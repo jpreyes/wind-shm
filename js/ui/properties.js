@@ -1,0 +1,1280 @@
+// ──────────────────────────────────────────────────────────────────────────────
+// PropertiesPanel — right-side panel: node/element properties + mat/sec tabs
+// ──────────────────────────────────────────────────────────────────────────────
+
+export class PropertiesPanel {
+  constructor(panelEl, app) {
+    this.panel = panelEl;
+    this.app   = app;
+
+    // ── Vertical super-tabs (Modelo / Resultados) ──────────────────────────
+    this._vtabBtns = [...panelEl.querySelectorAll('.vtab')];
+    this._vpanels  = {
+      modelo:     document.getElementById('vpanel-modelo'),
+      resultados: document.getElementById('vpanel-resultados'),
+    };
+    this._currentVTab = 'modelo';
+
+    // ── Horizontal sub-tabs (dentro de Modelo) ─────────────────────────────
+    this._tabBtns    = [...panelEl.querySelectorAll('#panel-tabs .ptab')];
+    this._tabContents = {
+      sel:   document.getElementById('ptab-sel'),
+      nodos: document.getElementById('ptab-nodos'),
+      elems: document.getElementById('ptab-elems'),
+      mat:   document.getElementById('ptab-mat'),
+      sec:   document.getElementById('ptab-sec'),
+      dia:   document.getElementById('ptab-dia'),
+    };
+    this._currentTab = 'sel';
+
+    // ── Result sub-tabs (dentro de Resultados) ─────────────────────────────
+    this._rtabBtns    = [...panelEl.querySelectorAll('.rtab')];
+    this._rtabContents = {
+      modal:    document.getElementById('rtab-modal'),
+      estatico: document.getElementById('rtab-estatico'),
+      combos:   document.getElementById('rtab-combos'),
+    };
+    this._currentRTab = 'modal';
+
+    this._init();
+  }
+
+  _init() {
+    this._vtabBtns.forEach(btn =>
+      btn.addEventListener('click', () => this._switchVTab(btn.dataset.vtab))
+    );
+    this._tabBtns.forEach(btn =>
+      btn.addEventListener('click', () => this._switchTab(btn.dataset.tab))
+    );
+    this._rtabBtns.forEach(btn =>
+      btn.addEventListener('click', () => this._switchRTab(btn.dataset.rtab))
+    );
+
+    document.getElementById('btn-add-mat')?.addEventListener('click',    () => this._addMaterial());
+    document.getElementById('btn-add-sec')?.addEventListener('click',    () => this._addSection());
+    document.getElementById('btn-add-dia')?.addEventListener('click',    () => this.app.addDiaphragmManual());
+    document.getElementById('btn-detect-dia')?.addEventListener('click', () => this.app.autoDetectDiaphragms());
+    document.getElementById('btn-add-combo')?.addEventListener('click',  () => this._addCombination());
+    document.getElementById('btn-add-node-row')?.addEventListener('click', () => this._addNodeRow());
+  }
+
+  _switchVTab(vtab) {
+    this._currentVTab = vtab;
+    this._vtabBtns.forEach(b => b.classList.toggle('active', b.dataset.vtab === vtab));
+    Object.entries(this._vpanels).forEach(([k, el]) =>
+      el?.classList.toggle('active', k === vtab)
+    );
+    if (vtab === 'resultados') this._switchRTab(this._currentRTab);
+  }
+
+  _switchTab(tab) {
+    this._currentTab = tab;
+    this._tabBtns.forEach(b => b.classList.toggle('active', b.dataset.tab === tab));
+    Object.entries(this._tabContents).forEach(([k, el]) =>
+      el?.classList.toggle('active', k === tab)
+    );
+    if (tab === 'mat')   this.renderMaterials();
+    if (tab === 'sec')   this.renderSections();
+    if (tab === 'dia')   this.renderDiaphragms();
+    if (tab === 'nodos') this.renderNodesGrid();
+    if (tab === 'elems') this.renderElemsGrid();
+  }
+
+  _switchRTab(rtab) {
+    this._currentRTab = rtab;
+    this._rtabBtns.forEach(b => b.classList.toggle('active', b.dataset.rtab === rtab));
+    Object.entries(this._rtabContents).forEach(([k, el]) =>
+      el?.classList.toggle('active', k === rtab)
+    );
+    if (rtab === 'modal')    this.renderModalResults();
+    if (rtab === 'estatico') this.renderStaticResults();
+    if (rtab === 'combos')   this.renderCombinations();
+  }
+
+  // ── Public API ─────────────────────────────────────────────────────────────
+  showDiaphragm(dId, showCM = false) {
+    this._switchVTab('modelo');
+    this._switchTab('dia');
+    setTimeout(() => {
+      const card = document.querySelector(`#dia-list .mat-card[data-id="${dId}"]`);
+      if (card && !card.classList.contains('open')) card.classList.add('open');
+      card?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    }, 50);
+    // Show CM displacements in sel tab if results exist
+    if (showCM || this.app._results) {
+      const d = this.app.model.diaphragms.get(dId);
+      const res = this.app._results;
+      if (d && res) {
+        const masterId = d.masterId || d.nodes[0];
+        const masterNode = this.app.model.nodes.get(masterId);
+        if (masterNode) {
+          this._switchVTab('modelo');
+          this._switchTab('sel');
+          const disp = res.getNodeDisp(masterId);
+          const fv = v => `<span style="font-family:var(--font-mono);color:${Math.abs(v)<1e-10?'var(--text-muted)':v>0?'#ef5350':'#42a5f5'}">${Math.abs(v)<1e-10?'—':v.toExponential(4)}</span>`;
+          this._tabContents.sel.innerHTML = `
+            <div class="prop-id" style="color:#ff7043">⊕ CM Diafragma #${dId}</div>
+            <div class="prop-section" style="border:1px solid #ff7043;border-radius:4px;padding:8px">
+              <div class="prop-title" style="color:#ff7043">Desplazamientos Nodo Master #${masterId}</div>
+              <table class="results-table">
+                <tr><th>DOF</th><th>Valor</th></tr>
+                ${['Ux','Uy','Uz','Rx','Ry','Rz'].map((n,i)=>`<tr><td>${n}</td><td>${fv(disp[i])}</td></tr>`).join('')}
+              </table>
+            </div>`;
+        }
+      }
+    }
+  }
+
+  showSelection(items) {
+    this._switchVTab('modelo');
+    this._switchTab('sel');
+    const res  = this.app._results;
+    const elems = items.filter(i => i.type === 'elem');
+    const nodes = items.filter(i => i.type === 'node');
+
+    // colour helper: sign-based for individual values, amber for aggregates
+    const fv = (v, amber = false) => {
+      const zero = Math.abs(v) < 1e-10;
+      const col  = amber ? '#ffc107'
+                 : zero  ? 'var(--text-muted)'
+                 : v > 0 ? '#ef5350' : '#42a5f5';
+      return `<td style="font-family:var(--font-mono);text-align:right;font-size:10px;color:${col}">${zero && !amber ? '—' : v.toExponential(3)}</td>`;
+    };
+
+    let html = `<div class="prop-id" style="color:var(--warn)">${items.length} objetos seleccionados</div>
+      <p class="panel-hint" style="margin-bottom:6px">Ctrl+clic: añadir/quitar &nbsp;|&nbsp; Clic vacío: deseleccionar</p>`;
+
+    // ── Elements ────────────────────────────────────────────────────────────
+    if (elems.length > 0) {
+      if (!res) {
+        html += `<p class="panel-hint">${elems.length} elemento(s) — ejecute el análisis para ver fuerzas.</p>`;
+      } else {
+        const sum = { N:0, Vy:0, Vz:0, T:0, My:0, Mz:0,
+                      maxN:0, maxVy:0, maxVz:0, maxMy:0, maxMz:0 };
+        let rowsHtml = '';
+        for (const { id } of elems) {
+          const f = res.getElemForces(id);
+          if (!f) continue;
+          const Vy = Math.abs(f.Vy1) > Math.abs(f.Vy2) ? f.Vy1 : f.Vy2;
+          const Vz = Math.abs(f.Vz1) > Math.abs(f.Vz2) ? f.Vz1 : f.Vz2;
+          const My = Math.abs(f.My1) > Math.abs(f.My2) ? f.My1 : f.My2;
+          const Mz = Math.abs(f.Mz1) > Math.abs(f.Mz2) ? f.Mz1 : f.Mz2;
+          const T  = f.T || 0;
+          sum.N  += f.N;  sum.maxN  = Math.max(sum.maxN,  Math.abs(f.N));
+          sum.Vy += Vy;   sum.maxVy = Math.max(sum.maxVy, Math.abs(Vy));
+          sum.Vz += Vz;   sum.maxVz = Math.max(sum.maxVz, Math.abs(Vz));
+          sum.My += My;   sum.maxMy = Math.max(sum.maxMy, Math.abs(My));
+          sum.Mz += Mz;   sum.maxMz = Math.max(sum.maxMz, Math.abs(Mz));
+          sum.T  += T;
+          rowsHtml += `<tr>
+            <td style="color:var(--text-muted);font-size:10px;font-family:var(--font-mono)">${id}</td>
+            ${fv(f.N)}${fv(Vy)}${fv(Vz)}${fv(T)}${fv(My)}${fv(Mz)}
+          </tr>`;
+        }
+        const sepStyle = 'border-top:1px solid var(--warn)';
+        rowsHtml += `<tr style="${sepStyle}">
+          <td style="font-size:10px;color:var(--warn);font-weight:700">Σ</td>
+          ${fv(sum.N,true)}${fv(sum.Vy,true)}${fv(sum.Vz,true)}${fv(sum.T,true)}${fv(sum.My,true)}${fv(sum.Mz,true)}
+        </tr>
+        <tr>
+          <td style="font-size:10px;color:#ffc107">max|·|</td>
+          ${fv(sum.maxN,true)}${fv(sum.maxVy,true)}${fv(sum.maxVz,true)}<td>—</td>${fv(sum.maxMy,true)}${fv(sum.maxMz,true)}
+        </tr>`;
+        html += `<div style="border:1px solid var(--warn);border-radius:4px;padding:8px;margin-bottom:8px;overflow-x:auto">
+          <div class="res-section-title" style="color:var(--warn);margin-top:0">${elems.length} Elementos — Fuerzas Internas (valor dominante en extremos)</div>
+          <table class="res-table"><thead>
+            <tr><th>El.</th><th>N</th><th>Vy</th><th>Vz</th><th>T</th><th>My</th><th>Mz</th></tr>
+          </thead><tbody>${rowsHtml}</tbody></table>
+        </div>`;
+      }
+    }
+
+    // ── Nodes ───────────────────────────────────────────────────────────────
+    if (nodes.length > 0) {
+      if (!res) {
+        html += `<p class="panel-hint">${nodes.length} nodo(s) — ejecute el análisis para ver desplazamientos.</p>`;
+      } else {
+        let rowsHtml = '';
+        for (const { id } of nodes) {
+          const d   = res.getNodeDisp(id);
+          const mag = Math.hypot(d[0], d[1], d[2]);
+          rowsHtml += `<tr>
+            <td style="color:var(--text-muted);font-size:10px;font-family:var(--font-mono)">${id}</td>
+            ${fv(d[0])}${fv(d[1])}${fv(d[2])}${fv(mag, true)}
+          </tr>`;
+        }
+        html += `<div style="border:1px solid var(--node-col);border-radius:4px;padding:8px;overflow-x:auto">
+          <div class="res-section-title" style="color:var(--node-col);margin-top:0">${nodes.length} Nodos — Desplazamientos</div>
+          <table class="res-table"><thead>
+            <tr><th>Nd.</th><th>Ux</th><th>Uy</th><th>Uz</th><th>|δ|</th></tr>
+          </thead><tbody>${rowsHtml}</tbody></table>
+        </div>`;
+      }
+    }
+
+    this._tabContents.sel.innerHTML = html;
+  }
+
+  showNothing() {
+    const sel = this._tabContents.sel;
+    if (sel) sel.innerHTML = '<p class="panel-hint">Haga clic en un nodo o elemento para editar sus propiedades.</p>';
+    this._switchVTab('modelo');
+    this._switchTab('sel');
+  }
+
+  showNode(node, focusSupports = false) {
+    if (!node) { this.showNothing(); return; }
+    this._switchVTab('modelo');
+    this._switchTab('sel');
+    const results = this.app._results;
+    this._tabContents.sel.innerHTML = this._nodeHTML(node)
+      + (results ? this._nodeResultsHTML(node, results) : '')
+      + this._nodeLoadsHTML(node);
+    this._bindNodeEvents(node);
+    this._bindNodeLoadsEvents(node);
+    if (focusSupports) {
+      const el = this._tabContents.sel.querySelector('.restraints-section');
+      if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }
+  }
+
+  showElement(elem) {
+    if (!elem) { this.showNothing(); return; }
+    this._switchVTab('modelo');
+    this._switchTab('sel');
+    const results = this.app._results;
+    this._tabContents.sel.innerHTML = this._elemHTML(elem)
+      + (results ? this._elemResultsHTML(elem, results) : '')
+      + this._elemLoadsHTML(elem);
+    this._bindElemEvents(elem);
+    this._bindElemLoadsEvents(elem);
+  }
+
+  refresh(model) {
+    if (this._currentTab === 'mat')   this.renderMaterials();
+    if (this._currentTab === 'sec')   this.renderSections();
+    if (this._currentTab === 'dia')   this.renderDiaphragms();
+    if (this._currentTab === 'nodos') this.renderNodesGrid();
+    if (this._currentVTab === 'resultados') this._switchRTab(this._currentRTab);
+    if (this._currentTab === 'elems') this.renderElemsGrid();
+  }
+
+  // ── Node grid ──────────────────────────────────────────────────────────────
+  renderNodesGrid() {
+    const wrap = document.getElementById('nodes-grid-wrap');
+    if (!wrap) return;
+    const model = this.app.model;
+
+    if (model.nodes.size === 0) {
+      wrap.innerHTML = '<p class="panel-hint">No hay nodos. Créelos en la vista 3D (tecla N) o con el botón de abajo.</p>';
+      return;
+    }
+
+    const dofs = ['ux','uy','uz','rx','ry','rz'];
+    let tbody = '';
+    for (const node of model.nodes.values()) {
+      const r = node.restraints;
+      const cbs = dofs.map(d =>
+        `<td class="ng-cb"><input type="checkbox" data-nid="${node.id}" data-dof="${d}" ${r[d] ? 'checked' : ''}></td>`
+      ).join('');
+      tbody += `<tr data-nid="${node.id}">
+        <td class="ng-id">${node.id}</td>
+        <td class="ng-coord"><input class="ng-x" type="number" value="${+node.x.toFixed(4)}" step="0.1" data-nid="${node.id}" data-f="x"></td>
+        <td class="ng-coord"><input class="ng-y" type="number" value="${+node.y.toFixed(4)}" step="0.1" data-nid="${node.id}" data-f="y"></td>
+        <td class="ng-coord"><input class="ng-z" type="number" value="${+node.z.toFixed(4)}" step="0.1" data-nid="${node.id}" data-f="z"></td>
+        ${cbs}
+        <td class="ng-del"><button data-nid="${node.id}" title="Eliminar">×</button></td>
+      </tr>`;
+    }
+
+    wrap.innerHTML = `<table class="nodes-grid">
+      <thead><tr>
+        <th>#</th><th>X</th><th>Y</th><th>Z</th>
+        <th>Ux</th><th>Uy</th><th>Uz</th><th>Rx</th><th>Ry</th><th>Rz</th><th></th>
+      </tr></thead>
+      <tbody>${tbody}</tbody>
+    </table>`;
+
+    // Bind coordinate inputs
+    wrap.querySelectorAll('input[data-f]').forEach(inp => {
+      inp.addEventListener('change', () => {
+        const id = +inp.dataset.nid;
+        const field = inp.dataset.f;
+        const val = parseFloat(inp.value) || 0;
+        this.app.snapshot();
+        this.app.model.updateNode(id, { [field]: val });
+        const node = this.app.model.nodes.get(id);
+        if (node) this.app.viewport.refreshNode(node);
+        this.app.markDirty();
+      });
+    });
+
+    // Bind restraint checkboxes
+    wrap.querySelectorAll('input[data-dof]').forEach(cb => {
+      cb.addEventListener('change', () => {
+        const id = +cb.dataset.nid;
+        const dof = cb.dataset.dof;
+        this.app.snapshot();
+        const node = this.app.model.nodes.get(id);
+        if (node) {
+          node.restraints[dof] = cb.checked ? 1 : 0;
+          this.app.viewport.refreshNode(node);
+          this.app.markDirty();
+        }
+      });
+    });
+
+    // Bind delete buttons
+    wrap.querySelectorAll('.ng-del button').forEach(btn => {
+      btn.addEventListener('click', () => {
+        this.app.deleteNode(+btn.dataset.nid);
+        this.renderNodesGrid();
+      });
+    });
+  }
+
+  _addNodeRow() {
+    this.app.snapshot();
+    const b = this.app.model.getBounds();
+    const node = this.app.model.addNode(b.center.x, b.center.y, 0);
+    this.app.viewport.addNodeMesh(node);
+    this.app.markDirty();
+    this.renderNodesGrid();
+    setTimeout(() => {
+      const row = document.querySelector(`#nodes-grid-wrap tr[data-nid="${node.id}"]`);
+      row?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+      row?.querySelector('.ng-x')?.focus();
+    }, 60);
+  }
+
+  // ── Elements grid ──────────────────────────────────────────────────────────
+  renderElemsGrid() {
+    const wrap = document.getElementById('elems-grid-wrap');
+    if (!wrap) return;
+    const model = this.app.model;
+    const res   = this.app._results;
+
+    if (model.elements.size === 0) {
+      wrap.innerHTML = '<p class="panel-hint">No hay elementos. Créelos en la vista 3D (tecla E).</p>';
+      return;
+    }
+
+    const mats = [...model.materials.values()];
+    const secs = [...model.sections.values()];
+
+    const matOpts = id => mats.map(m =>
+      `<option value="${m.id}" ${m.id === id ? 'selected' : ''}>${m.name}</option>`
+    ).join('');
+    const secOpts = id => secs.map(s =>
+      `<option value="${s.id}" ${s.id === id ? 'selected' : ''}>${s.name}</option>`
+    ).join('');
+
+    // Force column (max abs value at either end)
+    const fCol = (f, key1, key2 = null) => {
+      if (!f) return '<td class="eg-f">—</td>';
+      const v = key2 ? (Math.abs(f[key1]) > Math.abs(f[key2]) ? f[key1] : f[key2]) : f[key1];
+      const col = Math.abs(v) < 1e-10 ? '' : v > 0 ? ' style="color:#ef5350"' : ' style="color:#42a5f5"';
+      return `<td class="eg-f"${col}>${Math.abs(v) < 1e-10 ? '—' : v.toExponential(2)}</td>`;
+    };
+
+    let hasRes = false;
+    let tbody = '';
+    for (const el of model.elements.values()) {
+      const f = res ? res.getElemForces(el.id) : null;
+      if (f) hasRes = true;
+      tbody += `<tr data-eid="${el.id}">
+        <td class="eg-id">${el.id}</td>
+        <td class="eg-node"><input type="number" class="eg-n1" value="${el.n1}" min="1" data-eid="${el.id}" data-f="n1"></td>
+        <td class="eg-node"><input type="number" class="eg-n2" value="${el.n2}" min="1" data-eid="${el.id}" data-f="n2"></td>
+        <td class="eg-sel"><select class="eg-mat" data-eid="${el.id}">${matOpts(el.matId)}</select></td>
+        <td class="eg-sel"><select class="eg-sec" data-eid="${el.id}">${secOpts(el.secId)}</select></td>
+        ${res ? `${fCol(f,'N')}${fCol(f,'Vy1','Vy2')}${fCol(f,'My1','My2')}${fCol(f,'Mz1','Mz2')}` : ''}
+        <td class="ng-del"><button data-eid="${el.id}" title="Eliminar">×</button></td>
+      </tr>`;
+    }
+
+    const resHeader = res
+      ? '<th class="eg-f">N</th><th class="eg-f">Vy</th><th class="eg-f">My</th><th class="eg-f">Mz</th>'
+      : '';
+
+    wrap.innerHTML = `<table class="elems-grid">
+      <thead><tr>
+        <th>#</th><th>N1</th><th>N2</th><th>Mat.</th><th>Sec.</th>${resHeader}<th></th>
+      </tr></thead>
+      <tbody>${tbody}</tbody>
+    </table>`;
+
+    // Bind node inputs
+    wrap.querySelectorAll('input[data-f]').forEach(inp => {
+      inp.addEventListener('change', () => {
+        const id = +inp.dataset.eid;
+        const field = inp.dataset.f;
+        const val = parseInt(inp.value) || 1;
+        this.app.snapshot();
+        this.app.model.updateElement(id, { [field]: val });
+        this.app.viewport.refreshElem(this.app.model.elements.get(id));
+        this.app.markDirty();
+      });
+    });
+
+    // Bind material/section selects
+    wrap.querySelectorAll('.eg-mat').forEach(sel => {
+      sel.addEventListener('change', () => {
+        const id = +sel.dataset.eid;
+        this.app.snapshot();
+        this.app.model.updateElement(id, { matId: +sel.value });
+        this.app.markDirty();
+      });
+    });
+    wrap.querySelectorAll('.eg-sec').forEach(sel => {
+      sel.addEventListener('change', () => {
+        const id = +sel.dataset.eid;
+        this.app.snapshot();
+        this.app.model.updateElement(id, { secId: +sel.value });
+        this.app.markDirty();
+      });
+    });
+
+    // Bind delete buttons
+    wrap.querySelectorAll('.ng-del button').forEach(btn => {
+      btn.addEventListener('click', () => {
+        this.app.deleteElement(+btn.dataset.eid);
+        this.renderElemsGrid();
+      });
+    });
+  }
+
+  // ── Node form ──────────────────────────────────────────────────────────────
+  _nodeHTML(node) {
+    const r = node.restraints;
+    const dof = ['ux','uy','uz','rx','ry','rz'];
+    const labels = ['UX','UY','UZ','RX','RY','RZ'];
+    const checks = dof.map((d, i) =>
+      `<div class="restraint-cell">
+        <input type="checkbox" data-dof="${d}" ${r[d] ? 'checked' : ''}>
+        <span>${labels[i]}</span>
+      </div>`
+    ).join('');
+
+    return `
+      <div class="prop-id">Nodo #${node.id}</div>
+
+      <div class="prop-section">
+        <div class="prop-title">Coordenadas</div>
+        <div class="prop-row cols3">
+          <div class="prop-field"><label>X</label><input type="number" id="n-x" value="${+node.x.toFixed(6)}" step="0.01"></div>
+          <div class="prop-field"><label>Y</label><input type="number" id="n-y" value="${+node.y.toFixed(6)}" step="0.01"></div>
+          <div class="prop-field"><label>Z</label><input type="number" id="n-z" value="${+node.z.toFixed(6)}" step="0.01"></div>
+        </div>
+      </div>
+
+      <div class="prop-section restraints-section">
+        <div class="prop-title">Restricciones (1 = fijo)</div>
+        <div class="restraint-grid">${checks}</div>
+        <div style="margin-top:8px;display:flex;gap:6px;">
+          <button class="btn-secondary" id="btn-fix-all" style="flex:1;font-size:11px;">Fijar Todo</button>
+          <button class="btn-secondary" id="btn-free-all" style="flex:1;font-size:11px;">Liberar Todo</button>
+          <button class="btn-secondary" id="btn-pin" style="flex:1;font-size:11px;">Pin</button>
+        </div>
+      </div>
+
+      <div class="delete-btn-row">
+        <button class="btn-danger" id="btn-del-node" style="width:100%;">Eliminar Nodo #${node.id}</button>
+      </div>
+    `;
+  }
+
+  _bindNodeEvents(node) {
+    const sel = this._tabContents.sel;
+
+    const save = () => {
+      this.app.snapshot();
+      const x = parseFloat(sel.querySelector('#n-x').value);
+      const y = parseFloat(sel.querySelector('#n-y').value);
+      const z = parseFloat(sel.querySelector('#n-z').value);
+      const restraints = {};
+      sel.querySelectorAll('[data-dof]').forEach(cb => {
+        restraints[cb.dataset.dof] = cb.checked ? 1 : 0;
+      });
+      this.app.model.updateNode(node.id, { x, y, z, restraints });
+      this.app.viewport.refreshNode(this.app.model.nodes.get(node.id));
+      this.app.markDirty();
+    };
+
+    sel.querySelectorAll('input[type=number]').forEach(inp =>
+      inp.addEventListener('change', save)
+    );
+    sel.querySelectorAll('[data-dof]').forEach(cb =>
+      cb.addEventListener('change', save)
+    );
+
+    // Quick presets
+    sel.querySelector('#btn-fix-all')?.addEventListener('click', () => {
+      sel.querySelectorAll('[data-dof]').forEach(cb => cb.checked = true);
+      save();
+    });
+    sel.querySelector('#btn-free-all')?.addEventListener('click', () => {
+      sel.querySelectorAll('[data-dof]').forEach(cb => cb.checked = false);
+      save();
+    });
+    sel.querySelector('#btn-pin')?.addEventListener('click', () => {
+      // Fix translations, free rotations
+      ['ux','uy','uz'].forEach(d => { sel.querySelector(`[data-dof="${d}"]`).checked = true; });
+      ['rx','ry','rz'].forEach(d => { sel.querySelector(`[data-dof="${d}"]`).checked = false; });
+      save();
+    });
+
+    sel.querySelector('#btn-del-node')?.addEventListener('click', () => {
+      this.app.deleteNode(node.id);
+    });
+  }
+
+  // ── Element form ───────────────────────────────────────────────────────────
+  _elemHTML(elem) {
+    const model = this.app.model;
+    const matOptions = [...model.materials.values()].map(m =>
+      `<option value="${m.id}" ${m.id === elem.matId ? 'selected' : ''}>${m.name}</option>`
+    ).join('');
+    const secOptions = [...model.sections.values()].map(s =>
+      `<option value="${s.id}" ${s.id === elem.secId ? 'selected' : ''}>${s.name}</option>`
+    ).join('');
+
+    const dofLabels = ['UX','UY','UZ','RX','RY','RZ'];
+    const relHalf = (label, offset) => {
+      const boxes = dofLabels.map((d, i) =>
+        `<div class="releases-cell">
+          <input type="checkbox" data-rel="${offset+i}" ${elem.releases[offset+i] ? 'checked':''}>
+          <span>${d}</span>
+        </div>`
+      ).join('');
+      return `<div class="releases-half">
+        <div class="releases-half-title">${label}</div>
+        <div class="releases-grid">${boxes}</div>
+      </div>`;
+    };
+
+    return `
+      <div class="prop-id">Elemento #${elem.id}</div>
+
+      <div class="prop-section">
+        <div class="prop-title">Nodos</div>
+        <div class="prop-row">
+          <div class="prop-field"><label>Nodo 1</label><input type="number" id="e-n1" value="${elem.n1}" min="1"></div>
+          <div class="prop-field"><label>Nodo 2</label><input type="number" id="e-n2" value="${elem.n2}" min="1"></div>
+        </div>
+      </div>
+
+      <div class="prop-section">
+        <div class="prop-title">Material</div>
+        <div class="prop-row cols1">
+          <div class="prop-field"><label>Material</label>
+            <select id="e-mat">${matOptions}</select>
+          </div>
+        </div>
+      </div>
+
+      <div class="prop-section">
+        <div class="prop-title">Sección</div>
+        <div class="prop-row cols1">
+          <div class="prop-field"><label>Sección</label>
+            <select id="e-sec">${secOptions}</select>
+          </div>
+        </div>
+      </div>
+
+      <div class="prop-section">
+        <div class="prop-title">Liberaciones (rótulas)</div>
+        ${relHalf('Nodo 1 (inicio)', 0)}
+        ${relHalf('Nodo 2 (fin)', 6)}
+      </div>
+
+      <div class="delete-btn-row">
+        <button class="btn-danger" id="btn-del-elem" style="width:100%;">Eliminar Elemento #${elem.id}</button>
+      </div>
+    `;
+  }
+
+  _bindElemEvents(elem) {
+    const sel = this._tabContents.sel;
+
+    const save = () => {
+      this.app.snapshot();
+      const n1    = +sel.querySelector('#e-n1').value;
+      const n2    = +sel.querySelector('#e-n2').value;
+      const matId = +sel.querySelector('#e-mat').value;
+      const secId = +sel.querySelector('#e-sec').value;
+      const releases = Array(12).fill(0);
+      sel.querySelectorAll('[data-rel]').forEach(cb => {
+        releases[+cb.dataset.rel] = cb.checked ? 1 : 0;
+      });
+      this.app.model.updateElement(elem.id, { n1, n2, matId, secId, releases });
+      this.app.viewport.refreshElem(this.app.model.elements.get(elem.id));
+      this.app.markDirty();
+    };
+
+    sel.querySelectorAll('input[type=number], select').forEach(inp =>
+      inp.addEventListener('change', save)
+    );
+    sel.querySelectorAll('[data-rel]').forEach(cb =>
+      cb.addEventListener('change', save)
+    );
+
+    sel.querySelector('#btn-del-elem')?.addEventListener('click', () => {
+      this.app.deleteElement(elem.id);
+    });
+  }
+
+  // ── Load input for nodes ───────────────────────────────────────────────────
+  _nodeLoadsHTML(node) {
+    const lcId = this.app._activeLcId;
+    const lc   = this.app.model.loadCases.get(lcId);
+    const ex   = lc ? lc.loads.find(l => l.type === 'nodal' && l.nodeId === node.id) : null;
+    const F    = ex ? ex.F : [0,0,0,0,0,0];
+    const lcName = lc ? lc.name : '(sin caso)';
+    return `<div class="load-section">
+      <div class="prop-title">Cargas Nodales — <span style="color:var(--accent)">${lcName}</span></div>
+      <div class="prop-row cols3">
+        <div class="prop-field"><label>Fx</label><input type="number" data-lf="0" value="${F[0]}" step="1"></div>
+        <div class="prop-field"><label>Fy</label><input type="number" data-lf="1" value="${F[1]}" step="1"></div>
+        <div class="prop-field"><label>Fz</label><input type="number" data-lf="2" value="${F[2]}" step="1"></div>
+      </div>
+      <div class="prop-row cols3">
+        <div class="prop-field"><label>Mx</label><input type="number" data-lf="3" value="${F[3]}" step="0.1"></div>
+        <div class="prop-field"><label>My</label><input type="number" data-lf="4" value="${F[4]}" step="0.1"></div>
+        <div class="prop-field"><label>Mz</label><input type="number" data-lf="5" value="${F[5]}" step="0.1"></div>
+      </div>
+      <div style="display:flex;gap:6px;margin-top:6px;">
+        <button class="btn-primary" id="btn-apply-load" style="flex:1;font-size:11px;">Aplicar Carga</button>
+        <button class="btn-secondary" id="btn-clear-load" style="flex:1;font-size:11px;">Limpiar</button>
+      </div>
+    </div>`;
+  }
+
+  _bindNodeLoadsEvents(node) {
+    const sel = this._tabContents.sel;
+    sel.querySelector('#btn-apply-load')?.addEventListener('click', () => {
+      this.app.snapshot();
+      const lc = this.app.model.loadCases.get(this.app._activeLcId);
+      if (!lc) { this.app.toast('No hay caso de carga activo', 'warn'); return; }
+      const F = [0,1,2,3,4,5].map(i => parseFloat(sel.querySelector(`[data-lf="${i}"]`)?.value) || 0);
+      const idx = lc.loads.findIndex(l => l.type === 'nodal' && l.nodeId === node.id);
+      const load = { type: 'nodal', nodeId: node.id, F };
+      if (idx >= 0) lc.loads[idx] = load; else lc.loads.push(load);
+      this.app.markDirty();
+      this.app.refreshLoads();
+      this.app.toast('Carga aplicada', 'ok');
+    });
+    sel.querySelector('#btn-clear-load')?.addEventListener('click', () => {
+      this.app.snapshot();
+      const lc = this.app.model.loadCases.get(this.app._activeLcId);
+      if (!lc) return;
+      lc.loads = lc.loads.filter(l => !(l.type === 'nodal' && l.nodeId === node.id));
+      [0,1,2,3,4,5].forEach(i => { const inp = sel.querySelector(`[data-lf="${i}"]`); if (inp) inp.value = 0; });
+      this.app.markDirty();
+      this.app.refreshLoads();
+      this.app.toast('Carga eliminada', '');
+    });
+  }
+
+  _elemLoadsHTML(elem) {
+    const lcId = this.app._activeLcId;
+    const lc   = this.app.model.loadCases.get(lcId);
+    const ex   = lc ? lc.loads.find(l => l.type === 'dist' && l.elemId === elem.id) : null;
+    return `<div class="load-section">
+      <div class="prop-title">Carga Distribuida — <span style="color:var(--accent)">${lc?.name || '—'}</span></div>
+      <div class="prop-row">
+        <div class="prop-field"><label>Dirección</label>
+          <select id="dist-dir">
+            <option value="globalZ" ${ex?.dir==='globalZ'?'selected':''}>Global Z (gravedad)</option>
+            <option value="globalX" ${ex?.dir==='globalX'?'selected':''}>Global X</option>
+            <option value="globalY" ${ex?.dir==='globalY'?'selected':''}>Global Y</option>
+            <option value="localY"  ${ex?.dir==='localY' ?'selected':''}>Local y</option>
+            <option value="localZ"  ${ex?.dir==='localZ' ?'selected':''}>Local z</option>
+          </select>
+        </div>
+        <div class="prop-field"><label>w (kN/m)</label>
+          <input type="number" id="dist-w" value="${ex?.w ?? 0}" step="1">
+        </div>
+      </div>
+      <div style="display:flex;gap:6px;margin-top:6px;">
+        <button class="btn-primary" id="btn-apply-dist" style="flex:1;font-size:11px;">Aplicar</button>
+        <button class="btn-secondary" id="btn-clear-dist" style="flex:1;font-size:11px;">Limpiar</button>
+      </div>
+    </div>`;
+  }
+
+  _bindElemLoadsEvents(elem) {
+    const sel = this._tabContents.sel;
+    sel.querySelector('#btn-apply-dist')?.addEventListener('click', () => {
+      this.app.snapshot();
+      const lc = this.app.model.loadCases.get(this.app._activeLcId);
+      if (!lc) { this.app.toast('No hay caso de carga activo', 'warn'); return; }
+      const w   = parseFloat(sel.querySelector('#dist-w')?.value) || 0;
+      const dir = sel.querySelector('#dist-dir')?.value || 'globalZ';
+      const idx = lc.loads.findIndex(l => l.type === 'dist' && l.elemId === elem.id);
+      const load = { type: 'dist', elemId: elem.id, dir, w };
+      if (idx >= 0) lc.loads[idx] = load; else lc.loads.push(load);
+      this.app.markDirty();
+      this.app.refreshLoads();
+      this.app.toast('Carga distribuida aplicada', 'ok');
+    });
+    sel.querySelector('#btn-clear-dist')?.addEventListener('click', () => {
+      this.app.snapshot();
+      const lc = this.app.model.loadCases.get(this.app._activeLcId);
+      if (!lc) return;
+      lc.loads = lc.loads.filter(l => !(l.type === 'dist' && l.elemId === elem.id));
+      this.app.markDirty();
+      this.app.refreshLoads();
+    });
+  }
+
+  _nodeResultsHTML(node, results) {
+    const d  = results.getNodeDisp(node.id);
+    const rx = results.getReaction(node.id);
+    const hasReact = Object.values(node.restraints).some(v=>v);
+    const fv = v => `<span class="result-val ${Math.abs(v)<1e-10?'zero':v>0?'pos':'neg'}">${v.toExponential(4)}</span>`;
+    let html = `<div class="prop-section" style="border:1px solid var(--success);border-radius:4px;padding:8px;margin-bottom:8px;">
+      <div class="prop-title" style="color:var(--success)">Desplazamientos</div>
+      <table class="results-table">
+        <tr><th>DOF</th><th>Valor</th></tr>
+        ${['Ux','Uy','Uz','Rx','Ry','Rz'].map((n,i)=>`<tr><td>${n}</td><td>${fv(d[i])}</td></tr>`).join('')}
+      </table>`;
+    if (hasReact) {
+      html += `<div class="prop-title" style="color:var(--danger);margin-top:8px;">Reacciones</div>
+      <table class="results-table">
+        <tr><th>DOF</th><th>Valor</th></tr>
+        ${['Rx','Ry','Rz','Rmx','Rmy','Rmz'].map((n,i)=>`<tr><td>${n}</td><td>${fv(rx[i])}</td></tr>`).join('')}
+      </table>`;
+    }
+    return html + '</div>';
+  }
+
+  _elemResultsHTML(elem, results) {
+    const f = results.getElemForces(elem.id);
+    if (!f) return '';
+    const fv = v => `<td class="${Math.abs(v)<1e-6?'':''}${v>0?'pos':'neg'}">${v.toExponential(4)}</td>`;
+    return `<div class="prop-section" style="border:1px solid var(--success);border-radius:4px;padding:8px;margin-bottom:8px;">
+      <div class="prop-title" style="color:var(--success)">Fuerzas Internas</div>
+      <table class="results-table">
+        <tr><th>Fuerza</th><th>Nodo 1</th><th>Nodo 2</th></tr>
+        <tr><td>N</td>${fv(f.N)}<td>—</td></tr>
+        <tr><td>Vy</td>${fv(f.Vy1)}${fv(f.Vy2)}</tr>
+        <tr><td>Vz</td>${fv(f.Vz1)}${fv(f.Vz2)}</tr>
+        <tr><td>T</td>${fv(f.T)}<td>—</td></tr>
+        <tr><td>My</td>${fv(f.My1)}${fv(f.My2)}</tr>
+        <tr><td>Mz</td>${fv(f.Mz1)}${fv(f.Mz2)}</tr>
+      </table>
+    </div>`;
+  }
+
+  // ── Materials tab ──────────────────────────────────────────────────────────
+  renderMaterials() {
+    const container = document.getElementById('mat-list');
+    container.innerHTML = '';
+    for (const mat of this.app.model.materials.values()) {
+      container.appendChild(this._matCard(mat));
+    }
+  }
+
+  _matCard(mat) {
+    const card = document.createElement('div');
+    card.className = 'mat-card';
+    card.dataset.id = mat.id;
+    card.innerHTML = `
+      <div class="mat-card-head">
+        <span class="mat-card-id">${mat.id}</span>
+        <span class="mat-card-name">${mat.name}</span>
+        <span class="mat-card-chevron">▶</span>
+      </div>
+      <div class="mat-card-body">
+        <div class="prop-row">
+          <div class="prop-field"><label>Nombre</label><input type="text" data-f="name" value="${mat.name}"></div>
+          <div class="prop-field"><label>ρ (ton/m³)</label><input type="number" data-f="rho" value="${mat.rho}" step="0.01"></div>
+        </div>
+        <div class="prop-row">
+          <div class="prop-field"><label>E (kN/m²)</label><input type="number" data-f="E" value="${mat.E}" step="1e5"></div>
+          <div class="prop-field"><label>G (kN/m²)</label><input type="number" data-f="G" value="${mat.G}" step="1e5"></div>
+        </div>
+        <div class="prop-row">
+          <div class="prop-field"><label>ν</label><input type="number" data-f="nu" value="${mat.nu}" step="0.01" min="0" max="0.5"></div>
+        </div>
+        <div class="card-actions">
+          <button class="btn-danger btn-del-mat" style="flex:1;">Eliminar</button>
+        </div>
+      </div>
+    `;
+    card.querySelector('.mat-card-head').addEventListener('click', () => {
+      card.classList.toggle('open');
+    });
+    card.querySelectorAll('[data-f]').forEach(inp => {
+      inp.addEventListener('change', () => {
+        this.app.snapshot();
+        const updates = {};
+        card.querySelectorAll('[data-f]').forEach(i => {
+          updates[i.dataset.f] = i.type === 'number' ? +i.value : i.value;
+        });
+        this.app.model.updateMaterial(mat.id, updates);
+        // Update card name
+        card.querySelector('.mat-card-name').textContent = updates.name || mat.name;
+        this.app.markDirty();
+      });
+    });
+    card.querySelector('.btn-del-mat').addEventListener('click', () => {
+      const res = this.app.model.removeMaterial(mat.id);
+      if (res.ok === false) { this.app.toast(res.reason, 'warn'); return; }
+      this.app.markDirty();
+      this.renderMaterials();
+    });
+    return card;
+  }
+
+  _addMaterial() {
+    this.app.snapshot();
+    this.app.model.addMaterial({ name: 'Nuevo Material' });
+    this.app.markDirty();
+    this.renderMaterials();
+  }
+
+  // ── Combinations tab ───────────────────────────────────────────────────────
+  renderCombinations() {
+    const container = document.getElementById('combo-list');
+    if (!container) return;
+    container.innerHTML = '';
+    for (const c of this.app.model.combinations.values()) {
+      container.appendChild(this._comboCard(c));
+    }
+  }
+
+  _comboCard(combo) {
+    const card = document.createElement('div');
+    card.className = 'combo-card';
+    card.dataset.id = combo.id;
+
+    const head = document.createElement('div');
+    head.className = 'combo-card-head';
+    head.innerHTML = `
+      <span class="mat-card-id" style="background:rgba(210,153,34,0.2);color:var(--warn)">${combo.id}</span>
+      <span style="flex:1;font-size:13px;font-weight:600;color:var(--warn)">${combo.name}</span>
+      <span class="mat-card-chevron">▶</span>`;
+    head.addEventListener('click', () => card.classList.toggle('open'));
+
+    const body = document.createElement('div');
+    body.className = 'combo-card-body';
+
+    const render = () => {
+      body.innerHTML = '';
+
+      // Name field
+      body.insertAdjacentHTML('beforeend', `
+        <div class="prop-row cols1" style="margin-bottom:8px">
+          <div class="prop-field">
+            <label>Nombre</label>
+            <input type="text" class="combo-name-inp" value="${combo.name}">
+          </div>
+        </div>`);
+      body.querySelector('.combo-name-inp').addEventListener('change', e => {
+        combo.name = e.target.value;
+        head.querySelector('span:nth-child(2)').textContent = combo.name;
+        this.app.markDirty();
+      });
+
+      // Factor rows — includes static load cases AND available spectral results
+      const lcs = [...this.app.model.loadCases.values()];
+      const specEntries = [...(this.app._spectrumResults?.entries() || [])].map(([key, { params }]) => ({
+        id: key,
+        name: `[ESP] Dir-${params.direction} ${params.method}`
+      }));
+      body.insertAdjacentHTML('beforeend',
+        '<div class="prop-title" style="margin-bottom:6px">Factores</div>');
+      const factorsDiv = document.createElement('div');
+      body.appendChild(factorsDiv);
+
+      const renderFactors = () => {
+        factorsDiv.innerHTML = '';
+        combo.factors.forEach((fac, idx) => {
+          const row = document.createElement('div');
+          row.className = 'combo-factor-row';
+          const staticOpts = lcs.map(lc =>
+            `<option value="${lc.id}" ${String(lc.id) === String(fac.lcId) ? 'selected' : ''}>${lc.name}</option>`
+          ).join('');
+          const specOpts = specEntries.length
+            ? `<optgroup label="── Espectral ──">${specEntries.map(s =>
+                `<option value="${s.id}" ${s.id === fac.lcId ? 'selected' : ''}>${s.name}</option>`
+              ).join('')}</optgroup>`
+            : '';
+          row.innerHTML = `
+            <select class="fac-lc">${staticOpts}${specOpts}</select>
+            <input type="number" class="fac-val" value="${fac.factor}" step="0.1" placeholder="factor">
+            <button class="combo-del-factor" title="Eliminar">×</button>`;
+          row.querySelector('.fac-lc').addEventListener('change', e => {
+            const v = e.target.value;
+            combo.factors[idx].lcId = /^\d+$/.test(v) ? parseInt(v) : v;
+            this.app.markDirty();
+          });
+          row.querySelector('.fac-val').addEventListener('change', e => {
+            combo.factors[idx].factor = parseFloat(e.target.value) || 0;
+            this.app.markDirty();
+          });
+          row.querySelector('.combo-del-factor').addEventListener('click', () => {
+            combo.factors.splice(idx, 1);
+            renderFactors();
+            this.app.markDirty();
+          });
+          factorsDiv.appendChild(row);
+        });
+      };
+      renderFactors();
+
+      // Add factor button
+      const addBtn = document.createElement('button');
+      addBtn.className = 'btn-add';
+      addBtn.style.marginTop = '4px';
+      addBtn.textContent = '＋ Agregar Factor';
+      addBtn.addEventListener('click', () => {
+        const firstId = lcs[0] ? lcs[0].id : (specEntries[0] ? specEntries[0].id : null);
+        combo.factors.push({ lcId: firstId, factor: 1.0 });
+        renderFactors();
+        this.app.markDirty();
+      });
+      body.appendChild(addBtn);
+
+      // Run + Delete buttons
+      const actions = document.createElement('div');
+      actions.className = 'card-actions';
+      actions.style.marginTop = '10px';
+      actions.innerHTML = `
+        <button class="combo-run-btn" style="flex:1">▶ Ejecutar</button>
+        <button class="btn-danger" style="flex:1">Eliminar</button>`;
+      actions.querySelector('.combo-run-btn').addEventListener('click', () => {
+        this.app.runCombination(combo.id);
+      });
+      actions.querySelector('.btn-danger').addEventListener('click', () => {
+        this.app.snapshot();
+        this.app.model.removeCombination(combo.id);
+        this.app.markDirty();
+        this.renderCombinations();
+        this.app._renderLcSelector();
+      });
+      body.appendChild(actions);
+    };
+
+    render();
+    card.appendChild(head);
+    card.appendChild(body);
+    return card;
+  }
+
+  _addCombination() {
+    this.app.snapshot();
+    this.app.model.addCombination({ name: `Combo ${this.app.model.combinations.size + 1}` });
+    this.app.markDirty();
+    this.renderCombinations();
+    this.app._renderLcSelector();
+  }
+
+  // ── Sections tab ───────────────────────────────────────────────────────────
+  renderSections() {
+    const container = document.getElementById('sec-list');
+    container.innerHTML = '';
+    for (const sec of this.app.model.sections.values()) {
+      container.appendChild(this._secCard(sec));
+    }
+  }
+
+  _secCard(sec) {
+    const card = document.createElement('div');
+    card.className = 'sec-card';
+    card.dataset.id = sec.id;
+
+    const fld = (label, key, step = '0.0001') =>
+      `<div class="prop-field"><label>${label}</label><input type="number" data-f="${key}" value="${sec[key]}" step="${step}"></div>`;
+
+    card.innerHTML = `
+      <div class="sec-card-head">
+        <span class="sec-card-id">${sec.id}</span>
+        <span class="sec-card-name">${sec.name}</span>
+        <span class="sec-card-chevron">▶</span>
+      </div>
+      <div class="sec-card-body">
+        <div class="prop-row cols1">
+          <div class="prop-field"><label>Nombre</label><input type="text" data-f="name" value="${sec.name}"></div>
+        </div>
+        <div class="prop-row">
+          ${fld('A (m²)', 'A')}
+          ${fld('J (m⁴)', 'J')}
+        </div>
+        <div class="prop-row">
+          ${fld('Iz (m⁴)', 'Iz')}
+          ${fld('Iy (m⁴)', 'Iy')}
+        </div>
+        <div class="prop-row">
+          ${fld('Avy (m²)', 'Avy')}
+          ${fld('Avz (m²)', 'Avz')}
+        </div>
+        <div class="prop-row">
+          ${fld('κy', 'kappay', '0.001')}
+          ${fld('κz', 'kappaz', '0.001')}
+        </div>
+        <div class="card-actions">
+          <button class="btn-danger btn-del-sec" style="flex:1;">Eliminar</button>
+        </div>
+      </div>
+    `;
+    card.querySelector('.sec-card-head').addEventListener('click', () => {
+      card.classList.toggle('open');
+    });
+    card.querySelectorAll('[data-f]').forEach(inp => {
+      inp.addEventListener('change', () => {
+        this.app.snapshot();
+        const updates = {};
+        card.querySelectorAll('[data-f]').forEach(i => {
+          updates[i.dataset.f] = i.type === 'number' ? +i.value : i.value;
+        });
+        this.app.model.updateSection(sec.id, updates);
+        card.querySelector('.sec-card-name').textContent = updates.name || sec.name;
+        this.app.markDirty();
+      });
+    });
+    card.querySelector('.btn-del-sec').addEventListener('click', () => {
+      const res = this.app.model.removeSection(sec.id);
+      if (res.ok === false) { this.app.toast(res.reason, 'warn'); return; }
+      this.app.markDirty();
+      this.renderSections();
+    });
+    return card;
+  }
+
+  _addSection() {
+    this.app.snapshot();
+    this.app.model.addSection({ name: 'Nueva Sección' });
+    this.app.markDirty();
+    this.renderSections();
+  }
+
+  // ── Results tabs ───────────────────────────────────────────────────────────
+  renderResults() {
+    this.renderModalResults();
+    this.renderStaticResults();
+  }
+
+  renderModalResults() {
+    const body = document.getElementById('res-modal-body');
+    const hint = document.getElementById('res-modal-hint');
+    if (!body) return;
+    const modal = this.app._modalResults;
+    if (!modal) {
+      body.innerHTML = '';
+      if (hint) hint.style.display = '';
+      return;
+    }
+    if (hint) hint.style.display = 'none';
+    body.innerHTML = '';
+
+    body.insertAdjacentHTML('beforeend', '<div class="res-section-title">Participación de masas (%)</div>');
+    const th = '<tr><th>M.</th><th>f(Hz)</th><th>T(s)</th>' +
+               '<th>%X</th><th>%Y</th><th>%Rz</th>' +
+               '<th>ΣX%</th><th>ΣY%</th><th>ΣRz%</th></tr>';
+    let rows = '';
+    const { rows: prows } = modal.getParticipation();
+    for (const r of prows) {
+      const okX = r.cumPct[0] >= 90, okY = r.cumPct[1] >= 90, okRz = r.cumPct[2] >= 90;
+      const cx  = okX  ? 'cum-ok' : r.cumPct[0] > 60 ? 'cum-warn' : '';
+      const cy  = okY  ? 'cum-ok' : r.cumPct[1] > 60 ? 'cum-warn' : '';
+      const crz = okRz ? 'cum-ok' : r.cumPct[2] > 60 ? 'cum-warn' : '';
+      rows += `<tr>
+        <td>${r.mode}</td>
+        <td>${r.freq.toFixed(3)}</td>
+        <td>${r.period.toFixed(3)}</td>
+        <td>${r.pct[0].toFixed(1)}</td>
+        <td>${r.pct[1].toFixed(1)}</td>
+        <td>${r.pct[2].toFixed(1)}</td>
+        <td class="${cx}">${r.cumPct[0].toFixed(1)}</td>
+        <td class="${cy}">${r.cumPct[1].toFixed(1)}</td>
+        <td class="${crz}">${r.cumPct[2].toFixed(1)}</td>
+      </tr>`;
+    }
+    body.insertAdjacentHTML('beforeend',
+      `<table class="res-table"><thead>${th}</thead><tbody>${rows}</tbody></table>`);
+  }
+
+  renderStaticResults() {
+    const body = document.getElementById('res-static-body');
+    const hint = document.getElementById('res-static-hint');
+    if (!body) return;
+    const res = this.app._results;
+    if (!res) {
+      body.innerHTML = '';
+      if (hint) hint.style.display = '';
+      return;
+    }
+    if (hint) hint.style.display = 'none';
+    body.innerHTML = '';
+
+    // Show spectral header when result is a SpectrumResults (has .meta)
+    const meta = res.meta;
+    if (meta) {
+      body.insertAdjacentHTML('beforeend',
+        `<div class="res-section-title" style="color:var(--accent);margin-bottom:6px">
+          Espectro Dir-${meta.direction} | ${meta.method} | ζ=${(meta.zeta * 100).toFixed(0)}% | ${meta.nModes} modos
+        </div>`);
+    }
+
+    const fv = v => {
+      const a = Math.abs(v);
+      const cls = a < 1e-10 ? '' : v > 0 ? ' vp' : ' vn';
+      return `<td class="${cls.trim()}">${a < 1e-10 ? '—' : v.toExponential(3)}</td>`;
+    };
+
+    body.insertAdjacentHTML('beforeend', '<div class="res-section-title">Fuerzas en Elementos</div>');
+    const thE = '<tr><th>El.</th><th>N</th><th>Vy</th><th>Vz</th><th>T</th><th>My</th><th>Mz</th></tr>';
+    let rowsE = '';
+    for (const elem of this.app.model.elements.values()) {
+      const f = res.getElemForces(elem.id);
+      if (!f) continue;
+      const Vy = Math.abs(f.Vy1) > Math.abs(f.Vy2) ? f.Vy1 : f.Vy2;
+      const Vz = Math.abs(f.Vz1) > Math.abs(f.Vz2) ? f.Vz1 : f.Vz2;
+      const My = Math.abs(f.My1) > Math.abs(f.My2) ? f.My1 : f.My2;
+      const Mz = Math.abs(f.Mz1) > Math.abs(f.Mz2) ? f.Mz1 : f.Mz2;
+      rowsE += `<tr><td>${elem.id}</td>${fv(f.N)}${fv(Vy)}${fv(Vz)}${fv(f.T)}${fv(My)}${fv(Mz)}</tr>`;
+    }
+    body.insertAdjacentHTML('beforeend',
+      `<table class="res-table"><thead>${thE}</thead><tbody>${rowsE}</tbody></table>`);
+
+    body.insertAdjacentHTML('beforeend', '<div class="res-section-title">Desplazamientos Nodales</div>');
+    const thN = '<tr><th>Nd.</th><th>Ux</th><th>Uy</th><th>Uz</th><th>|δ|</th></tr>';
+    let rowsN = '';
+    for (const node of this.app.model.nodes.values()) {
+      const d = res.getNodeDisp(node.id);
+      const mag = Math.hypot(d[0], d[1], d[2]);
+      rowsN += `<tr><td>${node.id}</td>${fv(d[0])}${fv(d[1])}${fv(d[2])}${fv(mag)}</tr>`;
+    }
+    body.insertAdjacentHTML('beforeend',
+      `<table class="res-table"><thead>${thN}</thead><tbody>${rowsN}</tbody></table>`);
+  }
+
+  // ── Diaphragms tab ─────────────────────────────────────────────────────────
+  renderDiaphragms() {
+    const container = document.getElementById('dia-list');
+    if (!container) return;
+    container.innerHTML = '';
+
+    if (this.app.model.diaphragms.size === 0) {
+      container.innerHTML = '<p class="panel-hint">No hay diafragmas definidos. Use "Auto-detectar Pisos" o agregue uno manualmente.</p>';
+      return;
+    }
+
+    // Sort by Z
+    const sorted = [...this.app.model.diaphragms.values()].sort((a,b) => a.z - b.z);
+    for (const d of sorted) container.appendChild(this._diaCard(d));
+  }
+
+  _diaCard(d) {
+    const card = document.createElement('div');
+    card.className = 'mat-card'; // reuse mat-card styles
+    card.dataset.id = d.id;
+
+    const nodeCount  = d.nodes.length;
+    const masterNode = this.app.model.nodes.get(d.masterId || d.nodes[0]);
+    const hasMass    = d.mass && (d.mass.m > 0 || d.mass.Icm > 0);
+
+    card.innerHTML = `
+      <div class="mat-card-head">
+        <span class="mat-card-id" style="background:rgba(0,188,212,0.2);color:#00bcd4">${d.id}</span>
+        <span class="mat-card-name" style="color:#00bcd4">${d.name}</span>
+        <span style="font-size:10px;color:var(--text-muted);margin-left:auto">${nodeCount} nodos | Z=${d.z}</span>
+        <span class="mat-card-chevron">▶</span>
+      </div>
+      <div class="mat-card-body">
+        <div class="prop-row cols1">
+          <div class="prop-field"><label>Nombre</label>
+            <input type="text" data-df="name" value="${d.name}">
+          </div>
+        </div>
+        <div class="prop-row">
+          <div class="prop-field"><label>Z piso (m)</label>
+            <input type="number" data-df="z" value="${d.z}" step="0.1">
+          </div>
+          <div class="prop-field"><label>Nodo Master ID</label>
+            <input type="number" data-df="masterId" value="${d.masterId || d.nodes[0]}" step="1" min="1">
+          </div>
+        </div>
+        <div class="prop-title" style="margin-top:8px;">Centro de Masa</div>
+        <div class="prop-row">
+          <div class="prop-field"><label>CM x (m)</label>
+            <input type="number" data-df="cm.x" value="${d.cm?.x ?? 0}" step="0.01">
+          </div>
+          <div class="prop-field"><label>CM y (m)</label>
+            <input type="number" data-df="cm.y" value="${d.cm?.y ?? 0}" step="0.01">
+          </div>
+        </div>
+        <div class="prop-title" style="margin-top:8px;">Masa Concentrada</div>
+        <div class="prop-row">
+          <div class="prop-field"><label>m (ton)</label>
+            <input type="number" data-df="mass.m" value="${d.mass?.m ?? 0}" step="1" min="0">
+          </div>
+          <div class="prop-field"><label>Icm (ton·m²)</label>
+            <input type="number" data-df="mass.Icm" value="${d.mass?.Icm ?? 0}" step="1" min="0">
+          </div>
+        </div>
+        <div class="prop-title" style="margin-top:8px;">Excentricidad Accidental</div>
+        <div class="prop-row">
+          <div class="prop-field"><label>eₓ (m)</label>
+            <input type="number" data-df="ecc.ex" value="${d.eccentricity?.ex ?? 0}" step="0.01">
+          </div>
+          <div class="prop-field"><label>eᵧ (m)</label>
+            <input type="number" data-df="ecc.ey" value="${d.eccentricity?.ey ?? 0}" step="0.01">
+          </div>
+        </div>
+        <div class="prop-title" style="margin-top:8px;">Nodos del Piso</div>
+        <div class="prop-row cols1">
+          <div class="prop-field">
+            <label>IDs (separados por coma)</label>
+            <input type="text" data-df="nodes" value="${d.nodes.join(', ')}">
+          </div>
+        </div>
+        <div class="card-actions">
+          <button class="btn-danger btn-del-dia" style="flex:1">Eliminar</button>
+        </div>
+      </div>
+    `;
+
+    // Toggle expand
+    card.querySelector('.mat-card-head').addEventListener('click', () => card.classList.toggle('open'));
+
+    // Save on change
+    const saveCard = () => {
+      this.app.snapshot();
+      const get = sel => card.querySelector(`[data-df="${sel}"]`)?.value;
+      const getNum = sel => parseFloat(get(sel)) || 0;
+
+      const nodesStr = get('nodes') || '';
+      const nodeIds = nodesStr.split(',').map(s => parseInt(s.trim())).filter(n => !isNaN(n));
+
+      this.app.model.diaphragms.set(d.id, {
+        ...d,
+        name:        get('name') || d.name,
+        z:           getNum('z'),
+        masterId:    parseInt(get('masterId')) || nodeIds[0],
+        cm:          { x: getNum('cm.x'), y: getNum('cm.y') },
+        mass:        { m: getNum('mass.m'), Icm: getNum('mass.Icm') },
+        eccentricity:{ ex: getNum('ecc.ex'), ey: getNum('ecc.ey') },
+        nodes:       nodeIds
+      });
+      this.app.viewport.refreshDiaphragms();
+      this.app.markDirty();
+    };
+
+    card.querySelectorAll('input').forEach(inp => inp.addEventListener('change', saveCard));
+
+    card.querySelector('.btn-del-dia').addEventListener('click', () => {
+      this.app.snapshot();
+      this.app.model.removeDiaphragm(d.id);
+      this.app.viewport.refreshDiaphragms();
+      this.app.markDirty();
+      this.renderDiaphragms();
+    });
+
+    return card;
+  }
+}

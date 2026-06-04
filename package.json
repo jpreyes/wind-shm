@@ -1,0 +1,35 @@
+{
+  "name": "structweb3d",
+  "version": "0.1.0",
+  "description": "Aplicación educativa de análisis estructural 3D",
+  "main": "main.js",
+  "scripts": {
+    "start": "electron .",
+    "build:win": "electron-builder --win",
+    "build:mac": "electron-builder --mac",
+    "build:linux": "electron-builder --linux"
+  },
+  "build": {
+    "appId": "com.structweb3d.app",
+    "productName": "StructWeb3D",
+    "files": [
+      "index.html",
+      "style.css",
+      "main.js",
+      "preload.js",
+      "js/**",
+      "lib/**",
+      "examples/**"
+    ],
+    "directories": {
+      "output": "dist"
+    },
+    "win":   { "target": "nsis" },
+    "mac":   { "target": "dmg" },
+    "linux": { "target": "AppImage" }
+  },
+  "devDependencies": {
+    "electron": "^36.0.0",
+    "electron-builder": "^25.0.0"
+  }
+}
