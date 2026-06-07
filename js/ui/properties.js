@@ -498,7 +498,8 @@ export class PropertiesPanel {
 
   // ── Node form ──────────────────────────────────────────────────────────────
   _nodeHTML(node) {
-    const r = node.restraints;
+    const r  = node.restraints;
+    const nm = node.nodeMass ?? { mx: 0, my: 0, mz: 0 };
     const dof = ['ux','uy','uz','rx','ry','rz'];
     const labels = ['UX','UY','UZ','RX','RY','RZ'];
     const checks = dof.map((d, i) =>
@@ -507,6 +508,8 @@ export class PropertiesPanel {
         <span>${labels[i]}</span>
       </div>`
     ).join('');
+
+    const hasNM = nm.mx > 0 || nm.my > 0 || nm.mz > 0;
 
     return `
       <div class="prop-id">Nodo #${node.id}</div>
@@ -530,6 +533,31 @@ export class PropertiesPanel {
         </div>
       </div>
 
+      <div class="prop-section">
+        <div class="prop-title" style="${hasNM ? 'color:#ffd54f' : ''}">
+          Masa Nodal Concentrada${hasNM ? ' ●' : ''}
+        </div>
+        <div class="prop-row cols3">
+          <div class="prop-field"><label>mx (ton)</label>
+            <input type="number" id="nm-mx" value="${nm.mx ?? 0}" step="0.1" min="0">
+          </div>
+          <div class="prop-field"><label>my (ton)</label>
+            <input type="number" id="nm-my" value="${nm.my ?? 0}" step="0.1" min="0">
+          </div>
+          <div class="prop-field"><label>mz (ton)</label>
+            <input type="number" id="nm-mz" value="${nm.mz ?? 0}" step="0.1" min="0">
+          </div>
+        </div>
+        <div style="display:flex;gap:6px;margin-top:4px">
+          <button class="btn-secondary" id="btn-nm-iso" style="flex:1;font-size:11px;">
+            Copiar mx → my, mz
+          </button>
+        </div>
+        <div style="font-size:10px;color:var(--text-muted);margin-top:4px">
+          Entra en matriz M (análisis modal). W [kN] → m = W/9.81 ton
+        </div>
+      </div>
+
       <div class="delete-btn-row">
         <button class="btn-danger" id="btn-del-node" style="width:100%;">Eliminar Nodo #${node.id}</button>
       </div>
@@ -539,16 +567,21 @@ export class PropertiesPanel {
   _bindNodeEvents(node) {
     const sel = this._tabContents.sel;
 
+    const numVal = id => parseFloat(sel.querySelector(id)?.value) || 0;
+
     const save = () => {
       this.app.snapshot();
-      const x = parseFloat(sel.querySelector('#n-x').value);
-      const y = parseFloat(sel.querySelector('#n-y').value);
-      const z = parseFloat(sel.querySelector('#n-z').value);
+      const x = numVal('#n-x'), y = numVal('#n-y'), z = numVal('#n-z');
       const restraints = {};
       sel.querySelectorAll('[data-dof]').forEach(cb => {
         restraints[cb.dataset.dof] = cb.checked ? 1 : 0;
       });
-      this.app.model.updateNode(node.id, { x, y, z, restraints });
+      const nodeMass = {
+        mx: numVal('#nm-mx'),
+        my: numVal('#nm-my'),
+        mz: numVal('#nm-mz'),
+      };
+      this.app.model.updateNode(node.id, { x, y, z, restraints, nodeMass });
       this.app.viewport.refreshNode(this.app.model.nodes.get(node.id));
       this.app.markDirty();
     };
@@ -573,6 +606,15 @@ export class PropertiesPanel {
       // Fix translations, free rotations
       ['ux','uy','uz'].forEach(d => { sel.querySelector(`[data-dof="${d}"]`).checked = true; });
       ['rx','ry','rz'].forEach(d => { sel.querySelector(`[data-dof="${d}"]`).checked = false; });
+      save();
+    });
+
+    // Isotropic shortcut: copy mx to my and mz
+    sel.querySelector('#btn-nm-iso')?.addEventListener('click', () => {
+      const mxEl = sel.querySelector('#nm-mx');
+      const val  = mxEl?.value ?? '0';
+      sel.querySelector('#nm-my').value = val;
+      sel.querySelector('#nm-mz').value = val;
       save();
     });
 

@@ -72,6 +72,16 @@ export function assembleK(model, nodeIndex) {
   // Apply diaphragm concentrated masses (for modal analysis)
   applyDiaphragmMass(M, model, nodeIndex, nDOF);
 
+  // Apply user-defined nodal point masses (mx, my, mz in ton)
+  for (const node of model.nodes.values()) {
+    const nm = node.nodeMass;
+    if (!nm || (nm.mx === 0 && nm.my === 0 && nm.mz === 0)) continue;
+    const b = nodeIndex.get(node.id) * 6;
+    M[b*nDOF     + b    ] += nm.mx || 0;   // Ux
+    M[(b+1)*nDOF + (b+1)] += nm.my || 0;   // Uy
+    M[(b+2)*nDOF + (b+2)] += nm.mz || 0;   // Uz
+  }
+
   return { K, M, nDOF };
 }
 

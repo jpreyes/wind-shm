@@ -40,7 +40,8 @@ export class Model {
     const node = {
       id,
       x: +x, y: +y, z: +z,
-      restraints: { ux: 0, uy: 0, uz: 0, rx: 0, ry: 0, rz: 0, ...restraints }
+      restraints: { ux: 0, uy: 0, uz: 0, rx: 0, ry: 0, rz: 0, ...restraints },
+      nodeMass:   { mx: 0, my: 0, mz: 0 },
     };
     this.nodes.set(id, node);
     return node;
@@ -53,6 +54,7 @@ export class Model {
     if (props.y !== undefined) n.y = +props.y;
     if (props.z !== undefined) n.z = +props.z;
     if (props.restraints) Object.assign(n.restraints, props.restraints);
+    if (props.nodeMass)   Object.assign(n.nodeMass,   props.nodeMass);
     return n;
   }
 
