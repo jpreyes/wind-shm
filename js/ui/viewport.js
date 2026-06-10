@@ -1367,8 +1367,6 @@ export class Viewport {
 
   _showResultsUI(summary) {
     document.getElementById('results-overlay').classList.remove('hidden');
-    const lco = document.getElementById('lc-overlay');
-    if (lco) lco.style.display = 'none';
     document.getElementById('result-summary').textContent = summary;
     document.getElementById('results-banner').classList.add('visible');
     document.getElementById('btn-clear-results').style.display = '';

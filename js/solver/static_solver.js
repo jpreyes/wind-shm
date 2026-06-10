@@ -3,7 +3,7 @@
 // Solver:  K_ff · u_f = F_f  (Gaussian elimination via numeric.js)
 // ──────────────────────────────────────────────────────────────────────────────
 import { buildNodeIndex, assembleK, assembleF, getNodeDOFs } from './assembler.js';
-import { Results } from './postprocess.js?v=11';
+import { Results } from './postprocess.js?v=12';
 
 export class StaticSolver {
   /**

@@ -3,12 +3,12 @@
 // ──────────────────────────────────────────────────────────────────────────────
 import { Model }           from './model/model.js';
 import { Serializer }      from './model/serializer.js';
-import { Viewport }        from './ui/viewport.js?v=11';
+import { Viewport }        from './ui/viewport.js?v=12';
 import { PropertiesPanel } from './ui/properties.js';
 import { MenuBar }         from './ui/menu.js';
 import { UndoStack }       from './utils/undo.js';
-import { StaticSolver, ensureDefaultLC }   from './solver/static_solver.js?v=11';
-import { Results }                         from './solver/postprocess.js?v=11';
+import { StaticSolver, ensureDefaultLC }   from './solver/static_solver.js?v=12';
+import { Results }                         from './solver/postprocess.js?v=12';
 import { ModalSolver }                     from './solver/modal_solver.js';
 import { buildNodeIndex, assembleK, getNodeDOFs } from './solver/assembler.js';
 import { ModalResults }                    from './solver/modal_results.js';
@@ -857,7 +857,12 @@ class App {
         setTimeout(() => this._renderLcSelector(), 50);
       } else {
         this._activeLcId = +v;
-        this.refreshLoads();
+        if (this._results) {
+          // Results already shown — re-run with the same selfWeight flag
+          this.runAnalysis(this._results.selfWeight);
+        } else {
+          this.refreshLoads();
+        }
       }
     });
     document.getElementById('btn-add-lc')?.addEventListener('click', async () => {
