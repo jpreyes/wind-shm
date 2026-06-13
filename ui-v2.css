@@ -132,6 +132,7 @@ button:focus-visible, select:focus-visible, input:focus-visible {
   z-index: 1;
 }
 .inst-mark { width: 44px; height: 44px; flex-shrink: 0; }
+.inst-logo { height: 46px; width: auto; flex-shrink: 0; display: block; }
 .inst-names { display: flex; flex-direction: column; gap: 2px; }
 .inst-names strong {
   font-size: 13.5px;
@@ -346,6 +347,35 @@ button:focus-visible, select:focus-visible, input:focus-visible {
 }
 .landing-credit strong { color: var(--text); font-weight: 600; }
 
+/* ── banda de logos institucionales ── */
+.landing-logos {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 26px;
+  flex-wrap: wrap;
+  margin-bottom: 16px;
+}
+.landing-logos img { height: 44px; width: auto; }
+/* Logos solo-color (texto oscuro) van sobre chip blanco para que se lean en oscuro */
+.logo-chip {
+  background: #fff;
+  padding: 7px 12px;
+  border-radius: 8px;
+  box-sizing: content-box;
+}
+
+/* Logos en la sección Acerca de (Ayuda) */
+.help-logos {
+  display: flex;
+  align-items: center;
+  gap: 22px;
+  flex-wrap: wrap;
+  margin: 14px 0 4px;
+}
+.help-logos img { height: 38px; width: auto; }
+.help-logos .logo-chip { height: 30px; }
+
 @keyframes fade-up {
   from { opacity: 0; transform: translateY(18px); }
   to   { opacity: 1; transform: translateY(0); }
@@ -359,6 +389,9 @@ button:focus-visible, select:focus-visible, input:focus-visible {
 @media (max-height: 800px) {
   .landing-inst { padding: 16px 26px; }
   .inst-mark { width: 36px; height: 36px; }
+  .inst-logo { height: 36px; }
+  .landing-logos { gap: 18px; margin-bottom: 10px; }
+  .landing-logos img { height: 34px; }
   #hero-frame { width: min(190px, 40vw); margin-bottom: 2px; }
   .hero-title { font-size: clamp(44px, 6.5vw, 64px); }
   .hero-tag  { margin-top: 8px; font-size: 15px; }

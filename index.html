@@ -27,13 +27,13 @@
       window.dispatchEvent(new Event('pwa-installed'));
     });
   </script>
-  <link rel="stylesheet" href="style.css?v=31">
-  <link rel="stylesheet" href="ui-v2.css?v=31">
+  <link rel="stylesheet" href="style.css?v=32">
+  <link rel="stylesheet" href="ui-v2.css?v=32">
   <script type="importmap">
   {
     "imports": {
-      "three": "/lib/three/three.module.js",
-      "three/addons/": "/lib/three/addons/"
+      "three": "./lib/three/three.module.js",
+      "three/addons/": "./lib/three/addons/"
     }
   }
   </script>
@@ -636,7 +636,7 @@
           <div>
             <h2 style="margin:0">PÓRTICO</h2>
             <p style="margin:2px 0 0;color:var(--text-muted)">Laboratorio virtual de análisis estructural 3D
-              · <b id="help-version">versión 31</b> · junio 2026</p>
+              · <b id="help-version">versión 32</b> · junio 2026</p>
           </div>
         </div>
         <p><b>Material docente</b> desarrollado por el <b>Dr. Juan Patricio Reyes C.</b> —
@@ -646,6 +646,11 @@
            <b>Ingeniería Civil en Obras Civiles</b>: una herramienta para <i>ver por dentro</i>
            lo que el software comercial esconde — matrices, transformaciones, equilibrio,
            formas modales — y conectarlo con el cálculo manual del curso.</p>
+        <div class="help-logos">
+          <img src="icons/UACh-color-blanco.svg" alt="Universidad Austral de Chile">
+          <img src="icons/Facultad-color-blanco.svg" alt="Facultad de Ciencias de la Ingeniería">
+          <img class="logo-chip" src="icons/IOC-color.svg" alt="Instituto de Obras Civiles">
+        </div>
         <h2>Capacidades</h2>
         <ul class="help-list">
           <li>Elementos barra 3D tipo Timoshenko (12 GDL), liberaciones por condensación estática.</li>
@@ -675,17 +680,7 @@
 <!-- ══ PORTADA — pantalla de bienvenida ══ -->
 <div id="landing">
   <header class="landing-inst">
-    <!-- NOTA: reemplazar este emblema por el logo oficial del Instituto de
-         Obras Civiles / Facultad de Ciencias de la Ingeniería UACh cuando se
-         disponga del archivo (ej.: <img src="assets/logo-ioc-uach.png">) -->
-    <svg class="inst-mark" viewBox="0 0 48 48" aria-hidden="true">
-      <circle cx="24" cy="24" r="21.5" fill="none" stroke="var(--border2)" stroke-width="1.6"/>
-      <path d="M14 33 V19 Q14 15 18 15 H30 Q34 15 34 19 V33"
-            fill="none" stroke="var(--accent)" stroke-width="2.6" stroke-linecap="round"/>
-      <path d="M11 33 H37" stroke="var(--text-muted)" stroke-width="1.8" stroke-linecap="round"/>
-      <circle cx="14" cy="33" r="2.2" fill="var(--teal)"/>
-      <circle cx="34" cy="33" r="2.2" fill="var(--teal)"/>
-    </svg>
+    <img class="inst-logo" src="icons/UACh-color-blanco.svg" alt="Universidad Austral de Chile">
     <div class="inst-names">
       <strong>Universidad Austral de Chile</strong>
       <span>Facultad de Ciencias de la Ingeniería · Instituto de Obras Civiles</span>
@@ -728,6 +723,10 @@
   </main>
 
   <footer class="landing-credit">
+    <div class="landing-logos">
+      <img src="icons/Facultad-color-blanco.svg" alt="Facultad de Ciencias de la Ingeniería">
+      <img class="logo-chip" src="icons/IOC-color.svg" alt="Instituto de Obras Civiles">
+    </div>
     Material docente desarrollado por <strong>Dr. Juan Patricio Reyes C.</strong> —
     Instituto de Obras Civiles, Universidad Austral de Chile.<br>
     Para estudiantes de <strong>Arquitectura</strong>, <strong>Construcción</strong> e
@@ -802,8 +801,8 @@
 </script>
 
 <!-- numeric.js para solver (Fase 2+) -->
-<script src="/lib/numeric.js"></script>
-<script type="module" src="js/app.js?v=31"></script>
+<script src="lib/numeric.js"></script>
+<script type="module" src="js/app.js?v=32"></script>
 
 <!-- PWA: registrar el service worker (offline). Solo en contexto seguro
      (https o localhost); el navegador deja navigator.serviceWorker undefined
