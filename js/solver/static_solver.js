@@ -2,8 +2,8 @@
 // StaticSolver — direct stiffness method for linear static analysis
 // Solver:  K_ff · u_f = F_f  (Gaussian elimination via numeric.js)
 // ──────────────────────────────────────────────────────────────────────────────
-import { buildNodeIndex, assembleK, assembleF, getNodeDOFs } from './assembler.js?v=32';
-import { Results } from './postprocess.js?v=32';
+import { buildNodeIndex, assembleK, assembleF, getNodeDOFs } from './assembler.js?v=33';
+import { Results } from './postprocess.js?v=33';
 
 export class StaticSolver {
   /**
@@ -87,8 +87,11 @@ export class StaticSolver {
       reactions[i] = Ku_i - F[i];
     }
 
-    // Reacciones de apoyos elásticos: en un GDL con resorte (libre) el balance
-    // Ku−F vale 0; la reacción que el resorte ejerce sobre la estructura es −k·u.
+    // Reacciones de apoyos elásticos: SOLO en GDL libres (donde el resorte es el
+    // apoyo). Ahí el balance Ku−F vale 0 y la reacción real es −k·u. Si el GDL
+    // también está rígidamente restringido, el resorte no actúa (u=0): se conserva
+    // la reacción rígida Ku−F y NO se sobrescribe (de lo contrario daría 0).
+    const freeSet = new Set(freeDOF);
     for (const node of model.nodes.values()) {
       const sp = node.springs;
       if (!sp) continue;
@@ -96,7 +99,7 @@ export class StaticSolver {
       if (!ks.some(k => k > 0)) continue;
       const d = getNodeDOFs(nodeIndex, node.id);
       for (let i = 0; i < 6; i++) {
-        if (ks[i] > 0) reactions[d[i]] = -ks[i] * u[d[i]];
+        if (ks[i] > 0 && freeSet.has(d[i])) reactions[d[i]] = -ks[i] * u[d[i]];
       }
     }
 

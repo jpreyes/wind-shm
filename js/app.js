@@ -1,21 +1,21 @@
 // ──────────────────────────────────────────────────────────────────────────────
 // App — main orchestrator
 // ──────────────────────────────────────────────────────────────────────────────
-import { Model }           from './model/model.js?v=32';
-import { Serializer }      from './model/serializer.js?v=32';
-import { Viewport }        from './ui/viewport.js?v=32';
-import { PropertiesPanel } from './ui/properties.js?v=32';
-import { MenuBar }         from './ui/menu.js?v=32';
-import { UndoStack }       from './utils/undo.js?v=32';
-import { StaticSolver, ensureDefaultLC }   from './solver/static_solver.js?v=32';
-import { Results }                         from './solver/postprocess.js?v=32';
-import { ModalSolver }                     from './solver/modal_solver.js?v=32';
-import { buildNodeIndex, assembleK, getNodeDOFs } from './solver/assembler.js?v=32';
-import { ModalResults }                    from './solver/modal_results.js?v=32';
-import { SpectrumSolver }                  from './solver/spectrum_solver.js?v=32';
-import { autoDetectDiaphragms, computeFloorCR } from './solver/diaphragm.js?v=32';
-import { splitElement, splitByLength, discretizeAll, joinElements } from './model/discretize.js?v=32';
-import { localAxes, stiffnessMatrix, massMatrix, transformMatrix, globalStiffness, applyReleases } from './solver/timoshenko.js?v=32';
+import { Model }           from './model/model.js?v=33';
+import { Serializer }      from './model/serializer.js?v=33';
+import { Viewport }        from './ui/viewport.js?v=33';
+import { PropertiesPanel } from './ui/properties.js?v=33';
+import { MenuBar }         from './ui/menu.js?v=33';
+import { UndoStack }       from './utils/undo.js?v=33';
+import { StaticSolver, ensureDefaultLC }   from './solver/static_solver.js?v=33';
+import { Results }                         from './solver/postprocess.js?v=33';
+import { ModalSolver }                     from './solver/modal_solver.js?v=33';
+import { buildNodeIndex, assembleK, getNodeDOFs } from './solver/assembler.js?v=33';
+import { ModalResults }                    from './solver/modal_results.js?v=33';
+import { SpectrumSolver }                  from './solver/spectrum_solver.js?v=33';
+import { autoDetectDiaphragms, computeFloorCR } from './solver/diaphragm.js?v=33';
+import { splitElement, splitByLength, discretizeAll, joinElements } from './model/discretize.js?v=33';
+import { localAxes, stiffnessMatrix, massMatrix, transformMatrix, globalStiffness, applyReleases } from './solver/timoshenko.js?v=33';
 
 class App {
   constructor() {
