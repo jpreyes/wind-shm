@@ -1,7 +1,7 @@
 {
   "_meta": {
     "proposito": "Reglas de ingeniería para el asistente IA de PÓRTICO. El LLM solo extrae una 'ficha' estructurada desde el texto del usuario; este archivo + las bibliotecas CSV aportan los datos y decisiones que el LLM NO debe inventar. Un generador determinista combina ficha + reglas + bibliotecas para producir el modelo .s3d.",
-    "version": "0.2",
+    "version": "0.3",
     "fuentes": [
       "Perfiles: EN 10365 (dataset pcachim/eurocodepy, verificado contra IPE300/HEB200)",
       "Cargas de uso: NCh1537 | Viento: NCh432 | Sísmica: NCh433 | Nieve: NCh431",
@@ -12,7 +12,8 @@
     "perfiles_csv": "perfiles.csv",
     "materiales_csv": "materiales.csv",
     "_nota_perfiles": "90 perfiles I (IPE, HEA, HEB, HEM). Columnas en mm (h,b,tw,tf,r) y unidades de tabla (A_cm2, I_cm4, Iw_cm6, Av_cm2, W_cm3, i_cm). Iy=eje fuerte (mayor); Iz=eje débil (menor), convención Eurocode. Ampliable agregando filas. Pendiente: tubos CHS/RHS/SHS y perfiles IPN/UPN/L.",
-    "_conversion_a_PORTICO": "A: cm2 ×1e-4 → m2. I, It: cm4 ×1e-8 → m4. El generador mapea Iy(mayor)→plano fuerte y asigna Avy/Avz/kappa desde Av_y/Av_z del CSV."
+    "_conversion_a_PORTICO": "A: cm2 ×1e-4 → m2. I, It: cm4 ×1e-8 → m4. El generador mapea Iy(mayor)→plano fuerte y asigna Avy/Avz/kappa desde Av_y/Av_z del CSV.",
+    "sobrecargas_csv": "sobrecargas_NCh1537.csv"
   },
   "reglas_modelado": {
     "apoyo_base": "empotrado",
@@ -37,14 +38,11 @@
       "_fuente": "NCh433 (verificar fracción según uso)"
     },
     "sobrecarga_uso_NCh1537": {
-      "_fuente": "NCh1537 (verificar valores)",
-      "_unidad": "kN/m2",
-      "colegio_aula": 3.0,
-      "colegio_pasillo_escalera": 4.0,
-      "oficina": 2.5,
-      "habitacional": 2.0,
-      "techo_no_accesible": 1.0,
-      "_verificar": true
+      "_fuente": "NCh1537 — tabla COMPLETA (60 usos) en sobrecargas_NCh1537.csv, extraída del Excel del profesor.",
+      "_csv": "sobrecargas_NCh1537.csv",
+      "_columnas": "id, tipo_edificio, descripcion, Lo_kNm2 (sobrecarga uniforme), Qk_kN (carga concentrada)",
+      "_ejemplo_colegio": "Escuelas/Salas de Clases = 3.0 kN/m2 ; Escuelas/Pasillos = 4.0 kN/m2",
+      "_aplicacion": "Lo (kN/m2) se reparte a vigas por ancho tributario; Qk es carga concentrada de verificacion."
     },
     "nieve_NCh431": {
       "_fuente": "NCh431 — pendiente: PROFESOR aún no tiene este cálculo; se arma con la norma y se valida.",
