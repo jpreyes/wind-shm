@@ -37,6 +37,32 @@ export function perfilASeccion(p, nombre) {
   };
 }
 
+/**
+ * Sección RECTANGULAR maciza (p.ej. viga/pilar de hormigón) definida por b×h.
+ * b = ancho, h = altura (canto, eje fuerte). Acepta b_cm/h_cm o b_mm/h_mm o b_m/h_m.
+ *  - Iz (fuerte) = b·h³/12 ; Iy (débil) = h·b³/12
+ *  - J: constante de torsión de St. Venant para rectángulo (a≥c)
+ *  - Avy = Avz = (5/6)·A  (factor de corte de Timoshenko para rectángulo)
+ */
+export function rectangularASeccion(spec, nombre) {
+  const m = (cm, mm, mt) => cm != null ? cm / 100 : mm != null ? mm / 1000 : mt;
+  const b = m(spec.b_cm, spec.b_mm, spec.b_m);
+  const h = m(spec.h_cm, spec.h_mm, spec.h_m);
+  if (!(b > 0) || !(h > 0)) throw new Error(`Sección rectangular inválida: ${JSON.stringify(spec)}`);
+  const A = b * h;
+  const Iz = b * h ** 3 / 12;   // eje fuerte (flexión en el plano del canto)
+  const Iy = h * b ** 3 / 12;   // eje débil
+  const a = Math.max(b, h), c = Math.min(b, h);
+  const J = a * c ** 3 * (1 / 3 - 0.21 * (c / a) * (1 - c ** 4 / (12 * a ** 4)));
+  const Av = (5 / 6) * A;
+  const fmt = (x) => +x.toFixed(8);
+  return {
+    name: nombre || `${Math.round(b * 100)}x${Math.round(h * 100)}`,
+    A: fmt(A), Iz: fmt(Iz), Iy: fmt(Iy), J: fmt(J),
+    Avy: fmt(Av), Avz: fmt(Av), kappay: 1.0, kappaz: 1.0,
+  };
+}
+
 /** Fila de materiales.csv → material PÓRTICO. */
 export function filaAMaterial(m) {
   const num = (v) => (typeof v === 'number' ? v : parseFloat(v));
@@ -106,10 +132,40 @@ export function generarModelo(ficha, libs) {
     if (!p) throw new Error(`Perfil no encontrado en perfiles.csv: "${n}"`);
     return p;
   };
+  // Material tolerante: exacto → por fc (hormigón "fc=30"/"H30") → token-match.
   const buscarMat = (n) => {
-    const m = matPorNombre.get(String(n).trim());
-    if (!m) throw new Error(`Material no encontrado en materiales.csv: "${n}"`);
-    return m;
+    if (n == null) throw new Error('Falta el material (ficha.secciones.material). Para hormigón usa H20/H25/H30/H40; para acero S275/A630-420H.');
+    const raw = String(n).trim();
+    const exact = matPorNombre.get(raw);
+    if (exact) return exact;
+    const low = raw.toLowerCase().normalize('NFD').replace(/[^a-z0-9 ]/g, ' ');
+    // fc numérico → H{fc}
+    const fc = low.match(/\b(\d{2,3})\b/);
+    if (fc && /(horm|h\s*\d|fc|concret)/.test(low)) {
+      const byFc = materiales.find((m) => String(m.fc_MPa).trim() === fc[1] || String(m.nombre).trim().toUpperCase() === 'H' + fc[1]);
+      if (byFc) return byFc;
+    }
+    // token-match contra nombre + descripción
+    const qt = low.split(/\s+/).filter(Boolean);
+    let best = null, bestScore = 0;
+    for (const m of materiales) {
+      const t = `${m.nombre} ${m.descripcion}`.toLowerCase().normalize('NFD').replace(/[^a-z0-9 ]/g, ' ');
+      const score = qt.filter((q) => q.length >= 2 && t.includes(q)).length;
+      if (score > bestScore) { best = m; bestScore = score; }
+    }
+    if (best && bestScore > 0) return best;
+    throw new Error(`Material no encontrado en materiales.csv: "${n}". Use H20/H25/H30/H40 (hormigón) o S235/S275/S355/A630-420H (acero).`);
+  };
+  // Sección: string → perfil de acero (perfiles.csv); objeto {b_cm,h_cm} → rectangular (hormigón).
+  const resolverSeccion = (spec, etiqueta) => {
+    if (spec && typeof spec === 'object') return rectangularASeccion(spec, spec.nombre);
+    if (typeof spec === 'string' && /^\s*\d/.test(spec)) {
+      // "20x40" o "20x40cm" → rectangular
+      const mm = spec.match(/(\d+(?:\.\d+)?)\s*[xX×]\s*(\d+(?:\.\d+)?)/);
+      if (mm) return rectangularASeccion({ b_cm: +mm[1], h_cm: +mm[2] }, spec);
+    }
+    if (!spec) throw new Error(`Falta la sección de ${etiqueta} (ficha.secciones.${etiqueta}).`);
+    return perfilASeccion(buscarPerfil(spec), String(spec));
   };
 
   // ── Contadores e índices ──────────────────────────────────────────────────
@@ -120,9 +176,9 @@ export function generarModelo(ficha, libs) {
   const mat = filaAMaterial(buscarMat(ficha.secciones.material));
   mat.id = ++cnt.materials; materials.push(mat);
 
-  const secViga = perfilASeccion(buscarPerfil(ficha.secciones.vigas), ficha.secciones.vigas);
+  const secViga = resolverSeccion(ficha.secciones.vigas, 'vigas');
   secViga.id = ++cnt.sections; sections.push(secViga);
-  const secPilar = perfilASeccion(buscarPerfil(ficha.secciones.pilares), ficha.secciones.pilares);
+  const secPilar = resolverSeccion(ficha.secciones.pilares, 'pilares');
   secPilar.id = ++cnt.sections; sections.push(secPilar);
 
   // ── Geometría: ejes y niveles ─────────────────────────────────────────────

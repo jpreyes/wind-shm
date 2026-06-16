@@ -87,9 +87,9 @@
       "required": ["material", "vigas", "pilares"],
       "additionalProperties": false,
       "properties": {
-        "material": { "type": "string", "description": "Nombre en materiales.csv (ej. S275, A630-420H, H30)." },
-        "vigas": { "type": "string", "description": "Perfil en perfiles.csv (ej. IPE300)." },
-        "pilares": { "type": "string", "description": "Perfil en perfiles.csv (ej. HEB200)." }
+        "material": { "type": "string", "description": "Acero (S235/S275/S355/A630-420H) u hormigón (H20/H25/H30/H40). fc en MPa → H{fc}, ej. fc=30 → 'H30'." },
+        "vigas": { "$ref": "#/$defs/seccion", "description": "Perfil de acero (string, ej. 'IPE300') o sección rectangular de hormigón {b_cm,h_cm}." },
+        "pilares": { "$ref": "#/$defs/seccion", "description": "Perfil de acero (string, ej. 'HEB200') o sección rectangular de hormigón {b_cm,h_cm}." }
       }
     },
 
@@ -121,6 +121,25 @@
         "categoria": { "type": "string", "enum": ["I", "II", "III", "IV"] },
         "R": { "type": "number", "exclusiveMinimum": 0 }
       }
+    }
+  },
+
+  "$defs": {
+    "seccion": {
+      "oneOf": [
+        { "type": "string", "description": "Nombre de perfil de acero en perfiles.csv (ej. 'IPE300', 'HEB200'). También admite 'b x h' en cm." },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["b_cm", "h_cm"],
+          "description": "Sección rectangular maciza (hormigón): b = ancho, h = canto.",
+          "properties": {
+            "b_cm": { "type": "number", "exclusiveMinimum": 0 },
+            "h_cm": { "type": "number", "exclusiveMinimum": 0 },
+            "nombre": { "type": "string" }
+          }
+        }
+      ]
     }
   }
 }
