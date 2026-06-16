@@ -36,7 +36,7 @@ rígidos, sismo + sobrecarga de colegio + viento en Valdivia"*) en un modelo
 - **Viento (NCh432)** y **sísmica (NCh433)** — dependen de la ubicación. Se
   codificarán **desde los Excel del profesor** (fuente de verdad), no inventados.
   Sísmica → casos espectrales (dir X e Y), que PÓRTICO ya soporta.
-- **Nieve (NCh431)** — el profesor no la tiene aún; se arma con la norma y valida.
+- **Nieve (NCh431)** — se arma con la norma y se valida.
 
 ## Combinaciones (botón + asistente)
 
@@ -50,7 +50,7 @@ rígidos, sismo + sobrecarga de colegio + viento en Valdivia"*) en un modelo
 
 - Sin modelos locales. **LLM gratis en la nube** (Gemini Flash o Groq) con la
   **credencial del lado del servidor** (n8n cifrado o un Cloudflare Worker como
-  proxy). La llave nunca toca el navegador ni tu PC.
+  proxy). La llave nunca toca el navegador.
 
 ## Archivos
 
@@ -90,7 +90,7 @@ rígidos, sismo + sobrecarga de colegio + viento en Valdivia"*) en un modelo
   plantilla) y el generador construye el modelo en el navegador (carga
   `generador.js` + bibliotecas y reemplaza el modelo). Incluye un panel opcional
   de **lenguaje natural** que llama al webhook de n8n (URL guardada en
-  localStorage) para traer la ficha; la credencial del LLM vive en n8n.
+  localStorage) para traer la ficha; la credencial vive en el servidor.
 - **Espectro (F7)**: constructor NCh433 con gráfico (ver app).
 
 ## Flujo n8n (chat → LLM → ficha → modelo)
