@@ -1,7 +1,7 @@
 {
   "_meta": {
     "proposito": "Reglas de ingeniería para el asistente IA de PÓRTICO. El LLM solo extrae una 'ficha' estructurada desde el texto del usuario; este archivo + las bibliotecas CSV aportan los datos y decisiones que el LLM NO debe inventar. Un generador determinista combina ficha + reglas + bibliotecas para producir el modelo .s3d.",
-    "version": "0.3",
+    "version": "0.4",
     "fuentes": [
       "Perfiles: EN 10365 (dataset pcachim/eurocodepy, verificado contra IPE300/HEB200)",
       "Cargas de uso: NCh1537 | Viento: NCh432 | Sísmica: NCh433 | Nieve: NCh431",
@@ -55,13 +55,495 @@
       }
     },
     "viento_NCh432": {
-      "_fuente": "NCh432 — SE CODIFICARÁ desde el Excel del profesor (fuente de verdad).",
-      "_estado": "pendiente_excel",
-      "ciudades": {
-        "Valdivia": {
-          "_desde_excel": true
+      "_fuente": "NCh432.Of2010 — codificado desde 'Nch432_2010 Viento v0.2.xlsx' del profesor (fuente de verdad). Método analítico para edificios de baja altura (equivalente a ASCE 7-05 Fig. 6-4, 6-10 y Tabla 6-2), con velocidades básicas V de estaciones y zonas de latitud chilenas.",
+      "_estado": "codificado",
+      "_unidades": "V en m/s; presiones q,p en N/m² (multiplicar ×0.101972 para kgf/m²). Geometría en m.",
+      "metodo": "analitico_baja_altura_SPRFV",
+      "_aplicacion_PORTICO": "q(h)=0.613·Kz·Kzt·Kd·V²·I [N/m²]. Presión de diseño por zona: p = q·(GCpf − GCpi), evaluando ±GCpi y tomando el caso gobernante. Las presiones de muro (zona 1 barlovento, 4 sotavento, 5 lateral) → cargas lineales horizontales sobre pilares/vigas por ancho tributario; las de techo (zonas 2,3) → cargas normales sobre vigas de techo. Zonas 'E' = franjas de borde (ancho 2a, ver NCh432).",
+      "factor_importancia_I": {
+        "I": 0.87,
+        "II": 1.0,
+        "III": 1.15,
+        "IV": 1.15
+      },
+      "Kd_direccionalidad": {
+        "Edificio SPRFV": 0.85,
+        "Edificio elementos secundarios": 0.85,
+        "Techos abovedados en arco": 0.85,
+        "Chimeneas, estanques, similar (cuadrado)": 0.9,
+        "Chimeneas, estanques, similar (otros)": 0.95,
+        "Senaletica solida": 0.95,
+        "Senaletica solida y marco enrejado": 0.85,
+        "Torre enrejada (triangular, cuadrada, rectangular)": 0.85,
+        "Torre enrejada (otros)": 0.95
+      },
+      "GCpi_presion_interna": {
+        "Abierto": 0.0,
+        "Parcialmente cerrado": 0.55,
+        "Cerrado": 0.18,
+        "_nota": "Se aplica con signo ±; el diseño toma el caso gobernante."
+      },
+      "exposicion": {
+        "B": {
+          "alfa": 7.0,
+          "Zg_m": 365.76,
+          "zmin_m": 9.14
+        },
+        "C": {
+          "alfa": 9.5,
+          "Zg_m": 274.32,
+          "zmin_m": 4.57
+        },
+        "D": {
+          "alfa": 11.5,
+          "Zg_m": 213.36,
+          "zmin_m": 2.13
         }
-      }
+      },
+      "Kz_formula": "Kz = 2.01·(z/Zg)^(2/alfa), con z = max(h_techo, 4.6 m). (Excel: para h<4.6 usa una rama simplificada; aquí se usa la forma ASCE estándar.)",
+      "Kzt_topografico": {
+        "formula": "Kzt = (1 + K1·K2·K3)²  (si topografia='No aplica' → Kzt=1)",
+        "_lectura": "Tablas escalón [limite_superior_exclusivo, valor]; el último con limite null = infinito.",
+        "K1_por_HsobreLh": {
+          "Cima 2D": [
+            [
+              0.2,
+              0.29
+            ],
+            [
+              0.25,
+              0.36
+            ],
+            [
+              0.3,
+              0.43
+            ],
+            [
+              0.35,
+              0.51
+            ],
+            [
+              0.4,
+              0.58
+            ],
+            [
+              0.45,
+              0.65
+            ],
+            [
+              0.5,
+              0.72
+            ],
+            [
+              null,
+              0.72
+            ]
+          ],
+          "Escarpe 2D": [
+            [
+              0.2,
+              0.17
+            ],
+            [
+              0.25,
+              0.21
+            ],
+            [
+              0.3,
+              0.26
+            ],
+            [
+              0.35,
+              0.3
+            ],
+            [
+              0.4,
+              0.34
+            ],
+            [
+              0.45,
+              0.38
+            ],
+            [
+              0.5,
+              0.43
+            ],
+            [
+              null,
+              0.43
+            ]
+          ],
+          "Colina Axisim. 3D": [
+            [
+              0.2,
+              0.21
+            ],
+            [
+              0.25,
+              0.26
+            ],
+            [
+              0.3,
+              0.32
+            ],
+            [
+              0.35,
+              0.37
+            ],
+            [
+              0.4,
+              0.42
+            ],
+            [
+              0.45,
+              0.47
+            ],
+            [
+              0.5,
+              0.53
+            ],
+            [
+              null,
+              0.53
+            ]
+          ]
+        },
+        "K2_por_xsobreLh": {
+          "Cima 2D": [
+            [
+              0.5,
+              1.0
+            ],
+            [
+              1.0,
+              0.88
+            ],
+            [
+              1.5,
+              0.75
+            ],
+            [
+              2.0,
+              0.63
+            ],
+            [
+              2.5,
+              0.5
+            ],
+            [
+              3.0,
+              0.38
+            ],
+            [
+              3.5,
+              0.25
+            ],
+            [
+              4.0,
+              0.13
+            ],
+            [
+              null,
+              0.0
+            ]
+          ],
+          "Escarpe 2D / Colina Axisim. 3D": [
+            [
+              0.5,
+              1.0
+            ],
+            [
+              1.0,
+              0.67
+            ],
+            [
+              1.5,
+              0.33
+            ],
+            [
+              null,
+              0.0
+            ]
+          ]
+        },
+        "K3_por_zsobreLh": {
+          "Cima 2D": [
+            [
+              0.1,
+              1.0
+            ],
+            [
+              0.2,
+              0.74
+            ],
+            [
+              0.3,
+              0.55
+            ],
+            [
+              0.4,
+              0.41
+            ],
+            [
+              0.5,
+              0.3
+            ],
+            [
+              0.6,
+              0.22
+            ],
+            [
+              0.7,
+              0.17
+            ],
+            [
+              0.8,
+              0.12
+            ],
+            [
+              0.9,
+              0.09
+            ],
+            [
+              1.0,
+              0.07
+            ],
+            [
+              1.5,
+              0.05
+            ],
+            [
+              2.0,
+              0.01
+            ],
+            [
+              null,
+              0.0
+            ]
+          ],
+          "Escarpe 2D": [
+            [
+              0.1,
+              1.0
+            ],
+            [
+              0.2,
+              0.78
+            ],
+            [
+              0.3,
+              0.61
+            ],
+            [
+              0.4,
+              0.47
+            ],
+            [
+              0.5,
+              0.37
+            ],
+            [
+              0.6,
+              0.29
+            ],
+            [
+              0.7,
+              0.22
+            ],
+            [
+              0.8,
+              0.17
+            ],
+            [
+              0.9,
+              0.14
+            ],
+            [
+              1.0,
+              0.11
+            ],
+            [
+              1.5,
+              0.08
+            ],
+            [
+              2.0,
+              0.02
+            ],
+            [
+              null,
+              0.0
+            ]
+          ],
+          "Colina Axisim. 3D": [
+            [
+              0.1,
+              1.0
+            ],
+            [
+              0.2,
+              0.67
+            ],
+            [
+              0.3,
+              0.45
+            ],
+            [
+              0.4,
+              0.3
+            ],
+            [
+              0.5,
+              0.2
+            ],
+            [
+              0.6,
+              0.14
+            ],
+            [
+              0.7,
+              0.09
+            ],
+            [
+              0.8,
+              0.06
+            ],
+            [
+              0.9,
+              0.04
+            ],
+            [
+              1.0,
+              0.03
+            ],
+            [
+              1.5,
+              0.02
+            ],
+            [
+              null,
+              0.0
+            ]
+          ]
+        }
+      },
+      "V_basica_m_s": {
+        "por_estacion": {
+          "Arica": 23,
+          "Iquique": 25.8,
+          "Calama": 36.8,
+          "Antofagasta": 24.3,
+          "La Serena": 32.1,
+          "DGF-Lengua de Vaca": 34.6,
+          "CENMA-Pichidangui": 29.2,
+          "Pudahuel": 30.3,
+          "Torre Entel": 24.1,
+          "La Reina": 22.4,
+          "La Platina": 16.7,
+          "Putu": 29,
+          "Concepcion": 40,
+          "ENAP-Bio Bio": 43.5,
+          "Temuco": 35.2,
+          "Puerto Montt": 33.9,
+          "Chaiten": 49.2,
+          "Quellon": 49.7,
+          "Palena": 38.2,
+          "Coyhaique": 44.8,
+          "Balmaceda": 47.6,
+          "Chile Chico": 41.5,
+          "Cochrane": 38.1,
+          "Punta Arenas": 53.5
+        },
+        "por_latitud": [
+          {
+            "rango": "17°29'–27°",
+            "V": 30
+          },
+          {
+            "rango": "27°–35°",
+            "V": 35
+          },
+          {
+            "rango": "35°–42°",
+            "V": 40
+          },
+          {
+            "rango": "42°–50°",
+            "V": 50
+          },
+          {
+            "rango": "50°–56°32'",
+            "V": 55
+          }
+        ]
+      },
+      "GCpf_coef_presion_externa": {
+        "_tramos_pendiente_grados": "[0,5), [5,20), [20,45), [>=45]",
+        "_zonas": "1=muro barlovento, 2=techo barlovento, 3=techo sotavento, 4=muro sotavento, 5=muro lateral, 6=lateral; sufijo E=franja de borde.",
+        "zonas": {
+          "1": [
+            0.4,
+            0.53,
+            0.56,
+            0.56
+          ],
+          "2": [
+            -0.69,
+            -0.69,
+            0.21,
+            0.56
+          ],
+          "3": [
+            -0.37,
+            -0.48,
+            -0.43,
+            -0.37
+          ],
+          "4": [
+            -0.29,
+            -0.43,
+            0.37,
+            0.37
+          ],
+          "5": [
+            -0.45,
+            -0.45,
+            -0.45,
+            -0.45
+          ],
+          "6": [
+            -0.45,
+            -0.45,
+            -0.45,
+            -0.45
+          ],
+          "1E": [
+            0.61,
+            0.8,
+            0.69,
+            0.69
+          ],
+          "2E": [
+            -1.07,
+            -1.07,
+            0.27,
+            0.69
+          ],
+          "3E": [
+            -0.53,
+            -0.69,
+            -0.53,
+            -0.48
+          ],
+          "4E": [
+            0.43,
+            -0.64,
+            -0.48,
+            -0.48
+          ]
+        }
+      },
+      "_verificacion_excel": "Ejemplo Excel (Puerto Montt, V=40, Exp C, Cat II -> I=1, Kd=0.85; topo Escarpe 2D H=3,Lh=4,x=2,z=5 -> Kzt=1.046627; h=6): con Kz exacto=0.898876 da q=784.32 N/m2 y zona1=745.1, zona2=-972.6, zona1E=909.8 N/m2 (parc. cerrado). El Excel da q=785.30 (zona1=746.0) porque usa un Kz de tabla redondeado=0.90; la formula exacta (aqui codificada) difiere solo 0.13%."
     },
     "sismica_NCh433": {
       "_fuente": "NCh433 Of.2009 + DS61/2011 — codificado desde el Excel del profesor ('Espectro NCh433 of.2009 DS61.xls'). Verificado: R* y Sa(0) reproducen las celdas del Excel. Genera el espectro y lo asigna a casos ESPECTRALES (dir X e Y).",
