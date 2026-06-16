@@ -127,45 +127,76 @@ export function generarModelo(ficha, libs) {
   const perfilPorNombre = new Map(perfiles.map((p) => [String(p.nombre).trim(), p]));
   const matPorNombre = new Map(materiales.map((m) => [String(m.nombre).trim(), m]));
 
-  const buscarPerfil = (n) => {
-    const p = perfilPorNombre.get(String(n).trim());
-    if (!p) throw new Error(`Perfil no encontrado en perfiles.csv: "${n}"`);
-    return p;
+  // ── Avisos: el generador NUNCA falla por datos faltantes; sustituye/estima
+  //    y registra lo que hizo. tipo: 'reemplazo'|'estimado'|'omitido'|'info'.
+  const avisos = [];
+  const aviso = (tipo, msg) => avisos.push({ tipo, msg });
+
+  const sec = ficha.secciones || {};
+  const esRect = (s) => (s && typeof s === 'object' && (s.b_cm || s.b_mm || s.b_m)) ||
+                        (typeof s === 'string' && /\d+\s*[xX×]\s*\d+/.test(s));
+  // Contexto hormigón si las secciones van por dimensiones o el material lo sugiere.
+  const contextoHormigon = esRect(sec.vigas) || esRect(sec.pilares) ||
+                           /horm|fc|concret|^\s*h\s*\d/i.test(String(sec.material || ''));
+
+  // Material RESILIENTE: exacto → fc/Hxx → token-match → estimar hormigón → default.
+  const materialResiliente = (n) => {
+    if (n != null) {
+      const raw = String(n).trim();
+      const exact = matPorNombre.get(raw);
+      if (exact) return filaAMaterial(exact);
+      const low = raw.toLowerCase().normalize('NFD').replace(/[^a-z0-9 ]/g, ' ');
+      const fcm = low.match(/\b(\d{2,3})\b/);
+      const fc = fcm ? +fcm[1] : null;
+      if (fc && /(horm|h\s*\d|fc|concret)/.test(low)) {
+        const byFc = materiales.find((m) => String(m.fc_MPa).trim() === String(fc) || String(m.nombre).trim().toUpperCase() === 'H' + fc);
+        if (byFc) return filaAMaterial(byFc);
+        const E = Math.round(4700 * Math.sqrt(fc) * 1000); // kN/m² (E=4700√fc MPa)
+        aviso('estimado', `Material "${n}" no estaba en la base: se estimó hormigón fc=${fc} MPa (E≈${(E / 1e6).toFixed(0)} GPa, G≈${(Math.round(E / 2.4) / 1e6).toFixed(0)} GPa, ν=0.2, ρ=2.5 t/m³).`);
+        return { name: `H${fc}(est)`, E, G: Math.round(E / 2.4), nu: 0.2, rho: 2.5 };
+      }
+      const qt = low.split(/\s+/).filter(Boolean);
+      let best = null, bestScore = 0;
+      for (const m of materiales) {
+        const t = `${m.nombre} ${m.descripcion}`.toLowerCase().normalize('NFD').replace(/[^a-z0-9 ]/g, ' ');
+        const score = qt.filter((q) => q.length >= 2 && t.includes(q)).length;
+        if (score > bestScore) { best = m; bestScore = score; }
+      }
+      if (best && bestScore > 0) {
+        if (best.nombre.toLowerCase() !== raw.toLowerCase()) aviso('info', `Material "${n}" interpretado como "${best.nombre}".`);
+        return filaAMaterial(best);
+      }
+    }
+    const defNom = contextoHormigon ? 'H30' : 'S275';
+    aviso('reemplazo', `Material ${n == null ? '(no indicado)' : `"${n}"`} no reconocido: se usó ${defNom} por defecto.`);
+    const def = matPorNombre.get(defNom);
+    if (def) return filaAMaterial(def);
+    return contextoHormigon ? { name: 'H30', E: 28700000, G: 11960000, nu: 0.2, rho: 2.5 }
+                            : { name: 'S275', E: 210000000, G: 80800000, nu: 0.3, rho: 7.85 };
   };
-  // Material tolerante: exacto → por fc (hormigón "fc=30"/"H30") → token-match.
-  const buscarMat = (n) => {
-    if (n == null) throw new Error('Falta el material (ficha.secciones.material). Para hormigón usa H20/H25/H30/H40; para acero S275/A630-420H.');
-    const raw = String(n).trim();
-    const exact = matPorNombre.get(raw);
-    if (exact) return exact;
-    const low = raw.toLowerCase().normalize('NFD').replace(/[^a-z0-9 ]/g, ' ');
-    // fc numérico → H{fc}
-    const fc = low.match(/\b(\d{2,3})\b/);
-    if (fc && /(horm|h\s*\d|fc|concret)/.test(low)) {
-      const byFc = materiales.find((m) => String(m.fc_MPa).trim() === fc[1] || String(m.nombre).trim().toUpperCase() === 'H' + fc[1]);
-      if (byFc) return byFc;
+
+  // Sección RESILIENTE: rectangular {b_cm,h_cm}/"20x40" → hormigón; string → perfil
+  // de acero; si no se reconoce → reemplazo por defecto según contexto.
+  const seccionResiliente = (spec, etiqueta) => {
+    try {
+      if (spec && typeof spec === 'object') return rectangularASeccion(spec, spec.nombre);
+      if (typeof spec === 'string') {
+        const mm = spec.match(/(\d+(?:\.\d+)?)\s*[xX×]\s*(\d+(?:\.\d+)?)/);
+        if (mm) return rectangularASeccion({ b_cm: +mm[1], h_cm: +mm[2] }, spec);
+        const p = perfilPorNombre.get(spec.trim());
+        if (p) return perfilASeccion(p, spec.trim());
+      }
+    } catch { /* cae al reemplazo */ }
+    if (contextoHormigon) {
+      const d = etiqueta === 'pilares' ? { b_cm: 30, h_cm: 30 } : { b_cm: 25, h_cm: 50 };
+      aviso('reemplazo', `Sección de ${etiqueta} ${spec == null ? '(no indicada)' : `"${typeof spec === 'object' ? JSON.stringify(spec) : spec}"`} no reconocida: se usó hormigón ${d.b_cm}×${d.h_cm} cm por defecto.`);
+      return rectangularASeccion(d, `${d.b_cm}x${d.h_cm}`);
     }
-    // token-match contra nombre + descripción
-    const qt = low.split(/\s+/).filter(Boolean);
-    let best = null, bestScore = 0;
-    for (const m of materiales) {
-      const t = `${m.nombre} ${m.descripcion}`.toLowerCase().normalize('NFD').replace(/[^a-z0-9 ]/g, ' ');
-      const score = qt.filter((q) => q.length >= 2 && t.includes(q)).length;
-      if (score > bestScore) { best = m; bestScore = score; }
-    }
-    if (best && bestScore > 0) return best;
-    throw new Error(`Material no encontrado en materiales.csv: "${n}". Use H20/H25/H30/H40 (hormigón) o S235/S275/S355/A630-420H (acero).`);
-  };
-  // Sección: string → perfil de acero (perfiles.csv); objeto {b_cm,h_cm} → rectangular (hormigón).
-  const resolverSeccion = (spec, etiqueta) => {
-    if (spec && typeof spec === 'object') return rectangularASeccion(spec, spec.nombre);
-    if (typeof spec === 'string' && /^\s*\d/.test(spec)) {
-      // "20x40" o "20x40cm" → rectangular
-      const mm = spec.match(/(\d+(?:\.\d+)?)\s*[xX×]\s*(\d+(?:\.\d+)?)/);
-      if (mm) return rectangularASeccion({ b_cm: +mm[1], h_cm: +mm[2] }, spec);
-    }
-    if (!spec) throw new Error(`Falta la sección de ${etiqueta} (ficha.secciones.${etiqueta}).`);
-    return perfilASeccion(buscarPerfil(spec), String(spec));
+    const defNom = etiqueta === 'pilares' ? 'HEB200' : 'IPE300';
+    aviso('reemplazo', `Perfil de ${etiqueta} ${spec == null ? '(no indicado)' : `"${spec}"`} no encontrado: se usó ${defNom} por defecto.`);
+    const dp = perfilPorNombre.get(defNom);
+    if (dp) return perfilASeccion(dp, defNom);
+    return rectangularASeccion({ b_cm: 30, h_cm: 30 }, '30x30');
   };
 
   // ── Contadores e índices ──────────────────────────────────────────────────
@@ -173,22 +204,23 @@ export function generarModelo(ficha, libs) {
   const nodes = [], elements = [], materials = [], sections = [], diaphragms = [], loadCases = [], combinations = [];
 
   // ── Materiales y secciones ────────────────────────────────────────────────
-  const mat = filaAMaterial(buscarMat(ficha.secciones.material));
+  const mat = materialResiliente(sec.material);
   mat.id = ++cnt.materials; materials.push(mat);
 
-  const secViga = resolverSeccion(ficha.secciones.vigas, 'vigas');
+  const secViga = seccionResiliente(sec.vigas, 'vigas');
   secViga.id = ++cnt.sections; sections.push(secViga);
-  const secPilar = resolverSeccion(ficha.secciones.pilares, 'pilares');
+  const secPilar = seccionResiliente(sec.pilares, 'pilares');
   secPilar.id = ++cnt.sections; sections.push(secPilar);
 
-  // ── Geometría: ejes y niveles ─────────────────────────────────────────────
-  const geo = ficha.geometria;
+  // ── Geometría: ejes y niveles (RESILIENTE) ────────────────────────────────
+  const geo = ficha.geometria || {};
   const pinf = geo.planta_inferior || {};
   // Ejes por dirección: ejes explícitos → vanos (lista o {cantidad,luz_m}) → planta.
-  const ejesX = resolverEjes(pinf.Lx_m, geo.ejes_x_m, geo.vanos_x, sepMax);
-  const ejesY = is2D ? [0] : resolverEjes(pinf.Ly_m, geo.ejes_y_m, geo.vanos_y, sepMax);
-  if (ejesX.length < 2) throw new Error('Defina la geometría en X: vanos_x, ejes_x_m o planta_inferior.Lx_m.');
-  if (!is2D && ejesY.length < 2) throw new Error('Defina la geometría en Y: vanos_y, ejes_y_m o planta_inferior.Ly_m.');
+  let ejesX = resolverEjes(pinf.Lx_m, geo.ejes_x_m, geo.vanos_x, sepMax);
+  let ejesY = is2D ? [0] : resolverEjes(pinf.Ly_m, geo.ejes_y_m, geo.vanos_y, sepMax);
+  if (ejesX.length < 2) { ejesX = [0, 5]; aviso('reemplazo', 'No se definió geometría en X: se usó 1 vano de 5 m por defecto.'); }
+  if (!is2D && ejesY.length < 2) { ejesY = [0, 5]; aviso('reemplazo', 'No se definió geometría en Y: se usó 1 vano de 5 m por defecto.'); }
+  if (!geo.niveles || !geo.niveles.length) { geo.niveles = [{ altura_m: 3 }]; aviso('reemplazo', 'No se definieron niveles: se usó 1 nivel de 3 m por defecto.'); }
 
   // Luz total por los ejes resueltos (vale para planta, vanos o ejes explícitos).
   const Lx_inf = ejesX[ejesX.length - 1];
@@ -314,9 +346,20 @@ export function generarModelo(ficha, libs) {
   // hereda los globales de ficha.cargas. Permite ej. nivel 1 "Salas de Clases" y
   // nivel 3 "Bodegas livianas" con sobrecargas distintas.
   const nivel = (k) => geo.niveles[k - 1] || {};
+  // usoALo + aviso si un uso declarado no se reconoce (una vez por texto).
+  const usosAvisados = new Set();
+  const usoLo = (uso) => {
+    if (uso == null) return null;
+    const lo = usoALo(uso);
+    if (lo == null && !usosAvisados.has(uso)) {
+      usosAvisados.add(uso);
+      aviso('omitido', `Uso "${uso}" no se encontró en NCh1537: ese nivel queda sin sobrecarga de uso (CV=0). Indíquelo en kN/m² si corresponde.`);
+    }
+    return lo;
+  };
   const qCMk = (k) => nivel(k).muerta_adicional_kN_m2 ?? cargas.muerta_adicional_kN_m2 ?? 0;
-  const qCVk = (k) => nivel(k).sobrecarga_uso_kN_m2 ?? usoALo(nivel(k).uso_NCh1537)
-                    ?? cargas.sobrecarga_uso_kN_m2 ?? usoALo(cargas.uso_NCh1537) ?? 0;
+  const qCVk = (k) => nivel(k).sobrecarga_uso_kN_m2 ?? usoLo(nivel(k).uso_NCh1537)
+                    ?? cargas.sobrecarga_uso_kN_m2 ?? usoLo(cargas.uso_NCh1537) ?? 0;
 
   // reparte una carga de área q(k) [kN/m²] a las vigas en X por ancho tributario;
   // en 3D el ancho tributario escala con la planta variable del nivel (factor sy).
@@ -342,10 +385,13 @@ export function generarModelo(ficha, libs) {
   let lcSxId = null, lcSyId = null, lcNvId = null, lcWId = null;
   const h_techo = zNivel[nNiv];
 
+  const ub = ficha.ubicacion || {};
   if (cargas.nieve) {
     // Nieve sobre el techo (último nivel): carga de área ps (kN/m²) repartida.
     const nv = cargaNieveNCh431(ficha, reglas);
     const ps = nv.ps ?? 0;
+    (nv._notas || []).forEach((n) => aviso('omitido', `Nieve: ${n}`));
+    if (ps <= 0) aviso('omitido', `Nieve activada pero sin valor aplicable (¿falta latitud/altitud?): se creó el caso con carga 0.`);
     const lcNv = { id: ++cnt.loadCases, name: 'Nieve', loads: [], selfWeight: false, type: 'static', specDir: null, _nieve: nv };
     if (ps > 0) for (const v of vigasX) if (v.k === nNiv) {
       const w = ps * (is2D ? anchoTrib2D : tributario(ejesY, v.j) * factorPlanta(v.k).sy);
@@ -356,6 +402,7 @@ export function generarModelo(ficha, libs) {
   if (cargas.viento) {
     // Viento en +X: presión neta de muro (zona 1 barlovento − zona 4 sotavento)
     // como carga lineal horizontal (globalX) sobre los pilares de la cara x=mín.
+    if (ub.latitud_sur_deg == null && !ub.ciudad) aviso('omitido', 'Viento activado sin ubicación (latitud/ciudad): se usó la velocidad básica por defecto del cálculo.');
     const vi = cargaVientoNCh432(ficha, reglas, h_techo);
     const pNet_kNm2 = ((vi.presiones['1'] || 0) - (vi.presiones['4'] || 0)) / 1000; // N/m²→kN/m²
     const lcW = { id: ++cnt.loadCases, name: 'Viento X', loads: [], selfWeight: false, type: 'static', specDir: null, _viento: vi, _presion_neta_muro_kNm2: +pNet_kNm2.toFixed(4) };
@@ -368,9 +415,16 @@ export function generarModelo(ficha, libs) {
     loadCases.push(lcW); lcWId = lcW.id;
   }
   if (cargas.sismo) {
-    // Espectro elástico NCh433 (curva T,Sa en g). saFactor=g/R* tras el modal.
+    // Espectro elástico NCh433. Saneo de parámetros (zona/suelo/categoría) con
+    // defaults razonables si faltan o son inválidos, registrando el reemplazo.
+    const s = reglas.cargas?.sismica_NCh433 || {};
+    const sp = { ...(ficha.sismo || {}) };
+    if (!(s.tabla_suelos && s.tabla_suelos[sp.suelo])) { if (sp.suelo != null) aviso('reemplazo', `Suelo sísmico "${sp.suelo}" inválido: se usó D.`); else aviso('reemplazo', 'No se indicó suelo sísmico: se usó D.'); sp.suelo = 'D'; }
+    if (!(s.tabla_zona_Ao_g && s.tabla_zona_Ao_g[String(sp.zona)])) { if (sp.zona != null) aviso('reemplazo', `Zona sísmica "${sp.zona}" inválida: se usó 2.`); else aviso('reemplazo', 'No se indicó zona sísmica: se usó zona 2.'); sp.zona = 2; }
+    if (!(s.tabla_categoria_I && s.tabla_categoria_I[sp.categoria])) { sp.categoria = 'II'; }
     let esp = null;
-    try { esp = espectroNCh433(ficha, reglas); } catch (e) { esp = { _error: e.message }; }
+    try { esp = espectroNCh433({ ...ficha, sismo: sp }, reglas); }
+    catch (e) { esp = { _error: e.message }; aviso('omitido', `No se pudo construir el espectro NCh433 (${e.message}); el caso sísmico queda sin curva.`); }
     loadCases.push({ id: ++cnt.loadCases, name: 'Sismo X', loads: [], selfWeight: false, type: 'spectrum', specDir: 'X', _espectro_NCh433: esp }); lcSxId = cnt.loadCases;
     if (!is2D) { loadCases.push({ id: ++cnt.loadCases, name: 'Sismo Y', loads: [], selfWeight: false, type: 'spectrum', specDir: 'Y', _espectro_NCh433: esp }); lcSyId = cnt.loadCases; }
   }
@@ -425,5 +479,6 @@ export function generarModelo(ficha, libs) {
       reglas: reglas._meta?.version,
       resumen: `${nodes.length} nodos, ${elements.length} elementos, ${loadCases.length} casos, ${combinations.length} combinaciones`,
     },
+    _avisos: avisos,   // [{tipo:'reemplazo'|'estimado'|'omitido'|'info', msg}]
   };
 }
