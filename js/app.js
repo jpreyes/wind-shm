@@ -1,21 +1,21 @@
 // ──────────────────────────────────────────────────────────────────────────────
 // App — main orchestrator
 // ──────────────────────────────────────────────────────────────────────────────
-import { Model }           from './model/model.js?v=39';
-import { Serializer }      from './model/serializer.js?v=39';
-import { Viewport }        from './ui/viewport.js?v=39';
-import { PropertiesPanel } from './ui/properties.js?v=39';
-import { MenuBar }         from './ui/menu.js?v=39';
-import { UndoStack }       from './utils/undo.js?v=39';
-import { StaticSolver, ensureDefaultLC }   from './solver/static_solver.js?v=39';
-import { Results }                         from './solver/postprocess.js?v=39';
-import { ModalSolver }                     from './solver/modal_solver.js?v=39';
-import { buildNodeIndex, assembleK, getNodeDOFs } from './solver/assembler.js?v=39';
-import { ModalResults }                    from './solver/modal_results.js?v=39';
-import { SpectrumSolver }                  from './solver/spectrum_solver.js?v=39';
-import { autoDetectDiaphragms, computeFloorCR } from './solver/diaphragm.js?v=39';
-import { splitElement, splitByLength, discretizeAll, joinElements } from './model/discretize.js?v=39';
-import { localAxes, stiffnessMatrix, massMatrix, transformMatrix, globalStiffness, applyReleases } from './solver/timoshenko.js?v=39';
+import { Model }           from './model/model.js?v=40';
+import { Serializer }      from './model/serializer.js?v=40';
+import { Viewport }        from './ui/viewport.js?v=40';
+import { PropertiesPanel } from './ui/properties.js?v=40';
+import { MenuBar }         from './ui/menu.js?v=40';
+import { UndoStack }       from './utils/undo.js?v=40';
+import { StaticSolver, ensureDefaultLC }   from './solver/static_solver.js?v=40';
+import { Results }                         from './solver/postprocess.js?v=40';
+import { ModalSolver }                     from './solver/modal_solver.js?v=40';
+import { buildNodeIndex, assembleK, getNodeDOFs } from './solver/assembler.js?v=40';
+import { ModalResults }                    from './solver/modal_results.js?v=40';
+import { SpectrumSolver }                  from './solver/spectrum_solver.js?v=40';
+import { autoDetectDiaphragms, computeFloorCR } from './solver/diaphragm.js?v=40';
+import { splitElement, splitByLength, discretizeAll, joinElements } from './model/discretize.js?v=40';
+import { localAxes, stiffnessMatrix, massMatrix, transformMatrix, globalStiffness, applyReleases } from './solver/timoshenko.js?v=40';
 
 class App {
   constructor() {
@@ -2035,18 +2035,19 @@ class App {
     document.getElementById('btn-asis-llm')?.addEventListener('click', async () => {
       const url = document.getElementById('asis-endpoint').value.trim();
       const msg = document.getElementById('asis-nl').value.trim();
-      if (!url) { this.toast('Configure el endpoint n8n', 'warn'); return; }
+      if (!url) { this.toast('Configure el endpoint del asistente', 'warn'); return; }
       if (!msg) { this.toast('Escriba una descripción', 'warn'); return; }
       localStorage.setItem('portico_n8n_endpoint', url);
       this.toast('Consultando al asistente…', 'info');
       try {
         const r = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ mensaje: msg }) });
-        if (!r.ok) throw new Error('HTTP ' + r.status);
-        const data = await r.json();
+        // Leer el cuerpo aunque sea error: el servidor envía { error: "…" }.
+        const data = await r.json().catch(() => ({}));
+        if (!r.ok) throw new Error(data.error || data.message || `HTTP ${r.status}`);
         const ficha = data.ficha ?? data;
         document.getElementById('asis-ficha').value = JSON.stringify(ficha, null, 2);
         this.toast('Ficha recibida — revísela y genere', 'ok');
-      } catch (e) { this.toast('Error n8n: ' + e.message, 'error'); }
+      } catch (e) { this.toast('Error asistente: ' + e.message, 'error'); }
     });
 
     const restore = () => { okBtn.textContent = 'Aceptar'; };
@@ -2061,7 +2062,7 @@ class App {
     catch (e) { this.toast('Ficha JSON inválida: ' + e.message, 'error'); return; }
     try {
       const libs = await this._cargarBibliotecasAsistente();
-      const { generarModelo } = await import('../asistente/generador.js?v=39');
+      const { generarModelo } = await import('../asistente/generador.js?v=40');
       const modelo = generarModelo(ficha, libs);
       this._loadJSON(JSON.stringify(modelo), (ficha.proyecto || 'asistente') + '.s3d');
       this.markDirty();
