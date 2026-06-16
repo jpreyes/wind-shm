@@ -52,13 +52,36 @@ rígidos, sismo + sobrecarga de colegio + viento en Valdivia"*) en un modelo
   **credencial del lado del servidor** (n8n cifrado o un Cloudflare Worker como
   proxy). La llave nunca toca el navegador ni tu PC.
 
+## Archivos
+
+- **`reglas.json`** (v0.5) — normas codificadas: sobrecargas NCh1537, sismo
+  NCh433/DS61, combinaciones NCh3171, viento NCh432, nieve NCh431.
+- **`ficha.schema.json`** — JSON Schema (draft-07) de la ficha que rellena el LLM.
+- **`generador.js`** — generador determinista (ES module puro, Node + navegador):
+  `generarModelo(ficha, { reglas, perfiles, materiales, sobrecargas }) → .s3d`.
+- **`ejemplo_ficha.json`** / **`ejemplo_salida.s3d`** — ejemplo (colegio 3 niveles,
+  planta variable 10×10→10×8, Valdivia).
+- **`test_generador.mjs`** — test Node: conteos, mapeo de secciones y EQUILIBRIO
+  con el solver estático real (`node asistente/test_generador.mjs`).
+
+### Qué hace el generador hoy
+
+- Grilla (ejes explícitos o subdivisión por `separacion_maxima_vano_m`).
+- Multinivel con planta interpolada linealmente (taperizado).
+- Nodos, apoyos (empotrado/rotulado), pilares y vigas (X e Y); diafragmas rígidos.
+- Mapeo perfil EN → sección PÓRTICO con conversión cm→m e **intercambio de ejes**
+  (`Iz←Iy_EN` fuerte, `Avy←Avz_EN` alma) verificado contra `timoshenko.js`.
+- Cargas de área (CM + sobrecarga NCh1537) → líneas en vigas por **ancho
+  tributario** (escalado con la planta variable); conserva la resultante.
+- Masa sísmica en diafragmas (CM + fracción CV); casos espectrales Sismo X/Y.
+- Combinaciones NCh3171 (LRFD) sobre los casos generados.
+
 ## Pendiente
 
-1. **Integrar los Excel del profesor** (viento, sismo, sobrecargas) → tablas/
-   fórmulas en la config. Agregar nieve (NCh431).
-2. Esquema (JSON Schema) de la ficha.
-3. Generador determinista (ficha + reglas + bibliotecas → `.s3d`).
-4. Botones en la app: importar biblioteca CSV, aplicar carga de área, generar
-   combinaciones.
-5. Flujo n8n (chat → LLM → ficha → generador).
-6. Completar bibliotecas: tubos, IPN/UPN/L.
+1. Magnitudes de viento/nieve/sismo: los casos quedan creados como geometría;
+   falta poblar presiones de viento (NCh432) y el espectro (NCh433) con los
+   parámetros de la ficha (`sismo`, `ubicacion`).
+2. Botones en la app: importar biblioteca CSV, aplicar carga de área, generar
+   combinaciones (reutilizar `generador.js` desde la UI).
+3. Flujo n8n (chat → LLM → ficha → `generador.js`).
+4. Completar bibliotecas: tubos CHS/RHS/SHS, IPN/UPN/L.

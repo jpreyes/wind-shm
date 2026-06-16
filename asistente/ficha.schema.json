@@ -1,0 +1,104 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://portico/asistente/ficha.schema.json",
+  "title": "Ficha estructurada PÓRTICO",
+  "description": "Especificación acotada que el LLM rellena a partir del lenguaje natural. NO contiene geometría nodo-a-nodo ni valores de ingeniería: el generador determinista los deriva de esta ficha + reglas.json + bibliotecas CSV.",
+  "type": "object",
+  "required": ["modo", "geometria", "secciones"],
+  "additionalProperties": false,
+  "properties": {
+    "proyecto": { "type": "string", "description": "Nombre del proyecto." },
+    "modo": { "type": "string", "enum": ["2D", "3D"], "description": "2D = pórtico plano X–Z (sin ejes Y)." },
+
+    "ubicacion": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Para cargas dependientes de ubicación (nieve, viento, sismo).",
+      "properties": {
+        "ciudad": { "type": "string" },
+        "latitud_sur_deg": { "type": "number", "minimum": 17, "maximum": 56 },
+        "altitud_msnm": { "type": "number", "minimum": 0 },
+        "exposicion": { "type": "string", "enum": ["B", "C", "D"], "default": "C" }
+      }
+    },
+
+    "geometria": {
+      "type": "object",
+      "required": ["niveles"],
+      "additionalProperties": false,
+      "properties": {
+        "niveles": {
+          "type": "array",
+          "minItems": 1,
+          "description": "Un objeto por piso, de abajo hacia arriba.",
+          "items": {
+            "type": "object",
+            "required": ["altura_m"],
+            "additionalProperties": false,
+            "properties": { "altura_m": { "type": "number", "exclusiveMinimum": 0 } }
+          }
+        },
+        "planta_inferior": {
+          "type": "object",
+          "required": ["Lx_m"],
+          "additionalProperties": false,
+          "properties": {
+            "Lx_m": { "type": "number", "exclusiveMinimum": 0 },
+            "Ly_m": { "type": "number", "exclusiveMinimum": 0, "description": "Requerido en 3D." }
+          }
+        },
+        "planta_superior": {
+          "type": "object",
+          "additionalProperties": false,
+          "description": "Si se omite, igual a la inferior (planta constante). Si difiere, el generador interpola linealmente entre niveles.",
+          "properties": {
+            "Lx_m": { "type": "number", "exclusiveMinimum": 0 },
+            "Ly_m": { "type": "number", "exclusiveMinimum": 0 }
+          }
+        },
+        "ejes_x_m": { "type": "array", "items": { "type": "number" }, "description": "Coordenadas de ejes en X (opcional). Si se omite, el generador subdivide Lx por separacion_maxima_vano_m." },
+        "ejes_y_m": { "type": "array", "items": { "type": "number" }, "description": "Coordenadas de ejes en Y (opcional, ignorado en 2D)." },
+        "ancho_tributario_m": { "type": "number", "exclusiveMinimum": 0, "description": "Solo en 2D: separación entre pórticos para repartir cargas de área a líneas." }
+      }
+    },
+
+    "secciones": {
+      "type": "object",
+      "required": ["material", "vigas", "pilares"],
+      "additionalProperties": false,
+      "properties": {
+        "material": { "type": "string", "description": "Nombre en materiales.csv (ej. S275, A630-420H, H30)." },
+        "vigas": { "type": "string", "description": "Perfil en perfiles.csv (ej. IPE300)." },
+        "pilares": { "type": "string", "description": "Perfil en perfiles.csv (ej. HEB200)." }
+      }
+    },
+
+    "apoyo_base": { "type": "string", "enum": ["empotrado", "rotulado"], "default": "empotrado" },
+    "diafragma_rigido": { "type": "boolean", "default": true },
+
+    "cargas": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "muerta_adicional_kN_m2": { "type": "number", "minimum": 0, "description": "Carga muerta de área además del peso propio (losa, terminaciones)." },
+        "uso_NCh1537": { "type": "string", "description": "Descripción de uso en sobrecargas_NCh1537.csv (ej. 'Escuelas/Salas de Clases')." },
+        "sobrecarga_uso_kN_m2": { "type": "number", "minimum": 0, "description": "Override explícito de sobrecarga de uso (kN/m²); si se da, prevalece sobre uso_NCh1537." },
+        "nieve": { "type": "boolean", "default": false },
+        "viento": { "type": "boolean", "default": false },
+        "sismo": { "type": "boolean", "default": false }
+      }
+    },
+
+    "sismo": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Parámetros NCh433/DS61 para los casos espectrales (si cargas.sismo = true).",
+      "properties": {
+        "zona": { "type": "integer", "enum": [1, 2, 3] },
+        "suelo": { "type": "string", "enum": ["A", "B", "C", "D", "E"] },
+        "categoria": { "type": "string", "enum": ["I", "II", "III", "IV"] },
+        "R": { "type": "number", "exclusiveMinimum": 0 }
+      }
+    }
+  }
+}

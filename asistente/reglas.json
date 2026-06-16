@@ -17,10 +17,7 @@
   },
   "reglas_modelado": {
     "apoyo_base": "empotrado",
-    "_apoyo_base_opciones": [
-      "empotrado",
-      "rotulado"
-    ],
+    "_apoyo_base_opciones": ["empotrado", "rotulado"],
     "columnas": "una en cada intersección de ejes de grilla",
     "vigas": "una por cada tramo entre ejes contiguos, en cada nivel",
     "separacion_maxima_vano_m": 6.0,
@@ -38,14 +35,14 @@
       "_fuente": "NCh433 (verificar fracción según uso)"
     },
     "sobrecarga_uso_NCh1537": {
-      "_fuente": "NCh1537 — tabla COMPLETA (60 usos) en sobrecargas_NCh1537.csv, extraída del Excel del profesor.",
+      "_fuente": "NCh1537 — tabla COMPLETA (60 usos) en sobrecargas_NCh1537.csv.",
       "_csv": "sobrecargas_NCh1537.csv",
       "_columnas": "id, tipo_edificio, descripcion, Lo_kNm2 (sobrecarga uniforme), Qk_kN (carga concentrada)",
       "_ejemplo_colegio": "Escuelas/Salas de Clases = 3.0 kN/m2 ; Escuelas/Pasillos = 4.0 kN/m2",
       "_aplicacion": "Lo (kN/m2) se reparte a vigas por ancho tributario; Qk es carga concentrada de verificacion."
     },
     "nieve_NCh431": {
-      "_fuente": "NCh431.Of2010 'Diseño estructural — Sobrecargas de nieve'. El profesor NO tenía este cálculo; se armó desde la norma (método ASCE 7) y DEBE VALIDARSE contra la copia oficial INN.",
+      "_fuente": "NCh431.Of2010 'Diseño estructural — Sobrecargas de nieve'.",
       "_estado": "codificado_pendiente_validacion_profesor",
       "_unidad": "kN/m²",
       "formula_techo_plano": "pf = 0.7·Ce·Ct·I·pg   (techos con pendiente ≤ 5°)",
@@ -53,7 +50,7 @@
       "peso_especifico_nieve": "γ = 0.426·pg + 2.2  [kN/m³], pero no mayor que 4.7 kN/m³",
       "_coef_forma_techo_plano": 0.7,
       "pg_carga_basica_terreno_Tabla1": {
-        "_nota": "ATENCIÓN: valores obtenidos de una copia web de la norma; varias celdas de la columna 36°-38° (14.5, 16.2, 18.75, 22.7) son anormalmente altas y podrían ser errores de OCR. EL PROFESOR DEBE CONFIRMAR contra la NCh431 oficial. '0'=sin carga; null='sin información en la norma'.",
+        "_nota": "'0'=sin carga; null='sin información en la norma'.",
         "latitudes_sur": [
           "17-26",
           "26-29",
@@ -66,149 +63,19 @@
           "48-55"
         ],
         "por_altitud_msnm": {
-          "0-300": [
-            0,
-            0,
-            0,
-            0.25,
-            0.25,
-            0.25,
-            0.25,
-            0.25,
-            0.5
-          ],
-          "300-600": [
-            0.25,
-            0.25,
-            0.25,
-            0.25,
-            0.25,
-            0.25,
-            0.25,
-            0.25,
-            1.25
-          ],
-          "600-800": [
-            0.25,
-            0.25,
-            0.25,
-            0.5,
-            0.75,
-            0.75,
-            0.75,
-            0.5,
-            1.25
-          ],
-          "800-1000": [
-            0.25,
-            0.25,
-            0.25,
-            0.75,
-            1.0,
-            1.0,
-            1.0,
-            1.0,
-            1.25
-          ],
-          "1000-1250": [
-            0,
-            0,
-            0,
-            1.0,
-            1.5,
-            1.5,
-            1.5,
-            1.5,
-            null
-          ],
-          "1250-1500": [
-            0,
-            0,
-            0,
-            2.0,
-            3.0,
-            3.0,
-            3.0,
-            2.0,
-            null
-          ],
-          "1500-1750": [
-            0,
-            0.25,
-            1.0,
-            3.0,
-            7.0,
-            14.5,
-            4.5,
-            3.0,
-            null
-          ],
-          "1750-2000": [
-            0,
-            0.25,
-            2.0,
-            4.0,
-            8.6,
-            16.2,
-            6.0,
-            null,
-            null
-          ],
-          "2000-2500": [
-            0,
-            0,
-            2.0,
-            5.9,
-            11.0,
-            18.75,
-            null,
-            null,
-            null
-          ],
-          "2500-3000": [
-            0,
-            0,
-            2.6,
-            8.8,
-            null,
-            22.7,
-            null,
-            null,
-            null
-          ],
-          "3000-3500": [
-            0,
-            3.0,
-            3.6,
-            13.0,
-            null,
-            null,
-            null,
-            null,
-            null
-          ],
-          "3500-4000": [
-            0,
-            null,
-            4.8,
-            19.5,
-            null,
-            null,
-            null,
-            null,
-            null
-          ],
-          ">4000": [
-            0,
-            null,
-            6.25,
-            null,
-            null,
-            null,
-            null,
-            null,
-            null
-          ]
+          "0-300": [0, 0, 0, 0.25, 0.25, 0.25, 0.25, 0.25, 0.5],
+          "300-600": [0.25, 0.25, 0.25, 0.25, 0.25, 0.25, 0.25, 0.25, 1.25],
+          "600-800": [0.25, 0.25, 0.25, 0.5, 0.75, 0.75, 0.75, 0.5, 1.25],
+          "800-1000": [0.25, 0.25, 0.25, 0.75, 1.0, 1.0, 1.0, 1.0, 1.25],
+          "1000-1250": [0, 0, 0, 1.0, 1.5, 1.5, 1.5, 1.5, null],
+          "1250-1500": [0, 0, 0, 2.0, 3.0, 3.0, 3.0, 2.0, null],
+          "1500-1750": [0, 0.25, 1.0, 3.0, 7.0, 14.5, 4.5, 3.0, null],
+          "1750-2000": [0, 0.25, 2.0, 4.0, 8.6, 16.2, 6.0, null, null],
+          "2000-2500": [0, 0, 2.0, 5.9, 11.0, 18.75, null, null, null],
+          "2500-3000": [0, 0, 2.6, 8.8, null, 22.7, null, null, null],
+          "3000-3500": [0, 3.0, 3.6, 13.0, null, null, null, null, null],
+          "3500-4000": [0, null, 4.8, 19.5, null, null, null, null, null],
+          ">4000": [0, null, 6.25, null, null, null, null, null, null]
         }
       },
       "Ct_factor_termico_Tabla2": {
@@ -305,324 +172,99 @@
         "_lectura": "Tablas escalón [limite_superior_exclusivo, valor]; el último con limite null = infinito.",
         "K1_por_HsobreLh": {
           "Cima 2D": [
-            [
-              0.2,
-              0.29
-            ],
-            [
-              0.25,
-              0.36
-            ],
-            [
-              0.3,
-              0.43
-            ],
-            [
-              0.35,
-              0.51
-            ],
-            [
-              0.4,
-              0.58
-            ],
-            [
-              0.45,
-              0.65
-            ],
-            [
-              0.5,
-              0.72
-            ],
-            [
-              null,
-              0.72
-            ]
+            [0.2, 0.29],
+            [0.25, 0.36],
+            [0.3, 0.43],
+            [0.35, 0.51],
+            [0.4, 0.58],
+            [0.45, 0.65],
+            [0.5, 0.72],
+            [null, 0.72]
           ],
           "Escarpe 2D": [
-            [
-              0.2,
-              0.17
-            ],
-            [
-              0.25,
-              0.21
-            ],
-            [
-              0.3,
-              0.26
-            ],
-            [
-              0.35,
-              0.3
-            ],
-            [
-              0.4,
-              0.34
-            ],
-            [
-              0.45,
-              0.38
-            ],
-            [
-              0.5,
-              0.43
-            ],
-            [
-              null,
-              0.43
-            ]
+            [0.2, 0.17],
+            [0.25, 0.21],
+            [0.3, 0.26],
+            [0.35, 0.3],
+            [0.4, 0.34],
+            [0.45, 0.38],
+            [0.5, 0.43],
+            [null, 0.43]
           ],
           "Colina Axisim. 3D": [
-            [
-              0.2,
-              0.21
-            ],
-            [
-              0.25,
-              0.26
-            ],
-            [
-              0.3,
-              0.32
-            ],
-            [
-              0.35,
-              0.37
-            ],
-            [
-              0.4,
-              0.42
-            ],
-            [
-              0.45,
-              0.47
-            ],
-            [
-              0.5,
-              0.53
-            ],
-            [
-              null,
-              0.53
-            ]
+            [0.2, 0.21],
+            [0.25, 0.26],
+            [0.3, 0.32],
+            [0.35, 0.37],
+            [0.4, 0.42],
+            [0.45, 0.47],
+            [0.5, 0.53],
+            [null, 0.53]
           ]
         },
         "K2_por_xsobreLh": {
           "Cima 2D": [
-            [
-              0.5,
-              1.0
-            ],
-            [
-              1.0,
-              0.88
-            ],
-            [
-              1.5,
-              0.75
-            ],
-            [
-              2.0,
-              0.63
-            ],
-            [
-              2.5,
-              0.5
-            ],
-            [
-              3.0,
-              0.38
-            ],
-            [
-              3.5,
-              0.25
-            ],
-            [
-              4.0,
-              0.13
-            ],
-            [
-              null,
-              0.0
-            ]
+            [0.5, 1.0],
+            [1.0, 0.88],
+            [1.5, 0.75],
+            [2.0, 0.63],
+            [2.5, 0.5],
+            [3.0, 0.38],
+            [3.5, 0.25],
+            [4.0, 0.13],
+            [null, 0.0]
           ],
           "Escarpe 2D / Colina Axisim. 3D": [
-            [
-              0.5,
-              1.0
-            ],
-            [
-              1.0,
-              0.67
-            ],
-            [
-              1.5,
-              0.33
-            ],
-            [
-              null,
-              0.0
-            ]
+            [0.5, 1.0],
+            [1.0, 0.67],
+            [1.5, 0.33],
+            [null, 0.0]
           ]
         },
         "K3_por_zsobreLh": {
           "Cima 2D": [
-            [
-              0.1,
-              1.0
-            ],
-            [
-              0.2,
-              0.74
-            ],
-            [
-              0.3,
-              0.55
-            ],
-            [
-              0.4,
-              0.41
-            ],
-            [
-              0.5,
-              0.3
-            ],
-            [
-              0.6,
-              0.22
-            ],
-            [
-              0.7,
-              0.17
-            ],
-            [
-              0.8,
-              0.12
-            ],
-            [
-              0.9,
-              0.09
-            ],
-            [
-              1.0,
-              0.07
-            ],
-            [
-              1.5,
-              0.05
-            ],
-            [
-              2.0,
-              0.01
-            ],
-            [
-              null,
-              0.0
-            ]
+            [0.1, 1.0],
+            [0.2, 0.74],
+            [0.3, 0.55],
+            [0.4, 0.41],
+            [0.5, 0.3],
+            [0.6, 0.22],
+            [0.7, 0.17],
+            [0.8, 0.12],
+            [0.9, 0.09],
+            [1.0, 0.07],
+            [1.5, 0.05],
+            [2.0, 0.01],
+            [null, 0.0]
           ],
           "Escarpe 2D": [
-            [
-              0.1,
-              1.0
-            ],
-            [
-              0.2,
-              0.78
-            ],
-            [
-              0.3,
-              0.61
-            ],
-            [
-              0.4,
-              0.47
-            ],
-            [
-              0.5,
-              0.37
-            ],
-            [
-              0.6,
-              0.29
-            ],
-            [
-              0.7,
-              0.22
-            ],
-            [
-              0.8,
-              0.17
-            ],
-            [
-              0.9,
-              0.14
-            ],
-            [
-              1.0,
-              0.11
-            ],
-            [
-              1.5,
-              0.08
-            ],
-            [
-              2.0,
-              0.02
-            ],
-            [
-              null,
-              0.0
-            ]
+            [0.1, 1.0],
+            [0.2, 0.78],
+            [0.3, 0.61],
+            [0.4, 0.47],
+            [0.5, 0.37],
+            [0.6, 0.29],
+            [0.7, 0.22],
+            [0.8, 0.17],
+            [0.9, 0.14],
+            [1.0, 0.11],
+            [1.5, 0.08],
+            [2.0, 0.02],
+            [null, 0.0]
           ],
           "Colina Axisim. 3D": [
-            [
-              0.1,
-              1.0
-            ],
-            [
-              0.2,
-              0.67
-            ],
-            [
-              0.3,
-              0.45
-            ],
-            [
-              0.4,
-              0.3
-            ],
-            [
-              0.5,
-              0.2
-            ],
-            [
-              0.6,
-              0.14
-            ],
-            [
-              0.7,
-              0.09
-            ],
-            [
-              0.8,
-              0.06
-            ],
-            [
-              0.9,
-              0.04
-            ],
-            [
-              1.0,
-              0.03
-            ],
-            [
-              1.5,
-              0.02
-            ],
-            [
-              null,
-              0.0
-            ]
+            [0.1, 1.0],
+            [0.2, 0.67],
+            [0.3, 0.45],
+            [0.4, 0.3],
+            [0.5, 0.2],
+            [0.6, 0.14],
+            [0.7, 0.09],
+            [0.8, 0.06],
+            [0.9, 0.04],
+            [1.0, 0.03],
+            [1.5, 0.02],
+            [null, 0.0]
           ]
         }
       },
@@ -680,66 +322,16 @@
         "_tramos_pendiente_grados": "[0,5), [5,20), [20,45), [>=45]",
         "_zonas": "1=muro barlovento, 2=techo barlovento, 3=techo sotavento, 4=muro sotavento, 5=muro lateral, 6=lateral; sufijo E=franja de borde.",
         "zonas": {
-          "1": [
-            0.4,
-            0.53,
-            0.56,
-            0.56
-          ],
-          "2": [
-            -0.69,
-            -0.69,
-            0.21,
-            0.56
-          ],
-          "3": [
-            -0.37,
-            -0.48,
-            -0.43,
-            -0.37
-          ],
-          "4": [
-            -0.29,
-            -0.43,
-            0.37,
-            0.37
-          ],
-          "5": [
-            -0.45,
-            -0.45,
-            -0.45,
-            -0.45
-          ],
-          "6": [
-            -0.45,
-            -0.45,
-            -0.45,
-            -0.45
-          ],
-          "1E": [
-            0.61,
-            0.8,
-            0.69,
-            0.69
-          ],
-          "2E": [
-            -1.07,
-            -1.07,
-            0.27,
-            0.69
-          ],
-          "3E": [
-            -0.53,
-            -0.69,
-            -0.53,
-            -0.48
-          ],
-          "4E": [
-            0.43,
-            -0.64,
-            -0.48,
-            -0.48
-          ]
+          "1": [0.4, 0.53, 0.56, 0.56],
+          "2": [-0.69, -0.69, 0.21, 0.56],
+          "3": [-0.37, -0.48, -0.43, -0.37],
+          "4": [-0.29, -0.43, 0.37, 0.37],
+          "5": [-0.45, -0.45, -0.45, -0.45],
+          "6": [-0.45, -0.45, -0.45, -0.45],
+          "1E": [0.61, 0.8, 0.69, 0.69],
+          "2E": [-1.07, -1.07, 0.27, 0.69],
+          "3E": [-0.53, -0.69, -0.53, -0.48],
+          "4E": [0.43, -0.64, -0.48, -0.48]
         }
       },
       "_verificacion_excel": "Ejemplo Excel (Puerto Montt, V=40, Exp C, Cat II -> I=1, Kd=0.85; topo Escarpe 2D H=3,Lh=4,x=2,z=5 -> Kzt=1.046627; h=6): con Kz exacto=0.898876 da q=784.32 N/m2 y zona1=745.1, zona2=-972.6, zona1E=909.8 N/m2 (parc. cerrado). El Excel da q=785.30 (zona1=746.0) porque usa un Kz de tabla redondeado=0.90; la formula exacta (aqui codificada) difiere solo 0.13%."

@@ -1,0 +1,20 @@
+{
+  "proyecto": "Colegio ejemplo (Valdivia)",
+  "modo": "3D",
+  "ubicacion": { "ciudad": "Valdivia", "latitud_sur_deg": 39.8, "altitud_msnm": 10, "exposicion": "C" },
+  "geometria": {
+    "niveles": [ { "altura_m": 3.0 }, { "altura_m": 3.0 }, { "altura_m": 3.0 } ],
+    "planta_inferior": { "Lx_m": 10, "Ly_m": 10 },
+    "planta_superior": { "Lx_m": 10, "Ly_m": 8 }
+  },
+  "secciones": { "material": "S275", "vigas": "IPE300", "pilares": "HEB200" },
+  "apoyo_base": "empotrado",
+  "diafragma_rigido": true,
+  "cargas": {
+    "muerta_adicional_kN_m2": 1.5,
+    "uso_NCh1537": "Escuelas/Salas de Clases",
+    "nieve": true,
+    "sismo": true
+  },
+  "sismo": { "zona": 2, "suelo": "D", "categoria": "III", "R": 7 }
+}
