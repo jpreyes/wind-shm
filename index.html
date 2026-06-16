@@ -29,8 +29,8 @@
       window.dispatchEvent(new Event('pwa-installed'));
     });
   </script>
-  <link rel="stylesheet" href="style.css?v=44">
-  <link rel="stylesheet" href="ui-v2.css?v=44">
+  <link rel="stylesheet" href="style.css?v=45">
+  <link rel="stylesheet" href="ui-v2.css?v=45">
   <script type="importmap">
   {
     "imports": {
@@ -649,7 +649,7 @@
           <div>
             <h2 style="margin:0">PÓRTICO</h2>
             <p style="margin:2px 0 0;color:var(--text-muted)">Laboratorio virtual de análisis estructural 3D
-              · <b id="help-version">versión 44</b> · junio 2026</p>
+              · <b id="help-version">versión 45</b> · junio 2026</p>
           </div>
         </div>
         <p><b>Material docente</b> desarrollado por el <b>Dr. Juan Patricio Reyes C.</b> —
@@ -727,11 +727,11 @@
       <span>Espectro de respuesta</span><span>Combinaciones</span><span>Diafragmas rígidos</span>
     </div>
     <div class="hero-assistant" style="max-width:620px;margin:6px auto 14px;text-align:left">
-      <label style="display:block;font-size:12px;color:var(--text-muted,#9aa);margin-bottom:4px">✦ Empieza con IA: describe tu estructura y se modela sola</label>
+      <label style="display:block;font-size:12px;color:var(--text-muted,#9aa);margin-bottom:4px">✦ Empieza con el asistente: describe tu estructura y se modela sola</label>
       <textarea id="landing-nl" rows="5"
         placeholder="Ej.: edificio de 4 niveles de 3 m, 3 vanos de 6 m en X y 2 de 5 m en Y, hormigón H30, vigas 25x50, pilares 35x35, salas de clases, en Valdivia, con sismo zona 2 suelo D"
         style="width:100%;box-sizing:border-box;resize:vertical;min-height:120px;border-radius:8px;border:1px solid var(--border,#334);background:rgba(255,255,255,.06);color:#fff;padding:11px 13px;font-size:14px;line-height:1.45;font-family:inherit"></textarea>
-      <button id="btn-landing-gen" type="button" style="margin-top:7px;width:100%">✦ Generar modelo con IA</button>
+      <button id="btn-landing-gen" type="button" style="margin-top:7px;width:100%">✦ Generar modelo con el asistente</button>
     </div>
     <div class="hero-actions">
       <button id="btn-enter">Entrar al laboratorio (vacío) <span class="arrow">→</span></button>
@@ -776,7 +776,7 @@
   document.getElementById('btn-enter').addEventListener('click', enter);
   document.addEventListener('keydown', onKey, true);
 
-  // ── Generar con IA desde la portada ──
+  // ── Generar con el asistente desde la portada ──
   function generarDesdeLanding() {
     const ta = document.getElementById('landing-nl');
     const txt = (ta?.value || '').trim();
@@ -841,7 +841,7 @@
 
 <!-- numeric.js para solver (Fase 2+) -->
 <script src="lib/numeric.js"></script>
-<script type="module" src="js/app.js?v=44"></script>
+<script type="module" src="js/app.js?v=45"></script>
 
 <!-- PWA: registrar el service worker (offline). Solo en contexto seguro
      (https o localhost); el navegador deja navigator.serviceWorker undefined

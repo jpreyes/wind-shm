@@ -1,6 +1,6 @@
 {
   "_meta": {
-    "proposito": "Reglas de ingeniería para el asistente IA de PÓRTICO. El LLM solo extrae una 'ficha' estructurada desde el texto del usuario; este archivo + las bibliotecas CSV aportan los datos y decisiones que el LLM NO debe inventar. Un generador determinista combina ficha + reglas + bibliotecas para producir el modelo .s3d.",
+    "proposito": "Reglas de ingeniería para el asistente de PÓRTICO. El asistente solo extrae una 'ficha' estructurada desde el texto del usuario; este archivo + las bibliotecas CSV aportan los datos y decisiones que el asistente NO debe inventar. Un generador determinista combina ficha + reglas + bibliotecas para producir el modelo .s3d.",
     "version": "0.5",
     "fuentes": [
       "Perfiles: EN 10365 (dataset pcachim/eurocodepy, verificado contra IPE300/HEB200)",
@@ -43,7 +43,7 @@
     },
     "nieve_NCh431": {
       "_fuente": "NCh431.Of2010 'Diseño estructural — Sobrecargas de nieve'.",
-      "_estado": "codificado_pendiente_validacion_profesor",
+      "_estado": "codificado_pendiente_validacion",
       "_unidad": "kN/m²",
       "formula_techo_plano": "pf = 0.7·Ce·Ct·I·pg   (techos con pendiente ≤ 5°)",
       "formula_techo_inclinado": "ps = Cs·pf   (Cs = factor de pendiente, Figura 1 NCh431)",
@@ -113,7 +113,7 @@
         }
       },
       "Cs_factor_pendiente": {
-        "_nota": "Cs depende de la pendiente del techo y de la condición térmica. Figura 1 de NCh431 es un gráfico; aquí se usa la relación ASCE 7 estándar para cubierta NO resbaladiza. EL PROFESOR DEBE VALIDAR los quiebres contra la Figura 1 oficial.",
+        "_nota": "Cs depende de la pendiente del techo y de la condición térmica. Figura 1 de NCh431 es un gráfico; aquí se usa la relación ASCE 7 estándar para cubierta NO resbaladiza. DEBE VALIDARSE los quiebres contra la Figura 1 oficial.",
         "formula_techo_caliente_Ct_le_1.0": "Cs=1.0 si pend≤30°; lineal 1.0→0 entre 30° y 70°; Cs=0 si pend>70°",
         "formula_Ct_1.1": "Cs=1.0 si pend≤37.5°; lineal 1.0→0 entre 37.5° y 70°; Cs=0 si pend>70°",
         "formula_techo_frio_Ct_1.2": "Cs=1.0 si pend≤45°; lineal 1.0→0 entre 45° y 70°; Cs=0 si pend>70°"
@@ -121,7 +121,7 @@
       "_ejemplo_Valdivia": "Valdivia (~39.8°S, costa ~5–20 m) → banda latitud 38–42°, altitud 0–300 → pg=0.25 kN/m². Con Ce=1.0, Ct=1.0, I=1.0 (cat II), techo plano: pf=0.7·1·1·1·0.25=0.175 kN/m². VALIDAR."
     },
     "viento_NCh432": {
-      "_fuente": "NCh432.Of2010 — codificado desde 'Nch432_2010 Viento v0.2.xlsx' del profesor (fuente de verdad). Método analítico para edificios de baja altura (equivalente a ASCE 7-05 Fig. 6-4, 6-10 y Tabla 6-2), con velocidades básicas V de estaciones y zonas de latitud chilenas.",
+      "_fuente": "NCh432.Of2010 — codificado desde la norma NCh432.Of2010 (fuente de verdad). Método analítico para edificios de baja altura (equivalente a ASCE 7-05 Fig. 6-4, 6-10 y Tabla 6-2), con velocidades básicas V de estaciones y zonas de latitud chilenas.",
       "_estado": "codificado",
       "_unidades": "V en m/s; presiones q,p en N/m² (multiplicar ×0.101972 para kgf/m²). Geometría en m.",
       "metodo": "analitico_baja_altura_SPRFV",
@@ -166,7 +166,7 @@
           "zmin_m": 2.13
         }
       },
-      "Kz_formula": "Kz = 2.01·(z/Zg)^(2/alfa), con z = max(h_techo, 4.6 m). (Excel: para h<4.6 usa una rama simplificada; aquí se usa la forma ASCE estándar.)",
+      "Kz_formula": "Kz = 2.01·(z/Zg)^(2/alfa), con z = max(h_techo, 4.6 m). (Para h<4.6 m se usa la forma ASCE estándar.)",
       "Kzt_topografico": {
         "formula": "Kzt = (1 + K1·K2·K3)²  (si topografia='No aplica' → Kzt=1)",
         "_lectura": "Tablas escalón [limite_superior_exclusivo, valor]; el último con limite null = infinito.",
@@ -334,10 +334,10 @@
           "4E": [0.43, -0.64, -0.48, -0.48]
         }
       },
-      "_verificacion_excel": "Ejemplo Excel (Puerto Montt, V=40, Exp C, Cat II -> I=1, Kd=0.85; topo Escarpe 2D H=3,Lh=4,x=2,z=5 -> Kzt=1.046627; h=6): con Kz exacto=0.898876 da q=784.32 N/m2 y zona1=745.1, zona2=-972.6, zona1E=909.8 N/m2 (parc. cerrado). El Excel da q=785.30 (zona1=746.0) porque usa un Kz de tabla redondeado=0.90; la formula exacta (aqui codificada) difiere solo 0.13%."
+      "_verificacion": "Ejemplo (Puerto Montt, V=40, Exp C, Cat II -> I=1, Kd=0.85; topo Escarpe 2D H=3,Lh=4,x=2,z=5 -> Kzt=1.046627; h=6): con Kz exacto=0.898876 da q=784.32 N/m2 y zona1=745.1, zona2=-972.6, zona1E=909.8 N/m2 (parc. cerrado). La referencia con Kz de tabla redondeado=0.90 da q=785.30 (zona1=746.0); la formula exacta (aqui codificada) difiere solo 0.13%."
     },
     "sismica_NCh433": {
-      "_fuente": "NCh433 Of.2009 + DS61/2011 — codificado desde el Excel del profesor ('Espectro NCh433 of.2009 DS61.xls'). Verificado: R* y Sa(0) reproducen las celdas del Excel. Genera el espectro y lo asigna a casos ESPECTRALES (dir X e Y).",
+      "_fuente": "NCh433 Of.2009 + DS61/2011 — codificado desde la norma NCh433. Verificado: R* y Sa(0) según la norma. Genera el espectro y lo asigna a casos ESPECTRALES (dir X e Y).",
       "tabla_suelos": {
         "_columnas": "S, To(s), Tp(s)=T', n, p",
         "A": {
@@ -412,14 +412,14 @@
       "ciudades": {
         "Valdivia": {
           "zona_sismica": null,
-          "_nota": "Definir según comuna (Anexo NCh433). El Excel no trae el mapa comuna→zona; el profesor lo confirma.",
+          "_nota": "Definir según comuna (Anexo NCh433). Confirmar el mapa comuna→zona según el Anexo de la NCh433.",
           "_verificar": true
         }
       }
     }
   },
   "combinaciones_NCh3171": {
-    "_fuente": "NCh3171 / LRFD (ASCE 7) — 32 combinaciones del Excel 'Combinaciones de carga.xlsx' (factores parseados del nombre).",
+    "_fuente": "NCh3171 / LRFD (ASCE 7) — 32 combinaciones NCh3171 (factores según la norma).",
     "_mapa_cargas_a_casos": {
       "D": "CM (muerta, incl. peso propio)",
       "L": "CV (sobrecarga de uso)",

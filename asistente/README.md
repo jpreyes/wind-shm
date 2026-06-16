@@ -1,4 +1,4 @@
-# Asistente IA de PÓRTICO — diseño
+# Asistente de PÓRTICO — diseño
 
 Convierte una instrucción en lenguaje natural (ej.: *"edificio de 3 niveles de
 3 m, planta 10×10 que pasa a 10×8, vigas IPE300, pilares HEB200, diafragmas

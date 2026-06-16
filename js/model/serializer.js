@@ -1,7 +1,7 @@
 // ──────────────────────────────────────────────────────────────────────────────
 // Serializer — JSON (.s3d) and CSV import/export
 // ──────────────────────────────────────────────────────────────────────────────
-import { Model } from './model.js?v=44';
+import { Model } from './model.js?v=45';
 
 export class Serializer {
 

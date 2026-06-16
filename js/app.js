@@ -1,21 +1,21 @@
 // ──────────────────────────────────────────────────────────────────────────────
 // App — main orchestrator
 // ──────────────────────────────────────────────────────────────────────────────
-import { Model }           from './model/model.js?v=44';
-import { Serializer }      from './model/serializer.js?v=44';
-import { Viewport }        from './ui/viewport.js?v=44';
-import { PropertiesPanel } from './ui/properties.js?v=44';
-import { MenuBar }         from './ui/menu.js?v=44';
-import { UndoStack }       from './utils/undo.js?v=44';
-import { StaticSolver, ensureDefaultLC }   from './solver/static_solver.js?v=44';
-import { Results }                         from './solver/postprocess.js?v=44';
-import { ModalSolver }                     from './solver/modal_solver.js?v=44';
-import { buildNodeIndex, assembleK, getNodeDOFs } from './solver/assembler.js?v=44';
-import { ModalResults }                    from './solver/modal_results.js?v=44';
-import { SpectrumSolver }                  from './solver/spectrum_solver.js?v=44';
-import { autoDetectDiaphragms, computeFloorCR } from './solver/diaphragm.js?v=44';
-import { splitElement, splitByLength, discretizeAll, joinElements } from './model/discretize.js?v=44';
-import { localAxes, stiffnessMatrix, massMatrix, transformMatrix, globalStiffness, applyReleases } from './solver/timoshenko.js?v=44';
+import { Model }           from './model/model.js?v=45';
+import { Serializer }      from './model/serializer.js?v=45';
+import { Viewport }        from './ui/viewport.js?v=45';
+import { PropertiesPanel } from './ui/properties.js?v=45';
+import { MenuBar }         from './ui/menu.js?v=45';
+import { UndoStack }       from './utils/undo.js?v=45';
+import { StaticSolver, ensureDefaultLC }   from './solver/static_solver.js?v=45';
+import { Results }                         from './solver/postprocess.js?v=45';
+import { ModalSolver }                     from './solver/modal_solver.js?v=45';
+import { buildNodeIndex, assembleK, getNodeDOFs } from './solver/assembler.js?v=45';
+import { ModalResults }                    from './solver/modal_results.js?v=45';
+import { SpectrumSolver }                  from './solver/spectrum_solver.js?v=45';
+import { autoDetectDiaphragms, computeFloorCR } from './solver/diaphragm.js?v=45';
+import { splitElement, splitByLength, discretizeAll, joinElements } from './model/discretize.js?v=45';
+import { localAxes, stiffnessMatrix, massMatrix, transformMatrix, globalStiffness, applyReleases } from './solver/timoshenko.js?v=45';
 
 class App {
   constructor() {
@@ -1988,10 +1988,10 @@ class App {
     }
   }
 
-  // ── Asistente IA: ficha → generador determinista → modelo ──────────────────
+  // ── Asistente: ficha → generador determinista → modelo ──────────────────
   asistenteDialog() {
     const overlay = document.getElementById('modal-overlay');
-    document.getElementById('modal-title').textContent = 'Asistente IA — generar modelo desde ficha';
+    document.getElementById('modal-title').textContent = 'Asistente — generar modelo desde ficha';
     document.getElementById('modal-box')?.classList.add('modal-wide');
     document.getElementById('modal-cancel').style.display = '';
     const okBtn = document.getElementById('modal-ok');
@@ -2024,7 +2024,7 @@ class App {
     <input type="text" id="asis-endpoint" value="${ep}" placeholder="/api/asistente"></div>
   <button type="button" id="btn-asis-llm" class="btn-primary" style="margin-left:8px">✦ Pedir ficha al asistente</button>
 </div>
-<small style="color:var(--text-muted);display:block;margin-top:4px">La credencial del LLM vive como secreto del servidor (Cloudflare Worker), nunca en el navegador. Luego pulsa <b>Generar modelo</b>.</small>
+<small style="color:var(--text-muted);display:block;margin-top:4px">La credencial del asistente vive como secreto del servidor (Cloudflare Worker), nunca en el navegador. Luego pulsa <b>Generar modelo</b>.</small>
 
 <details style="margin-top:12px">
   <summary style="cursor:pointer;color:var(--accent)">Ver / editar la ficha (JSON) — avanzado</summary>
@@ -2040,7 +2040,7 @@ class App {
       if (!url) { this.toast('Configure el endpoint del asistente', 'warn'); return; }
       if (!msg) { this.toast('Escriba una descripción', 'warn'); return; }
       localStorage.setItem('portico_n8n_endpoint', url);
-      this._showProgress('Consultando al asistente IA…', 'Puede tardar varios segundos');
+      this._showProgress('Consultando al asistente…', 'Puede tardar varios segundos');
       try {
         const r = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ mensaje: msg }) });
         const data = await r.json().catch(() => ({}));   // el servidor envía { error } aun en fallo
@@ -2063,7 +2063,7 @@ class App {
    *  Usado por el cuadro de la portada y reutilizable desde cualquier lugar. */
   async asistenteDesdeTexto(mensaje) {
     const url = localStorage.getItem('portico_n8n_endpoint') || '/api/asistente';
-    this._showProgress('Consultando al asistente IA…', 'Interpretando tu descripción');
+    this._showProgress('Consultando al asistente…', 'Interpretando tu descripción');
     let ficha = null;
     try {
       const r = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ mensaje }) });
@@ -2085,7 +2085,7 @@ class App {
     this._showProgress('Generando el modelo…', 'Aplicando reglas y cargas normativas');
     try {
       const libs = await this._cargarBibliotecasAsistente();
-      const { generarModelo } = await import('../asistente/generador.js?v=44');
+      const { generarModelo } = await import('../asistente/generador.js?v=45');
       const modelo = generarModelo(ficha, libs);
       this._loadJSON(JSON.stringify(modelo), (ficha.proyecto || 'asistente') + '.s3d');
       this.markDirty();
