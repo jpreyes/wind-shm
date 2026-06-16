@@ -1,21 +1,21 @@
 // ──────────────────────────────────────────────────────────────────────────────
 // App — main orchestrator
 // ──────────────────────────────────────────────────────────────────────────────
-import { Model }           from './model/model.js?v=33';
-import { Serializer }      from './model/serializer.js?v=33';
-import { Viewport }        from './ui/viewport.js?v=33';
-import { PropertiesPanel } from './ui/properties.js?v=33';
-import { MenuBar }         from './ui/menu.js?v=33';
-import { UndoStack }       from './utils/undo.js?v=33';
-import { StaticSolver, ensureDefaultLC }   from './solver/static_solver.js?v=33';
-import { Results }                         from './solver/postprocess.js?v=33';
-import { ModalSolver }                     from './solver/modal_solver.js?v=33';
-import { buildNodeIndex, assembleK, getNodeDOFs } from './solver/assembler.js?v=33';
-import { ModalResults }                    from './solver/modal_results.js?v=33';
-import { SpectrumSolver }                  from './solver/spectrum_solver.js?v=33';
-import { autoDetectDiaphragms, computeFloorCR } from './solver/diaphragm.js?v=33';
-import { splitElement, splitByLength, discretizeAll, joinElements } from './model/discretize.js?v=33';
-import { localAxes, stiffnessMatrix, massMatrix, transformMatrix, globalStiffness, applyReleases } from './solver/timoshenko.js?v=33';
+import { Model }           from './model/model.js?v=34';
+import { Serializer }      from './model/serializer.js?v=34';
+import { Viewport }        from './ui/viewport.js?v=34';
+import { PropertiesPanel } from './ui/properties.js?v=34';
+import { MenuBar }         from './ui/menu.js?v=34';
+import { UndoStack }       from './utils/undo.js?v=34';
+import { StaticSolver, ensureDefaultLC }   from './solver/static_solver.js?v=34';
+import { Results }                         from './solver/postprocess.js?v=34';
+import { ModalSolver }                     from './solver/modal_solver.js?v=34';
+import { buildNodeIndex, assembleK, getNodeDOFs } from './solver/assembler.js?v=34';
+import { ModalResults }                    from './solver/modal_results.js?v=34';
+import { SpectrumSolver }                  from './solver/spectrum_solver.js?v=34';
+import { autoDetectDiaphragms, computeFloorCR } from './solver/diaphragm.js?v=34';
+import { splitElement, splitByLength, discretizeAll, joinElements } from './model/discretize.js?v=34';
+import { localAxes, stiffnessMatrix, massMatrix, transformMatrix, globalStiffness, applyReleases } from './solver/timoshenko.js?v=34';
 
 class App {
   constructor() {
@@ -1379,6 +1379,14 @@ class App {
     // Preseleccionar la dirección del caso espectral activo (si lo hay)
     const activeLc = this.model.loadCases.get(this._activeLcId);
     const prefDir = activeLc?.type === 'spectrum' ? activeLc.specDir : 'X';
+    // Prefill: si el caso espectral activo ya tiene un espectro guardado en el
+    // .s3d (lc.spec.rawText), se reutiliza para no perder lo definido.
+    const savedText = activeLc?.type === 'spectrum' ? activeLc.spec?.rawText : null;
+    const initialText = savedText || defaultText;
+    // T* fundamental sugerido desde el análisis modal (si está disponible)
+    const Tstar0 = this._modalResults?.period?.[0]
+      ? this._modalResults.period[0].toFixed(3) : '';
+
     return new Promise(resolve => {
       const overlay = document.getElementById('modal-overlay');
       document.getElementById('modal-title').textContent = 'Espectro de Respuesta';
@@ -1405,6 +1413,28 @@ class App {
     <input type="number" id="sp-zeta" value="0.05" step="0.01" min="0.01" max="0.5">
   </div>
 </div>
+
+<fieldset style="border:1px solid var(--border);border-radius:6px;padding:8px 10px;margin-bottom:10px">
+  <legend style="padding:0 6px;color:var(--accent);font-size:12px">Construir espectro NCh433 / DS61</legend>
+  <div class="prop-row cols3" style="margin-bottom:8px">
+    <div class="prop-field"><label>Zona sísmica (Ao)</label>
+      <select id="sp-zona"><option value="1">1 (0.20 g)</option><option value="2" selected>2 (0.30 g)</option><option value="3">3 (0.40 g)</option></select>
+    </div>
+    <div class="prop-field"><label>Tipo de suelo</label>
+      <select id="sp-suelo"><option>A</option><option>B</option><option>C</option><option selected>D</option><option>E</option></select>
+    </div>
+    <div class="prop-field"><label>Categoría (I)</label>
+      <select id="sp-cat"><option value="I">I (0.6)</option><option value="II" selected>II (1.0)</option><option value="III">III (1.2)</option><option value="IV">IV (1.2)</option></select>
+    </div>
+  </div>
+  <div class="prop-row cols3" style="margin-bottom:8px">
+    <div class="prop-field"><label>Ro</label><input type="number" id="sp-Ro" value="11" step="0.5" min="1"></div>
+    <div class="prop-field"><label>T* (s) — del modal</label><input type="number" id="sp-Tstar" value="${Tstar0}" step="0.01" min="0" placeholder="opcional"></div>
+    <div class="prop-field"><label>&nbsp;</label><button type="button" id="sp-gen" class="btn" style="width:100%">Generar curva</button></div>
+  </div>
+  <small id="sp-rstar" style="color:var(--text-muted);display:block">Sa(T)=S·Ao·I·α(T)/R*. Si T* está vacío, R*=1 (espectro elástico).</small>
+</fieldset>
+
 <div class="prop-row" style="margin-bottom:10px">
   <div class="prop-field">
     <label>Unidades de Sa</label>
@@ -1418,20 +1448,63 @@ class App {
 </div>
 <div class="prop-field">
   <label>Espectro — T (s), Sa   (una pareja por línea)</label>
-  <textarea id="sp-spectrum" rows="9" class="sp-textarea">${defaultText}</textarea>
-  <small style="color:var(--text-muted);display:block;margin-top:4px">
-    Columnas: T [s] , Sa [unidad seleccionada]. Ejemplo en <em>g</em> (NCh433 simplificado).
-  </small>
+  <textarea id="sp-spectrum" rows="7" class="sp-textarea">${initialText}</textarea>
+</div>
+<div class="prop-field" style="margin-top:8px">
+  <label>Curva Sa(T)</label>
+  <svg id="sp-graph" viewBox="0 0 420 200" style="width:100%;height:170px;background:var(--bg-elev,#1b1b1b);border:1px solid var(--border);border-radius:6px"></svg>
 </div>`;
+
+      // ── Tablas NCh433/DS61 (mismas que asistente/reglas.json) ──────────────
+      const SUELOS = { A:{S:0.9,To:0.15,p:2.0}, B:{S:1.0,To:0.30,p:1.5}, C:{S:1.05,To:0.40,p:1.6}, D:{S:1.2,To:0.75,p:1.0}, E:{S:1.3,To:1.2,p:1.0} };
+      const AO = { '1':0.20, '2':0.30, '3':0.40 };
+      const CAT = { I:0.6, II:1.0, III:1.2, IV:1.2 };
+
+      const $ = (id) => document.getElementById(id);
+
+      const drawGraph = () => {
+        const pts = _parseSpectrum($('sp-spectrum').value); // [{T,Sa},...]
+        const svg = $('sp-graph');
+        const W = 420, H = 200, ml = 38, mr = 8, mt = 12, mb = 24;
+        if (pts.length < 2) { svg.innerHTML = `<text x="${W/2}" y="${H/2}" fill="#888" font-size="11" text-anchor="middle">curva insuficiente</text>`; return; }
+        const Tmax = Math.max(...pts.map(p => p.T)) || 1;
+        const Samax = Math.max(...pts.map(p => p.Sa)) || 1;
+        const sx = (t) => ml + (t / Tmax) * (W - ml - mr);
+        const sy = (s) => H - mb - (s / Samax) * (H - mt - mb);
+        const poly = pts.map(p => `${sx(p.T).toFixed(1)},${sy(p.Sa).toFixed(1)}`).join(' ');
+        const gx = [0, 0.25, 0.5, 0.75, 1].map(f => { const t = +(f*Tmax).toFixed(2); return `<line x1="${sx(t)}" y1="${mt}" x2="${sx(t)}" y2="${H-mb}" stroke="#333"/><text x="${sx(t)}" y="${H-8}" fill="#888" font-size="9" text-anchor="middle">${t}</text>`; }).join('');
+        const gy = [0, 0.5, 1].map(f => { const s = +(f*Samax).toFixed(3); return `<line x1="${ml}" y1="${sy(s)}" x2="${W-mr}" y2="${sy(s)}" stroke="#333"/><text x="${ml-4}" y="${sy(s)+3}" fill="#888" font-size="9" text-anchor="end">${s}</text>`; }).join('');
+        svg.innerHTML = `${gy}${gx}<polyline points="${poly}" fill="none" stroke="var(--accent,#4ea1ff)" stroke-width="2"/><text x="${W-mr}" y="${mt+2}" fill="#888" font-size="9" text-anchor="end">Sa  ·  T (s)</text>`;
+      };
+
+      const genNCh433 = () => {
+        const su = SUELOS[$('sp-suelo').value]; const Ao = AO[$('sp-zona').value]; const I = CAT[$('sp-cat').value];
+        const Ro = parseFloat($('sp-Ro').value) || 11; const Tstar = parseFloat($('sp-Tstar').value);
+        const Rstar = (Tstar > 0) ? 1 + Tstar / (0.10 * su.To + Tstar / Ro) : 1;
+        const alpha = (T) => (1 + 4.5 * Math.pow(T / su.To, su.p)) / (1 + Math.pow(T / su.To, 3));
+        const lines = [];
+        for (let T = 0; T <= 3.0001; T += 0.05) {
+          const Tr = +T.toFixed(2);
+          lines.push(`${Tr.toFixed(2)}, ${(su.S * Ao * I * alpha(Tr) / Rstar).toFixed(4)}`);
+        }
+        $('sp-spectrum').value = lines.join('\n');
+        $('sp-unit').value = '9.81';
+        $('sp-rstar').textContent = `R* = ${Rstar.toFixed(4)} (To=${su.To}, Ro=${Ro}${Tstar>0?`, T*=${Tstar}`:''}). Sa(0)=${(su.S*Ao*I/Rstar).toFixed(4)} g.`;
+        drawGraph();
+      };
+
+      $('sp-gen').addEventListener('click', genNCh433);
+      $('sp-spectrum').addEventListener('input', drawGraph);
+      drawGraph();
 
       overlay.classList.remove('hidden');
 
       overlay._resolve = () => {
-        const dir     = document.getElementById('sp-dir').value;
-        const method  = document.getElementById('sp-method').value;
-        const zeta    = parseFloat(document.getElementById('sp-zeta').value) || 0.05;
-        const factor  = parseFloat(document.getElementById('sp-unit').value) || 9.81;
-        const rawText = document.getElementById('sp-spectrum').value;
+        const dir     = $('sp-dir').value;
+        const method  = $('sp-method').value;
+        const zeta    = parseFloat($('sp-zeta').value) || 0.05;
+        const factor  = parseFloat($('sp-unit').value) || 9.81;
+        const rawText = $('sp-spectrum').value;
         const spectrum = _parseSpectrum(rawText);
         if (spectrum.length < 2) {
           this.toast('El espectro necesita al menos 2 puntos (T,Sa)', 'error');
