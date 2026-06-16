@@ -281,20 +281,47 @@ export function generarModelo(ficha, libs) {
       for (let j = 0; j < ejesY.length; j++)
         elementoPilar.set(key(k, i, j), addElem(nodeId.get(key(k, i, j)), nodeId.get(key(k + 1, i, j)), secPilar.id));
 
-  // vigas en cada nivel de piso (k = 1..nNiv): tramos en X y en Y
-  const vigasX = []; // {elemId, k, j, Lx} para reparto de cargas
+  // vigas en cada nivel de piso (k = 1..nNiv): tramos en X y en Y.
+  // Se registran todas (X e Y) con su largo y un área tributaria que se acumula
+  // por paneles (regla de 45°) para repartir cargas de área en AMBAS direcciones.
+  const anchoTrib2D = geo.ancho_tributario_m || sepMax; // 2D: separación entre pórticos
+  const coordX = (k, i) => ejesX[i] * factorPlanta(k).sx;
+  const coordY = (k, j) => ejesY[j] * factorPlanta(k).sy;
+  const vigas = [];                  // {elemId, k, dir:'X'|'Y', L, trib}
+  const vigaXId = new Map();         // "k,i,j" → índice (viga X de (i,j)→(i+1,j))
+  const vigaYId = new Map();         // "k,i,j" → índice (viga Y de (i,j)→(i,j+1))
   for (let k = 1; k <= nNiv; k++) {
-    for (let j = 0; j < ejesY.length; j++) {
+    for (let j = 0; j < ejesY.length; j++)
       for (let i = 0; i < ejesX.length - 1; i++) {
         const eid = addElem(nodeId.get(key(k, i, j)), nodeId.get(key(k, i + 1, j)), secViga.id);
-        vigasX.push({ elemId: eid, k, j });
+        vigaXId.set(key(k, i, j), vigas.push({ elemId: eid, k, dir: 'X', L: coordX(k, i + 1) - coordX(k, i), trib: 0 }) - 1);
       }
-    }
-    if (!is2D) {
+    if (!is2D)
       for (let i = 0; i < ejesX.length; i++)
-        for (let j = 0; j < ejesY.length - 1; j++)
-          addElem(nodeId.get(key(k, i, j)), nodeId.get(key(k, i, j + 1)), secViga.id);
-    }
+        for (let j = 0; j < ejesY.length - 1; j++) {
+          const eid = addElem(nodeId.get(key(k, i, j)), nodeId.get(key(k, i, j + 1)), secViga.id);
+          vigaYId.set(key(k, i, j), vigas.push({ elemId: eid, k, dir: 'Y', L: coordY(k, j + 1) - coordY(k, j), trib: 0 }) - 1);
+        }
+  }
+
+  // Área tributaria por viga: 3D = regla de 45° por panel (triángulos en el lado
+  // corto, trapecios en el largo) → carga vigas X e Y. 2D = ancho tributario fijo.
+  if (is2D) {
+    for (const v of vigas) v.trib = v.L * anchoTrib2D;
+  } else {
+    for (let k = 1; k <= nNiv; k++)
+      for (let i = 0; i < ejesX.length - 1; i++)
+        for (let j = 0; j < ejesY.length - 1; j++) {
+          const sx = coordX(k, i + 1) - coordX(k, i);
+          const sy = coordY(k, j + 1) - coordY(k, j);
+          // área tributaria que aporta este panel a cada viga X (largo sx) y a cada viga Y (largo sy)
+          const aX = sx >= sy ? sy * (2 * sx - sy) / 4 : sx * sx / 4;
+          const aY = sx >= sy ? sy * sy / 4 : sx * (2 * sy - sx) / 4;
+          vigas[vigaXId.get(key(k, i, j))].trib     += aX;   // borde y=j
+          vigas[vigaXId.get(key(k, i, j + 1))].trib += aX;   // borde y=j+1
+          vigas[vigaYId.get(key(k, i, j))].trib     += aY;   // borde x=i
+          vigas[vigaYId.get(key(k, i + 1, j))].trib += aY;   // borde x=i+1
+        }
   }
 
   // ── Diafragmas rígidos por nivel ──────────────────────────────────────────
@@ -306,7 +333,6 @@ export function generarModelo(ficha, libs) {
 
   // ── Cargas de área → líneas, casos CM / CV (POR NIVEL) ─────────────────────
   const cargas = ficha.cargas || {};
-  const anchoTrib2D = geo.ancho_tributario_m || sepMax; // 2D: separación entre pórticos
 
   // Lookup sobrecarga de uso (NCh1537), tolerante: match exacto y, si no, el
   // mejor por solape de tokens (sin acentos, con prefijos). Así "bodegas
@@ -361,14 +387,15 @@ export function generarModelo(ficha, libs) {
   const qCVk = (k) => nivel(k).sobrecarga_uso_kN_m2 ?? usoLo(nivel(k).uso_NCh1537)
                     ?? cargas.sobrecarga_uso_kN_m2 ?? usoLo(cargas.uso_NCh1537) ?? 0;
 
-  // reparte una carga de área q(k) [kN/m²] a las vigas en X por ancho tributario;
-  // en 3D el ancho tributario escala con la planta variable del nivel (factor sy).
+  // reparte una carga de área q(k) [kN/m²] a TODAS las vigas (X e Y) según su
+  // área tributaria: carga lineal equivalente w = q · A_trib / L. Conserva la
+  // resultante total (Σ A_trib = área del piso) y carga ambas direcciones.
   const cargasDistFn = (qFn) => {
     const out = [];
-    for (const v of vigasX) {
+    for (const v of vigas) {
       const q = qFn(v.k);
-      if (!(q > 0)) continue;
-      const w = is2D ? q * anchoTrib2D : q * tributario(ejesY, v.j) * factorPlanta(v.k).sy;
+      if (!(q > 0) || !(v.trib > 0) || !(v.L > 0)) continue;
+      const w = q * v.trib / v.L;
       if (w > 0) out.push({ type: 'dist', elemId: v.elemId, dir: 'gravity', w: +w.toFixed(6) });
     }
     return out;
@@ -393,9 +420,8 @@ export function generarModelo(ficha, libs) {
     (nv._notas || []).forEach((n) => aviso('omitido', `Nieve: ${n}`));
     if (ps <= 0) aviso('omitido', `Nieve activada pero sin valor aplicable (¿falta latitud/altitud?): se creó el caso con carga 0.`);
     const lcNv = { id: ++cnt.loadCases, name: 'Nieve', loads: [], selfWeight: false, type: 'static', specDir: null, _nieve: nv };
-    if (ps > 0) for (const v of vigasX) if (v.k === nNiv) {
-      const w = ps * (is2D ? anchoTrib2D : tributario(ejesY, v.j) * factorPlanta(v.k).sy);
-      lcNv.loads.push({ type: 'dist', elemId: v.elemId, dir: 'gravity', w: +w.toFixed(6) });
+    if (ps > 0) for (const v of vigas) if (v.k === nNiv && v.trib > 0 && v.L > 0) {
+      lcNv.loads.push({ type: 'dist', elemId: v.elemId, dir: 'gravity', w: +(ps * v.trib / v.L).toFixed(6) });
     }
     loadCases.push(lcNv); lcNvId = lcNv.id;
   }

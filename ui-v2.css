@@ -92,12 +92,13 @@ button:focus-visible, select:focus-visible, input:focus-visible {
   display: flex;
   flex-direction: column;
   align-items: center;
-  justify-content: space-between;
+  justify-content: flex-start;
   background:
     radial-gradient(1100px 520px at 50% -8%, rgba(56, 189, 248, 0.13), transparent 65%),
     radial-gradient(900px 480px at 88% 108%, rgba(45, 212, 191, 0.10), transparent 60%),
     var(--bg);
-  overflow: hidden;
+  overflow-y: auto;     /* permite ver el pie (logos) si el contenido no cabe */
+  overflow-x: hidden;
   transition: opacity 0.6s ease, filter 0.6s ease;
 }
 /* La portada es siempre OSCURA (splash), independiente del tema de la app:
@@ -163,6 +164,9 @@ button:focus-visible, select:focus-visible, input:focus-visible {
   z-index: 1;
   padding: 0 24px;
   max-width: 760px;
+  width: 100%;
+  box-sizing: border-box;
+  margin: auto 0;          /* centra si hay espacio; permite scroll si no */
 }
 #hero-frame {
   width: min(330px, 60vw);
@@ -413,6 +417,23 @@ button:focus-visible, select:focus-visible, input:focus-visible {
 @media (max-height: 620px) {
   #hero-frame { display: none; }
   .hero-desc  { display: none; }
+}
+
+/* ── Pantallas angostas (móvil): portada responsive ── */
+@media (max-width: 560px) {
+  .landing-inst { padding: 14px 16px; flex-wrap: wrap; gap: 8px; }
+  .landing-hero { padding: 12px 16px; }
+  #hero-frame { width: min(220px, 56vw); }
+  .hero-title { font-size: clamp(38px, 13vw, 52px); }
+  .hero-desc { display: none; }
+  .hero-chips { gap: 6px; }
+  .hero-chips span { font-size: 11px; padding: 4px 9px; }
+  .hero-assistant { max-width: 100% !important; }
+  .hero-actions { flex-wrap: wrap; justify-content: center; gap: 8px; }
+  .hero-actions button { flex: 1 1 auto; min-width: 0; }
+  .landing-credit { padding: 12px 16px 18px; font-size: 10.5px; }
+  .landing-logos { flex-wrap: wrap; gap: 14px; }
+  .landing-logos img { height: 30px; }
 }
 
 @media (prefers-reduced-motion: reduce) {
