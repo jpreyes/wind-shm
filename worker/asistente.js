@@ -45,14 +45,31 @@ async function cargarBibliotecas(env, base) {
   return { reglas, perfiles: parseCSV(pTxt), materiales: parseCSV(mTxt), sobrecargas: parseCSV(sTxt) };
 }
 
-async function llamarModelo(modelo, mensaje, env) {
-  const r = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+// Proveedor del LLM. Prioridad: OpenAI directo (si hay OPENAI_API_KEY) →
+// OpenRouter. Ambos usan el formato chat/completions de OpenAI, así que el
+// parseo de la respuesta es idéntico.
+function proveedorLLM(env) {
+  if (env.OPENAI_API_KEY) return {
+    nombre: 'OpenAI',
+    url: 'https://api.openai.com/v1/chat/completions',
+    key: env.OPENAI_API_KEY,
+    modelos: [env.OPENAI_MODEL || 'gpt-4o-mini'],
+    extraHeaders: {},
+  };
+  if (env.OPENROUTER_API_KEY) return {
+    nombre: 'OpenRouter',
+    url: 'https://openrouter.ai/api/v1/chat/completions',
+    key: env.OPENROUTER_API_KEY,
+    modelos: env.OPENROUTER_MODEL ? [env.OPENROUTER_MODEL] : MODELS_FREE,
+    extraHeaders: { 'X-Title': 'PORTICO Asistente' },
+  };
+  return null;
+}
+
+async function llamarModelo(prov, modelo, mensaje) {
+  return fetch(prov.url, {
     method: 'POST',
-    headers: {
-      Authorization: `Bearer ${env.OPENROUTER_API_KEY}`,
-      'Content-Type': 'application/json',
-      'X-Title': 'PORTICO Asistente',
-    },
+    headers: { Authorization: `Bearer ${prov.key}`, 'Content-Type': 'application/json', ...prov.extraHeaders },
     body: JSON.stringify({
       model: modelo,
       temperature: 0,
@@ -60,15 +77,14 @@ async function llamarModelo(modelo, mensaje, env) {
       messages: [{ role: 'system', content: SYSTEM }, { role: 'user', content: mensaje }],
     }),
   });
-  return r;
 }
 
 async function fichaDesdeLLM(mensaje, env) {
-  if (!env.OPENROUTER_API_KEY) throw new Error('Falta el secreto OPENROUTER_API_KEY en el Worker.');
-  const modelos = env.OPENROUTER_MODEL ? [env.OPENROUTER_MODEL] : MODELS_FREE;
+  const prov = proveedorLLM(env);
+  if (!prov) throw new Error('Falta el secreto OPENAI_API_KEY u OPENROUTER_API_KEY en el Worker.');
   let ultimoError = 'sin respuesta';
-  for (const modelo of modelos) {
-    const r = await llamarModelo(modelo, mensaje, env);
+  for (const modelo of prov.modelos) {
+    const r = await llamarModelo(prov, modelo, mensaje);
     if (r.ok) {
       const data = await r.json();
       // Algunos proveedores devuelven 200 con un error embebido.
@@ -84,7 +100,7 @@ async function fichaDesdeLLM(mensaje, env) {
     if (r.status === 401 || r.status === 403) break;
     // 429 (rate limit) o 5xx: probar el siguiente modelo de la cascada.
   }
-  throw new Error(`OpenRouter sin modelo disponible. Último: ${ultimoError}`);
+  throw new Error(`${prov.nombre}: sin modelo disponible. Último: ${ultimoError}`);
 }
 
 export default {
