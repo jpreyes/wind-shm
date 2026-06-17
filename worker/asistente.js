@@ -104,7 +104,8 @@ async function fichaDesdeLLM(mensaje, env) {
         .replace(/^```(json)?/i, '').replace(/```$/, '').trim();
       const i = raw.indexOf('{'), j = raw.lastIndexOf('}');
       if (i < 0 || j < 0) { ultimoError = `${modelo}: no devolvió JSON`; continue; }
-      return JSON.parse(raw.slice(i, j + 1));
+      // data.model = id real del modelo que respondió (puede traer sufijo de versión)
+      return { ficha: JSON.parse(raw.slice(i, j + 1)), llm: { proveedor: prov.nombre, modelo: data.model || modelo } };
     }
     ultimoError = `${modelo}: HTTP ${r.status} ${(await r.text()).slice(0, 200)}`;
     // 401/403 son de credencial/política: no sirve probar otros modelos.
@@ -122,11 +123,13 @@ export default {
       if (request.method !== 'POST') return json({ error: 'Use POST' }, 405);
       try {
         const body = await request.json();
-        const ficha = body.ficha ?? (body.mensaje ? await fichaDesdeLLM(body.mensaje, env) : null);
+        let ficha = body.ficha ?? null, llm = null;
+        if (!ficha && body.mensaje) { const res = await fichaDesdeLLM(body.mensaje, env); ficha = res.ficha; llm = res.llm; }
         if (!ficha) return json({ error: 'Envíe { mensaje } o { ficha }' }, 400);
         const libs = await cargarBibliotecas(env, request.url);
         const modelo = generarModelo(ficha, libs);
-        return json({ ficha, resumen: modelo._generado?.resumen, modelo });
+        // _llm informa proveedor y modelo que generó la ficha (null si se envió ficha directa)
+        return json({ ficha, resumen: modelo._generado?.resumen, modelo, _llm: llm });
       } catch (e) {
         return json({ error: String(e.message || e) }, 500);
       }
