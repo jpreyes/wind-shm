@@ -11,9 +11,9 @@
     "modo": { "type": "string", "enum": ["2D", "3D"], "description": "2D = pórtico plano X–Z (sin ejes Y)." },
     "tipologia": {
       "type": "string",
-      "enum": ["marco", "muros_madera", "cercha"],
+      "enum": ["marco", "muros_madera", "cercha", "puente", "galpon"],
       "default": "marco",
-      "description": "marco = pórtico de pilares y vigas (acero/hormigón). muros_madera = entramado ligero de madera (tabiques con pies derechos + soleras + viguetas de piso). cercha = cercha/celosía de techo a dos aguas tipo Warren (rellene 'cercha')."
+      "description": "marco = pórtico de pilares y vigas (acero/hormigón). muros_madera = entramado ligero (tabiques + soleras + viguetas; material madera o acero=steel framing; con techo plano o de cerchas). cercha = celosía de techo a dos aguas (Warren/Pratt/Howe). puente = tablero sobre pilas (vigas continuas o de celosía). galpon = nave industrial (pórticos de columnas + cerchas de techo)."
     },
 
     "ubicacion": {
@@ -192,6 +192,7 @@
         "separacion_m": { "type": "number", "exclusiveMinimum": 0, "default": 0.6, "description": "Separación entre cerchas." },
         "dir": { "type": "string", "enum": ["X", "Y"], "description": "Dirección en que las cerchas salvan la luz. Si se omite, salvan el lado más corto." },
         "n_paneles": { "type": "integer", "minimum": 2, "description": "Nº de paneles de cada cercha (par)." },
+        "tipo_celosia": { "type": "string", "enum": ["warren", "pratt", "howe"], "default": "warren", "description": "Patrón del alma de las cerchas de techo." },
         "escuadria_cordon": { "type": "string", "description": "Escuadría de cordones, ej. '2x6'." },
         "escuadria_diagonal": { "type": "string", "description": "Escuadría de diagonales, ej. '2x4'." }
       }
@@ -208,7 +209,44 @@
         "n_paneles": { "type": "integer", "minimum": 2, "default": 8, "description": "Nº de paneles del cordón inferior (par, para que coincida la cumbrera)." },
         "separacion_m": { "type": "number", "exclusiveMinimum": 0, "default": 0.6, "description": "Separación entre cerchas (ancho tributario de carga; ej. 0.6 = @60 cm)." },
         "escuadria_cordon": { "type": "string", "description": "Escuadría de los cordones (superior e inferior), ej. '2x6'." },
-        "escuadria_diagonal": { "type": "string", "description": "Escuadría de diagonales/montantes, ej. '2x4'." }
+        "escuadria_diagonal": { "type": "string", "description": "Escuadría de diagonales/montantes, ej. '2x4'." },
+        "tipo_celosia": { "type": "string", "enum": ["warren", "pratt", "howe"], "default": "warren", "description": "Patrón del alma: warren (zigzag), pratt (montantes + diagonales a tracción) o howe." }
+      }
+    },
+
+    "puente": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Solo tipologia = 'puente'. Tablero de largo×ancho sobre pilas cada luz_pila. Vigas longitudinales continuas o de celosía (Warren/Pratt/Howe).",
+      "properties": {
+        "largo_m": { "type": "number", "exclusiveMinimum": 0, "default": 30, "description": "Largo total del puente." },
+        "ancho_m": { "type": "number", "exclusiveMinimum": 0, "default": 5, "description": "Ancho del tablero." },
+        "altura_pila_m": { "type": "number", "exclusiveMinimum": 0, "default": 5, "description": "Altura de las pilas (nivel del tablero sobre la base)." },
+        "luz_pila_m": { "type": "number", "exclusiveMinimum": 0, "description": "Separación entre pilas (ej. 20 = pilas cada 20 m). Alternativa: n_pilas." },
+        "n_pilas": { "type": "integer", "minimum": 2, "description": "Nº de líneas de pila (alternativa a luz_pila_m)." },
+        "tipo_viga": { "type": "string", "enum": ["viga", "cercha"], "default": "viga", "description": "viga = vigas longitudinales continuas; cercha = vigas de celosía bajo el tablero." },
+        "tipo_celosia": { "type": "string", "enum": ["warren", "pratt", "howe"], "default": "warren", "description": "Patrón de la celosía si tipo_viga='cercha'." },
+        "canto_m": { "type": "number", "exclusiveMinimum": 0, "description": "Canto de la viga de celosía (si tipo_viga='cercha')." },
+        "n_paneles_por_vano": { "type": "integer", "minimum": 2, "description": "Paneles de celosía por vano entre pilas." }
+      }
+    },
+
+    "galpon": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Solo tipologia = 'galpon'. Nave industrial: pórticos (columnas) espaciados a lo largo + cerchas de techo a dos aguas (Warren/Pratt/Howe) + costaneras.",
+      "properties": {
+        "luz_m": { "type": "number", "exclusiveMinimum": 0, "default": 15, "description": "Luz del galpón (ancho que salvan las cerchas)." },
+        "largo_m": { "type": "number", "exclusiveMinimum": 0, "default": 30, "description": "Largo del galpón (dirección de los marcos)." },
+        "altura_columna_m": { "type": "number", "exclusiveMinimum": 0, "default": 6, "description": "Altura de columnas (alero)." },
+        "separacion_marcos_m": { "type": "number", "exclusiveMinimum": 0, "default": 5, "description": "Separación entre marcos/pórticos." },
+        "pendiente_pct": { "type": "number", "minimum": 0, "default": 15, "description": "Pendiente del techo en %." },
+        "altura_cumbrera_m": { "type": "number", "exclusiveMinimum": 0, "description": "Altura de cumbrera sobre el alero (override de pendiente_pct)." },
+        "tipo_celosia": { "type": "string", "enum": ["warren", "pratt", "howe"], "default": "warren", "description": "Patrón de las cerchas de techo." },
+        "n_paneles": { "type": "integer", "minimum": 2, "description": "Nº de paneles de cada cercha (par)." },
+        "escuadria_columna": { "type": "string", "description": "Escuadría/perfil de columnas." },
+        "escuadria_cordon": { "type": "string", "description": "Escuadría/perfil de cordones de cercha." },
+        "escuadria_diagonal": { "type": "string", "description": "Escuadría/perfil de diagonales y costaneras." }
       }
     }
   },

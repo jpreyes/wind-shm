@@ -131,6 +131,48 @@ export function resolverMaterialFlexible(n, materiales, aviso) {
   return null;
 }
 
+/**
+ * Teje el ALMA de una celosía (montantes + diagonales) entre el cordón inferior
+ * B[] y el superior T[] (n paneles, n+1 nodos), según el tipo:
+ *  - 'warren': diagonales en zigzag, sin montantes.
+ *  - 'pratt':  montantes verticales + diagonales que DESCIENDEN hacia el centro
+ *              (en tracción bajo carga gravitacional).
+ *  - 'howe':   montantes verticales + diagonales que ASCIENDEN hacia el centro
+ *              (en compresión).
+ * addEl(n1,n2,secId) crea la barra; secId = sección de las diagonales/montantes.
+ */
+export function tejerCelosiaWeb(B, T, n, tipo, addEl, secId) {
+  const t = String(tipo || 'warren').toLowerCase();
+  const half = n / 2;
+  if (/pratt|howe/.test(t)) {
+    for (let i = 0; i <= n; i++) addEl(B[i], T[i], secId);              // montantes
+    for (let i = 0; i < n; i++) {
+      const izq = i < half;
+      if (/pratt/.test(t)) izq ? addEl(T[i], B[i + 1], secId) : addEl(B[i], T[i + 1], secId);
+      else /* howe */      izq ? addEl(B[i], T[i + 1], secId) : addEl(T[i], B[i + 1], secId);
+    }
+  } else {
+    for (let i = 0; i < n; i++) (i % 2 === 0 ? addEl(B[i], T[i + 1], secId) : addEl(T[i], B[i + 1], secId));
+  }
+}
+
+/**
+ * Resolvedor de sección GENERAL: escuadría de madera ("2x8") o {b_cm,h_cm} →
+ * rectangular; nombre de perfil de acero ("HEB200") → perfil; si no se reconoce,
+ * usa una sección rectangular por defecto. Registra avisos.
+ */
+export function pickSeccionGen(spec, perfiles, defRect, label, aviso) {
+  const r = escuadriaASeccion(spec, label);
+  if (r) { if (spec) aviso('info', `${label}: ${r.etiqueta}.`); return r.sec; }
+  if (typeof spec === 'string') {
+    const pm = new Map((perfiles || []).map((p) => [String(p.nombre).trim().toLowerCase(), p]));
+    const pf = pm.get(spec.trim().toLowerCase());
+    if (pf) { aviso('info', `${label}: perfil ${pf.nombre}.`); return perfilASeccion(pf, pf.nombre); }
+  }
+  if (spec != null) aviso('reemplazo', `${label}: sección "${typeof spec === 'object' ? JSON.stringify(spec) : spec}" no reconocida: se usó ${defRect.b_cm}×${defRect.h_cm} cm por defecto.`);
+  return rectangularASeccion(defRect, `${defRect.b_cm}x${defRect.h_cm}`);
+}
+
 // ── Helpers de geometría ──────────────────────────────────────────────────────
 
 /** Coordenadas de ejes a partir de una especificación de vanos:
@@ -180,6 +222,8 @@ function tributario(ejes, j) {
 export function generarModelo(ficha, libs) {
   // Despacho por tipología: madera y cercha tienen geometría propia.
   const tip = String(ficha.tipologia || 'marco').toLowerCase();
+  if (/puente|bridge|viaduct|pasarela/.test(tip)) return generarPuente(ficha, libs);
+  if (/galp|nave|industrial|shed|hangar|bodega/.test(tip)) return generarGalpon(ficha, libs);
   if (/cercha|celos|warren|truss/.test(tip)) return generarCercha(ficha, libs);
   if (/madera|tabiqu|entramad|light.?frame|steel.?fram|metalcon|muros/.test(tip)) return generarMurosMadera(ficha, libs);
 
@@ -640,6 +684,7 @@ export function generarMurosMadera(ficha, libs) {
   // ── Techo: plano (viguetas) por defecto, o cerchas Warren a dos aguas ──
   const techo = ficha.techo || {};
   const techoCercha = /cercha|warren|celos|truss|dos.?agua/.test(String(techo.tipo || ''));
+  const techoCel = /pratt/i.test(String(techo.tipo_celosia || '')) ? 'pratt' : (/howe/i.test(String(techo.tipo_celosia || '')) ? 'howe' : 'warren');
   const dirT = techo.dir === 'Y' ? 'Y' : (techo.dir === 'X' ? 'X' : (Lx <= Ly ? 'X' : 'Y')); // las cerchas salvan la luz en esta dirección
   const sepT = techo.separacion_m > 0 ? techo.separacion_m : 0.6;   // separación entre cerchas
   const spanT = dirT === 'X' ? Lx : Ly;   // luz de la cercha
@@ -818,8 +863,8 @@ export function generarMurosMadera(ficha, libs) {
         const Lsl = Math.hypot(da, zRoof(along(i + 1)) - zRoof(along(i))) || da;
         if (eid != null) roofTop.push({ elemId: eid, dx: da, Lsl });
       }
-      for (let i = 0; i < nT; i++) (i % 2 === 0 ? addEl(B[i], T[i + 1], secDiagT.id) : addEl(T[i], B[i + 1], secDiagT.id)); // Warren
-      addEl(B[nT / 2], T[nT / 2], secDiagT.id);   // pendolón
+      tejerCelosiaWeb(B, T, nT, techoCel, addEl, secDiagT.id);          // alma Warren/Pratt/Howe
+      if (techoCel === 'warren') addEl(B[nT / 2], T[nT / 2], secDiagT.id);   // pendolón
       topByPos.push(T); botByPos.push(B);
     }
     // costaneras (purlins): unen cerchas consecutivas en cada nodo de cordón → estabilidad fuera del plano
@@ -963,11 +1008,9 @@ export function generarCercha(ficha, libs) {
   for (let i = 0; i < n; i++) addEl(B[i], B[i + 1], secCord.id);     // cordón inferior
   const topEls = [];
   for (let i = 0; i < n; i++) topEls[i] = addEl(T[i], T[i + 1], secCord.id);  // cordón superior (dos aguas)
-  for (let i = 0; i < n; i++) {                                       // diagonales Warren (zigzag)
-    if (i % 2 === 0) addEl(B[i], T[i + 1], secDiag.id);
-    else addEl(T[i], B[i + 1], secDiag.id);
-  }
-  addEl(B[n / 2], T[n / 2], secDiag.id);   // pendolón (montante en la cumbrera)
+  const tCel = /pratt/i.test(String(c.tipo_celosia || '')) ? 'pratt' : (/howe/i.test(String(c.tipo_celosia || '')) ? 'howe' : 'warren');
+  tejerCelosiaWeb(B, T, n, tCel, addEl, secDiag.id);                 // alma Warren/Pratt/Howe
+  if (tCel === 'warren') addEl(B[n / 2], T[n / 2], secDiag.id);      // pendolón
 
   // ── Cargas de techo sobre el cordón superior (por ancho tributario) ──
   // w = q·sep·dx / L_inclinado  → conserva la resultante vertical (Σ = q·sep·L).
@@ -998,7 +1041,223 @@ export function generarCercha(ficha, libs) {
     _generado: {
       por: 'asistente/generador.js (cercha Warren)',
       reglas: (libs.reglas && libs.reglas._meta) ? libs.reglas._meta.version : undefined,
-      resumen: `cercha Warren ${L} m, pendiente ${(slope * 100).toFixed(0)}%, cumbrera ${hR.toFixed(2)} m, ${nodes.length} nodos, ${elements.length} barras`,
+      resumen: `cercha ${tCel} ${L} m, pendiente ${(slope * 100).toFixed(0)}%, cumbrera ${hR.toFixed(2)} m, ${nodes.length} nodos, ${elements.length} barras`,
+    },
+    _avisos: avisos,
+  };
+}
+
+// ──────────────────────────────────────────────────────────────────────────────
+// Tipología PUENTE (tablero sobre pilas; viga continua o vigas de celosía)
+//   Tablero de largo L × ancho W a la altura H sobre pilas (pórticos) cada luz_pila.
+//   tipo_viga='viga' → vigas longitudinales continuas; 'cercha' → vigas de celosía
+//   (Warren/Pratt/Howe) de canto bajo el tablero. Determinista y resiliente.
+// ──────────────────────────────────────────────────────────────────────────────
+export function generarPuente(ficha, libs) {
+  const materiales = libs.materiales || [], perfiles = libs.perfiles || [];
+  const avisos = []; const aviso = (t, m) => avisos.push({ tipo: t, msg: m });
+  const matByName = new Map(materiales.map((m) => [String(m.nombre).trim().toLowerCase(), m]));
+  const pickMat = (n) => {
+    const r = resolverMaterialFlexible(n, materiales, aviso); if (r) return r;
+    const d = matByName.get('s275'); aviso('reemplazo', `Material ${n == null ? '(no indicado)' : `"${n}"`}: se usó acero S275 (puente).`);
+    return d ? filaAMaterial(d) : { name: 'S275', E: 2.1e8, G: 8.08e7, nu: 0.3, rho: 7.85 };
+  };
+  const mat = pickMat((ficha.secciones || {}).material); mat.id = 1;
+  const esMadera = /pino|madera/i.test(mat.name);
+
+  const p = ficha.puente || {};
+  let L = p.largo_m > 0 ? p.largo_m : 30; if (!(p.largo_m > 0)) aviso('reemplazo', 'Largo de puente no indicado: 30 m.');
+  let W = p.ancho_m > 0 ? p.ancho_m : 5; if (!(p.ancho_m > 0)) aviso('reemplazo', 'Ancho de tablero no indicado: 5 m.');
+  const H = p.altura_pila_m > 0 ? p.altura_pila_m : 5;
+  let luzP = p.luz_pila_m > 0 ? p.luz_pila_m : (p.n_pilas >= 2 ? +(L / (p.n_pilas - 1)).toFixed(4) : 10);
+  if (luzP > L) luzP = L;
+  const esCercha = /cercha|celos|warren|pratt|howe|truss/.test(String(p.tipo_viga || p.tipo || ''));
+  const tCel = /pratt/i.test(String(p.tipo_celosia || p.tipo_viga || '')) ? 'pratt' : (/howe/i.test(String(p.tipo_celosia || p.tipo_viga || '')) ? 'howe' : 'warren');
+  const canto = p.canto_m > 0 ? p.canto_m : Math.max(0.8, +(luzP / 8).toFixed(2));
+
+  const secGirder = pickSeccionGen(p.escuadria_viga ?? (ficha.secciones || {}).vigas, perfiles, esMadera ? { b_cm: 15, h_cm: 35 } : { b_cm: 40, h_cm: 80 }, 'Viga/cordón', aviso); secGirder.id = 1;
+  const secPila = pickSeccionGen(p.escuadria_pila ?? (ficha.secciones || {}).pilares, perfiles, { b_cm: 50, h_cm: 50 }, 'Pila', aviso); secPila.id = 2;
+  const secDiag = pickSeccionGen(p.escuadria_diagonal, perfiles, esMadera ? { b_cm: 10, h_cm: 20 } : { b_cm: 25, h_cm: 25 }, 'Diagonal/transversal', aviso); secDiag.id = 3;
+
+  const nodes = [], elements = []; let nid = 0, eid = 0; const nodeAt = new Map(), elemAt = new Set();
+  const rk = (v) => Math.round(v * 1e5) / 1e5;
+  const getNode = (x, y, z, restr) => {
+    const k = `${rk(x)}|${rk(y)}|${rk(z)}`; let id = nodeAt.get(k);
+    if (id == null) { id = ++nid; nodeAt.set(k, id); nodes.push({ id, x: rk(x), y: rk(y), z: rk(z), restraints: restr || { ux: 0, uy: 0, uz: 0, rx: 0, ry: 0, rz: 0 }, nodeMass: { mx: 0, my: 0, mz: 0 }, springs: { kux: 0, kuy: 0, kuz: 0, krx: 0, kry: 0, krz: 0 } }); }
+    else if (restr) Object.assign(nodes[id - 1].restraints, restr);
+    return id;
+  };
+  const addEl = (n1, n2, s) => { if (n1 == null || n2 == null || n1 === n2) return null; const ek = `${Math.min(n1, n2)}-${Math.max(n1, n2)}`; if (elemAt.has(ek)) return null; elemAt.add(ek); const id = ++eid; elements.push({ id, n1, n2, matId: 1, secId: s, releases: Array(12).fill(0) }); return id; };
+  const serie = (Lt, seg) => { const a = [0]; let x = seg; while (x < Lt - 1e-6) { a.push(+x.toFixed(4)); x += seg; } a.push(+Lt.toFixed(4)); return a; };
+  const empot = { ux: 1, uy: 1, uz: 1, rx: 1, ry: 1, rz: 1 };
+
+  const Xp = serie(L, luzP);             // posiciones de pilas
+  const ys = [0, W];                      // dos planos de vigas (bordes del tablero)
+  const deckZ = H;                        // nivel del tablero
+  const botZ = esCercha ? +(H - canto).toFixed(4) : H;   // cordón inferior / apoyo de pila
+
+  // nodos longitudinales del tablero: para cercha se subdivide cada vano en paneles
+  let Xn;
+  if (esCercha) {
+    const pPan = Math.max(2, Math.round(p.n_paneles_por_vano || Math.max(2, Math.round(luzP / Math.max(0.5, canto)))));
+    const set = new Set();
+    for (let s = 0; s < Xp.length - 1; s++) { const a = Xp[s], b = Xp[s + 1]; for (let i = 0; i <= pPan; i++) set.add(+(a + (b - a) * i / pPan).toFixed(4)); }
+    Xn = [...set].sort((u, v) => u - v);
+  } else Xn = Xp.slice();
+
+  // pilas (columnas) en cada Xp y cada borde, de z=0 (empotrado) a botZ
+  for (const xp of Xp) for (const y of ys) addEl(getNode(xp, y, 0, empot), getNode(xp, y, botZ), secPila.id);
+  if (esCercha) for (const xp of Xp) addEl(getNode(xp, 0, botZ), getNode(xp, W, botZ), secDiag.id);  // travesaño de pila
+
+  // vigas longitudinales / cerchas a cada borde
+  const topEls = [];   // cordón superior = tablero, lleva la carga
+  for (const y of ys) {
+    if (!esCercha) {
+      for (let i = 0; i < Xn.length - 1; i++) topEls.push(addEl(getNode(Xn[i], y, deckZ), getNode(Xn[i + 1], y, deckZ), secGirder.id));
+    } else {
+      const B = [], T = [];
+      for (let i = 0; i < Xn.length; i++) { B[i] = getNode(Xn[i], y, botZ); T[i] = getNode(Xn[i], y, deckZ); }
+      for (let i = 0; i < Xn.length - 1; i++) addEl(B[i], B[i + 1], secGirder.id);                 // cordón inferior
+      for (let i = 0; i < Xn.length - 1; i++) topEls.push(addEl(T[i], T[i + 1], secGirder.id));    // cordón superior (tablero)
+      tejerCelosiaWeb(B, T, Xn.length - 1, tCel, addEl, secDiag.id);
+    }
+  }
+  // travesaños del tablero (a nivel deckZ) en cada nodo longitudinal
+  for (const xn of Xn) addEl(getNode(xn, 0, deckZ), getNode(xn, W, deckZ), secDiag.id);
+
+  // ── Cargas del tablero (CM + CV) sobre las vigas de borde, ancho tributario W/2 ──
+  const cargas = ficha.cargas || {};
+  let qCM = cargas.muerta_adicional_kN_m2; if (qCM == null) { qCM = 2.0; aviso('estimado', 'Peso de tablero no indicado: 2.0 kN/m².'); }
+  let qCV = cargas.sobrecarga_uso_kN_m2; if (qCV == null) { qCV = 4.0; aviso('estimado', 'Sobrecarga de puente no indicada: 4.0 kN/m² (peatonal/liviana; para vehicular use NCh3171/AASHTO).'); }
+  const lcCM = { id: 1, name: 'CM', loads: [], selfWeight: true, type: 'static', specDir: null };
+  const lcCV = { id: 2, name: 'CV', loads: [], selfWeight: false, type: 'static', specDir: null };
+  for (const e of topEls) {
+    if (e == null) continue;
+    lcCM.loads.push({ type: 'dist', elemId: e, dir: 'gravity', w: +(qCM * W / 2).toFixed(6) });
+    lcCV.loads.push({ type: 'dist', elemId: e, dir: 'gravity', w: +(qCV * W / 2).toFixed(6) });
+  }
+  const loadCases = [lcCM, lcCV];
+  const combinations = [
+    { id: 1, name: '1.4CM', factors: [{ lcId: 1, factor: 1.4 }] },
+    { id: 2, name: '1.2CM+1.6CV', factors: [{ lcId: 1, factor: 1.2 }, { lcId: 2, factor: 1.6 }] },
+  ];
+
+  return {
+    version: '1.0', units: 'kN-m', mode: '3D',
+    nodes, elements, materials: [mat], sections: [secGirder, secPila, secDiag], diaphragms: [],
+    loadCases, combinations,
+    grids: { x: Xp, y: ys, z: [0, botZ, deckZ] },
+    _counters: { nodes: nodes.length, elements: elements.length, materials: 1, sections: 3, diaphragms: 0, loadCases: 2, combinations: 2 },
+    _generado: {
+      por: 'asistente/generador.js (puente)',
+      reglas: (libs.reglas && libs.reglas._meta) ? libs.reglas._meta.version : undefined,
+      resumen: `puente ${L}×${W} m, ${Xp.length} líneas de pila @${luzP} m, ${esCercha ? `vigas de celosía ${tCel} (canto ${canto} m)` : 'vigas continuas'}: ${nodes.length} nodos, ${elements.length} barras`,
+    },
+    _avisos: avisos,
+  };
+}
+
+// ──────────────────────────────────────────────────────────────────────────────
+// Tipología GALPÓN / NAVE INDUSTRIAL (pórticos de columnas + cerchas de techo)
+//   Marcos espaciados a lo largo (Y): 2 columnas (x=0, x=luz) + cercha de techo a
+//   dos aguas (Warren/Pratt/Howe) sobre las columnas; costaneras (purlins) unen
+//   los marcos. Integra "edificio + cerchas". Determinista y resiliente.
+// ──────────────────────────────────────────────────────────────────────────────
+export function generarGalpon(ficha, libs) {
+  const materiales = libs.materiales || [], perfiles = libs.perfiles || [];
+  const avisos = []; const aviso = (t, m) => avisos.push({ tipo: t, msg: m });
+  const matByName = new Map(materiales.map((m) => [String(m.nombre).trim().toLowerCase(), m]));
+  const pickMat = (n) => {
+    const r = resolverMaterialFlexible(n, materiales, aviso); if (r) return r;
+    const d = matByName.get('s275'); aviso('reemplazo', `Material ${n == null ? '(no indicado)' : `"${n}"`}: se usó acero S275 (galpón).`);
+    return d ? filaAMaterial(d) : { name: 'S275', E: 2.1e8, G: 8.08e7, nu: 0.3, rho: 7.85 };
+  };
+  const mat = pickMat((ficha.secciones || {}).material); mat.id = 1;
+  const esMadera = /pino|madera/i.test(mat.name);
+
+  const g = ficha.galpon || {};
+  const luz = g.luz_m > 0 ? g.luz_m : 15; if (!(g.luz_m > 0)) aviso('reemplazo', 'Luz del galpón no indicada: 15 m.');
+  const largo = g.largo_m > 0 ? g.largo_m : 30; if (!(g.largo_m > 0)) aviso('reemplazo', 'Largo del galpón no indicado: 30 m.');
+  const H = g.altura_columna_m > 0 ? g.altura_columna_m : 6;
+  const sep = g.separacion_marcos_m > 0 ? g.separacion_marcos_m : 5;
+  const slope = (g.pendiente_pct >= 0 ? g.pendiente_pct : 15) / 100;
+  const hR = g.altura_cumbrera_m > 0 ? g.altura_cumbrera_m : +(slope * (luz / 2)).toFixed(4);
+  const tCel = /pratt/i.test(String(g.tipo_celosia || '')) ? 'pratt' : (/howe/i.test(String(g.tipo_celosia || '')) ? 'howe' : 'warren');
+  let nT = Math.max(2, Math.round(g.n_paneles || Math.max(4, Math.round(luz)))); if (nT % 2) nT += 1;
+
+  const secCol = pickSeccionGen(g.escuadria_columna ?? (ficha.secciones || {}).pilares, perfiles, esMadera ? { b_cm: 15, h_cm: 20 } : { b_cm: 30, h_cm: 30 }, 'Columna', aviso); secCol.id = 1;
+  const secCord = pickSeccionGen(g.escuadria_cordon, perfiles, esMadera ? { b_cm: 7.5, h_cm: 15 } : { b_cm: 15, h_cm: 15 }, 'Cordón', aviso); secCord.id = 2;
+  const secDiag = pickSeccionGen(g.escuadria_diagonal, perfiles, esMadera ? { b_cm: 5, h_cm: 10 } : { b_cm: 10, h_cm: 10 }, 'Diagonal/costanera', aviso); secDiag.id = 3;
+
+  const nodes = [], elements = []; let nid = 0, eid = 0; const nodeAt = new Map(), elemAt = new Set();
+  const rk = (v) => Math.round(v * 1e5) / 1e5;
+  const getNode = (x, y, z, restr) => {
+    const k = `${rk(x)}|${rk(y)}|${rk(z)}`; let id = nodeAt.get(k);
+    if (id == null) { id = ++nid; nodeAt.set(k, id); nodes.push({ id, x: rk(x), y: rk(y), z: rk(z), restraints: restr || { ux: 0, uy: 0, uz: 0, rx: 0, ry: 0, rz: 0 }, nodeMass: { mx: 0, my: 0, mz: 0 }, springs: { kux: 0, kuy: 0, kuz: 0, krx: 0, kry: 0, krz: 0 } }); }
+    else if (restr) Object.assign(nodes[id - 1].restraints, restr);
+    return id;
+  };
+  const addEl = (n1, n2, s) => { if (n1 == null || n2 == null || n1 === n2) return null; const ek = `${Math.min(n1, n2)}-${Math.max(n1, n2)}`; if (elemAt.has(ek)) return null; elemAt.add(ek); const id = ++eid; elements.push({ id, n1, n2, matId: 1, secId: s, releases: Array(12).fill(0) }); return id; };
+  const serie = (Lt, seg) => { const a = [0]; let x = seg; while (x < Lt - 1e-6) { a.push(+x.toFixed(4)); x += seg; } a.push(+Lt.toFixed(4)); return a; };
+  const empot = { ux: 1, uy: 1, uz: 1, rx: 1, ry: 1, rz: 1 };
+
+  const along = (i) => +(i * luz / nT).toFixed(5);
+  const zRoof = (a) => +(a <= luz / 2 ? (2 * hR / luz) * a : (2 * hR / luz) * (luz - a)).toFixed(5);
+  const Yf = serie(largo, sep);          // posiciones de marcos
+  const marcos = [];                      // {T, B, tops}
+  for (const yf of Yf) {
+    // columnas (x=0, x=luz) de z=0 (empotrado) a H
+    addEl(getNode(0, yf, 0, empot), getNode(0, yf, H), secCol.id);
+    addEl(getNode(luz, yf, 0, empot), getNode(luz, yf, H), secCol.id);
+    // cercha de techo: cordón inferior a H, cordón superior a dos aguas
+    const B = [], T = [], tops = [];
+    for (let i = 0; i <= nT; i++) { const x = along(i); B[i] = getNode(x, yf, H); T[i] = getNode(x, yf, +(H + zRoof(x)).toFixed(4)); }
+    for (let i = 0; i < nT; i++) addEl(B[i], B[i + 1], secCord.id);                  // cordón inferior (tirante)
+    for (let i = 0; i < nT; i++) {
+      const e = addEl(T[i], T[i + 1], secCord.id);
+      const da = along(i + 1) - along(i); const Lsl = Math.hypot(da, zRoof(along(i + 1)) - zRoof(along(i))) || da;
+      tops.push({ elemId: e, dx: da, Lsl });
+    }
+    tejerCelosiaWeb(B, T, nT, tCel, addEl, secDiag.id);
+    if (tCel === 'warren') addEl(B[nT / 2], T[nT / 2], secDiag.id);   // pendolón
+    marcos.push({ T, B, tops });
+  }
+  // costaneras (purlins): unen marcos consecutivos en cada nodo de cordón
+  for (let s = 0; s + 1 < Yf.length; s++) for (let i = 0; i <= nT; i++) {
+    addEl(marcos[s].T[i], marcos[s + 1].T[i], secDiag.id);
+    addEl(marcos[s].B[i], marcos[s + 1].B[i], secDiag.id);
+  }
+
+  // ── Cargas de techo (CM + CV) sobre cordones superiores, ancho tributario sep ──
+  const cargas = ficha.cargas || {};
+  let qCM = cargas.muerta_adicional_kN_m2; if (qCM == null) { qCM = 0.2; aviso('estimado', 'Peso de cubierta no indicado: 0.2 kN/m² (cubierta metálica liviana).'); }
+  let qCV = cargas.sobrecarga_uso_kN_m2; if (qCV == null) { qCV = 1.0; aviso('estimado', 'Sobrecarga de techo no indicada: 1.0 kN/m².'); }
+  const lcCM = { id: 1, name: 'CM', loads: [], selfWeight: true, type: 'static', specDir: null };
+  const lcCV = { id: 2, name: 'CV', loads: [], selfWeight: false, type: 'static', specDir: null };
+  for (let f = 0; f < Yf.length; f++) {
+    const trib = tributario(Yf, f);
+    for (const tp of marcos[f].tops) {
+      if (tp.elemId == null) continue;
+      lcCM.loads.push({ type: 'dist', elemId: tp.elemId, dir: 'gravity', w: +(qCM * trib * tp.dx / tp.Lsl).toFixed(6) });
+      lcCV.loads.push({ type: 'dist', elemId: tp.elemId, dir: 'gravity', w: +(qCV * trib * tp.dx / tp.Lsl).toFixed(6) });
+    }
+  }
+  const loadCases = [lcCM, lcCV];
+  const combinations = [
+    { id: 1, name: '1.4CM', factors: [{ lcId: 1, factor: 1.4 }] },
+    { id: 2, name: '1.2CM+1.6CV', factors: [{ lcId: 1, factor: 1.2 }, { lcId: 2, factor: 1.6 }] },
+  ];
+
+  return {
+    version: '1.0', units: 'kN-m', mode: '3D',
+    nodes, elements, materials: [mat], sections: [secCol, secCord, secDiag], diaphragms: [],
+    loadCases, combinations,
+    grids: { x: [0, luz], y: Yf, z: [0, H, +(H + hR).toFixed(4)] },
+    _counters: { nodes: nodes.length, elements: elements.length, materials: 1, sections: 3, diaphragms: 0, loadCases: 2, combinations: 2 },
+    _generado: {
+      por: 'asistente/generador.js (galpón)',
+      reglas: (libs.reglas && libs.reglas._meta) ? libs.reglas._meta.version : undefined,
+      resumen: `galpón ${esMadera ? 'madera' : 'acero'} luz ${luz} m × largo ${largo} m, ${Yf.length} marcos @${sep} m, cerchas ${tCel} pend. ${(slope * 100).toFixed(0)}%: ${nodes.length} nodos, ${elements.length} barras`,
     },
     _avisos: avisos,
   };
