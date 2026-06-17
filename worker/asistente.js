@@ -42,8 +42,8 @@ function parseCSV(txt) {
   });
 }
 
-const json = (obj, status = 200) =>
-  new Response(JSON.stringify(obj), { status, headers: { 'Content-Type': 'application/json; charset=utf-8' } });
+const json = (obj, status = 200, extra = {}) =>
+  new Response(JSON.stringify(obj), { status, headers: { 'Content-Type': 'application/json; charset=utf-8', ...extra } });
 
 async function cargarBibliotecas(env, base) {
   const get = (p) => env.ASSETS.fetch(new Request(new URL(p, base)));
@@ -56,25 +56,26 @@ async function cargarBibliotecas(env, base) {
   return { reglas, perfiles: parseCSV(pTxt), materiales: parseCSV(mTxt), sobrecargas: parseCSV(sTxt) };
 }
 
-// Proveedor del LLM. Prioridad: OpenAI directo (si hay OPENAI_API_KEY) →
-// OpenRouter. Ambos usan el formato chat/completions de OpenAI, así que el
-// parseo de la respuesta es idéntico.
-function proveedorLLM(env) {
-  if (env.OPENAI_API_KEY) return {
+// Proveedores del LLM EN ORDEN DE PRIORIDAD. Se intentan en cascada: primero
+// OpenAI (si hay OPENAI_API_KEY), y si TODOS sus modelos fallan, se pasa a
+// OpenRouter (modelos gratis). Ambos usan el formato chat/completions de OpenAI.
+function proveedoresLLM(env) {
+  const lista = [];
+  if (env.OPENAI_API_KEY) lista.push({
     nombre: 'OpenAI',
     url: 'https://api.openai.com/v1/chat/completions',
     key: env.OPENAI_API_KEY,
     modelos: [env.OPENAI_MODEL || 'gpt-4o-mini'],
     extraHeaders: {},
-  };
-  if (env.OPENROUTER_API_KEY) return {
+  });
+  if (env.OPENROUTER_API_KEY) lista.push({
     nombre: 'OpenRouter',
     url: 'https://openrouter.ai/api/v1/chat/completions',
     key: env.OPENROUTER_API_KEY,
     modelos: env.OPENROUTER_MODEL ? [env.OPENROUTER_MODEL] : MODELS_FREE,
     extraHeaders: { 'X-Title': 'PORTICO Asistente' },
-  };
-  return null;
+  });
+  return lista;
 }
 
 async function llamarModelo(prov, modelo, mensaje) {
@@ -91,28 +92,30 @@ async function llamarModelo(prov, modelo, mensaje) {
 }
 
 async function fichaDesdeLLM(mensaje, env) {
-  const prov = proveedorLLM(env);
-  if (!prov) throw new Error('Falta el secreto OPENAI_API_KEY u OPENROUTER_API_KEY en el Worker.');
-  let ultimoError = 'sin respuesta';
-  for (const modelo of prov.modelos) {
-    const r = await llamarModelo(prov, modelo, mensaje);
-    if (r.ok) {
-      const data = await r.json();
-      // Algunos proveedores devuelven 200 con un error embebido.
-      if (data.error) { ultimoError = `${modelo}: ${data.error.message || JSON.stringify(data.error)}`; continue; }
-      let raw = String(data.choices?.[0]?.message?.content ?? '').trim()
-        .replace(/^```(json)?/i, '').replace(/```$/, '').trim();
-      const i = raw.indexOf('{'), j = raw.lastIndexOf('}');
-      if (i < 0 || j < 0) { ultimoError = `${modelo}: no devolvió JSON`; continue; }
-      // data.model = id real del modelo que respondió (puede traer sufijo de versión)
-      return { ficha: JSON.parse(raw.slice(i, j + 1)), llm: { proveedor: prov.nombre, modelo: data.model || modelo } };
+  const provs = proveedoresLLM(env);
+  if (!provs.length) throw new Error('Falta el secreto OPENAI_API_KEY u OPENROUTER_API_KEY en el Worker.');
+  const intentos = [];   // log de cada intento (para diagnóstico)
+  for (const prov of provs) {
+    for (const modelo of prov.modelos) {
+      const r = await llamarModelo(prov, modelo, mensaje);
+      if (r.ok) {
+        const data = await r.json();
+        if (data.error) { intentos.push(`${prov.nombre}/${modelo}: ${data.error.message || JSON.stringify(data.error)}`); continue; }
+        let raw = String(data.choices?.[0]?.message?.content ?? '').trim()
+          .replace(/^```(json)?/i, '').replace(/```$/, '').trim();
+        const i = raw.indexOf('{'), j = raw.lastIndexOf('}');
+        if (i < 0 || j < 0) { intentos.push(`${prov.nombre}/${modelo}: no devolvió JSON`); continue; }
+        // data.model = id real del modelo que respondió (puede traer sufijo de versión)
+        return { ficha: JSON.parse(raw.slice(i, j + 1)), llm: { proveedor: prov.nombre, modelo: data.model || modelo, intentos } };
+      }
+      intentos.push(`${prov.nombre}/${modelo}: HTTP ${r.status} ${(await r.text()).slice(0, 160)}`);
+      // 401/403 = credencial/política: no sirve probar más modelos de ESTE proveedor.
+      if (r.status === 401 || r.status === 403) break;
+      // 429 (rate limit) o 5xx: probar el siguiente modelo del mismo proveedor.
     }
-    ultimoError = `${modelo}: HTTP ${r.status} ${(await r.text()).slice(0, 200)}`;
-    // 401/403 son de credencial/política: no sirve probar otros modelos.
-    if (r.status === 401 || r.status === 403) break;
-    // 429 (rate limit) o 5xx: probar el siguiente modelo de la cascada.
+    // si este proveedor no funcionó, se pasa al siguiente (OpenAI → OpenRouter)
   }
-  throw new Error(`${prov.nombre}: sin modelo disponible. Último: ${ultimoError}`);
+  throw new Error(`Ningún modelo disponible. Intentos: ${intentos.join(' | ')}`);
 }
 
 export default {
@@ -128,8 +131,10 @@ export default {
         if (!ficha) return json({ error: 'Envíe { mensaje } o { ficha }' }, 400);
         const libs = await cargarBibliotecas(env, request.url);
         const modelo = generarModelo(ficha, libs);
-        // _llm informa proveedor y modelo que generó la ficha (null si se envió ficha directa)
-        return json({ ficha, resumen: modelo._generado?.resumen, modelo, _llm: llm });
+        // _llm informa proveedor y modelo que generó la ficha (null si se envió ficha directa).
+        // También se expone en encabezados HTTP X-Asistente-Proveedor / X-Asistente-Modelo.
+        const hdr = llm ? { 'X-Asistente-Proveedor': llm.proveedor, 'X-Asistente-Modelo': String(llm.modelo) } : {};
+        return json({ ficha, resumen: modelo._generado?.resumen, modelo, _llm: llm }, 200, hdr);
       } catch (e) {
         return json({ error: String(e.message || e) }, 500);
       }
