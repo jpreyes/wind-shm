@@ -63,6 +63,36 @@ export function rectangularASeccion(spec, nombre) {
   };
 }
 
+// Escuadrías comerciales de madera (pulgadas nominales → mm reales, S4S cepillado).
+// Para las no tabuladas se usa nominal × 25.4 mm. Valores referenciales de docencia.
+const ESCUADRIAS_MM = {
+  '1x4': [19, 89], '1x6': [19, 140],
+  '2x2': [38, 38], '2x3': [38, 64], '2x4': [38, 89], '2x5': [38, 114],
+  '2x6': [38, 140], '2x8': [38, 184], '2x10': [38, 235], '2x12': [38, 286],
+  '3x4': [64, 89], '4x4': [89, 89], '4x6': [89, 140],
+};
+
+/**
+ * Escuadría de madera ("2x4", "2x8") o {b_cm,h_cm} → sección PÓRTICO.
+ * Devuelve también la escuadría reconocida (mm). null si no se puede interpretar.
+ */
+export function escuadriaASeccion(spec, nombre) {
+  if (spec && typeof spec === 'object') return { sec: rectangularASeccion(spec, nombre), etiqueta: nombre, mm: null };
+  if (spec == null) return null;
+  const s = String(spec).toLowerCase().replace(/["”]|pulg\w*|plg|in\b|\s/g, '');
+  const key = s.replace(/[x×*]/g, 'x');
+  if (ESCUADRIAS_MM[key]) {
+    const [b, h] = ESCUADRIAS_MM[key];
+    return { sec: rectangularASeccion({ b_mm: b, h_mm: h }, nombre || `${key}"`), etiqueta: `${key}" (${b}×${h} mm)`, mm: [b, h] };
+  }
+  const m = key.match(/^(\d+(?:\.\d+)?)x(\d+(?:\.\d+)?)$/);
+  if (m) {
+    const b = +(+m[1] * 25.4).toFixed(1), h = +(+m[2] * 25.4).toFixed(1);
+    return { sec: rectangularASeccion({ b_mm: b, h_mm: h }, nombre || `${m[1]}x${m[2]}"`), etiqueta: `${m[1]}x${m[2]}" (${b}×${h} mm nominal)`, mm: [b, h] };
+  }
+  return null;
+}
+
 /** Fila de materiales.csv → material PÓRTICO. */
 export function filaAMaterial(m) {
   const num = (v) => (typeof v === 'number' ? v : parseFloat(v));
@@ -119,6 +149,10 @@ function tributario(ejes, j) {
  * @returns {object}        modelo .s3d (listo para JSON.stringify y abrir en PÓRTICO)
  */
 export function generarModelo(ficha, libs) {
+  // Despacho por tipología: entramado de madera tiene geometría propia.
+  const tip = String(ficha.tipologia || 'marco').toLowerCase();
+  if (/madera|tabiqu|entramad|light.?frame/.test(tip)) return generarMurosMadera(ficha, libs);
+
   const { reglas, perfiles, materiales } = libs;
   const rmod = reglas.reglas_modelado || {};
   const sepMax = rmod.separacion_maxima_vano_m || 6.0;
@@ -506,5 +540,229 @@ export function generarModelo(ficha, libs) {
       resumen: `${nodes.length} nodos, ${elements.length} elementos, ${loadCases.length} casos, ${combinations.length} combinaciones`,
     },
     _avisos: avisos,   // [{tipo:'reemplazo'|'estimado'|'omitido'|'info', msg}]
+  };
+}
+
+// ──────────────────────────────────────────────────────────────────────────────
+// Tipología ENTRAMADO LIGERO DE MADERA (tabiques + viguetas)
+//   Pies derechos (verticales) + soleras inferior/superior (horizontales) por
+//   nivel; tabiques perimetrales y/o interiores con aberturas (puerta/ventana:
+//   se omiten los pies derechos del vano y se coloca un dintel). Viguetas de
+//   piso/techo apoyadas en los muros, cargadas por ancho tributario (1 dirección).
+//   Determinista y resiliente: nunca falla por datos faltantes.
+// ──────────────────────────────────────────────────────────────────────────────
+export function generarMurosMadera(ficha, libs) {
+  const materiales = libs.materiales || [];
+  const matPorNombre = new Map(materiales.map((m) => [String(m.nombre).trim(), m]));
+  const avisos = [];
+  const aviso = (tipo, msg) => avisos.push({ tipo, msg });
+
+  // ── Material (madera) ──
+  const pickMat = (n) => {
+    if (n != null) {
+      const ex = matPorNombre.get(String(n).trim());
+      if (ex) return filaAMaterial(ex);
+      if (/pino|madera|wood|radiata|timber/i.test(String(n))) {
+        const m2 = matPorNombre.get('Pino Radiata') ||
+          materiales.find((m) => /madera|timber/i.test(`${m.tipo}`));
+        if (m2) { aviso('info', `Material "${n}" interpretado como "${m2.nombre}".`); return filaAMaterial(m2); }
+      }
+    }
+    const def = matPorNombre.get('Pino Radiata');
+    aviso('reemplazo', `Material ${n == null ? '(no indicado)' : `"${n}"`}: se usó Pino Radiata por defecto (tipología madera).`);
+    return def ? filaAMaterial(def) : { name: 'Pino Radiata', E: 1.0e7, G: 6.25e5, nu: 0.3, rho: 0.45 };
+  };
+  const mat = pickMat((ficha.secciones || {}).material); mat.id = 1;
+
+  // ── Secciones (escuadrías) ──
+  const tb = ficha.tabiques || {};
+  const ep = ficha.entrepisos || {};
+  const pickSec = (spec, label, defKey) => {
+    const r = escuadriaASeccion(spec, label);
+    if (r) { if (spec) aviso('info', `${label}: ${r.etiqueta}.`); return r.sec; }
+    aviso('reemplazo', `${label}: escuadría ${spec == null ? '(no indicada)' : `"${spec}"`} no reconocida: se usó ${defKey}" por defecto.`);
+    return escuadriaASeccion(defKey, label).sec;
+  };
+  const secStud = pickSec(tb.escuadria, 'Pie derecho/solera', '2x4'); secStud.id = 1;
+  const secJoist = pickSec(ep.escuadria, 'Vigueta', '2x8'); secJoist.id = 2;
+
+  // ── Geometría base ──
+  const geo = ficha.geometria || {};
+  const pinf = geo.planta_inferior || {};
+  let Lx = pinf.Lx_m, Ly = pinf.Ly_m;
+  if (!(Lx > 0)) { Lx = 6; aviso('reemplazo', 'No se indicó largo de planta (Lx): se usó 6 m.'); }
+  if (!(Ly > 0)) { Ly = 4; aviso('reemplazo', 'No se indicó ancho de planta (Ly): se usó 4 m.'); }
+  if (!geo.niveles || !geo.niveles.length) { geo.niveles = [{ altura_m: 3 }]; aviso('reemplazo', 'No se definieron niveles: 1 nivel de 3 m.'); }
+  const nNiv = geo.niveles.length;
+  const zNivel = [0];
+  for (let k = 0; k < nNiv; k++) zNivel.push(+(zNivel[k] + (geo.niveles[k].altura_m > 0 ? geo.niveles[k].altura_m : 3)).toFixed(4));
+
+  const sepStud = tb.separacion_m > 0 ? tb.separacion_m : 0.4;
+  const sepJoist = ep.separacion_m > 0 ? ep.separacion_m : 0.6;
+  const dirJ = (ep.dir === 'Y') ? 'Y' : 'X';   // dirección en que corren las viguetas
+  const perim = tb.perimetro !== false;
+
+  // ── Registro de nodos/elementos (con fusión por coordenada y deduplicado) ──
+  const nodes = [], elements = [];
+  let nid = 0, eid = 0;
+  const nodeAt = new Map(), elemAt = new Set();
+  const rk = (v) => Math.round(v * 1000) / 1000;
+  const empot = () => ({ ux: 1, uy: 1, uz: 1, rx: 1, ry: 1, rz: 1 });
+  const rotul = () => ({ ux: 1, uy: 1, uz: 1, rx: 0, ry: 0, rz: 0 });
+  const baseR = (ficha.apoyo_base === 'rotulado') ? rotul : empot;
+  const getNode = (x, y, z) => {
+    const k = `${rk(x)}|${rk(y)}|${rk(z)}`;
+    let id = nodeAt.get(k);
+    if (id == null) {
+      id = ++nid; nodeAt.set(k, id);
+      nodes.push({
+        id, x: rk(x), y: rk(y), z: rk(z),
+        restraints: rk(z) === 0 ? baseR() : { ux: 0, uy: 0, uz: 0, rx: 0, ry: 0, rz: 0 },
+        nodeMass: { mx: 0, my: 0, mz: 0 },
+        springs: { kux: 0, kuy: 0, kuz: 0, krx: 0, kry: 0, krz: 0 },
+      });
+    }
+    return id;
+  };
+  const addEl = (n1, n2, secId) => {
+    if (n1 == null || n2 == null || n1 === n2) return null;
+    const ek = `${Math.min(n1, n2)}-${Math.max(n1, n2)}`;
+    if (elemAt.has(ek)) return null;
+    elemAt.add(ek);
+    const id = ++eid;
+    elements.push({ id, n1, n2, matId: 1, secId, releases: Array(12).fill(0) });
+    return id;
+  };
+
+  // serie inclusiva [0, sep, 2·sep, …, L] con el último nodo exactamente en L
+  const serie = (L, sep) => {
+    const a = [0]; let x = sep;
+    while (x < L - 1e-6) { a.push(+x.toFixed(4)); x += sep; }
+    a.push(+L.toFixed(4));
+    return a;
+  };
+  const merge = (a, b) => [...new Set([...a, ...b].map((v) => +(+v).toFixed(4)))].sort((p, q) => p - q);
+
+  // Muro genérico a lo largo de un eje. axis='X' → la línea corre en X a y=fixed;
+  // axis='Y' → corre en Y a x=fixed. coords = nodos de solera; studs = posiciones
+  // de pie derecho; aberturas = [{a, b, alto, tipo}] (a,b = bordes del vano).
+  const buildWall = (axis, fixed, coords, studs, zb, zt, aberturas = []) => {
+    const P = (c, z) => axis === 'X' ? getNode(c, fixed, z) : getNode(fixed, c, z);
+    // soleras inferior (zb) y superior (zt) por tramos entre nodos consecutivos
+    for (let i = 0; i < coords.length - 1; i++) {
+      const c0 = coords[i], c1 = coords[i + 1], mid = (c0 + c1) / 2;
+      const enPuerta = aberturas.some((ab) => ab.tipo !== 'ventana' && mid > ab.a + 1e-6 && mid < ab.b - 1e-6);
+      if (!enPuerta) addEl(P(c0, zb), P(c1, zb), secStud.id);  // solera inferior (sin umbral en puertas)
+      addEl(P(c0, zt), P(c1, zt), secStud.id);                 // solera superior (continua)
+    }
+    // pies derechos (omitidos dentro de un vano)
+    for (const c of studs) {
+      if (aberturas.some((ab) => c > ab.a + 1e-6 && c < ab.b - 1e-6)) continue;
+      addEl(P(c, zb), P(c, zt), secStud.id);
+    }
+    // jambas + dintel en cada abertura
+    for (const ab of aberturas) {
+      const zh = Math.min(zt - 1e-4, zb + ab.alto);
+      addEl(P(ab.a, zb), P(ab.a, zh), secStud.id); addEl(P(ab.a, zh), P(ab.a, zt), secStud.id);
+      addEl(P(ab.b, zb), P(ab.b, zh), secStud.id); addEl(P(ab.b, zh), P(ab.b, zt), secStud.id);
+      addEl(P(ab.a, zh), P(ab.b, zh), secStud.id);   // dintel
+    }
+  };
+
+  // Posiciones de pies derechos y de viguetas
+  const Px = serie(Lx, sepStud), Py = serie(Ly, sepStud);
+  const Xj = serie(Lx, sepJoist), Yj = serie(Ly, sepJoist);
+
+  // ── Tabiques perimetrales por nivel ──
+  for (let k = 1; k <= nNiv; k++) {
+    const zb = zNivel[k - 1], zt = zNivel[k];
+    if (!perim) break;
+    // muros que corren en X (a y=0 y y=Ly): reciben viguetas si dirJ='Y' (en x=Xj)
+    const cx = merge(Px, dirJ === 'Y' ? Xj : []);
+    buildWall('X', 0, cx, Px, zb, zt);
+    buildWall('X', Ly, cx, Px, zb, zt);
+    // muros que corren en Y (a x=0 y x=Lx): reciben viguetas si dirJ='X' (en y=Yj)
+    const cy = merge(Py, dirJ === 'X' ? Yj : []);
+    buildWall('Y', 0, cy, Py, zb, zt);
+    buildWall('Y', Lx, cy, Py, zb, zt);
+  }
+
+  // ── Tabiques interiores con aberturas ──
+  for (const w of (tb.interiores || [])) {
+    const k = Math.min(nNiv, Math.max(1, w.nivel || 1));
+    const zb = zNivel[k - 1], zt = zNivel[k];
+    const dir = w.dir === 'X' ? 'X' : 'Y';
+    const Lrun = dir === 'X' ? Lx : Ly;
+    const fixed = Math.min(dir === 'X' ? Ly : Lx, Math.max(0, w.pos_m != null ? w.pos_m : (dir === 'X' ? Ly : Lx) / 2));
+    const ab = (w.aberturas || []).map((o) => {
+      const ancho = o.ancho_m > 0 ? o.ancho_m : 0.8;
+      const c = Math.min(Lrun - ancho / 2, Math.max(ancho / 2, o.centro_m != null ? o.centro_m : Lrun / 2));
+      return { a: +(c - ancho / 2).toFixed(4), b: +(c + ancho / 2).toFixed(4), alto: o.alto_m > 0 ? o.alto_m : 2.0, tipo: o.tipo === 'ventana' ? 'ventana' : 'puerta' };
+    });
+    const edges = ab.flatMap((o) => [o.a, o.b]);
+    const studs = serie(Lrun, sepStud);
+    buildWall(dir, fixed, merge(studs, edges), studs, zb, zt, ab);
+  }
+
+  // ── Viguetas de piso/techo por nivel (apoyadas en muros), con ancho tributario ──
+  const joists = [];   // {elemId, k, L, trib}
+  for (let k = 1; k <= nNiv; k++) {
+    const z = zNivel[k];
+    if (dirJ === 'X') {                  // viguetas en X (de x=0 a x=Lx), distribuidas en Y
+      for (let j = 0; j < Yj.length; j++) {
+        const eid = addEl(getNode(0, Yj[j], z), getNode(Lx, Yj[j], z), secJoist.id);
+        joists.push({ elemId: eid, k, L: Lx, trib: tributario(Yj, j) });
+      }
+    } else {                              // viguetas en Y (de y=0 a y=Ly), distribuidas en X
+      for (let i = 0; i < Xj.length; i++) {
+        const eid = addEl(getNode(Xj[i], 0, z), getNode(Xj[i], Ly, z), secJoist.id);
+        joists.push({ elemId: eid, k, L: Ly, trib: tributario(Xj, i) });
+      }
+    }
+  }
+
+  // ── Cargas: CM (peso propio + adicional) y CV (uso) sobre viguetas ──
+  const cargas = ficha.cargas || {};
+  let qCMadic = cargas.muerta_adicional_kN_m2;
+  if (qCMadic == null) { qCMadic = 0.3; aviso('estimado', 'Carga muerta adicional de piso no indicada: se usó 0.3 kN/m² (revestimientos + cielo).'); }
+  let qCVfloor = cargas.sobrecarga_uso_kN_m2;
+  if (qCVfloor == null) { qCVfloor = 2.0; aviso('estimado', 'Sobrecarga de uso no indicada: se usó 2.0 kN/m² (habitacional, NCh1537).'); }
+  const qRoof = 1.0;
+  if (nNiv >= 1) aviso('info', `Techo (nivel ${nNiv}) modelado como plataforma plana de viguetas con sobrecarga ${qRoof} kN/m². Las cerchas son una tipología aparte.`);
+  const cvAt = (k) => (k < nNiv ? qCVfloor : qRoof);
+
+  const lcCM = { id: 1, name: 'CM', loads: [], selfWeight: true, type: 'static', specDir: null };
+  const lcCV = { id: 2, name: 'CV', loads: [], selfWeight: false, type: 'static', specDir: null };
+  for (const j of joists) {
+    if (j.elemId == null || !(j.L > 0) || !(j.trib > 0)) continue;
+    if (qCMadic > 0) lcCM.loads.push({ type: 'dist', elemId: j.elemId, dir: 'gravity', w: +(qCMadic * j.trib).toFixed(6) });
+    const cv = cvAt(j.k);
+    if (cv > 0) lcCV.loads.push({ type: 'dist', elemId: j.elemId, dir: 'gravity', w: +(cv * j.trib).toFixed(6) });
+  }
+  const loadCases = [lcCM, lcCV];
+
+  // ── Combinaciones (gravitacionales NCh3171) ──
+  const combinations = [
+    { id: 1, name: '1.4CM', factors: [{ lcId: 1, factor: 1.4 }] },
+    { id: 2, name: '1.2CM+1.6CV', factors: [{ lcId: 1, factor: 1.2 }, { lcId: 2, factor: 1.6 }] },
+  ];
+
+  return {
+    version: '1.0',
+    units: 'kN-m',
+    mode: '3D',
+    nodes, elements,
+    materials: [mat],
+    sections: [secStud, secJoist],
+    diaphragms: [],
+    loadCases, combinations,
+    grids: { x: Px, y: Py, z: zNivel },
+    _counters: { nodes: nodes.length, elements: elements.length, materials: 1, sections: 2, diaphragms: 0, loadCases: 2, combinations: 2 },
+    _generado: {
+      por: 'asistente/generador.js (muros_madera)',
+      reglas: (libs.reglas && libs.reglas._meta) ? libs.reglas._meta.version : undefined,
+      resumen: `${nodes.length} nodos, ${elements.length} elementos (entramado de madera), ${joists.length} viguetas`,
+    },
+    _avisos: avisos,
   };
 }

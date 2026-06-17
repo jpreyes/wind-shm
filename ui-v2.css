@@ -69,8 +69,8 @@ button:focus-visible, select:focus-visible, input:focus-visible {
 
 /* ── Overlays del viewport (vidrio) ─────────────────────────── */
 .vp-ctrl {
-  background: rgba(9, 13, 19, 0.78);
-  border: 1px solid rgba(60, 76, 96, 0.55);
+  background: var(--glass);
+  border: 1px solid var(--border2);
   border-radius: 9px;
   backdrop-filter: blur(10px) saturate(1.3);
   box-shadow: var(--shadow-sm);
@@ -101,13 +101,28 @@ button:focus-visible, select:focus-visible, input:focus-visible {
   overflow-x: hidden;
   transition: opacity 0.6s ease, filter 0.6s ease;
 }
-/* La portada es siempre OSCURA (splash), independiente del tema de la app:
-   se redeclaran las variables en oscuro para todo su contenido. */
-#landing {
+/* La portada sigue el tema de la app. En OSCURO se redeclaran las variables
+   (el :root base ya es oscuro, pero esto la deja explícita para el splash);
+   en CLARO hereda las variables de :root[data-theme="light"]. */
+:root[data-theme="dark"] #landing {
   --bg: #070a0f; --bg2: #0c1117; --bg3: #121925; --bg4: #1b2433;
   --border: #1d2735; --border2: #2d3a4d;
   --text: #dbe4ee; --text-muted: #7e8da0;
   --accent: #38bdf8; --teal: #2dd4bf;
+}
+/* Modo claro: el título y los chips estaban pensados para fondo oscuro. */
+:root[data-theme="light"] .hero-title {
+  background: linear-gradient(115deg, #16344a 22%, var(--accent) 68%, var(--teal));
+  -webkit-background-clip: text; background-clip: text;
+}
+:root[data-theme="light"] .hero-chips span { background: rgba(255, 255, 255, 0.72); }
+:root[data-theme="light"] #landing::before {
+  background-image:
+    linear-gradient(rgba(40, 70, 110, 0.06) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(40, 70, 110, 0.06) 1px, transparent 1px),
+    linear-gradient(rgba(40, 70, 110, 0.03) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(40, 70, 110, 0.03) 1px, transparent 1px);
+  background-size: 120px 120px, 120px 120px, 24px 24px, 24px 24px;
 }
 #landing.exit { opacity: 0; filter: blur(6px); pointer-events: none; }
 

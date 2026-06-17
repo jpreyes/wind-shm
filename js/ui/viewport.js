@@ -194,12 +194,13 @@ export class Viewport {
 
   /** Tema claro/oscuro: ajusta el fondo del lienzo y la grilla. */
   setTheme(isLight) {
-    this._renderer?.setClearColor(isLight ? 0xeaeef4 : COL.BG, 1);
+    // Claro: gris-azulado apagado (no blanco puro) para no encandilar la vista.
+    this._renderer?.setClearColor(isLight ? 0xd6dbe4 : COL.BG, 1);
     if (this._grid) {
       this._scene.remove(this._grid);
       this._grid.traverse((o) => { o.geometry?.dispose?.(); o.material?.dispose?.(); });
     }
-    this._buildGrid(isLight ? 0x9aabbf : COL.GRID_CENTER, isLight ? 0xccd5e2 : COL.GRID_MAIN);
+    this._buildGrid(isLight ? 0x8b9cb2 : COL.GRID_CENTER, isLight ? 0xbcc6d5 : COL.GRID_MAIN);
   }
 
   _buildAxes() {

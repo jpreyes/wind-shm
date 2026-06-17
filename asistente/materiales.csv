@@ -8,3 +8,5 @@ H20,hormigon,"Hormigon H20 (Ec=4700 raiz fc, verificar NCh430)",2.10e7,8.75e6,0.
 H25,hormigon,Hormigon H25 (verificar NCh430),2.35e7,9.79e6,0.2,2.5,,25
 H30,hormigon,Hormigon H30 (valor por defecto de PORTICO),2.87e7,1.19e7,0.2,2.5,,30
 H40,hormigon,Hormigon H40 (verificar NCh430),2.97e7,1.24e7,0.2,2.5,,40
+Pino Radiata,madera,Madera aserrada pino radiata grado estructural (NCh1198; E=10 GPa; G=E/16; rho=450 kg/m3),1.0e7,6.25e5,0.3,0.45,,
+Pino Radiata GS,madera,Pino radiata grado seleccionado estructural (NCh1198; E=11 GPa),1.1e7,6.88e5,0.3,0.46,,

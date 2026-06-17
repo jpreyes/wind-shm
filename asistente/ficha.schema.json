@@ -4,11 +4,17 @@
   "title": "Ficha estructurada PÓRTICO",
   "description": "Especificación acotada que el LLM rellena a partir del lenguaje natural. NO contiene geometría nodo-a-nodo ni valores de ingeniería: el generador determinista los deriva de esta ficha + reglas.json + bibliotecas CSV.",
   "type": "object",
-  "required": ["modo", "geometria", "secciones"],
+  "required": ["modo", "geometria"],
   "additionalProperties": false,
   "properties": {
     "proyecto": { "type": "string", "description": "Nombre del proyecto." },
     "modo": { "type": "string", "enum": ["2D", "3D"], "description": "2D = pórtico plano X–Z (sin ejes Y)." },
+    "tipologia": {
+      "type": "string",
+      "enum": ["marco", "muros_madera"],
+      "default": "marco",
+      "description": "marco = pórtico de pilares y vigas (acero/hormigón). muros_madera = entramado ligero de madera (tabiques con pies derechos + soleras + viguetas de piso). Para edificaciones de madera con tabiques use 'muros_madera' y rellene 'tabiques' y 'entrepisos'."
+    },
 
     "ubicacion": {
       "type": "object",
@@ -120,6 +126,56 @@
         "suelo": { "type": "string", "enum": ["A", "B", "C", "D", "E"] },
         "categoria": { "type": "string", "enum": ["I", "II", "III", "IV"] },
         "R": { "type": "number", "exclusiveMinimum": 0 }
+      }
+    },
+
+    "tabiques": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Solo tipologia = 'muros_madera'. Entramado de tabiques: pies derechos verticales + soleras (inferior/superior). La planta (geometria.planta_inferior Lx_m, Ly_m) define el perímetro.",
+      "properties": {
+        "escuadria": { "type": "string", "description": "Escuadría del pie derecho en pulgadas, ej. '2x4', '2x6'. También acepta {b_cm,h_cm} pero lo normal es la escuadría comercial." },
+        "separacion_m": { "type": "number", "exclusiveMinimum": 0, "default": 0.4, "description": "Separación entre pies derechos (ej. 0.4 = @40 cm)." },
+        "perimetro": { "type": "boolean", "default": true, "description": "Generar los 4 muros perimetrales en cada nivel." },
+        "interiores": {
+          "type": "array",
+          "description": "Tabiques interiores. Cada uno es una línea en planta con aberturas opcionales (puertas/ventanas).",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["dir", "pos_m"],
+            "properties": {
+              "nivel": { "type": "integer", "minimum": 1, "default": 1, "description": "Nivel en que se ubica el tabique (1 = primer piso)." },
+              "dir": { "type": "string", "enum": ["X", "Y"], "description": "Dirección de la línea del tabique en planta." },
+              "pos_m": { "type": "number", "minimum": 0, "description": "Coordenada perpendicular del tabique (si dir=Y, es la X; si dir=X, es la Y). 'centro' ≈ L/2." },
+              "aberturas": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": ["ancho_m"],
+                  "properties": {
+                    "tipo": { "type": "string", "enum": ["puerta", "ventana"], "default": "puerta" },
+                    "ancho_m": { "type": "number", "exclusiveMinimum": 0, "description": "Ancho del vano (ej. 0.8 = puerta de 80 cm)." },
+                    "alto_m": { "type": "number", "exclusiveMinimum": 0, "default": 2.0, "description": "Alto del vano (dintel) desde la base del tabique." },
+                    "centro_m": { "type": "number", "minimum": 0, "description": "Posición del centro del vano a lo largo de la línea del tabique. Si se omite, al centro del muro." }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+
+    "entrepisos": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Solo tipologia = 'muros_madera'. Viguetas de piso/techo apoyadas en los muros.",
+      "properties": {
+        "escuadria": { "type": "string", "description": "Escuadría de la vigueta en pulgadas, ej. '2x8', '2x10'." },
+        "separacion_m": { "type": "number", "exclusiveMinimum": 0, "default": 0.6, "description": "Separación entre viguetas (ej. 0.6 = @60 cm)." },
+        "dir": { "type": "string", "enum": ["X", "Y"], "default": "X", "description": "Dirección en que corren las viguetas (apoyadas en los muros perpendiculares)." }
       }
     }
   },
