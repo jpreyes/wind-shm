@@ -572,19 +572,33 @@ export class Viewport {
     const sp = node.springs;
     if (!sp || !Object.values(sp).some(k => k > 0)) return;
 
-    const s = 0.45;   // tamaño del símbolo
-    const pts = [
-      [0, 0], [0, -0.18], [0.5, -0.30], [-0.5, -0.46], [0.5, -0.62],
-      [-0.5, -0.78], [0, -0.90], [0, -1.05]
-    ].map(([x, y]) => new THREE.Vector3(x * s * 0.5, y * s, 0));
-    const geo = new THREE.BufferGeometry().setFromPoints(pts);
-    const line = new THREE.Line(geo, new THREE.LineBasicMaterial({ color: 0x2dd4bf }));
-    // base del resorte
-    const basePts = [new THREE.Vector3(-s * 0.4, -1.05 * s, 0), new THREE.Vector3(s * 0.4, -1.05 * s, 0)];
-    const base = new THREE.Line(new THREE.BufferGeometry().setFromPoints(basePts),
-                                new THREE.LineBasicMaterial({ color: 0x2dd4bf }));
+    const s = 0.45;          // tamaño del símbolo
+    const col = 0x2dd4bf;
     const group = new THREE.Group();
-    group.add(line); group.add(base);
+    const abajo = new THREE.Vector3(0, -1, 0);   // el zig-zag base se dibuja hacia −Y
+
+    // Construye un resorte (zig-zag + plato) orientado desde el nodo hacia 'dir'.
+    const mkResorte = (dir) => {
+      const pts = [
+        [0, 0], [0, -0.18], [0.5, -0.30], [-0.5, -0.46], [0.5, -0.62],
+        [-0.5, -0.78], [0, -0.90], [0, -1.05],
+      ].map(([x, y]) => new THREE.Vector3(x * s * 0.5, y * s, 0));
+      const basePts = [new THREE.Vector3(-s * 0.4, -1.05 * s, 0), new THREE.Vector3(s * 0.4, -1.05 * s, 0)];
+      const g = new THREE.Group();
+      g.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints(pts), new THREE.LineBasicMaterial({ color: col })));
+      g.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints(basePts), new THREE.LineBasicMaterial({ color: col })));
+      g.quaternion.setFromUnitVectors(abajo, dir.clone().normalize());   // rota −Y → dir
+      group.add(g);
+    };
+
+    // Un resorte por dirección de traslación con rigidez (modelo→Three: X→X, Y→Z, Z→Y).
+    if (sp.kuz > 0) mkResorte(new THREE.Vector3(0, -1, 0));   // vertical (Z) — como antes
+    if (sp.kux > 0) mkResorte(new THREE.Vector3(-1, 0, 0));   // horizontal en X
+    if (sp.kuy > 0) mkResorte(new THREE.Vector3(0, 0, -1));   // horizontal en Y
+    // Si solo hay resortes rotacionales, mostrar uno vertical como indicador.
+    if (!group.children.length && (sp.krx > 0 || sp.kry > 0 || sp.krz > 0)) mkResorte(new THREE.Vector3(0, -1, 0));
+    if (!group.children.length) return;
+
     group.position.copy(this.m2t(node.x, node.y, node.z));
     this._scene.add(group);
     this._springSymbols.set(node.id, group);
@@ -644,19 +658,14 @@ export class Viewport {
     };
 
     if (allFixed) {
-      // ── Empotrado (6 DOF): wireframe square-pyramid + plate — RED ────────
+      // ── Empotramiento total (6 GDL): CUBO — RED. Distinto de las pirámides
+      //    de los apoyos articulados/deslizantes para no confundir. ──────────
       const col = COL.NODE_FIXED;
-      const cH  = s * 1.5;
-      const cone = addMesh(new THREE.ConeGeometry(s * 0.72, cH, 4, 1), col, 0.75, true);
-      cone.rotation.y = Math.PI / 4;   // rotate 45° so edges face front
-      cone.position.y = -cH / 2;
-      const bH = s * 0.38;
-      const box = addMesh(new THREE.BoxGeometry(s * 1.7, bH, s * 1.7), col, 0.45, true);
-      box.position.y = -cH - bH / 2;
-      // Cross-hatch on base plate (two diagonals)
-      const by = -cH, bw = s * 0.85;
-      addLine([new THREE.Vector3(-bw, by, -bw), new THREE.Vector3(bw, by, bw)], col, 0.35);
-      addLine([new THREE.Vector3(bw,  by, -bw), new THREE.Vector3(-bw, by, bw)], col, 0.35);
+      const c = s * 1.4;
+      const solido = addMesh(new THREE.BoxGeometry(c, c, c), col, 0.3);       // cubo translúcido
+      solido.position.y = -c / 2;
+      const wire = addMesh(new THREE.BoxGeometry(c, c, c), col, 0.95, true);  // aristas marcadas
+      wire.position.y = -c / 2;
 
     } else if (transFixed) {
       // ── Pin / Articulado (3 trans): wireframe pyramid + hatch — ORANGE ───
@@ -676,22 +685,31 @@ export class Viewport {
       }
 
     } else if (partial) {
-      // ── Deslizante / Roller (1–2 trans): small pyramid + disk — CYAN ─────
+      // ── Deslizante / Roller (1–2 trans): pirámide + DOS LÍNEAS paralelas en
+      //    cada dirección LIBRE (de deslizamiento), para ver qué se libera. ──
       const col = 0x00bcd4;
       const cH  = s * 1.1;
       const cone = addMesh(new THREE.ConeGeometry(s * 0.5, cH, 4, 1), col, 0.75, true);
       cone.rotation.y = Math.PI / 4;
       cone.position.y = -cH / 2;
-      // Roller disk
-      const disk = addMesh(new THREE.CylinderGeometry(s * 0.62, s * 0.62, s * 0.1, 16), col, 0.35);
-      disk.position.y = -cH - s * 0.05;
-      // Circle outline for clarity
-      const pts = [];
-      for (let k = 0; k <= 24; k++) {
-        const a = (k / 24) * Math.PI * 2;
-        pts.push(new THREE.Vector3(s * 0.62 * Math.cos(a), -cH, s * 0.62 * Math.sin(a)));
+      // direcciones de traslación LIBRES (modelo → Three.js: X→X, Y→Z, Z→Y)
+      const libres = [];
+      if (!r.ux) libres.push(new THREE.Vector3(1, 0, 0));   // libre en X
+      if (!r.uy) libres.push(new THREE.Vector3(0, 0, 1));   // libre en Y
+      if (!r.uz) libres.push(new THREE.Vector3(0, 1, 0));   // libre en Z (vertical)
+      const bY = -cH;
+      for (const d of libres) {
+        // offset perpendicular (a los costados) para las dos líneas paralelas
+        let off = new THREE.Vector3().crossVectors(d, new THREE.Vector3(0, 1, 0));
+        if (off.lengthSq() < 1e-6) off = new THREE.Vector3(1, 0, 0);   // d vertical
+        off.normalize().multiplyScalar(s * 0.55);
+        const half = d.clone().multiplyScalar(s * 1.0);
+        const base = new THREE.Vector3(0, bY, 0);
+        for (const sgn of [1, -1]) {
+          const c = off.clone().multiplyScalar(sgn).add(base);
+          addLine([c.clone().sub(half), c.clone().add(half)], col, 0.95);
+        }
       }
-      addLine(pts, col, 0.75);
 
     } else {
       // ── Solo rotaciones: anillo plano — YELLOW ────────────────────────────
@@ -1447,8 +1465,8 @@ export class Viewport {
            <span data-close style="cursor:pointer;color:var(--text-muted,#9aa);font-size:15px;line-height:1">×</span>
          </div>
          <div style="display:flex;gap:5px;margin-bottom:6px">
-           <button data-preset="emp" style="flex:1;padding:6px 0;border-radius:5px;cursor:pointer;border:1px solid var(--border,#334);background:transparent;color:var(--text,#e6edf3);font-weight:600">Empotrado</button>
-           <button data-preset="pin" style="flex:1;padding:6px 0;border-radius:5px;cursor:pointer;border:1px solid var(--border,#334);background:transparent;color:var(--text,#e6edf3);font-weight:600">Rótula (Pin)</button>
+           <button data-preset="emp" title="Empotramiento total: fija las 6 GDL (resiste fuerzas y momentos)." style="flex:1;padding:6px 0;border-radius:5px;cursor:pointer;border:1px solid var(--border,#334);background:transparent;color:var(--text,#e6edf3);font-weight:600">Empotrado (fijar todo)</button>
+           <button data-preset="pin" title="Apoyo articulado: fija traslaciones, libera giros (no resiste momentos)." style="flex:1;padding:6px 0;border-radius:5px;cursor:pointer;border:1px solid var(--border,#334);background:transparent;color:var(--text,#e6edf3);font-weight:600">Rótula (Pin)</button>
          </div>
          <div style="display:flex;gap:5px;margin-bottom:8px">
            <button data-preset="rollz" style="flex:1;padding:6px 0;border-radius:5px;cursor:pointer;border:1px solid var(--border,#334);background:transparent;color:var(--text,#e6edf3);font-weight:600">Rodillo (libre X,Y)</button>

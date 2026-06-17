@@ -1,8 +1,8 @@
 // ──────────────────────────────────────────────────────────────────────────────
 // PropertiesPanel — right-side panel: node/element properties + mat/sec tabs
 // ──────────────────────────────────────────────────────────────────────────────
-import { computeFloorCR, computeFloorCM, computeTributaryWeights } from '../solver/diaphragm.js?v=52';
-import { localAxes } from '../solver/timoshenko.js?v=52';
+import { computeFloorCR, computeFloorCM, computeTributaryWeights } from '../solver/diaphragm.js?v=53';
+import { localAxes } from '../solver/timoshenko.js?v=53';
 
 export class PropertiesPanel {
   constructor(panelEl, app) {
@@ -535,10 +535,12 @@ export class PropertiesPanel {
       <div class="prop-section restraints-section">
         <div class="prop-title">Restricciones (1 = fijo)</div>
         <div class="restraint-grid">${checks}</div>
-        <div style="margin-top:8px;display:flex;gap:6px;">
-          <button class="btn-secondary" id="btn-fix-all" style="flex:1;font-size:11px;">Fijar Todo</button>
-          <button class="btn-secondary" id="btn-free-all" style="flex:1;font-size:11px;">Liberar Todo</button>
-          <button class="btn-secondary" id="btn-pin" style="flex:1;font-size:11px;">Pin</button>
+        <div style="margin-top:8px;display:flex;flex-direction:column;gap:6px;">
+          <button class="btn-secondary" id="btn-fix-all" style="font-size:11px;" title="Fija las 6 GDL (3 traslaciones + 3 giros): empotramiento, resiste fuerzas y momentos.">Fijar Todo (empotramiento total)</button>
+          <div style="display:flex;gap:6px;">
+            <button class="btn-secondary" id="btn-free-all" style="flex:1;font-size:11px;">Liberar Todo</button>
+            <button class="btn-secondary" id="btn-pin" style="flex:1;font-size:11px;" title="Apoyo articulado: fija traslaciones, libera giros (no resiste momentos).">Pin (rótula)</button>
+          </div>
         </div>
       </div>
 
