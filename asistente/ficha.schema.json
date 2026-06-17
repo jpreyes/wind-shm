@@ -11,9 +11,9 @@
     "modo": { "type": "string", "enum": ["2D", "3D"], "description": "2D = pórtico plano X–Z (sin ejes Y)." },
     "tipologia": {
       "type": "string",
-      "enum": ["marco", "muros_madera", "cercha", "puente", "galpon"],
+      "enum": ["marco", "muros_madera", "cercha", "puente", "galpon", "primitivas"],
       "default": "marco",
-      "description": "marco = pórtico de pilares y vigas (acero/hormigón). muros_madera = entramado ligero (tabiques + soleras + viguetas; material madera o acero=steel framing; con techo plano o de cerchas). cercha = celosía de techo a dos aguas (Warren/Pratt/Howe). puente = tablero sobre pilas (vigas continuas o de celosía). galpon = nave industrial (pórticos de columnas + cerchas de techo)."
+      "description": "marco = pórtico de pilares y vigas. muros_madera = entramado ligero (madera o acero). cercha = celosía de techo (Warren/Pratt/Howe). puente = tablero/viga central sobre pilas. galpon = nave industrial. primitivas = ESTRUCTURA LIBRE para CUALQUIER caso sin plantilla (torres, mástiles, parrillas, puentes de N vigas…): se rellena 'elementos' y 'apoyos' con coordenadas. Usa 'primitivas' cuando ninguna plantilla encaje."
     },
 
     "ubicacion": {
@@ -255,6 +255,44 @@
         "escuadria_columna": { "type": "string", "description": "Escuadría/perfil de columnas." },
         "escuadria_cordon": { "type": "string", "description": "Escuadría/perfil de cordones de cercha." },
         "escuadria_diagonal": { "type": "string", "description": "Escuadría/perfil de diagonales y costaneras." }
+      }
+    },
+
+    "material_defecto": { "type": "string", "description": "Solo tipologia = 'primitivas'. Material por defecto de los elementos (ej. 'H50', 'S275', 'Pino Radiata'). Cada elemento puede override con su propio 'material'." },
+
+    "elementos": {
+      "type": "array",
+      "description": "Solo tipologia = 'primitivas'. Lista de barras en coordenadas [x,y,z] (m). Las barras que comparten un punto se unen automáticamente (mismo nodo). Con esto se arma CUALQUIER estructura (torre, mástil, parrilla, puente de N vigas…).",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "tipo": { "type": "string", "enum": ["viga", "columna", "barra", "vigas_repetidas"], "default": "barra", "description": "barra/viga/columna = una barra de 'desde' a 'hasta'. vigas_repetidas = una barra base repetida en 'paso_dir' cada 'paso'." },
+          "desde": { "type": "array", "items": { "type": "number" }, "minItems": 3, "maxItems": 3, "description": "Punto inicial [x,y,z] en m." },
+          "hasta": { "type": "array", "items": { "type": "number" }, "minItems": 3, "maxItems": 3, "description": "Punto final [x,y,z] en m." },
+          "seccion": { "$ref": "#/$defs/seccion", "description": "Sección: {b_cm,h_cm}, perfil ('IPE300') o escuadría ('2x4')." },
+          "material": { "type": "string", "description": "Override del material de esta barra." },
+          "n": { "type": "integer", "minimum": 1, "description": "Subdivisiones de la barra (nodos intermedios). Útil para cargas/deformada." },
+          "carga_kN_m": { "type": "number", "minimum": 0, "description": "Carga lineal vertical (kN/m) sobre esta(s) barra(s) → caso CV." },
+          "paso_dir": { "type": "string", "enum": ["X", "Y", "Z"], "description": "Solo vigas_repetidas: dirección de repetición." },
+          "paso": { "type": "number", "exclusiveMinimum": 0, "description": "Solo vigas_repetidas: separación entre copias." },
+          "n_repeticiones": { "type": "integer", "minimum": 1, "description": "Solo vigas_repetidas: cuántas copias (alternativa: hasta_coord)." },
+          "hasta_coord": { "type": "number", "description": "Solo vigas_repetidas: coordenada final en paso_dir (alternativa a n_repeticiones)." }
+        }
+      }
+    },
+
+    "apoyos": {
+      "type": "array",
+      "description": "Solo tipologia = 'primitivas'. Apoyos sobre nodos existentes (deben coincidir con extremos de barras).",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "en": { "type": "array", "items": { "type": "array", "items": { "type": "number" }, "minItems": 3, "maxItems": 3 }, "description": "Lista de puntos [x,y,z] donde aplicar el apoyo." },
+          "z": { "type": "number", "description": "Aplicar a TODOS los nodos a esta cota z (ej. z:0 = toda la base)." },
+          "tipo": { "type": "string", "description": "'empotrado' | 'rotulado' | 'rodillo', o un objeto {ux,uy,uz,rx,ry,rz} con 1=fijo." }
+        }
       }
     }
   },

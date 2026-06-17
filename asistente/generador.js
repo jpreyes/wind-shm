@@ -80,7 +80,7 @@ export function escuadriaASeccion(spec, nombre) {
   if (spec && typeof spec === 'object') {
     // Solo si trae dimensiones reconocibles; si no (p.ej. objeto anidado del LLM), null.
     if (spec.b_cm == null && spec.b_mm == null && spec.b_m == null) return null;
-    try { return { sec: rectangularASeccion(spec, nombre), etiqueta: nombre, mm: null }; }
+    try { const sec = rectangularASeccion(spec, nombre); return { sec, etiqueta: nombre || sec.name, mm: null }; }
     catch { return null; }
   }
   if (spec == null) return null;
@@ -168,7 +168,7 @@ export function tejerCelosiaWeb(B, T, n, tipo, addEl, secId) {
  * usa una sección rectangular por defecto. Registra avisos.
  */
 export function pickSeccionGen(spec, perfiles, defRect, label, aviso) {
-  const r = escuadriaASeccion(spec, label);
+  const r = escuadriaASeccion(spec);   // nombre auto por dimensiones (no la etiqueta → no colapsa)
   if (r) { if (spec) aviso('info', `${label}: ${r.etiqueta}.`); return r.sec; }
   if (typeof spec === 'string') {
     const pm = new Map((perfiles || []).map((p) => [String(p.nombre).trim().toLowerCase(), p]));
@@ -228,6 +228,7 @@ function tributario(ejes, j) {
 export function generarModelo(ficha, libs) {
   // Despacho por tipología: madera y cercha tienen geometría propia.
   const tip = String(ficha.tipologia || 'marco').toLowerCase();
+  if (/primitiv|libre|custom|generic|torre|mastil|celos[ií]a.?libre/.test(tip) || (Array.isArray(ficha.elementos) && ficha.elementos.length)) return generarDesdePrimitivas(ficha, libs);
   if (/puente|bridge|viaduct|pasarela/.test(tip)) return generarPuente(ficha, libs);
   if (/galp|nave|industrial|shed|hangar|bodega/.test(tip)) return generarGalpon(ficha, libs);
   if (/cercha|celos|warren|truss/.test(tip)) return generarCercha(ficha, libs);
@@ -1306,6 +1307,181 @@ export function generarGalpon(ficha, libs) {
       por: 'asistente/generador.js (galpón)',
       reglas: (libs.reglas && libs.reglas._meta) ? libs.reglas._meta.version : undefined,
       resumen: `galpón ${esMadera ? 'madera' : 'acero'} luz ${luz} m × largo ${largo} m, ${Yf.length} marcos @${sep} m, cerchas ${tCel} pend. ${(slope * 100).toFixed(0)}%: ${nodes.length} nodos, ${elements.length} barras`,
+    },
+    _avisos: avisos,
+  };
+}
+
+// ──────────────────────────────────────────────────────────────────────────────
+// Tipología PRIMITIVAS (estructura LIBRE) — para CUALQUIER estructura, incluso
+// las que no tienen plantilla (torres, mástiles, parrillas, puentes de N vigas…).
+//   El asistente coloca ELEMENTOS en coordenadas; el código hace la ingeniería:
+//   fusiona nodos por coordenada (las barras que comparten punto quedan unidas),
+//   resuelve secciones/materiales, aplica cargas y valida. Determinista y seguro.
+//
+//   ficha.elementos[]:
+//     {tipo:"viga"|"columna"|"barra", desde:[x,y,z], hasta:[x,y,z],
+//      seccion:{b_cm,h_cm}|"IPE300"|"2x4", material?, n?, carga_kN_m?}
+//     {tipo:"vigas_repetidas", desde, hasta, paso_dir:"X|Y|Z", paso,
+//      n_repeticiones (o hasta_coord), seccion, material?, n?, carga_kN_m?}
+//   ficha.apoyos[]: {en:[[x,y,z],…]|z:0, tipo:"empotrado"|"rotulado"|"rodillo"|{ux,…}}
+// ──────────────────────────────────────────────────────────────────────────────
+export function generarDesdePrimitivas(ficha, libs) {
+  const materiales = libs.materiales || [], perfiles = libs.perfiles || [];
+  const avisos = []; const aviso = (t, m) => avisos.push({ tipo: t, msg: m });
+  const matByName = new Map(materiales.map((m) => [String(m.nombre).trim().toLowerCase(), m]));
+  const matDefRaw = ficha.material_defecto ?? (ficha.secciones || {}).material;
+  const matDef = resolverMaterialFlexible(matDefRaw, materiales, aviso) ||
+    (matByName.get('s275') ? filaAMaterial(matByName.get('s275')) : { name: 'S275', E: 2.1e8, G: 8.08e7, nu: 0.3, rho: 7.85 });
+
+  const materials = [], matId = new Map();
+  const useMat = (n) => {
+    const r = (n != null ? resolverMaterialFlexible(n, materiales, aviso) : null) || matDef;
+    if (!matId.has(r.name)) { const id = materials.length + 1; materials.push({ ...r, id }); matId.set(r.name, id); }
+    return matId.get(r.name);
+  };
+  const sections = [], secId = new Map();
+  const useSec = (spec, label) => {
+    const s = pickSeccionGen(spec, perfiles, { b_cm: 20, h_cm: 40 }, label || 'Sección', aviso);
+    if (!secId.has(s.name)) { const id = sections.length + 1; sections.push({ ...s, id }); secId.set(s.name, id); }
+    return secId.get(s.name);
+  };
+
+  const nodes = [], elements = []; let nid = 0, eid = 0; const nodeAt = new Map(), elemAt = new Set();
+  const rk = (v) => Math.round((+v) * 1e4) / 1e4;
+  const getNode = (x, y, z) => {
+    const k = `${rk(x)}|${rk(y)}|${rk(z)}`; let id = nodeAt.get(k);
+    if (id == null) { id = ++nid; nodeAt.set(k, id); nodes.push({ id, x: rk(x), y: rk(y), z: rk(z), restraints: { ux: 0, uy: 0, uz: 0, rx: 0, ry: 0, rz: 0 }, nodeMass: { mx: 0, my: 0, mz: 0 }, springs: { kux: 0, kuy: 0, kuz: 0, krx: 0, kry: 0, krz: 0 } }); }
+    return id;
+  };
+  const addEl = (n1, n2, sid, mid) => { if (n1 == null || n2 == null || n1 === n2) return null; const ek = `${Math.min(n1, n2)}-${Math.max(n1, n2)}`; if (elemAt.has(ek)) return null; elemAt.add(ek); const id = ++eid; elements.push({ id, n1, n2, matId: mid, secId: sid, releases: Array(12).fill(0) }); return id; };
+  // viga desde a→b con n subdivisiones (nodos intermedios → mejor deformada y reparto de carga)
+  const vigaEntre = (a, b, sid, mid, n = 1) => {
+    n = Math.max(1, Math.round(n || 1)); const out = []; let prev = getNode(a[0], a[1], a[2]);
+    for (let i = 1; i <= n; i++) { const t = i / n; const cur = getNode(a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t, a[2] + (b[2] - a[2]) * t); const e = addEl(prev, cur, sid, mid); if (e) out.push(e); prev = cur; }
+    return out;
+  };
+
+  const lcCM = { id: 1, name: 'CM', loads: [], selfWeight: true, type: 'static', specDir: null };
+  const lcCV = { id: 2, name: 'CV', loads: [], selfWeight: false, type: 'static', specDir: null };
+  const elemCarga = new Map();   // elemId → w (kN/m) ; se rearma tras el corte de mallas
+  const cargar = (els, w) => { if (!(w > 0)) return; for (const e of els) if (e != null) elemCarga.set(e, +(+w).toFixed(6)); };
+
+  for (const el of (ficha.elementos || [])) {
+    const tipo = String(el.tipo || 'viga').toLowerCase();
+    const sid = useSec(el.seccion, el.tipo);
+    const mid = useMat(el.material);
+    if (/repet|grilla|paralel/.test(tipo)) {
+      if (!Array.isArray(el.desde) || !Array.isArray(el.hasta)) { aviso('omitido', `Elemento "${tipo}" sin desde/hasta válidos: omitido.`); continue; }
+      const dir = String(el.paso_dir || el.repetir_dir || 'Y').toUpperCase();
+      const paso = el.paso > 0 ? el.paso : 1;
+      const idx = dir === 'X' ? 0 : dir === 'Z' ? 2 : 1;
+      let nrep = el.n_repeticiones > 0 ? Math.round(el.n_repeticiones)
+        : (el.hasta_coord != null ? Math.floor(Math.abs(el.hasta_coord - el.desde[idx]) / paso + 1e-6) + 1 : 1);
+      nrep = Math.min(2000, Math.max(1, nrep));
+      const all = [];
+      for (let r = 0; r < nrep; r++) {
+        const off = [0, 0, 0]; off[idx] = paso * r;
+        const a = [el.desde[0] + off[0], el.desde[1] + off[1], el.desde[2] + off[2]];
+        const b = [el.hasta[0] + off[0], el.hasta[1] + off[1], el.hasta[2] + off[2]];
+        all.push(...vigaEntre(a, b, sid, mid, el.n || 1));
+      }
+      cargar(all, el.carga_kN_m);
+    } else {
+      if (!Array.isArray(el.desde) || !Array.isArray(el.hasta)) { aviso('omitido', `Elemento "${tipo}" sin desde/hasta válidos: omitido.`); continue; }
+      cargar(vigaEntre(el.desde, el.hasta, sid, mid, el.n || 1), el.carga_kN_m);
+    }
+  }
+
+  // ── Auto-conexión de mallas: une barras que se cruzan o cuyo extremo cae sobre
+  //    otra barra (inserta el nodo del cruce y parte las barras). Hace que una
+  //    parrilla/torre quede conectada aunque el cruce caiga a mitad de barra. ──
+  const conectarMalla = () => {
+    const tol = 1e-3, tol2 = tol * tol;
+    const P = (id) => { const n = nodes[id - 1]; return [n.x, n.y, n.z]; };
+    const sub = (a, b) => [a[0] - b[0], a[1] - b[1], a[2] - b[2]];
+    const add = (a, b) => [a[0] + b[0], a[1] + b[1], a[2] + b[2]];
+    const mul = (a, s) => [a[0] * s, a[1] * s, a[2] * s];
+    const dot = (a, b) => a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
+    const d2 = (a, b) => { const d = sub(a, b); return dot(d, d); };
+    // 1) nodos en cruces interiores (mitad–mitad) de pares de barras
+    const seg = elements.map((e) => [P(e.n1), P(e.n2)]);
+    for (let i = 0; i < seg.length; i++) for (let j = i + 1; j < seg.length; j++) {
+      const [a1, a2] = seg[i], [b1, b2] = seg[j];
+      const d1 = sub(a2, a1), d2v = sub(b2, b1), r = sub(a1, b1);
+      const A = dot(d1, d1), E = dot(d2v, d2v), F = dot(d2v, r), C = dot(d1, r), B = dot(d1, d2v);
+      const den = A * E - B * B; if (Math.abs(den) < 1e-9) continue;
+      const s = (B * F - C * E) / den, t = (A * F - B * C) / den;
+      if (s <= 1e-4 || s >= 1 - 1e-4 || t <= 1e-4 || t >= 1 - 1e-4) continue;
+      const p1 = add(a1, mul(d1, s)), p2 = add(b1, mul(d2v, t));
+      if (d2(p1, p2) > tol2) continue;          // alabeadas: no se cortan
+      getNode(p1[0], p1[1], p1[2]);              // crea el nodo del cruce
+    }
+    // 2) parte cada barra en los nodos colineales interiores (incl. extremos de otras)
+    const nuevos = [], seen = new Set(), cargaN = new Map();
+    for (const e of elements) {
+      const a = P(e.n1), b = P(e.n2), L2 = d2(a, b); if (L2 < 1e-12) continue;
+      const on = [];
+      for (const n of nodes) {
+        if (n.id === e.n1 || n.id === e.n2) continue;
+        const p = [n.x, n.y, n.z], tt = dot(sub(p, a), sub(b, a)) / L2;
+        if (tt <= 1e-4 || tt >= 1 - 1e-4) continue;
+        if (d2(add(a, mul(sub(b, a), tt)), p) > tol2) continue;
+        on.push({ id: n.id, t: tt });
+      }
+      const w = elemCarga.get(e.id);
+      on.sort((u, v) => u.t - v.t);
+      let prev = e.n1; const seq = [...on.map((o) => o.id), e.n2];
+      for (const nid of seq) {
+        const ek = `${Math.min(prev, nid)}-${Math.max(prev, nid)}`;
+        if (prev !== nid && !seen.has(ek)) { seen.add(ek); const ne = { id: nuevos.length + 1, n1: prev, n2: nid, matId: e.matId, secId: e.secId, releases: Array(12).fill(0) }; nuevos.push(ne); if (w != null) cargaN.set(ne.id, w); }
+        prev = nid;
+      }
+    }
+    elements.length = 0; for (const e of nuevos) elements.push(e);
+    elemCarga.clear(); for (const [k, v] of cargaN) elemCarga.set(k, v);
+  };
+  if (elements.length && elements.length < 4000) conectarMalla();
+
+  const presetR = (t) => {
+    t = String(t || 'empotrado').toLowerCase();
+    if (/empotr|fij/.test(t)) return { ux: 1, uy: 1, uz: 1, rx: 1, ry: 1, rz: 1 };
+    if (/rotul|pin|articul/.test(t)) return { ux: 1, uy: 1, uz: 1, rx: 0, ry: 0, rz: 0 };
+    if (/rodillo|roller/.test(t)) return { uz: 1 };
+    return { ux: 1, uy: 1, uz: 1, rx: 1, ry: 1, rz: 1 };
+  };
+  for (const ap of (ficha.apoyos || [])) {
+    const r = (ap.tipo && typeof ap.tipo === 'object') ? ap.tipo : presetR(ap.tipo || ap.restr);
+    const setN = (id) => { if (id != null) nodes[id - 1].restraints = { ux: 0, uy: 0, uz: 0, rx: 0, ry: 0, rz: 0, ...r }; };
+    if (Array.isArray(ap.en)) for (const p of ap.en) {
+      const id = nodeAt.get(`${rk(p[0])}|${rk(p[1])}|${rk(p[2])}`);
+      if (id != null) setN(id); else aviso('omitido', `Apoyo en (${p.join(',')}) no coincide con ningún nodo.`);
+    }
+    if (ap.z != null) for (const n of nodes) if (Math.abs(n.z - ap.z) < 1e-4) n.restraints = { ux: 0, uy: 0, uz: 0, rx: 0, ry: 0, rz: 0, ...r };
+  }
+
+  // Cargas (tras el corte de mallas): carga lineal vertical por barra → caso CV.
+  for (const e of elements) { const w = elemCarga.get(e.id); if (w > 0) lcCV.loads.push({ type: 'dist', elemId: e.id, dir: 'gravity', w }); }
+
+  // Validación (no falla; avisa) — clave para el ciclo de mejora.
+  const usados = new Set(); for (const e of elements) { usados.add(e.n1); usados.add(e.n2); }
+  const sueltos = nodes.filter((n) => !usados.has(n.id)).length;
+  if (sueltos) aviso('info', `${sueltos} nodo(s) sin elementos conectados.`);
+  if (!nodes.some((n) => Object.values(n.restraints).some((v) => v))) aviso('omitido', 'No se definieron apoyos: agregue "apoyos" o el modelo será inestable.');
+  if (!elements.length) aviso('omitido', 'No se generó ningún elemento: revise "elementos" (cada uno necesita desde/hasta).');
+
+  const is2D = ficha.modo === '2D';
+  return {
+    version: '1.0', units: 'kN-m', mode: is2D ? '2D' : '3D',
+    nodes, elements, materials: materials.length ? materials : [{ ...matDef, id: 1 }], sections, diaphragms: [],
+    loadCases: [lcCM, lcCV],
+    combinations: [{ id: 1, name: '1.4CM', factors: [{ lcId: 1, factor: 1.4 }] }, { id: 2, name: '1.2CM+1.6CV', factors: [{ lcId: 1, factor: 1.2 }, { lcId: 2, factor: 1.6 }] }],
+    grids: { x: [], y: [], z: [] },
+    _counters: { nodes: nodes.length, elements: elements.length, materials: materials.length, sections: sections.length, diaphragms: 0, loadCases: 2, combinations: 2 },
+    _generado: {
+      por: 'asistente/generador.js (primitivas)',
+      reglas: (libs.reglas && libs.reglas._meta) ? libs.reglas._meta.version : undefined,
+      resumen: `estructura libre (primitivas): ${nodes.length} nodos, ${elements.length} elementos, ${materials.length} material(es), ${sections.length} sección(es)`,
     },
     _avisos: avisos,
   };
