@@ -156,6 +156,12 @@ export class Viewport {
     el.addEventListener('pointerup',   e => this._onUp(e));
     el.addEventListener('contextmenu', e => e.preventDefault());
     window.addEventListener('resize',  () => this._onResize());
+    // Responsive real: seguir el tamaño del CONTENEDOR (panel lateral, layout…),
+    // no solo el resize de la ventana.
+    if (window.ResizeObserver) {
+      this._ro = new ResizeObserver(() => this._onResize());
+      this._ro.observe(this.container);
+    }
     this._onResize();
 
     // Floor-Z and snap inputs
@@ -812,15 +818,21 @@ export class Viewport {
   //       pórtico plano);  'x' → mira a lo largo de −X modelo (elevación Y–Z).
   _fitOrtho(axis, coord = 0) {
     const b = this.app.model.getBounds();
-    const span = Math.max(b.max.x - b.min.x, b.max.y - b.min.y, b.max.z - b.min.z, 8);
+    const dx = b.max.x - b.min.x, dy = b.max.y - b.min.y, dz = b.max.z - b.min.z;
     const c = this.m2t(b.center.x, b.center.y, b.center.z);
     const cam = this._cameraOrtho;
-    const half = span * 0.75;
     const aspect = (this.container.clientWidth || 800) / (this.container.clientHeight || 600);
+    // Ajuste al bounding box REAL en el plano de vista (ancho × alto), no a un
+    // cubo de max(span): así una estructura plana/ancha (cercha, puente) llena
+    // la pantalla en vez de verse como una línea.
+    const W = (axis === 'x' ? dy : dx);   // ancho horizontal en el plano
+    const H = dz;                          // alto (Z) del plano
+    const margin = 1.12;
+    const half = Math.max((W / aspect) / 2, H / 2, 1) * margin;
     cam.left = -half * aspect; cam.right = half * aspect;
     cam.top  =  half;          cam.bottom = -half;
     cam.zoom = 1;
-    const d = span * 4;
+    const d = Math.max(dx, dy, dz, 8) * 4;
     if (axis === 'x') {
       // mirar el plano Y–Z desde +X
       cam.position.set(c.x + d, c.y, c.z);

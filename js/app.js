@@ -1,21 +1,21 @@
 // ──────────────────────────────────────────────────────────────────────────────
 // App — main orchestrator
 // ──────────────────────────────────────────────────────────────────────────────
-import { Model }           from './model/model.js?v=56';
-import { Serializer }      from './model/serializer.js?v=56';
-import { Viewport }        from './ui/viewport.js?v=56';
-import { PropertiesPanel } from './ui/properties.js?v=56';
-import { MenuBar }         from './ui/menu.js?v=56';
-import { UndoStack }       from './utils/undo.js?v=56';
-import { StaticSolver, ensureDefaultLC }   from './solver/static_solver.js?v=56';
-import { Results }                         from './solver/postprocess.js?v=56';
-import { ModalSolver }                     from './solver/modal_solver.js?v=56';
-import { buildNodeIndex, assembleK, getNodeDOFs } from './solver/assembler.js?v=56';
-import { ModalResults }                    from './solver/modal_results.js?v=56';
-import { SpectrumSolver }                  from './solver/spectrum_solver.js?v=56';
-import { autoDetectDiaphragms, computeFloorCR } from './solver/diaphragm.js?v=56';
-import { splitElement, splitByLength, discretizeAll, joinElements, intersectarElementos } from './model/discretize.js?v=56';
-import { localAxes, stiffnessMatrix, massMatrix, transformMatrix, globalStiffness, applyReleases } from './solver/timoshenko.js?v=56';
+import { Model }           from './model/model.js?v=57';
+import { Serializer }      from './model/serializer.js?v=57';
+import { Viewport }        from './ui/viewport.js?v=57';
+import { PropertiesPanel } from './ui/properties.js?v=57';
+import { MenuBar }         from './ui/menu.js?v=57';
+import { UndoStack }       from './utils/undo.js?v=57';
+import { StaticSolver, ensureDefaultLC }   from './solver/static_solver.js?v=57';
+import { Results }                         from './solver/postprocess.js?v=57';
+import { ModalSolver }                     from './solver/modal_solver.js?v=57';
+import { buildNodeIndex, assembleK, getNodeDOFs } from './solver/assembler.js?v=57';
+import { ModalResults }                    from './solver/modal_results.js?v=57';
+import { SpectrumSolver }                  from './solver/spectrum_solver.js?v=57';
+import { autoDetectDiaphragms, computeFloorCR } from './solver/diaphragm.js?v=57';
+import { splitElement, splitByLength, discretizeAll, joinElements, intersectarElementos } from './model/discretize.js?v=57';
+import { localAxes, stiffnessMatrix, massMatrix, transformMatrix, globalStiffness, applyReleases } from './solver/timoshenko.js?v=57';
 
 class App {
   constructor() {
@@ -2108,7 +2108,7 @@ class App {
     this._showProgress('Generando el modelo…', 'Aplicando reglas y cargas normativas');
     try {
       const libs = await this._cargarBibliotecasAsistente();
-      const { generarModelo } = await import('../asistente/generador.js?v=56');
+      const { generarModelo } = await import('../asistente/generador.js?v=57');
       const modelo = generarModelo(ficha, libs);
       this._loadJSON(JSON.stringify(modelo), (ficha.proyecto || 'asistente') + '.s3d');
       this.markDirty();
