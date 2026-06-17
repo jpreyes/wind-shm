@@ -409,11 +409,22 @@
         "Ro": 11.0,
         "R": 7.0
       },
-      "ciudades": {
-        "Valdivia": {
-          "zona_sismica": null,
-          "_nota": "Definir según comuna (Anexo NCh433). Confirmar el mapa comuna→zona según el Anexo de la NCh433.",
-          "_verificar": true
+      "zonificacion_ciudades": {
+        "_fuente": "NCh433.Of1996 Mod.2009 / DS61. Tabla 4.1 (zonificación por comunas, Regiones IV a IX) + Figuras 4.1 a),b),c) para el resto (XV,I,II,III,X,XI,XII,XIV y RM). Zona 3 = costa (Ao=0.4g), Zona 2 = valle central (0.3g), Zona 1 = cordillera (0.2g). Claves normalizadas en minúsculas y sin acentos.",
+        "_nota": "Si la ciudad no está en esta tabla, el generador usa zona 2 e informa que debe verificarse contra la comuna exacta (Tabla 4.1 / Figura 4.1 NCh433).",
+        "tabla": {
+          "arica": 3, "iquique": 3, "alto hospicio": 3, "pozo almonte": 3,
+          "antofagasta": 3, "calama": 2, "tocopilla": 3, "mejillones": 3, "taltal": 3,
+          "copiapo": 3, "vallenar": 3, "chanaral": 3, "caldera": 3, "huasco": 3,
+          "la serena": 3, "coquimbo": 3, "ovalle": 2, "illapel": 3, "los vilos": 3, "andacollo": 3, "vicuna": 2, "salamanca": 2, "combarbala": 2, "monte patria": 2,
+          "valparaiso": 3, "vina del mar": 3, "quilpue": 3, "villa alemana": 3, "concon": 3, "quillota": 3, "san antonio": 3, "casablanca": 3, "san felipe": 3, "la calera": 3, "la ligua": 3, "limache": 3, "quintero": 3, "cartagena": 3, "el quisco": 3, "el tabo": 3, "algarrobo": 3, "papudo": 3, "zapallar": 3, "los andes": 2, "san esteban": 2, "calle larga": 2,
+          "santiago": 2, "puente alto": 2, "maipu": 2, "la florida": 2, "las condes": 2, "providencia": 2, "nunoa": 2, "penalolen": 2, "san bernardo": 2, "talagante": 2, "colina": 2, "buin": 2, "pudahuel": 2, "quilicura": 2, "penaflor": 2, "vitacura": 2, "la reina": 2, "macul": 2, "renca": 2, "melipilla": 3, "curacavi": 3, "lampa": 3, "tiltil": 3, "el monte": 3, "maria pinto": 3,
+          "rancagua": 2, "machali": 2, "rengo": 2, "san fernando": 2, "san vicente": 2, "chimbarongo": 2, "graneros": 2, "pichilemu": 3, "santa cruz": 3, "las cabras": 3, "navidad": 3,
+          "talca": 3, "curico": 2, "linares": 2, "constitucion": 3, "cauquenes": 3, "molina": 2, "san javier": 3, "parral": 2, "san clemente": 2, "maule": 3, "chanco": 3,
+          "concepcion": 3, "talcahuano": 3, "chillan": 3, "chillan viejo": 3, "coronel": 3, "lota": 3, "tome": 3, "chiguayante": 3, "san pedro de la paz": 3, "hualpen": 3, "hualqui": 3, "arauco": 3, "lebu": 3, "canete": 3, "bulnes": 3, "cabrero": 3, "nacimiento": 3, "los angeles": 2, "mulchen": 2, "yungay": 2, "san carlos": 3, "coihueco": 2,
+          "temuco": 2, "padre las casas": 3, "angol": 3, "villarrica": 2, "pucon": 1, "nueva imperial": 3, "lautaro": 2, "victoria": 2, "loncoche": 2, "pitrufquen": 2, "carahue": 3, "traiguen": 3, "collipulli": 2, "curacautin": 2, "curarrehue": 1, "lonquimay": 1, "melipeuco": 1,
+          "valdivia": 3, "corral": 3, "mariquina": 3, "san jose de la mariquina": 3, "la union": 2, "rio bueno": 2, "panguipulli": 2, "los lagos": 2, "lanco": 2, "paillaco": 2, "futrono": 2,
+          "puerto montt": 3, "puerto varas": 2, "osorno": 2, "castro": 3, "ancud": 3, "calbuco": 3, "frutillar": 2, "llanquihue": 2, "quellon": 3, "chonchi": 3, "purranque": 2
         }
       }
     }

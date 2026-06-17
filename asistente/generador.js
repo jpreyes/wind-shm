@@ -102,6 +102,35 @@ export function filaAMaterial(m) {
   };
 }
 
+/**
+ * Resolvedor de material FLEXIBLE para entramado/cercha: reconoce ACERO
+ * (acero/steel/metalcon/S235.../A630), MADERA (pino/madera/wood) y HORMIGÓN
+ * (Hxx/fc). Devuelve el material PÓRTICO o null (que el llamador resuelva el
+ * default según contexto). Registra avisos de interpretación.
+ */
+export function resolverMaterialFlexible(n, materiales, aviso) {
+  if (n == null) return null;
+  const byName = new Map(materiales.map((m) => [String(m.nombre).trim().toLowerCase(), m]));
+  const raw = String(n).trim(), low = raw.toLowerCase();
+  const ex = byName.get(low); if (ex) return filaAMaterial(ex);
+  if (/acero|steel|metalcon|s2\d\d|s3\d\d|a2\d\d|a6\d\d/.test(low)) {
+    const grade = materiales.find((m) => m.tipo === 'acero' && low.includes(String(m.nombre).toLowerCase())) || byName.get('s275');
+    if (grade) { if (String(grade.nombre).toLowerCase() !== low) aviso('info', `Material "${n}" interpretado como acero "${grade.nombre}".`); return filaAMaterial(grade); }
+    aviso('reemplazo', `Material "${n}": se usó acero S275.`); return { name: 'S275', E: 2.1e8, G: 8.08e7, nu: 0.3, rho: 7.85 };
+  }
+  if (/pino|madera|wood|radiata|timber/.test(low)) {
+    const w = byName.get('pino radiata'); if (w) { if (low !== 'pino radiata') aviso('info', `Material "${n}" interpretado como "${w.nombre}".`); return filaAMaterial(w); }
+  }
+  const fcm = low.match(/\b(\d{2,3})\b/);
+  if (fcm && /(horm|h\s*\d|fc|concret)/.test(low)) {
+    const fc = +fcm[1]; const c = byName.get('h' + fc); if (c) return filaAMaterial(c);
+    const E = Math.round(4700 * Math.sqrt(fc) * 1000);
+    aviso('estimado', `Hormigón fc=${fc} MPa estimado (E≈${(E / 1e6).toFixed(0)} GPa).`);
+    return { name: `H${fc}(est)`, E, G: Math.round(E / 2.4), nu: 0.2, rho: 2.5 };
+  }
+  return null;
+}
+
 // ── Helpers de geometría ──────────────────────────────────────────────────────
 
 /** Coordenadas de ejes a partir de una especificación de vanos:
@@ -152,7 +181,7 @@ export function generarModelo(ficha, libs) {
   // Despacho por tipología: madera y cercha tienen geometría propia.
   const tip = String(ficha.tipologia || 'marco').toLowerCase();
   if (/cercha|celos|warren|truss/.test(tip)) return generarCercha(ficha, libs);
-  if (/madera|tabiqu|entramad|light.?frame/.test(tip)) return generarMurosMadera(ficha, libs);
+  if (/madera|tabiqu|entramad|light.?frame|steel.?fram|metalcon|muros/.test(tip)) return generarMurosMadera(ficha, libs);
 
   const { reglas, perfiles, materiales } = libs;
   const rmod = reglas.reglas_modelado || {};
@@ -480,6 +509,14 @@ export function generarModelo(ficha, libs) {
     // defaults razonables si faltan o son inválidos, registrando el reemplazo.
     const s = reglas.cargas?.sismica_NCh433 || {};
     const sp = { ...(ficha.sismo || {}) };
+    // Zona sísmica por CIUDAD (NCh433) si no se indicó explícitamente.
+    if (sp.zona == null && ub.ciudad) {
+      const zc = s.zonificacion_ciudades?.tabla;
+      const key = String(ub.ciudad).toLowerCase().normalize('NFD').replace(/[^a-z ]/g, '').replace(/\s+/g, ' ').trim();
+      const z = zc ? zc[key] : null;
+      if (z != null) { sp.zona = z; aviso('info', `Zona sísmica ${z} asignada por ciudad "${ub.ciudad}" (NCh433).`); }
+      else aviso('omitido', `Ciudad "${ub.ciudad}" no está en la tabla de zonificación: verifique la zona según la comuna (Tabla 4.1 / Figura 4.1 NCh433).`);
+    }
     if (!(s.tabla_suelos && s.tabla_suelos[sp.suelo])) { if (sp.suelo != null) aviso('reemplazo', `Suelo sísmico "${sp.suelo}" inválido: se usó D.`); else aviso('reemplazo', 'No se indicó suelo sísmico: se usó D.'); sp.suelo = 'D'; }
     if (!(s.tabla_zona_Ao_g && s.tabla_zona_Ao_g[String(sp.zona)])) { if (sp.zona != null) aviso('reemplazo', `Zona sísmica "${sp.zona}" inválida: se usó 2.`); else aviso('reemplazo', 'No se indicó zona sísmica: se usó zona 2.'); sp.zona = 2; }
     if (!(s.tabla_categoria_I && s.tabla_categoria_I[sp.categoria])) { sp.categoria = 'II'; }
@@ -558,22 +595,16 @@ export function generarMurosMadera(ficha, libs) {
   const avisos = [];
   const aviso = (tipo, msg) => avisos.push({ tipo, msg });
 
-  // ── Material (madera) ──
+  // ── Material (acero/madera/hormigón; default madera si no se indica) ──
   const pickMat = (n) => {
-    if (n != null) {
-      const ex = matPorNombre.get(String(n).trim());
-      if (ex) return filaAMaterial(ex);
-      if (/pino|madera|wood|radiata|timber/i.test(String(n))) {
-        const m2 = matPorNombre.get('Pino Radiata') ||
-          materiales.find((m) => /madera|timber/i.test(`${m.tipo}`));
-        if (m2) { aviso('info', `Material "${n}" interpretado como "${m2.nombre}".`); return filaAMaterial(m2); }
-      }
-    }
+    const r = resolverMaterialFlexible(n, materiales, aviso);
+    if (r) return r;
     const def = matPorNombre.get('Pino Radiata');
-    aviso('reemplazo', `Material ${n == null ? '(no indicado)' : `"${n}"`}: se usó Pino Radiata por defecto (tipología madera).`);
+    aviso('reemplazo', `Material ${n == null ? '(no indicado)' : `"${n}"`}: se usó Pino Radiata por defecto (entramado). Para steel framing indique material 'acero' o 'S275'.`);
     return def ? filaAMaterial(def) : { name: 'Pino Radiata', E: 1.0e7, G: 6.25e5, nu: 0.3, rho: 0.45 };
   };
   const mat = pickMat((ficha.secciones || {}).material); mat.id = 1;
+  const esAcero = /acero|s\d{3}|a\d{3}/i.test(mat.name);
 
   // ── Secciones (escuadrías) ──
   const tb = ficha.tabiques || {};
@@ -584,8 +615,9 @@ export function generarMurosMadera(ficha, libs) {
     aviso('reemplazo', `${label}: escuadría ${spec == null ? '(no indicada)' : `"${spec}"`} no reconocida: se usó ${defKey}" por defecto.`);
     return escuadriaASeccion(defKey, label).sec;
   };
-  const secStud = pickSec(tb.escuadria, 'Pie derecho/solera', '2x4'); secStud.id = 1;
-  const secJoist = pickSec(ep.escuadria, 'Vigueta', '2x8'); secJoist.id = 2;
+  const secStud = pickSec(tb.escuadria, 'Pie derecho/montante', esAcero ? '2x4' : '2x4'); secStud.id = 1;
+  const secJoist = pickSec(ep.escuadria, 'Vigueta', esAcero ? '2x8' : '2x8'); secJoist.id = 2;
+  if (esAcero) aviso('info', `Steel framing: se usó material ${mat.name}. Las escuadrías se modelan como secciones rectangulares macizas equivalentes (un perfil C real de metalcon tiene menor inercia para igual canto).`);
 
   // ── Geometría base ──
   const geo = ficha.geometria || {};
@@ -604,6 +636,14 @@ export function generarMurosMadera(ficha, libs) {
   const perim = tb.perimetro !== false;
   const diagOn = tb.diagonales !== false;       // arriostramiento de tabiques (por defecto sí)
   const diagTramos = tb.diagonal_tramos >= 2 ? Math.floor(tb.diagonal_tramos) : 3; // tramos que abarca cada diagonal
+
+  // ── Techo: plano (viguetas) por defecto, o cerchas Warren a dos aguas ──
+  const techo = ficha.techo || {};
+  const techoCercha = /cercha|warren|celos|truss|dos.?agua/.test(String(techo.tipo || ''));
+  const dirT = techo.dir === 'Y' ? 'Y' : (techo.dir === 'X' ? 'X' : (Lx <= Ly ? 'X' : 'Y')); // las cerchas salvan la luz en esta dirección
+  const sepT = techo.separacion_m > 0 ? techo.separacion_m : 0.6;   // separación entre cerchas
+  const spanT = dirT === 'X' ? Lx : Ly;   // luz de la cercha
+  const perpT = dirT === 'X' ? Ly : Lx;   // dirección en que se reparten las cerchas
 
   // ── Registro de nodos/elementos (con fusión por coordenada y deduplicado) ──
   const nodes = [], elements = [];
@@ -644,7 +684,7 @@ export function generarMurosMadera(ficha, libs) {
     a.push(+L.toFixed(4));
     return a;
   };
-  const merge = (a, b) => [...new Set([...a, ...b].map((v) => +(+v).toFixed(4)))].sort((p, q) => p - q);
+  const merge = (...arrs) => [...new Set(arrs.flat().map((v) => +(+v).toFixed(4)))].sort((p, q) => p - q);
 
   // Muro genérico a lo largo de un eje. axis='X' → la línea corre en X a y=fixed;
   // axis='Y' → corre en Y a x=fixed. coords = nodos de solera; studs = posiciones
@@ -686,20 +726,26 @@ export function generarMurosMadera(ficha, libs) {
     }
   };
 
-  // Posiciones de pies derechos y de viguetas
+  // Posiciones de pies derechos, de viguetas y de cerchas (techo)
   const Px = serie(Lx, sepStud), Py = serie(Ly, sepStud);
   const Xj = serie(Lx, sepJoist), Yj = serie(Ly, sepJoist);
+  const Tt = techoCercha ? serie(perpT, sepT) : [];   // posiciones de cerchas (perpendicular a la luz)
 
   // ── Tabiques perimetrales por nivel ──
+  // Los apoyos de las cerchas deben caer en nodos de la solera superior del último
+  // nivel: por eso se fusionan las posiciones de cercha (Tt) en los muros que las soportan.
   for (let k = 1; k <= nNiv; k++) {
     const zb = zNivel[k - 1], zt = zNivel[k];
     if (!perim) break;
-    // muros que corren en X (a y=0 y y=Ly): reciben viguetas si dirJ='Y' (en x=Xj)
-    const cx = merge(Px, dirJ === 'Y' ? Xj : []);
+    const esUltimo = k === nNiv;
+    // muros que corren en X (a y=0 y y=Ly): reciben viguetas si dirJ='Y' (en x=Xj),
+    // y apoyos de cercha si dirT='Y' (en x=Tt)
+    const cx = merge(Px, dirJ === 'Y' ? Xj : [], (esUltimo && dirT === 'Y') ? Tt : []);
     buildWall('X', 0, cx, Px, zb, zt);
     buildWall('X', Ly, cx, Px, zb, zt);
-    // muros que corren en Y (a x=0 y x=Lx): reciben viguetas si dirJ='X' (en y=Yj)
-    const cy = merge(Py, dirJ === 'X' ? Yj : []);
+    // muros que corren en Y (a x=0 y x=Lx): reciben viguetas si dirJ='X' (en y=Yj),
+    // y apoyos de cercha si dirT='X' (en y=Tt)
+    const cy = merge(Py, dirJ === 'X' ? Yj : [], (esUltimo && dirT === 'X') ? Tt : []);
     buildWall('Y', 0, cy, Py, zb, zt);
     buildWall('Y', Lx, cy, Py, zb, zt);
   }
@@ -721,9 +767,11 @@ export function generarMurosMadera(ficha, libs) {
     buildWall(dir, fixed, merge(studs, edges), studs, zb, zt, ab);
   }
 
-  // ── Viguetas de piso/techo por nivel (apoyadas en muros), con ancho tributario ──
+  // ── Viguetas de piso por nivel (apoyadas en muros), con ancho tributario ──
+  // Si el techo es de cerchas, el último nivel NO lleva plataforma plana de viguetas.
   const joists = [];   // {elemId, k, L, trib}
-  for (let k = 1; k <= nNiv; k++) {
+  const kJoistMax = techoCercha ? nNiv - 1 : nNiv;
+  for (let k = 1; k <= kJoistMax; k++) {
     const z = zNivel[k];
     if (dirJ === 'X') {                  // viguetas en X (de x=0 a x=Lx), distribuidas en Y
       for (let j = 0; j < Yj.length; j++) {
@@ -738,6 +786,50 @@ export function generarMurosMadera(ficha, libs) {
     }
   }
 
+  // ── Techo de cerchas Warren a dos aguas (integrado sobre los muros) ──
+  // Cada cercha es una celosía plana vertical que salva la luz spanT, apoyada en
+  // sus dos extremos sobre las soleras superiores; se reparten cada sepT y se
+  // atan entre sí con costaneras (purlins) → techo 3D estable.
+  const roofTop = [];   // {elemId, dx, Lsl}  (cordones superiores, para carga)
+  let secCordT = null, secDiagT = null;
+  if (techoCercha) {
+    secCordT = escuadriaASeccion(techo.escuadria_cordon || (esAcero ? '2x6' : '2x6'), 'Cordón techo').sec; secCordT.id = 3;
+    secDiagT = escuadriaASeccion(techo.escuadria_diagonal || '2x4', 'Diagonal techo').sec; secDiagT.id = 4;
+    const zT = zNivel[nNiv];
+    const usaAltura = techo.altura_cumbrera_m > 0;
+    const slopeT = (techo.pendiente_pct >= 0 ? techo.pendiente_pct : 10) / 100;
+    const hRT = usaAltura ? techo.altura_cumbrera_m : slopeT * (spanT / 2);
+    let nT = Math.max(2, Math.round(techo.n_paneles || Math.max(4, Math.round(spanT)) )); if (nT % 2) nT += 1;
+    const along = (i) => +(i * spanT / nT).toFixed(5);
+    const zRoof = (a) => +(a <= spanT / 2 ? (2 * hRT / spanT) * a : (2 * hRT / spanT) * (spanT - a)).toFixed(5);
+    const XY = (a, p) => dirT === 'X' ? [a, p] : [p, a];   // (along,perp)→(x,y)
+    const topByPos = [];   // por posición: lista de nodos del cordón superior (para costaneras)
+    const botByPos = [];
+    for (const p of Tt) {
+      const B = [], T = [];
+      for (let i = 0; i <= nT; i++) {
+        const [bx, by] = XY(along(i), p); B[i] = getNode(bx, by, zT);
+        const [tx, ty] = XY(along(i), p); T[i] = getNode(tx, ty, zT + zRoof(along(i)));
+      }
+      for (let i = 0; i < nT; i++) addEl(B[i], B[i + 1], secCordT.id);                 // cordón inferior
+      for (let i = 0; i < nT; i++) {                                                    // cordón superior + carga
+        const eid = addEl(T[i], T[i + 1], secCordT.id);
+        const da = along(i + 1) - along(i);
+        const Lsl = Math.hypot(da, zRoof(along(i + 1)) - zRoof(along(i))) || da;
+        if (eid != null) roofTop.push({ elemId: eid, dx: da, Lsl });
+      }
+      for (let i = 0; i < nT; i++) (i % 2 === 0 ? addEl(B[i], T[i + 1], secDiagT.id) : addEl(T[i], B[i + 1], secDiagT.id)); // Warren
+      addEl(B[nT / 2], T[nT / 2], secDiagT.id);   // pendolón
+      topByPos.push(T); botByPos.push(B);
+    }
+    // costaneras (purlins): unen cerchas consecutivas en cada nodo de cordón → estabilidad fuera del plano
+    for (let s = 0; s + 1 < Tt.length; s++)
+      for (let i = 0; i <= nT; i++) {
+        addEl(topByPos[s][i], topByPos[s + 1][i], secDiagT.id);
+        addEl(botByPos[s][i], botByPos[s + 1][i], secDiagT.id);
+      }
+  }
+
   // ── Cargas: CM (peso propio + adicional) y CV (uso) sobre viguetas ──
   const cargas = ficha.cargas || {};
   let qCMadic = cargas.muerta_adicional_kN_m2;
@@ -745,7 +837,9 @@ export function generarMurosMadera(ficha, libs) {
   let qCVfloor = cargas.sobrecarga_uso_kN_m2;
   if (qCVfloor == null) { qCVfloor = 2.0; aviso('estimado', 'Sobrecarga de uso no indicada: se usó 2.0 kN/m² (habitacional, NCh1537).'); }
   const qRoof = 1.0;
-  if (nNiv >= 1) aviso('info', `Techo (nivel ${nNiv}) modelado como plataforma plana de viguetas con sobrecarga ${qRoof} kN/m². Para techo de cerchas use la tipología 'cercha' (Warren a dos aguas).`);
+  if (!techoCercha && nNiv >= 1) aviso('info', `Techo (nivel ${nNiv}) modelado como plataforma plana de viguetas con sobrecarga ${qRoof} kN/m². Para techo de cerchas indique techo:{tipo:'cercha'}.`);
+  if (techoCercha) aviso('info', `Techo de cerchas Warren a dos aguas (${Tt.length} cerchas @${sepT} m, luz ${spanT} m, pendiente ${(((techo.pendiente_pct >= 0 ? techo.pendiente_pct : 10)))}%) integrado sobre los muros.`);
+  // viguetas planas: piso (k<nNiv) usa qCVfloor; si el techo es plano, el último nivel usa qRoof
   const cvAt = (k) => (k < nNiv ? qCVfloor : qRoof);
 
   const lcCM = { id: 1, name: 'CM', loads: [], selfWeight: true, type: 'static', specDir: null };
@@ -756,6 +850,12 @@ export function generarMurosMadera(ficha, libs) {
     const cv = cvAt(j.k);
     if (cv > 0) lcCV.loads.push({ type: 'dist', elemId: j.elemId, dir: 'gravity', w: +(cv * j.trib).toFixed(6) });
   }
+  // techo de cerchas: carga sobre cordones superiores por ancho tributario (sepT)
+  for (const r of roofTop) {
+    if (r.elemId == null) continue;
+    if (qCMadic > 0) lcCM.loads.push({ type: 'dist', elemId: r.elemId, dir: 'gravity', w: +(qCMadic * sepT * r.dx / r.Lsl).toFixed(6) });
+    lcCV.loads.push({ type: 'dist', elemId: r.elemId, dir: 'gravity', w: +(qRoof * sepT * r.dx / r.Lsl).toFixed(6) });
+  }
   const loadCases = [lcCM, lcCV];
 
   // ── Combinaciones (gravitacionales NCh3171) ──
@@ -764,21 +864,24 @@ export function generarMurosMadera(ficha, libs) {
     { id: 2, name: '1.2CM+1.6CV', factors: [{ lcId: 1, factor: 1.2 }, { lcId: 2, factor: 1.6 }] },
   ];
 
+  const sections = [secStud, secJoist];
+  if (secCordT) sections.push(secCordT);
+  if (secDiagT) sections.push(secDiagT);
   return {
     version: '1.0',
     units: 'kN-m',
     mode: '3D',
     nodes, elements,
     materials: [mat],
-    sections: [secStud, secJoist],
+    sections,
     diaphragms: [],
     loadCases, combinations,
     grids: { x: Px, y: Py, z: zNivel },
-    _counters: { nodes: nodes.length, elements: elements.length, materials: 1, sections: 2, diaphragms: 0, loadCases: 2, combinations: 2 },
+    _counters: { nodes: nodes.length, elements: elements.length, materials: 1, sections: sections.length, diaphragms: 0, loadCases: 2, combinations: 2 },
     _generado: {
-      por: 'asistente/generador.js (muros_madera)',
+      por: 'asistente/generador.js (entramado)',
       reglas: (libs.reglas && libs.reglas._meta) ? libs.reglas._meta.version : undefined,
-      resumen: `${nodes.length} nodos, ${elements.length} elementos (entramado de madera), ${joists.length} viguetas`,
+      resumen: `entramado ${esAcero ? 'de acero' : 'de madera'} (${mat.name}): ${nodes.length} nodos, ${elements.length} elementos, ${joists.length} viguetas${techoCercha ? `, ${Tt.length} cerchas` : ''}`,
     },
     _avisos: avisos,
   };
@@ -798,16 +901,10 @@ export function generarCercha(ficha, libs) {
   const aviso = (tipo, msg) => avisos.push({ tipo, msg });
 
   const pickMat = (n) => {
-    if (n != null) {
-      const ex = matPorNombre.get(String(n).trim());
-      if (ex) return filaAMaterial(ex);
-      if (/pino|madera|wood|radiata|timber/i.test(String(n))) {
-        const m2 = matPorNombre.get('Pino Radiata');
-        if (m2) { aviso('info', `Material "${n}" interpretado como "${m2.nombre}".`); return filaAMaterial(m2); }
-      }
-    }
+    const r = resolverMaterialFlexible(n, materiales, aviso);
+    if (r) return r;
     const def = matPorNombre.get('Pino Radiata');
-    aviso('reemplazo', `Material ${n == null ? '(no indicado)' : `"${n}"`}: se usó Pino Radiata por defecto (cercha de madera).`);
+    aviso('reemplazo', `Material ${n == null ? '(no indicado)' : `"${n}"`}: se usó Pino Radiata por defecto (cercha). Para cercha de acero indique material 'acero' o 'S275'.`);
     return def ? filaAMaterial(def) : { name: 'Pino Radiata', E: 1.0e7, G: 6.25e5, nu: 0.3, rho: 0.45 };
   };
   const mat = pickMat((ficha.secciones || {}).material); mat.id = 1;

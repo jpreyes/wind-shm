@@ -181,6 +181,22 @@
       }
     },
 
+    "techo": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Solo tipologia = 'muros_madera'. Techo del edificio. Por defecto plano (viguetas). Con tipo 'cercha' corona el edificio con cerchas Warren a dos aguas integradas sobre los muros.",
+      "properties": {
+        "tipo": { "type": "string", "enum": ["plano", "cercha"], "default": "plano", "description": "plano = plataforma de viguetas; cercha = cerchas Warren a dos aguas." },
+        "pendiente_pct": { "type": "number", "minimum": 0, "default": 10, "description": "Pendiente del techo en % (solo tipo cercha)." },
+        "altura_cumbrera_m": { "type": "number", "exclusiveMinimum": 0, "description": "Altura de cumbrera (override de pendiente_pct)." },
+        "separacion_m": { "type": "number", "exclusiveMinimum": 0, "default": 0.6, "description": "Separación entre cerchas." },
+        "dir": { "type": "string", "enum": ["X", "Y"], "description": "Dirección en que las cerchas salvan la luz. Si se omite, salvan el lado más corto." },
+        "n_paneles": { "type": "integer", "minimum": 2, "description": "Nº de paneles de cada cercha (par)." },
+        "escuadria_cordon": { "type": "string", "description": "Escuadría de cordones, ej. '2x6'." },
+        "escuadria_diagonal": { "type": "string", "description": "Escuadría de diagonales, ej. '2x4'." }
+      }
+    },
+
     "cercha": {
       "type": "object",
       "additionalProperties": false,
