@@ -1,8 +1,8 @@
 // ──────────────────────────────────────────────────────────────────────────────
 // PropertiesPanel — right-side panel: node/element properties + mat/sec tabs
 // ──────────────────────────────────────────────────────────────────────────────
-import { computeFloorCR, computeFloorCM, computeTributaryWeights } from '../solver/diaphragm.js?v=60';
-import { localAxes } from '../solver/timoshenko.js?v=60';
+import { computeFloorCR, computeFloorCM, computeTributaryWeights } from '../solver/diaphragm.js?v=61';
+import { localAxes } from '../solver/timoshenko.js?v=61';
 
 export class PropertiesPanel {
   constructor(panelEl, app) {
@@ -257,23 +257,44 @@ export class PropertiesPanel {
         </div>
         <div class="prop-row" style="align-items:flex-end;gap:6px">
           <div class="prop-field" style="width:96px"><label>Repeticiones</label><input type="number" id="tr-rep" value="1" min="1" step="1"></div>
-          <button class="btn-secondary" id="tr-copy" style="flex:1;font-size:11px" title="Crea copias desplazadas (array lineal)">Copiar ×N</button>
+          <button class="btn-secondary" id="tr-copy" style="flex:1;font-size:11px" title="Crea copias desplazadas (array)">Copiar ×N</button>
           <button class="btn-secondary" id="tr-move" style="flex:1;font-size:11px" title="Desplaza la selección">Mover</button>
         </div>
-        <p class="panel-hint" style="margin:6px 0 0">Ej.: dX=5, repeticiones=10 → 10 copias cada 5 m. Copias coincidentes se fusionan.</p>
+        <details style="margin-top:6px">
+          <summary style="cursor:pointer;font-size:11px;color:var(--text-muted)">2ª dirección (array 2D) y espejar</summary>
+          <div class="prop-row cols3" style="gap:6px;margin:6px 0">
+            <div class="prop-field"><label>dX₂</label><input type="number" id="tr-dx2" value="0" step="0.5"></div>
+            <div class="prop-field"><label>dY₂</label><input type="number" id="tr-dy2" value="0" step="0.5"></div>
+            <div class="prop-field"><label>dZ₂</label><input type="number" id="tr-dz2" value="0" step="0.5"></div>
+          </div>
+          <div class="prop-row" style="align-items:flex-end;gap:6px;margin-bottom:8px">
+            <div class="prop-field" style="width:96px"><label>Repeticiones₂</label><input type="number" id="tr-rep2" value="0" min="0" step="1"></div>
+            <span class="panel-hint" style="flex:1">Array 2D = grilla rep × rep₂ (usa "Copiar ×N").</span>
+          </div>
+          <div class="prop-row" style="align-items:flex-end;gap:6px">
+            <div class="prop-field"><label>Espejar plano</label>
+              <select id="tr-mir"><option value="X">X = c</option><option value="Y">Y = c</option><option value="Z">Z = c</option></select></div>
+            <div class="prop-field" style="width:70px"><label>c (m)</label><input type="number" id="tr-mirc" value="0" step="0.5"></div>
+            <button class="btn-secondary" id="tr-mirror" style="flex:1;font-size:11px" title="Crea una copia reflejada de la selección">Espejar</button>
+          </div>
+        </details>
+        <p class="panel-hint" style="margin:6px 0 0">Ej.: dX=5, rep=10 → 10 copias cada 5 m. Con dY₂ y rep₂ se hace grilla 2D. Copias coincidentes se fusionan.</p>
       </div>`;
   }
   _bindTransform() {
     const $ = (i) => this._tabContents.sel.querySelector(i);
-    const vals = () => [parseFloat($('#tr-dx').value), parseFloat($('#tr-dy').value), parseFloat($('#tr-dz').value)];
-    $('#tr-copy')?.addEventListener('click', () => { const [x, y, z] = vals(); this.app.copiarSeleccion(x, y, z, parseInt($('#tr-rep').value, 10)); });
-    $('#tr-move')?.addEventListener('click', () => { const [x, y, z] = vals(); this.app.moverSeleccion(x, y, z); });
+    const num = (i) => parseFloat($(i).value) || 0;
+    $('#tr-copy')?.addEventListener('click', () => this.app.copiarSeleccion(num('#tr-dx'), num('#tr-dy'), num('#tr-dz'), parseInt($('#tr-rep').value, 10), num('#tr-dx2'), num('#tr-dy2'), num('#tr-dz2'), parseInt($('#tr-rep2').value, 10)));
+    $('#tr-move')?.addEventListener('click', () => this.app.moverSeleccion(num('#tr-dx'), num('#tr-dy'), num('#tr-dz')));
+    $('#tr-mirror')?.addEventListener('click', () => this.app.espejarSeleccion($('#tr-mir').value, num('#tr-mirc')));
   }
 
   // HTML de acciones masivas para N elementos seleccionados.
   _accionesSelHTML(elems) {
     const mats = [...this.app.model.materials.values()].map(m => `<option value="${m.id}">${m.name}</option>`).join('');
     const secs = [...this.app.model.sections.values()].map(s => `<option value="${s.id}">${s.name}</option>`).join('');
+    const lcs = [...this.app.model.loadCases.values()].filter(l => l.type !== 'spectrum')
+      .map(l => `<option value="${l.id}" ${l.id === this.app._activeLcId ? 'selected' : ''}>${l.name}${l.selfWeight ? ' ⊕PP' : ''}</option>`).join('');
     const n = elems.length;
     return `
       <div class="prop-section" style="border:1px solid var(--accent);border-radius:6px;padding:8px;margin-top:8px">
@@ -293,6 +314,24 @@ export class PropertiesPanel {
             <input type="number" id="sel-disc" value="4" min="2" step="1"></div>
           <button class="btn-secondary" id="sel-disc-go" style="font-size:11px">Dividir</button>
         </div>
+        <div style="border-top:1px dashed var(--border2);margin:4px 0 8px;padding-top:8px">
+          <div class="prop-row cols3" style="gap:6px;margin-bottom:6px">
+            <div class="prop-field"><label>Carga w (kN/m)</label><input type="number" id="sel-w" value="10" step="1"></div>
+            <div class="prop-field"><label>Dirección</label>
+              <select id="sel-wdir">
+                <option value="gravity">Gravedad ↓</option>
+                <option value="globalX">Global +X</option>
+                <option value="globalY">Global +Y</option>
+                <option value="localY">Local y</option>
+                <option value="localZ">Local z</option>
+              </select></div>
+            <div class="prop-field"><label>Caso</label><select id="sel-wlc">${lcs}</select></div>
+          </div>
+          <div style="display:flex;gap:6px">
+            <button class="btn-secondary" id="sel-w-go" style="flex:1;font-size:11px" title="Asigna la misma carga distribuida a todos (reemplaza la previa en ese caso)">Aplicar carga</button>
+            <button class="btn-secondary" id="sel-w-clr" style="flex:1;font-size:11px" title="Quita las cargas distribuidas de estos elementos en el caso elegido">Quitar carga</button>
+          </div>
+        </div>
         <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:8px">
           <button class="btn-secondary" id="sel-join" style="flex:1;font-size:11px" title="Une tramos colineales en una sola barra">Unir colineales</button>
           ${n === 2 ? `<button class="btn-secondary" id="sel-inter" style="flex:1;font-size:11px" title="Crea un nodo común en el cruce de los 2 elementos">Cortar en intersección</button>` : ''}
@@ -311,6 +350,8 @@ export class PropertiesPanel {
     $('#sel-mat-go')?.addEventListener('click', () => { const v = $('#sel-mat').value; if (v) this.app.setMaterialSelected(v); });
     $('#sel-sec-go')?.addEventListener('click', () => { const v = $('#sel-sec').value; if (v) this.app.setSectionSelected(v); });
     $('#sel-disc-go')?.addEventListener('click', () => this.app.discretizeSelected(parseInt($('#sel-disc').value, 10)));
+    $('#sel-w-go')?.addEventListener('click', () => this.app.setCargaDistSelected(parseFloat($('#sel-w').value), $('#sel-wdir').value, $('#sel-wlc').value));
+    $('#sel-w-clr')?.addEventListener('click', () => this.app.setCargaDistSelected(0, $('#sel-wdir').value, $('#sel-wlc').value));
     $('#sel-join')?.addEventListener('click', () => this.app.joinSelectedElements());
     $('#sel-inter')?.addEventListener('click', () => this.app.unirInterseccion());
     $('#sel-hide')?.addEventListener('click', () => this.app.hideSelected());

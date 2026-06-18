@@ -1,21 +1,21 @@
 // ──────────────────────────────────────────────────────────────────────────────
 // App — main orchestrator
 // ──────────────────────────────────────────────────────────────────────────────
-import { Model }           from './model/model.js?v=60';
-import { Serializer }      from './model/serializer.js?v=60';
-import { Viewport }        from './ui/viewport.js?v=60';
-import { PropertiesPanel } from './ui/properties.js?v=60';
-import { MenuBar }         from './ui/menu.js?v=60';
-import { UndoStack }       from './utils/undo.js?v=60';
-import { StaticSolver, ensureDefaultLC }   from './solver/static_solver.js?v=60';
-import { Results }                         from './solver/postprocess.js?v=60';
-import { ModalSolver }                     from './solver/modal_solver.js?v=60';
-import { buildNodeIndex, assembleK, getNodeDOFs } from './solver/assembler.js?v=60';
-import { ModalResults }                    from './solver/modal_results.js?v=60';
-import { SpectrumSolver }                  from './solver/spectrum_solver.js?v=60';
-import { autoDetectDiaphragms, computeFloorCR } from './solver/diaphragm.js?v=60';
-import { splitElement, splitByLength, discretizeAll, joinElements, intersectarElementos } from './model/discretize.js?v=60';
-import { localAxes, stiffnessMatrix, massMatrix, transformMatrix, globalStiffness, applyReleases } from './solver/timoshenko.js?v=60';
+import { Model }           from './model/model.js?v=61';
+import { Serializer }      from './model/serializer.js?v=61';
+import { Viewport }        from './ui/viewport.js?v=61';
+import { PropertiesPanel } from './ui/properties.js?v=61';
+import { MenuBar }         from './ui/menu.js?v=61';
+import { UndoStack }       from './utils/undo.js?v=61';
+import { StaticSolver, ensureDefaultLC }   from './solver/static_solver.js?v=61';
+import { Results }                         from './solver/postprocess.js?v=61';
+import { ModalSolver }                     from './solver/modal_solver.js?v=61';
+import { buildNodeIndex, assembleK, getNodeDOFs } from './solver/assembler.js?v=61';
+import { ModalResults }                    from './solver/modal_results.js?v=61';
+import { SpectrumSolver }                  from './solver/spectrum_solver.js?v=61';
+import { autoDetectDiaphragms, computeFloorCR } from './solver/diaphragm.js?v=61';
+import { splitElement, splitByLength, discretizeAll, joinElements, intersectarElementos } from './model/discretize.js?v=61';
+import { localAxes, stiffnessMatrix, massMatrix, transformMatrix, globalStiffness, applyReleases } from './solver/timoshenko.js?v=61';
 
 class App {
   constructor() {
@@ -347,8 +347,9 @@ class App {
     this.viewport.renderModel(this.model); this.refreshLoads(); this.markDirty(); this._updateStats();
     this.toast(`${ids.size} nodo(s) movidos (${dx}, ${dy}, ${dz})`, 'ok');
   }
-  copiarSeleccion(dx, dy, dz, reps) {
+  copiarSeleccion(dx, dy, dz, reps, dx2 = 0, dy2 = 0, dz2 = 0, reps2 = 0) {
     dx = +dx || 0; dy = +dy || 0; dz = +dz || 0; reps = Math.max(1, Math.round(reps || 1));
+    dx2 = +dx2 || 0; dy2 = +dy2 || 0; dz2 = +dz2 || 0; reps2 = Math.max(0, Math.round(reps2 || 0));
     if (!(dx || dy || dz)) { this.toast('Indique un desplazamiento (dX, dY o dZ) ≠ 0', 'warn'); return; }
     const elems = this._selElems().map(id => this.model.elements.get(id)).filter(Boolean);
     const nodeIds = this._nodosDeSeleccion(); if (!nodeIds.size) { this.toast('Seleccione nodos o elementos para copiar', 'warn'); return; }
@@ -362,20 +363,80 @@ class App {
       coordIdx.set(k, nn.id); return nn.id;
     };
     const pares = new Set(); for (const e of this.model.elements.values()) pares.add(`${Math.min(e.n1, e.n2)}-${Math.max(e.n1, e.n2)}`);
-    let nEl = 0;
-    for (let r = 1; r <= reps; r++) {
-      const ox = dx * r, oy = dy * r, oz = dz * r, map = new Map();
-      for (const nid of nodeIds) { const n = this.model.nodes.get(nid); map.set(nid, getOrAdd(n.x + ox, n.y + oy, n.z + oz, n)); }
+    // Una copia de la selección con un nodo-mapeo dado (offset o reflexión).
+    const copiarInstancia = (mapCoord) => {
+      const map = new Map();
+      for (const nid of nodeIds) { const n = this.model.nodes.get(nid); const p = mapCoord(n); map.set(nid, getOrAdd(p.x, p.y, p.z, n)); }
+      let k = 0;
       for (const e of elems) {
         const a = map.get(e.n1), b = map.get(e.n2); if (a == null || b == null || a === b) continue;
         const pk = `${Math.min(a, b)}-${Math.max(a, b)}`; if (pares.has(pk)) continue; pares.add(pk);
         const ne = this.model.addElement(a, b, e.matId, e.secId);
         if (ne && e.releases && e.releases.some(x => x)) this.model.updateElement(ne.id, { releases: [...e.releases] });
-        if (ne) nEl++;
+        if (ne) k++;
       }
+      return k;
+    };
+    let nEl = 0;
+    // grilla (reps+1)×(reps2+1) salvo el original (0,0); reps2=0 → array lineal
+    for (let i = 0; i <= reps; i++) for (let j = 0; j <= reps2; j++) {
+      if (i === 0 && j === 0) continue;
+      const ox = dx * i + dx2 * j, oy = dy * i + dy2 * j, oz = dz * i + dz2 * j;
+      nEl += copiarInstancia((n) => ({ x: n.x + ox, y: n.y + oy, z: n.z + oz }));
     }
+    this._afterCopia(nEl);
+    const total = reps2 > 0 ? `${reps}×${reps2}` : `×${reps}`;
+    this.toast(`Copiado ${total}: +${nEl} elemento(s)`, 'ok');
+  }
+
+  _afterCopia(nEl) {
     this.viewport.renderModel(this.model); this.refreshLoads(); this.viewport.clearSelection(); this.panel.showNothing(); this.markDirty(); this._updateStats();
-    this.toast(`Copiado ×${reps}: +${nEl} elemento(s)`, 'ok');
+  }
+
+  // Espejar (reflejar) la selección respecto al plano perpendicular a 'eje' en 'coord'.
+  espejarSeleccion(eje, coord) {
+    coord = +coord || 0; eje = String(eje || 'X').toUpperCase();
+    const elems = this._selElems().map(id => this.model.elements.get(id)).filter(Boolean);
+    const nodeIds = this._nodosDeSeleccion(); if (!nodeIds.size) { this.toast('Seleccione nodos o elementos para espejar', 'warn'); return; }
+    this.snapshot();
+    const rk = (v) => Math.round(v * 1e4) / 1e4, key = (x, y, z) => `${rk(x)}|${rk(y)}|${rk(z)}`;
+    const coordIdx = new Map(); for (const n of this.model.nodes.values()) coordIdx.set(key(n.x, n.y, n.z), n.id);
+    const getOrAdd = (x, y, z, src) => {
+      const k = key(x, y, z); if (coordIdx.has(k)) return coordIdx.get(k);
+      const nn = this.model.addNode(rk(x), rk(y), rk(z), src ? { ...src.restraints } : {});
+      if (src) this.model.updateNode(nn.id, { springs: { ...src.springs } });
+      coordIdx.set(k, nn.id); return nn.id;
+    };
+    const pares = new Set(); for (const e of this.model.elements.values()) pares.add(`${Math.min(e.n1, e.n2)}-${Math.max(e.n1, e.n2)}`);
+    const refl = (n) => ({ x: eje === 'X' ? 2 * coord - n.x : n.x, y: eje === 'Y' ? 2 * coord - n.y : n.y, z: eje === 'Z' ? 2 * coord - n.z : n.z });
+    const map = new Map();
+    for (const nid of nodeIds) { const n = this.model.nodes.get(nid); const p = refl(n); map.set(nid, getOrAdd(p.x, p.y, p.z, n)); }
+    let nEl = 0;
+    for (const e of elems) {
+      const a = map.get(e.n1), b = map.get(e.n2); if (a == null || b == null || a === b) continue;
+      const pk = `${Math.min(a, b)}-${Math.max(a, b)}`; if (pares.has(pk)) continue; pares.add(pk);
+      const ne = this.model.addElement(a, b, e.matId, e.secId);
+      if (ne && e.releases && e.releases.some(x => x)) this.model.updateElement(ne.id, { releases: [...e.releases] });
+      if (ne) nEl++;
+    }
+    this._afterCopia(nEl);
+    this.toast(`Espejado en ${eje}=${coord}: +${nEl} elemento(s)`, 'ok');
+  }
+
+  // ── Carga distribuida masiva sobre los elementos seleccionados ──────────────
+  setCargaDistSelected(w, dir, lcId) {
+    const ids = this._selElems(); if (!ids.length) { this.toast('Seleccione elementos', 'warn'); return; }
+    const lc = this.model.loadCases.get(+lcId) || this.model.loadCases.get(this._activeLcId) || [...this.model.loadCases.values()][0];
+    if (!lc) { this.toast('No hay caso de carga', 'warn'); return; }
+    if (lc.type === 'spectrum') { this.toast('El caso espectral no admite cargas distribuidas', 'warn'); return; }
+    w = +w; dir = dir || 'gravity';
+    this.snapshot();
+    const set = new Set(ids);
+    lc.loads = (lc.loads || []).filter(l => !(l.type === 'dist' && set.has(l.elemId)));   // reemplaza la existente
+    if (w && Number.isFinite(w)) for (const id of ids) lc.loads.push({ type: 'dist', elemId: id, dir, w });
+    this.refreshLoads(); this.markDirty(); this._updateStats();
+    this.toast(w ? `Carga ${w} kN/m (${dir}) en ${ids.length} elem. · ${lc.name}` : `Cargas distribuidas quitadas de ${ids.length} elem. · ${lc.name}`, 'ok');
+    this._reselect(ids);
   }
 
   async discretizeAllDialog() {
@@ -2232,7 +2293,7 @@ class App {
     this._showProgress('Generando el modelo…', 'Aplicando reglas y cargas normativas');
     try {
       const libs = await this._cargarBibliotecasAsistente();
-      const { generarModelo } = await import('../asistente/generador.js?v=60');
+      const { generarModelo } = await import('../asistente/generador.js?v=61');
       const modelo = generarModelo(ficha, libs);
       this._loadJSON(JSON.stringify(modelo), (ficha.proyecto || 'asistente') + '.s3d');
       this.markDirty();
