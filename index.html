@@ -29,8 +29,8 @@
       window.dispatchEvent(new Event('pwa-installed'));
     });
   </script>
-  <link rel="stylesheet" href="style.css?v=65">
-  <link rel="stylesheet" href="ui-v2.css?v=65">
+  <link rel="stylesheet" href="style.css?v=66">
+  <link rel="stylesheet" href="ui-v2.css?v=66">
   <script type="importmap">
   {
     "imports": {
@@ -245,7 +245,7 @@
         <div class="vp-ctrl">
           <label style="display:flex;align-items:center;gap:5px;cursor:pointer;font-size:11px;color:var(--text-muted)"
             title="Discretización automática: al analizar, cada elemento se subdivide internamente en N tramos (deformadas y diagramas precisos, rótulas visibles en la deformada). Al limpiar resultados el modelo vuelve a su estado original.">
-            <input type="checkbox" id="auto-disc" checked style="accent-color:var(--accent);cursor:pointer">
+            <input type="checkbox" id="auto-disc" style="accent-color:var(--accent);cursor:pointer">
             Disc. auto ×<input type="number" id="auto-disc-n" value="5" min="2" max="50" step="1"
               title="Nº de tramos por elemento para el análisis"
               style="width:42px;background:var(--bg-elev,#141b27);color:var(--text,#e6edf3);border:1px solid var(--border,#334);border-radius:4px;padding:1px 3px;font-size:11px">
@@ -655,7 +655,7 @@
           <div>
             <h2 style="margin:0">PÓRTICO</h2>
             <p style="margin:2px 0 0;color:var(--text-muted)">Laboratorio virtual de análisis estructural 3D
-              · <b id="help-version">versión 65</b> · junio 2026</p>
+              · <b id="help-version">versión 66</b> · junio 2026</p>
           </div>
         </div>
         <p><b>Material docente</b> desarrollado por el <b>Dr. Juan Patricio Reyes C.</b> —
@@ -852,7 +852,7 @@
 
 <!-- numeric.js para solver (Fase 2+) -->
 <script src="lib/numeric.js"></script>
-<script type="module" src="js/app.js?v=65"></script>
+<script type="module" src="js/app.js?v=66"></script>
 
 <!-- PWA: registrar el service worker (offline). Solo en contexto seguro
      (https o localhost); el navegador deja navigator.serviceWorker undefined

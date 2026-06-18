@@ -130,8 +130,13 @@ export class Viewport {
     this._controls.enableDamping  = true;
     this._controls.dampingFactor  = 0.08;
     this._controls.screenSpacePanning = true;
-    this._controls.zoomSpeed      = 1.2;
-    this._controls.mouseButtons   = { LEFT: THREE.MOUSE.LEFT, MIDDLE: THREE.MOUSE.DOLLY, RIGHT: THREE.MOUSE.ROTATE };
+    this._controls.zoomSpeed      = 1.4;
+    this._controls.enableZoom     = true;
+    this._controls.enablePan      = true;
+    // 3D: izq=orbitar, der=panear, medio=zoom. (En 2D se cambia a paneo con la izq.)
+    this._MB_3D = { LEFT: THREE.MOUSE.ROTATE, MIDDLE: THREE.MOUSE.DOLLY, RIGHT: THREE.MOUSE.PAN };
+    this._MB_2D = { LEFT: THREE.MOUSE.PAN,    MIDDLE: THREE.MOUSE.DOLLY, RIGHT: THREE.MOUSE.PAN };
+    this._controls.mouseButtons   = this._MB_3D;
 
     // Grid (Three.js XZ plane = model XY floor)
     this._buildGrid();
@@ -869,9 +874,11 @@ export class Viewport {
       this._setProjection('ortho');
       this._fitOrtho('y', 0);
       this._controls.enableRotate = false;
+      this._controls.mouseButtons = this._MB_2D;   // arrastrar con la izq = panear
     } else if (!this._elevation) {
       this._setProjection('persp');
       this._controls.enableRotate = true;
+      this._controls.mouseButtons = this._MB_3D;
     }
     this.refreshElevationOptions();
   }
@@ -887,11 +894,13 @@ export class Viewport {
       this._setProjection('ortho');
       this._fitOrtho(this._elevation.axis === 'x' ? 'x' : 'y', this._elevation.coord);
       this._controls.enableRotate = false;
+      this._controls.mouseButtons = this._MB_2D;   // paneo con la izq en vista plana
       this.app.toast(
         `Elevación ${this._elevation.name}: solo se muestra ese plano; los nodos nuevos caen en él. Seleccione "Vista 3D" para volver.`, 'ok');
     } else {
       this._setProjection('persp');
       this._controls.enableRotate = true;
+      this._controls.mouseButtons = this._MB_3D;
       this.setView('iso');
     }
     this._applyElevationFilter();
@@ -959,6 +968,13 @@ export class Viewport {
     const mX = Math.max((xHi - xLo) * 0.08, 0.8);
     const mY = Math.max((yHi - yLo) * 0.08, 0.8);
 
+    // Tamaños PROPORCIONALES al modelo: etiquetas de grilla y triada de ejes
+    // dejan de verse gigantes en estructuras pequeñas/planas (cerchas, vigas).
+    const span = Math.max(b.max.x - b.min.x, b.max.y - b.min.y, b.max.z - b.min.z, 1);
+    const ls   = Math.min(Math.max(span * 0.028, 0.16), 0.9);   // alto de etiqueta
+    const off  = ls * 1.4;                                       // separación etiqueta–línea
+    this._axesGroup?.scale.setScalar(Math.min(Math.max(span * 0.10, 0.9), 5) / 2.5);
+
     const lineMat = new THREE.LineDashedMaterial({ color: 0x44506a, dashSize: 0.35, gapSize: 0.22 });
     const addLine = (p1, p2) => {
       const geo = new THREE.BufferGeometry().setFromPoints([p1, p2]);
@@ -969,7 +985,7 @@ export class Viewport {
     const addLbl = (text, pos) => {
       const sp = this._makeIdSprite(text, '#9ab2d4');
       sp.position.copy(pos);
-      sp.scale.set(0.95, 0.42, 1);
+      sp.scale.set(ls * 2.2, ls, 1);
       g.add(sp);
     };
     const letter = i => {
@@ -981,17 +997,17 @@ export class Viewport {
     // Ejes X (A, B, C…): líneas paralelas a Y global en planta (z = zLo)
     xs.forEach((x, i) => {
       addLine(this.m2t(x, yLo - mY, zLo), this.m2t(x, yHi + mY, zLo));
-      addLbl(letter(i), this.m2t(x, yLo - mY - 0.5, zLo));
+      addLbl(letter(i), this.m2t(x, yLo - mY - off, zLo));
     });
     // Ejes Y (1, 2, 3…): líneas paralelas a X global en planta
     ys.forEach((y, i) => {
       addLine(this.m2t(xLo - mX, y, zLo), this.m2t(xHi + mX, y, zLo));
-      addLbl(String(i + 1), this.m2t(xLo - mX - 0.5, y, zLo));
+      addLbl(String(i + 1), this.m2t(xLo - mX - off, y, zLo));
     });
     // Niveles Z: líneas horizontales en el plano X–Z (y = yLo) + etiqueta de cota
     zs.forEach(z => {
       addLine(this.m2t(xLo - mX, yLo, z), this.m2t(xHi + mX, yLo, z));
-      addLbl(`+${+z.toFixed(2)}`, this.m2t(xLo - mX - 0.6, yLo, z));
+      addLbl(`+${+z.toFixed(2)}`, this.m2t(xLo - mX - off, yLo, z));
     });
 
     this._scene.add(g);
@@ -2572,35 +2588,51 @@ export class Viewport {
     this._loadObjects = [];
   }
 
+  // Mostrar / ocultar las flechas de carga (toggle desde la UI).
+  setLoadsVisible(v) {
+    this._loadsVisible = !!v;
+    this.app.refreshLoads?.();
+    return this._loadsVisible;
+  }
+  toggleLoads() { return this.setLoadsVisible(!(this._loadsVisible !== false)); }
+
   showLoads(model, lcId) {
     this.clearLoads();
+    if (this._loadsVisible === false) return;     // ocultas por el usuario
     const lc = model.loadCases.get(lcId);
     if (!lc || lc.loads.length === 0) return;
 
     const b    = model.getBounds();
     const span = Math.max(b.max.x - b.min.x, b.max.y - b.min.y, b.max.z - b.min.z, 1);
-    const baseLen = span * 0.28;
+    // Longitud de flecha PROPORCIONAL y acotada: nunca más de ~7% del modelo, así
+    // no tapan la estructura (antes 0.28·span las hacía gigantes en cerchas).
+    const maxLen = span * 0.07;
+    const minLen = span * 0.02;
 
     // Find max force magnitude for proportional scaling
-    let maxF = 0;
+    let maxF = 0, nDist = 0;
     for (const ld of lc.loads) {
       if (ld.type === 'nodal') {
         const mag = Math.hypot(ld.F[0], ld.F[1], ld.F[2]);
         if (mag > maxF) maxF = mag;
       } else if (ld.type === 'dist') {
+        nDist++;
         if (Math.abs(ld.w) > maxF) maxF = Math.abs(ld.w);
       }
     }
     if (maxF < 1e-30) return;
 
     const addArrow = (dir3, origin, frac, color) => {
-      const len = Math.max(0.04, baseLen * frac);
-      const hl  = len * 0.28;
-      const hw  = len * 0.14;
+      const len = Math.min(maxLen, Math.max(minLen, maxLen * frac));
+      const hl  = len * 0.30;
+      const hw  = len * 0.16;
       const arrow = new THREE.ArrowHelper(dir3.clone().normalize(), origin, len, color, hl, hw);
       this._scene.add(arrow);
       this._loadObjects.push(arrow);
     };
+    // Densidad de flechas por elemento adaptada al nº de cargas (evita la maraña
+    // cuando hay muchos elementos cargados, p.ej. tras discretizar o en cerchas).
+    const perElem = nDist > 30 ? 1 : nDist > 12 ? 2 : 4;
 
     // Model-direction → Three.js direction (m2t for vectors: x→x, y→z, z→y)
     const dirMap = {
