@@ -1,8 +1,8 @@
 // ──────────────────────────────────────────────────────────────────────────────
 // PropertiesPanel — right-side panel: node/element properties + mat/sec tabs
 // ──────────────────────────────────────────────────────────────────────────────
-import { computeFloorCR, computeFloorCM, computeTributaryWeights } from '../solver/diaphragm.js?v=59';
-import { localAxes } from '../solver/timoshenko.js?v=59';
+import { computeFloorCR, computeFloorCM, computeTributaryWeights } from '../solver/diaphragm.js?v=60';
+import { localAxes } from '../solver/timoshenko.js?v=60';
 
 export class PropertiesPanel {
   constructor(panelEl, app) {
@@ -216,14 +216,58 @@ export class PropertiesPanel {
       }
     }
 
-    // ── Acciones masivas sobre los elementos seleccionados ───────────────────
+    // ── Acciones masivas ──────────────────────────────────────────────────────
     if (elems.length > 0) html += this._accionesSelHTML(elems);
-    // ── Grupos guardados ──────────────────────────────────────────────────────
+    if (nodes.length > 0) html += this._accionesNodosHTML(nodes);
+    html += this._transformHTML(items.length);
     html += this._gruposHTML();
 
     this._tabContents.sel.innerHTML = html;
     if (elems.length > 0) this._bindAccionesSel(elems.map(e => e.id));
+    if (nodes.length > 0) this._bindAccionesNodos();
+    this._bindTransform();
     this._bindGrupos();
+  }
+
+  _accionesNodosHTML(nodes) {
+    return `
+      <div class="prop-section" style="border:1px solid var(--node-col);border-radius:6px;padding:8px;margin-top:8px">
+        <div class="prop-title" style="color:var(--node-col);margin-top:0">Apoyo · ${nodes.length} nodo(s)</div>
+        <div style="display:flex;gap:6px;flex-wrap:wrap">
+          <button class="btn-secondary nod-sup" data-p="empotrado" style="flex:1;font-size:11px" title="Fija las 6 GDL">Empotrado</button>
+          <button class="btn-secondary nod-sup" data-p="rotulado" style="flex:1;font-size:11px" title="Fija traslaciones, libera giros">Rótula</button>
+          <button class="btn-secondary nod-sup" data-p="rodillo" style="flex:1;font-size:11px" title="Solo vertical (Uz)">Rodillo</button>
+          <button class="btn-secondary nod-sup" data-p="libre" style="flex:1;font-size:11px" title="Sin apoyo">Libre</button>
+        </div>
+      </div>`;
+  }
+  _bindAccionesNodos() {
+    this._tabContents.sel.querySelectorAll('.nod-sup').forEach(b => b.addEventListener('click', () => this.app.setSupportSelectedNodes(b.dataset.p)));
+  }
+
+  // Mover / Copiar (array lineal) — sirve para nodos y elementos.
+  _transformHTML(n) {
+    return `
+      <div class="prop-section" style="border:1px solid var(--teal);border-radius:6px;padding:8px;margin-top:8px">
+        <div class="prop-title" style="color:var(--teal);margin-top:0">Mover / Copiar selección</div>
+        <div class="prop-row cols3" style="margin-bottom:6px">
+          <div class="prop-field"><label>dX (m)</label><input type="number" id="tr-dx" value="0" step="0.5"></div>
+          <div class="prop-field"><label>dY (m)</label><input type="number" id="tr-dy" value="0" step="0.5"></div>
+          <div class="prop-field"><label>dZ (m)</label><input type="number" id="tr-dz" value="0" step="0.5"></div>
+        </div>
+        <div class="prop-row" style="align-items:flex-end;gap:6px">
+          <div class="prop-field" style="width:96px"><label>Repeticiones</label><input type="number" id="tr-rep" value="1" min="1" step="1"></div>
+          <button class="btn-secondary" id="tr-copy" style="flex:1;font-size:11px" title="Crea copias desplazadas (array lineal)">Copiar ×N</button>
+          <button class="btn-secondary" id="tr-move" style="flex:1;font-size:11px" title="Desplaza la selección">Mover</button>
+        </div>
+        <p class="panel-hint" style="margin:6px 0 0">Ej.: dX=5, repeticiones=10 → 10 copias cada 5 m. Copias coincidentes se fusionan.</p>
+      </div>`;
+  }
+  _bindTransform() {
+    const $ = (i) => this._tabContents.sel.querySelector(i);
+    const vals = () => [parseFloat($('#tr-dx').value), parseFloat($('#tr-dy').value), parseFloat($('#tr-dz').value)];
+    $('#tr-copy')?.addEventListener('click', () => { const [x, y, z] = vals(); this.app.copiarSeleccion(x, y, z, parseInt($('#tr-rep').value, 10)); });
+    $('#tr-move')?.addEventListener('click', () => { const [x, y, z] = vals(); this.app.moverSeleccion(x, y, z); });
   }
 
   // HTML de acciones masivas para N elementos seleccionados.

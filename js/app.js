@@ -1,21 +1,21 @@
 // ──────────────────────────────────────────────────────────────────────────────
 // App — main orchestrator
 // ──────────────────────────────────────────────────────────────────────────────
-import { Model }           from './model/model.js?v=59';
-import { Serializer }      from './model/serializer.js?v=59';
-import { Viewport }        from './ui/viewport.js?v=59';
-import { PropertiesPanel } from './ui/properties.js?v=59';
-import { MenuBar }         from './ui/menu.js?v=59';
-import { UndoStack }       from './utils/undo.js?v=59';
-import { StaticSolver, ensureDefaultLC }   from './solver/static_solver.js?v=59';
-import { Results }                         from './solver/postprocess.js?v=59';
-import { ModalSolver }                     from './solver/modal_solver.js?v=59';
-import { buildNodeIndex, assembleK, getNodeDOFs } from './solver/assembler.js?v=59';
-import { ModalResults }                    from './solver/modal_results.js?v=59';
-import { SpectrumSolver }                  from './solver/spectrum_solver.js?v=59';
-import { autoDetectDiaphragms, computeFloorCR } from './solver/diaphragm.js?v=59';
-import { splitElement, splitByLength, discretizeAll, joinElements, intersectarElementos } from './model/discretize.js?v=59';
-import { localAxes, stiffnessMatrix, massMatrix, transformMatrix, globalStiffness, applyReleases } from './solver/timoshenko.js?v=59';
+import { Model }           from './model/model.js?v=60';
+import { Serializer }      from './model/serializer.js?v=60';
+import { Viewport }        from './ui/viewport.js?v=60';
+import { PropertiesPanel } from './ui/properties.js?v=60';
+import { MenuBar }         from './ui/menu.js?v=60';
+import { UndoStack }       from './utils/undo.js?v=60';
+import { StaticSolver, ensureDefaultLC }   from './solver/static_solver.js?v=60';
+import { Results }                         from './solver/postprocess.js?v=60';
+import { ModalSolver }                     from './solver/modal_solver.js?v=60';
+import { buildNodeIndex, assembleK, getNodeDOFs } from './solver/assembler.js?v=60';
+import { ModalResults }                    from './solver/modal_results.js?v=60';
+import { SpectrumSolver }                  from './solver/spectrum_solver.js?v=60';
+import { autoDetectDiaphragms, computeFloorCR } from './solver/diaphragm.js?v=60';
+import { splitElement, splitByLength, discretizeAll, joinElements, intersectarElementos } from './model/discretize.js?v=60';
+import { localAxes, stiffnessMatrix, massMatrix, transformMatrix, globalStiffness, applyReleases } from './solver/timoshenko.js?v=60';
 
 class App {
   constructor() {
@@ -316,6 +316,67 @@ class App {
   ocultarGrupo(nombre) { const g = this.grupos().get(nombre); if (!g) return; this.viewport.hideElements([...g]); this.toast(`Grupo "${nombre}" oculto`, 'ok'); }
   mostrarGrupo(nombre) { const g = this.grupos().get(nombre); if (!g) return; this.viewport.showElements([...g]); this.toast(`Grupo "${nombre}" mostrado`, 'ok'); }
   eliminarGrupo(nombre) { this.grupos().delete(nombre); this.toast(`Grupo "${nombre}" eliminado`, 'ok'); this.panel.showSelection(this.viewport.getSelected()); }
+
+  // ── Acciones masivas sobre NODOS ────────────────────────────────────────────
+  _selNodes() { return this.viewport.getSelected().filter(s => s.type === 'node').map(s => s.id); }
+  setSupportSelectedNodes(preset) {
+    const ids = this._selNodes(); if (!ids.length) { this.toast('Seleccione nodos', 'warn'); return; }
+    const R = preset === 'empotrado' ? { ux: 1, uy: 1, uz: 1, rx: 1, ry: 1, rz: 1 }
+      : preset === 'rotulado' ? { ux: 1, uy: 1, uz: 1, rx: 0, ry: 0, rz: 0 }
+      : preset === 'rodillo' ? { ux: 0, uy: 0, uz: 1, rx: 0, ry: 0, rz: 0 }
+      : { ux: 0, uy: 0, uz: 0, rx: 0, ry: 0, rz: 0 };
+    this.snapshot();
+    for (const id of ids) { this.model.updateNode(id, { restraints: { ...R } }); this.viewport.refreshNode(this.model.nodes.get(id)); }
+    this.markDirty(); this._updateStats();
+    this.toast(`Apoyo "${preset}" aplicado a ${ids.length} nodo(s)`, 'ok');
+    this.panel.showSelection(this.viewport.getSelected());
+  }
+
+  // ── Mover / Copiar (array lineal) la selección ──────────────────────────────
+  _nodosDeSeleccion() {
+    const set = new Set(this._selNodes());
+    for (const id of this._selElems()) { const e = this.model.elements.get(id); if (e) { set.add(e.n1); set.add(e.n2); } }
+    return set;
+  }
+  moverSeleccion(dx, dy, dz) {
+    dx = +dx || 0; dy = +dy || 0; dz = +dz || 0;
+    if (!(dx || dy || dz)) { this.toast('Indique un desplazamiento (dX, dY o dZ)', 'warn'); return; }
+    const ids = this._nodosDeSeleccion(); if (!ids.size) { this.toast('Seleccione nodos o elementos para mover', 'warn'); return; }
+    this.snapshot();
+    for (const id of ids) { const n = this.model.nodes.get(id); this.model.updateNode(id, { x: n.x + dx, y: n.y + dy, z: n.z + dz }); }
+    this.viewport.renderModel(this.model); this.refreshLoads(); this.markDirty(); this._updateStats();
+    this.toast(`${ids.size} nodo(s) movidos (${dx}, ${dy}, ${dz})`, 'ok');
+  }
+  copiarSeleccion(dx, dy, dz, reps) {
+    dx = +dx || 0; dy = +dy || 0; dz = +dz || 0; reps = Math.max(1, Math.round(reps || 1));
+    if (!(dx || dy || dz)) { this.toast('Indique un desplazamiento (dX, dY o dZ) ≠ 0', 'warn'); return; }
+    const elems = this._selElems().map(id => this.model.elements.get(id)).filter(Boolean);
+    const nodeIds = this._nodosDeSeleccion(); if (!nodeIds.size) { this.toast('Seleccione nodos o elementos para copiar', 'warn'); return; }
+    this.snapshot();
+    const rk = (v) => Math.round(v * 1e4) / 1e4, key = (x, y, z) => `${rk(x)}|${rk(y)}|${rk(z)}`;
+    const coordIdx = new Map(); for (const n of this.model.nodes.values()) coordIdx.set(key(n.x, n.y, n.z), n.id);
+    const getOrAdd = (x, y, z, src) => {
+      const k = key(x, y, z); if (coordIdx.has(k)) return coordIdx.get(k);
+      const nn = this.model.addNode(rk(x), rk(y), rk(z), src ? { ...src.restraints } : {});
+      if (src) this.model.updateNode(nn.id, { springs: { ...src.springs } });
+      coordIdx.set(k, nn.id); return nn.id;
+    };
+    const pares = new Set(); for (const e of this.model.elements.values()) pares.add(`${Math.min(e.n1, e.n2)}-${Math.max(e.n1, e.n2)}`);
+    let nEl = 0;
+    for (let r = 1; r <= reps; r++) {
+      const ox = dx * r, oy = dy * r, oz = dz * r, map = new Map();
+      for (const nid of nodeIds) { const n = this.model.nodes.get(nid); map.set(nid, getOrAdd(n.x + ox, n.y + oy, n.z + oz, n)); }
+      for (const e of elems) {
+        const a = map.get(e.n1), b = map.get(e.n2); if (a == null || b == null || a === b) continue;
+        const pk = `${Math.min(a, b)}-${Math.max(a, b)}`; if (pares.has(pk)) continue; pares.add(pk);
+        const ne = this.model.addElement(a, b, e.matId, e.secId);
+        if (ne && e.releases && e.releases.some(x => x)) this.model.updateElement(ne.id, { releases: [...e.releases] });
+        if (ne) nEl++;
+      }
+    }
+    this.viewport.renderModel(this.model); this.refreshLoads(); this.viewport.clearSelection(); this.panel.showNothing(); this.markDirty(); this._updateStats();
+    this.toast(`Copiado ×${reps}: +${nEl} elemento(s)`, 'ok');
+  }
 
   async discretizeAllDialog() {
     if (this.model.elements.size === 0) { this.toast('No hay elementos', 'warn'); return; }
@@ -2025,6 +2086,12 @@ class App {
       let parsed = null;
       try { parsed = JSON.parse(text); } catch {}
       this.model = this.serializer.fromJSON(text);
+      // Grupos y ocultos guardados en el archivo (estado de vista).
+      this._grupos = new Map((parsed && Array.isArray(parsed.grupos) ? parsed.grupos : [])
+        .map((g) => [g.name, new Set((g.elems || []).filter((id) => this.model.elements.has(id)))]));
+      this.viewport.clearHidden();
+      if (parsed && Array.isArray(parsed.ocultos))
+        this.viewport._hiddenElems = new Set(parsed.ocultos.filter((id) => this.model.elements.has(id)));
       this.viewport._elevation = null;          // la elevación es por sesión
       this._refreshDiaphragmCRs();   // P1-2: fix stale CR/masterId from saved files
       this.undoStack.clear();
@@ -2165,7 +2232,7 @@ class App {
     this._showProgress('Generando el modelo…', 'Aplicando reglas y cargas normativas');
     try {
       const libs = await this._cargarBibliotecasAsistente();
-      const { generarModelo } = await import('../asistente/generador.js?v=59');
+      const { generarModelo } = await import('../asistente/generador.js?v=60');
       const modelo = generarModelo(ficha, libs);
       this._loadJSON(JSON.stringify(modelo), (ficha.proyecto || 'asistente') + '.s3d');
       this.markDirty();
@@ -2386,9 +2453,14 @@ class App {
   // los resultados del análisis embebidos, para reabrir el archivo "ya corrido".
   _fullSaveJSON() {
     const modelJSON = this._modelJSONForSave();
-    if (!this._hasSavableResults()) return modelJSON;
-    try {
-      const obj = JSON.parse(modelJSON);
+    let obj;
+    try { obj = JSON.parse(modelJSON); } catch { return modelJSON; }
+    // Grupos y elementos ocultos (estado de vista) — persisten en el .s3d.
+    if (this._grupos && this._grupos.size)
+      obj.grupos = [...this._grupos].map(([name, set]) => ({ name, elems: [...set] }));
+    if (this.viewport?.hiddenCount?.())
+      obj.ocultos = [...this.viewport._hiddenElems];
+    if (this._hasSavableResults()) {
       obj.results = {
         sig:          this._resultsCache.sig,
         autoDisc:     !!this._resultsCache.autoDisc,
@@ -2397,8 +2469,8 @@ class App {
         savedAt:      new Date().toISOString(),
         cases:        this._resultsCache.cases,
       };
-      return JSON.stringify(obj, null, 2);
-    } catch { return modelJSON; }
+    }
+    return (obj.grupos || obj.ocultos || obj.results) ? JSON.stringify(obj, null, 2) : modelJSON;
   }
 
   _saveToastMsg() {
