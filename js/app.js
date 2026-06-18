@@ -1,21 +1,21 @@
 // ──────────────────────────────────────────────────────────────────────────────
 // App — main orchestrator
 // ──────────────────────────────────────────────────────────────────────────────
-import { Model }           from './model/model.js?v=61';
-import { Serializer }      from './model/serializer.js?v=61';
-import { Viewport }        from './ui/viewport.js?v=61';
-import { PropertiesPanel } from './ui/properties.js?v=61';
-import { MenuBar }         from './ui/menu.js?v=61';
-import { UndoStack }       from './utils/undo.js?v=61';
-import { StaticSolver, ensureDefaultLC }   from './solver/static_solver.js?v=61';
-import { Results }                         from './solver/postprocess.js?v=61';
-import { ModalSolver }                     from './solver/modal_solver.js?v=61';
-import { buildNodeIndex, assembleK, getNodeDOFs } from './solver/assembler.js?v=61';
-import { ModalResults }                    from './solver/modal_results.js?v=61';
-import { SpectrumSolver }                  from './solver/spectrum_solver.js?v=61';
-import { autoDetectDiaphragms, computeFloorCR } from './solver/diaphragm.js?v=61';
-import { splitElement, splitByLength, discretizeAll, joinElements, intersectarElementos } from './model/discretize.js?v=61';
-import { localAxes, stiffnessMatrix, massMatrix, transformMatrix, globalStiffness, applyReleases } from './solver/timoshenko.js?v=61';
+import { Model }           from './model/model.js?v=62';
+import { Serializer }      from './model/serializer.js?v=62';
+import { Viewport }        from './ui/viewport.js?v=62';
+import { PropertiesPanel } from './ui/properties.js?v=62';
+import { MenuBar }         from './ui/menu.js?v=62';
+import { UndoStack }       from './utils/undo.js?v=62';
+import { StaticSolver, ensureDefaultLC }   from './solver/static_solver.js?v=62';
+import { Results }                         from './solver/postprocess.js?v=62';
+import { ModalSolver }                     from './solver/modal_solver.js?v=62';
+import { buildNodeIndex, assembleK, getNodeDOFs } from './solver/assembler.js?v=62';
+import { ModalResults }                    from './solver/modal_results.js?v=62';
+import { SpectrumSolver }                  from './solver/spectrum_solver.js?v=62';
+import { autoDetectDiaphragms, computeFloorCR } from './solver/diaphragm.js?v=62';
+import { splitElement, splitByLength, discretizeAll, joinElements, intersectarElementos } from './model/discretize.js?v=62';
+import { localAxes, stiffnessMatrix, massMatrix, transformMatrix, globalStiffness, applyReleases } from './solver/timoshenko.js?v=62';
 
 class App {
   constructor() {
@@ -1697,7 +1697,19 @@ class App {
           this.toast('El espectro necesita al menos 2 puntos (T,Sa)', 'error');
           resolve(null); return;
         }
-        resolve({ spectrum, saFactor: factor, direction: dir, zeta, method, rawText });
+        // Parámetros NCh433/DS61 con que se construyó la curva (para la memoria de cálculo).
+        const su = SUELOS[$('sp-suelo').value];
+        const TstarV = parseFloat($('sp-Tstar').value);
+        const RoV = parseFloat($('sp-Ro').value) || 11;
+        const RstarV = (TstarV > 0) ? 1 + TstarV / (0.10 * su.To + TstarV / RoV) : 1;
+        const nch433 = {
+          zona: $('sp-zona').value, suelo: $('sp-suelo').value, cat: $('sp-cat').value,
+          Ao: AO[$('sp-zona').value], I: CAT[$('sp-cat').value],
+          S: su.S, To: su.To, p: su.p, Ro: RoV,
+          Tstar: TstarV > 0 ? TstarV : null, Rstar: RstarV,
+          unidadSa: $('sp-unit').options[$('sp-unit').selectedIndex]?.text || '',
+        };
+        resolve({ spectrum, saFactor: factor, direction: dir, zeta, method, rawText, nch433 });
       };
       overlay._reject = () => resolve(null);
     });
@@ -2293,7 +2305,7 @@ class App {
     this._showProgress('Generando el modelo…', 'Aplicando reglas y cargas normativas');
     try {
       const libs = await this._cargarBibliotecasAsistente();
-      const { generarModelo } = await import('../asistente/generador.js?v=61');
+      const { generarModelo } = await import('../asistente/generador.js?v=62');
       const modelo = generarModelo(ficha, libs);
       this._loadJSON(JSON.stringify(modelo), (ficha.proyecto || 'asistente') + '.s3d');
       this.markDirty();
@@ -2724,6 +2736,276 @@ class App {
     a.download = `structweb3d_${new Date().toISOString().slice(0,19).replace(/[T:]/g,'-')}.png`;
     a.click();
     this.toast('Imagen exportada', 'ok');
+  }
+
+  // ── Memoria / Bases de Cálculo (documento imprimible a PDF) ─────────────────
+  async generarBasesCalculo() {
+    if (this.model.nodes.size === 0) {
+      this.toast('Modelo vacío — nada que documentar', 'warn'); return;
+    }
+    this.toast('Generando memoria de cálculo…');
+    let imgs = { base: null, deformada: null, modos: [] };
+    try { imgs = await this._capturarVistasMemoria(); }
+    catch (e) { console.error('Captura de vistas falló:', e); }
+
+    const html = this._memoriaHTML(imgs);
+
+    const win = window.open('', '_blank');
+    if (!win) {
+      this._downloadText(html, 'memoria_calculo.html', 'text/html;charset=utf-8');
+      this.toast('Pop-up bloqueado — memoria descargada como HTML', 'warn');
+      return;
+    }
+    win.document.open();
+    win.document.write(html);
+    win.document.close();
+    this.toast('Memoria generada — use «Imprimir → Guardar como PDF»', 'ok');
+  }
+
+  // Captura base, deformada y hasta 3 modos, y restaura la vista del usuario.
+  async _capturarVistasMemoria() {
+    const vp  = this.viewport;
+    const out = { base: null, deformada: null, modos: [] };
+    const hadResults     = !!this._results;
+    const hadModal       = !!this._modalResults;
+    const prevMode       = this._modalMode;
+    const prevType       = document.getElementById('result-type')?.value || 'deformed';
+    const modalVisible   = !document.getElementById('modal-analysis-overlay')?.classList.contains('hidden');
+    const resultsVisible = !document.getElementById('results-overlay')?.classList.contains('hidden');
+    const frame = () => new Promise(r => requestAnimationFrame(() => r()));
+
+    vp.setView('iso');
+
+    // Modelo base (sin deformada ni modos)
+    vp.clearResults();
+    await frame();
+    out.base = vp.snapshot();
+
+    // Deformada (si hay resultados estáticos)
+    if (hadResults) {
+      vp.showDeformed(this._results, null);
+      await frame();
+      out.deformada = vp.snapshot();
+    }
+
+    // Hasta 3 modos de vibrar (si hay análisis modal)
+    if (hadModal) {
+      const mr = this._modalResults;
+      const b  = this.model.getBounds();
+      const span = Math.max(b.max.x - b.min.x, b.max.y - b.min.y, b.max.z - b.min.z, 1);
+      const n = Math.min(3, mr.nModes);
+      for (let i = 0; i < n; i++) {
+        vp.showModeShape(mr, i, span / 5);
+        await frame();
+        out.modos.push({ n: i + 1, freq: mr.freq[i], period: mr.period[i], img: vp.snapshot() });
+      }
+    }
+
+    // Restaurar lo que el usuario tenía en pantalla
+    vp.clearResults();
+    if (hadModal && modalVisible) {
+      document.getElementById('modal-analysis-overlay')?.classList.remove('hidden');
+      this._modalMode = prevMode;
+      this._refreshModalView();
+    } else if (hadResults && resultsVisible) {
+      const s = document.getElementById('result-type'); if (s) s.value = prevType;
+      document.getElementById('results-overlay')?.classList.remove('hidden');
+      this._refreshResultView();
+    }
+    return out;
+  }
+
+  _memoriaHTML(imgs) {
+    const m = this.model;
+    const esc = (s) => String(s ?? '').replace(/[&<>"]/g, c => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;' }[c]));
+    const fmt = (v, d = 3) => (v == null || !isFinite(v)) ? '—'
+      : (Math.abs(v) >= 1e5 || (Math.abs(v) > 0 && Math.abs(v) < 1e-3) ? (+v).toExponential(2) : (+v).toFixed(d));
+    const proyecto = (document.title || '').replace(/^●\s*/, '').replace(/\s*—\s*PÓRTICO.*$/i, '').trim() || 'Modelo sin título';
+    const fecha = new Date().toLocaleString('es-CL');
+    const U = m.units || 'kN-m';
+
+    // ── Materiales ──────────────────────────────────────────────────────────
+    const matRows = [...m.materials.values()].map(mt => `<tr>
+      <td>${esc(mt.name)}</td><td>${fmt(mt.E,0)}</td><td>${fmt(mt.G,0)}</td>
+      <td>${fmt(mt.nu,2)}</td><td>${fmt(mt.rho,3)}</td></tr>`).join('') || '<tr><td colspan="5">Sin materiales</td></tr>';
+
+    // ── Secciones (con conteo de elementos que la usan) ─────────────────────
+    const secCount = new Map();
+    for (const el of m.elements.values()) secCount.set(el.secId, (secCount.get(el.secId) || 0) + 1);
+    const secRows = [...m.sections.values()].map(s => `<tr>
+      <td>${esc(s.name)}</td><td>${fmt(s.A,5)}</td><td>${fmt(s.Iy,6)}</td><td>${fmt(s.Iz,6)}</td>
+      <td>${fmt(s.J,6)}</td><td>${fmt(s.Avy,5)}</td><td>${fmt(s.Avz,5)}</td>
+      <td>${secCount.get(s.id) || 0}</td></tr>`).join('') || '<tr><td colspan="8">Sin secciones</td></tr>';
+
+    // ── Clasificación de casos y cargas ─────────────────────────────────────
+    const tipoCaso = (lc) => {
+      if (lc.type === 'spectrum') return 'Sísmica (espectro)';
+      const n = (lc.name || '').toLowerCase();
+      if (/vient|wind/.test(n)) return 'Viento';
+      if (/niev|snow/.test(n)) return 'Nieve';
+      if (/sism|seism|\bsx\b|\bsy\b|\beq\b/.test(n)) return 'Sísmica';
+      if (/sobre|live|\bcv\b|uso/.test(n)) return 'Sobrecarga de uso';
+      if (/event|acc/.test(n)) return 'Eventual';
+      if (/perm|muert|\bcm\b|dead|propio/.test(n) || lc.selfWeight) return 'Permanente';
+      return 'Carga';
+    };
+    const dirLabel = { gravity:'Gravedad ↓ (−Z)', globalX:'Global +X', globalY:'Global +Y',
+      globalZ:'Global +Z', localY:'Local y', localZ:'Local z', x:'Global +X', y:'Global +Y', z:'Global +Z' };
+
+    const casosStatic = [...m.loadCases.values()].filter(lc => lc.type !== 'spectrum');
+    const cargasHTML = casosStatic.map(lc => {
+      const loadRows = (lc.loads || []).map(ld => {
+        if (ld.type === 'nodal') {
+          const [Fx,Fy,Fz,Mx,My,Mz] = ld.F || [];
+          return `<tr><td>Puntual</td><td>Nodo ${ld.nodeId}</td><td>—</td>
+            <td>F=(${fmt(Fx,2)}, ${fmt(Fy,2)}, ${fmt(Fz,2)}) kN · M=(${fmt(Mx,2)}, ${fmt(My,2)}, ${fmt(Mz,2)}) kN·m</td></tr>`;
+        }
+        return `<tr><td>Distribuida</td><td>Elem ${ld.elemId}</td>
+          <td>${esc(dirLabel[ld.dir] || ld.dir || 'Gravedad')}</td><td>w = ${fmt(ld.w,2)} kN/m</td></tr>`;
+      }).join('');
+      const cuerpo = loadRows || `<tr><td colspan="4" class="muted">${lc.selfWeight ? 'Solo peso propio' : 'Sin cargas asignadas'}</td></tr>`;
+      return `<h3>${esc(lc.name)} <span class="tag">${tipoCaso(lc)}</span>${lc.selfWeight ? ' <span class="tag tag-pp">+ peso propio</span>' : ''}</h3>
+        <table><thead><tr><th>Tipo</th><th>Aplicada en</th><th>Dirección</th><th>Valor</th></tr></thead>
+        <tbody>${cuerpo}</tbody></table>`;
+    }).join('') || '<p class="muted">No hay casos de carga estáticos definidos.</p>';
+
+    // ── Sísmico (espectros con sus parámetros NCh433/DS61) ──────────────────
+    let sismoHTML = '';
+    const espectros = [...this._spectrumResults.values()].filter(e => e?.params);
+    if (espectros.length) {
+      sismoHTML = espectros.map(({ params: p }) => {
+        const k = p.nch433 || {};
+        const tabla = `<table><tbody>
+          <tr><th>Dirección sísmica</th><td>${esc(p.direction)}</td><th>Método combinación</th><td>${esc(p.method)}</td></tr>
+          <tr><th>Zona sísmica</th><td>${esc(k.zona ?? '—')} (A₀ = ${fmt(k.Ao,2)} g)</td><th>Tipo de suelo</th><td>${esc(k.suelo ?? '—')} (S=${fmt(k.S,2)}, T₀=${fmt(k.To,2)}, p=${fmt(k.p,2)})</td></tr>
+          <tr><th>Categoría de importancia</th><td>${esc(k.cat ?? '—')} (I = ${fmt(k.I,2)})</td><th>Amortiguamiento ζ</th><td>${fmt(p.zeta,2)}</td></tr>
+          <tr><th>R₀</th><td>${fmt(k.Ro,1)}</td><th>R* / T*</th><td>R*=${fmt(k.Rstar,3)} ${k.Tstar ? `(T*=${fmt(k.Tstar,3)} s)` : '(elástico)'}</td></tr>
+        </tbody></table>`;
+        return `<h3>Espectro de respuesta — dirección ${esc(p.direction)}</h3>
+          ${tabla}
+          <div class="spec-graph">${this._memoriaEspectroSVG(p.spectrum)}</div>
+          <p class="muted">Sa(T) = S·A₀·I·α(T)/R* (NCh433 / DS61). Unidad de Sa: ${esc(k.unidadSa || 'g')}.</p>`;
+      }).join('');
+    } else {
+      sismoHTML = '<p class="muted">No se ha ejecutado un análisis de espectro de respuesta. ' +
+        'Ejecute «Análisis → Espectro de Respuesta (F7)» para documentar zona sísmica, suelo, importancia y el espectro de diseño.</p>';
+    }
+
+    // ── Modal (3 modos) ─────────────────────────────────────────────────────
+    let modalHTML = '';
+    if (this._modalResults) {
+      const { rows } = this._modalResults.getParticipation();
+      const partRows = rows.slice(0, Math.max(3, Math.min(rows.length, 12))).map(r => `<tr>
+        <td>${r.mode}</td><td>${fmt(r.freq,3)}</td><td>${fmt(r.period,3)}</td>
+        <td>${fmt(r.pct[0],1)}</td><td>${fmt(r.pct[1],1)}</td><td>${fmt(r.pct[2],1)}</td>
+        <td>${fmt(r.cumPct[0],1)}</td><td>${fmt(r.cumPct[1],1)}</td><td>${fmt(r.cumPct[2],1)}</td></tr>`).join('');
+      const modeImgs = imgs.modos.map(md => `<figure>
+        <img src="${md.img}" alt="Modo ${md.n}">
+        <figcaption>Modo ${md.n} — f = ${fmt(md.freq,3)} Hz · T = ${fmt(md.period,3)} s</figcaption></figure>`).join('');
+      modalHTML = `
+        <p>Modos extraídos: ${this._modalResults.nModes}. Frecuencias y períodos de los primeros modos:</p>
+        <table><thead><tr><th>Modo</th><th>f (Hz)</th><th>T (s)</th>
+          <th>Mx (%)</th><th>My (%)</th><th>Mrz (%)</th><th>ΣMx</th><th>ΣMy</th><th>ΣMrz</th></tr></thead>
+          <tbody>${partRows}</tbody></table>
+        <p class="muted">Mx/My/Mrz = masa modal participante (%). Σ = acumulada.</p>
+        ${modeImgs ? `<div class="figrow">${modeImgs}</div>` : ''}`;
+    } else {
+      modalHTML = '<p class="muted">No se ha ejecutado el análisis modal. Ejecute «Análisis → Análisis Modal (F6)» para documentar los modos de vibrar.</p>';
+    }
+
+    // ── Imágenes del modelo ─────────────────────────────────────────────────
+    const figBase = imgs.base ? `<figure><img src="${imgs.base}" alt="Modelo base"><figcaption>Modelo estructural (geometría base)</figcaption></figure>` : '';
+    const figDef  = imgs.deformada ? `<figure><img src="${imgs.deformada}" alt="Deformada"><figcaption>Deformada (resultado estático)</figcaption></figure>`
+      : '<p class="muted">Deformada no disponible — ejecute el análisis estático (F5).</p>';
+
+    const s = m.getStats();
+    return `<!DOCTYPE html><html lang="es"><head><meta charset="utf-8">
+<title>Bases de Cálculo — ${esc(proyecto)}</title>
+<style>
+  :root{--ink:#1b2533;--mut:#5c6a7d;--bd:#cdd6e3;--ac:#0e7fc0;--head:#0a3a57;}
+  *{box-sizing:border-box;}
+  body{font-family:'Segoe UI',system-ui,sans-serif;color:var(--ink);margin:0;padding:32px 40px;font-size:12px;line-height:1.5;}
+  h1{font-size:22px;color:var(--head);margin:0 0 2px;}
+  h2{font-size:15px;color:var(--head);border-bottom:2px solid var(--ac);padding-bottom:3px;margin:26px 0 10px;}
+  h3{font-size:13px;color:var(--head);margin:16px 0 6px;}
+  .sub{color:var(--mut);font-size:12px;margin:0 0 4px;}
+  table{width:100%;border-collapse:collapse;margin:6px 0 12px;font-size:11px;}
+  th,td{border:1px solid var(--bd);padding:4px 7px;text-align:left;}
+  th{background:#eef3f9;color:var(--head);font-weight:600;}
+  td{font-variant-numeric:tabular-nums;}
+  .muted{color:var(--mut);font-style:italic;}
+  .tag{display:inline-block;background:var(--ac);color:#fff;font-size:9px;padding:1px 7px;border-radius:9px;vertical-align:middle;font-weight:600;}
+  .tag-pp{background:#15803d;}
+  figure{margin:8px 0;text-align:center;}
+  img{max-width:100%;border:1px solid var(--bd);border-radius:6px;background:#f6f8fb;}
+  figcaption{color:var(--mut);font-size:10px;margin-top:3px;}
+  .figrow{display:flex;flex-wrap:wrap;gap:10px;}
+  .figrow figure{flex:1 1 30%;min-width:200px;margin:4px 0;}
+  .spec-graph{border:1px solid var(--bd);border-radius:6px;padding:6px;background:#f6f8fb;max-width:480px;}
+  .hdr{display:flex;justify-content:space-between;align-items:flex-end;border-bottom:3px solid var(--head);padding-bottom:8px;}
+  .meta{text-align:right;color:var(--mut);font-size:11px;}
+  .print-btn{position:fixed;top:12px;right:12px;background:var(--ac);color:#fff;border:none;padding:8px 16px;border-radius:6px;font-size:13px;cursor:pointer;box-shadow:0 2px 8px rgba(0,0,0,.2);}
+  @media print{.print-btn{display:none;} h2{break-after:avoid;} table,figure{break-inside:avoid;} body{padding:0;}}
+</style></head><body>
+<button class="print-btn" onclick="window.print()">🖨 Imprimir / Guardar PDF</button>
+<div class="hdr">
+  <div><h1>Bases de Cálculo Estructural</h1><p class="sub">PÓRTICO — Análisis estructural 3D</p></div>
+  <div class="meta">Proyecto: <b>${esc(proyecto)}</b><br>${esc(fecha)}<br>Unidades: ${esc(U.replace('-',' — '))}</div>
+</div>
+
+<h2>1. Descripción del modelo</h2>
+<table><tbody>
+  <tr><th>Nodos</th><td>${s.nodes}</td><th>Elementos</th><td>${s.elements}</td></tr>
+  <tr><th>Materiales</th><td>${s.materials}</td><th>Secciones</th><td>${s.sections}</td></tr>
+  <tr><th>Modo del proyecto</th><td>${esc(m.mode || '3D')}</td><th>Casos de carga</th><td>${m.loadCases.size}</td></tr>
+</tbody></table>
+${figBase}
+
+<h2>2. Materiales y propiedades</h2>
+<table><thead><tr><th>Material</th><th>E (kN/m²)</th><th>G (kN/m²)</th><th>ν</th><th>ρ (t/m³)</th></tr></thead>
+<tbody>${matRows}</tbody></table>
+
+<h2>3. Secciones de los elementos</h2>
+<table><thead><tr><th>Sección</th><th>A (m²)</th><th>Iy (m⁴)</th><th>Iz (m⁴)</th><th>J (m⁴)</th><th>Avy (m²)</th><th>Avz (m²)</th><th># elem</th></tr></thead>
+<tbody>${secRows}</tbody></table>
+
+<h2>4. Cargas</h2>
+${cargasHTML}
+
+<h2>5. Acción sísmica</h2>
+${sismoHTML}
+
+<h2>6. Modelo deformado</h2>
+${figDef}
+
+<h2>7. Análisis modal — modos de vibrar</h2>
+${modalHTML}
+
+<p class="muted" style="margin-top:24px;border-top:1px solid var(--bd);padding-top:8px">
+  Documento generado automáticamente por PÓRTICO. Las propiedades y resultados corresponden al estado del modelo al momento de la generación.
+  Cargas de viento, nieve y sobrecargas se representan como casos de carga; verifique su clasificación según la normativa aplicable.</p>
+</body></html>`;
+  }
+
+  // SVG del espectro Sa(T) para la memoria de cálculo.
+  _memoriaEspectroSVG(pts) {
+    if (!Array.isArray(pts) || pts.length < 2) return '<p class="muted">Sin curva.</p>';
+    const W = 460, H = 220, ml = 46, mr = 12, mt = 12, mb = 30;
+    const Tmax = Math.max(...pts.map(p => p.T)) || 1;
+    const Smax = Math.max(...pts.map(p => p.Sa)) || 1;
+    const sx = t => ml + (t / Tmax) * (W - ml - mr);
+    const sy = s => H - mb - (s / Smax) * (H - mt - mb);
+    const poly = pts.map(p => `${sx(p.T).toFixed(1)},${sy(p.Sa).toFixed(1)}`).join(' ');
+    const gx = [0,0.25,0.5,0.75,1].map(f => { const t=+(f*Tmax).toFixed(2);
+      return `<line x1="${sx(t)}" y1="${mt}" x2="${sx(t)}" y2="${H-mb}" stroke="#dde5ef"/><text x="${sx(t)}" y="${H-10}" fill="#5c6a7d" font-size="9" text-anchor="middle">${t}</text>`; }).join('');
+    const gy = [0,0.25,0.5,0.75,1].map(f => { const sv=+(f*Smax).toFixed(3);
+      return `<line x1="${ml}" y1="${sy(sv)}" x2="${W-mr}" y2="${sy(sv)}" stroke="#dde5ef"/><text x="${ml-5}" y="${sy(sv)+3}" fill="#5c6a7d" font-size="9" text-anchor="end">${sv}</text>`; }).join('');
+    return `<svg viewBox="0 0 ${W} ${H}" style="width:100%;height:auto">
+      ${gy}${gx}
+      <polyline points="${poly}" fill="none" stroke="#0e7fc0" stroke-width="2"/>
+      <text x="${ml}" y="${mt-1}" fill="#5c6a7d" font-size="9">Sa</text>
+      <text x="${W-mr}" y="${H-2}" fill="#5c6a7d" font-size="9" text-anchor="end">T (s)</text>
+    </svg>`;
   }
 
   // ── Toast notifications ────────────────────────────────────────────────────

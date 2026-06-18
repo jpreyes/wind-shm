@@ -9,7 +9,7 @@
 // Al subir la versión de la app, suba también CACHE_VERSION para forzar una
 // limpieza completa de la caché antigua en la próxima visita en línea.
 // ──────────────────────────────────────────────────────────────────────────────
-const CACHE_VERSION = 'v61';
+const CACHE_VERSION = 'v62';
 const CACHE = `portico-${CACHE_VERSION}`;
 
 // Núcleo mínimo para que la app arranque aunque sea la primera vez sin red.
@@ -19,9 +19,9 @@ const SHELL = [
   './',
   './index.html',
   './manifest.webmanifest',
-  './style.css?v=61',
-  './ui-v2.css?v=61',
-  './js/app.js?v=61',
+  './style.css?v=62',
+  './ui-v2.css?v=62',
+  './js/app.js?v=62',
   './lib/numeric.js',
   './icons/icon.svg',
   './icons/icon-192.png',

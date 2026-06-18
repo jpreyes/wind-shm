@@ -1660,6 +1660,13 @@ export class Viewport {
   }
 
   zoomExtents() { this.setView('iso'); }
+
+  // Render the current scene and return it as a PNG data URL (para la memoria de cálculo).
+  snapshot() {
+    this._renderer.render(this._scene, this._camera);
+    return this._renderer.domElement.toDataURL('image/png');
+  }
+
   toggleGrid()  { this._grid.visible = !this._grid.visible; }
   toggleAxes()  { this._axesGroup.visible = !this._axesGroup.visible; }
 

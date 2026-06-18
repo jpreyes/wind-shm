@@ -725,19 +725,20 @@ html, body { height: 100%; overflow: hidden; background: var(--bg); color: var(-
 }
 #results-overlay .vp-ctrl { pointer-events: all; }
 #results-overlay select, #results-overlay input {
-  background: rgba(13,17,23,0.9);
+  background: var(--glass);
   border: 1px solid var(--success);
   color: var(--text);
   padding: 3px 6px;
   border-radius: var(--radius);
   font-size: 12px;
+  backdrop-filter: blur(4px);
 }
 #results-overlay.hidden { display: none; }
 
 #result-summary {
   display: flex;
   align-items: center;
-  background: rgba(13,17,23,0.85);
+  background: var(--glass);
   border: 1px solid var(--border2);
   border-radius: var(--radius);
   padding: 3px 10px;

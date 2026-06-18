@@ -29,8 +29,8 @@
       window.dispatchEvent(new Event('pwa-installed'));
     });
   </script>
-  <link rel="stylesheet" href="style.css?v=61">
-  <link rel="stylesheet" href="ui-v2.css?v=61">
+  <link rel="stylesheet" href="style.css?v=62">
+  <link rel="stylesheet" href="ui-v2.css?v=62">
   <script type="importmap">
   {
     "imports": {
@@ -125,6 +125,8 @@
           <li data-action="export-results">Exportar Resultados Estáticos</li>
           <li data-action="export-modal">Exportar Resultados Modales</li>
           <li data-action="export-spectrum">Exportar Resultados Espectrales</li>
+          <li class="sep"></li>
+          <li data-action="bases-calculo">📄 Memoria / Bases de Cálculo…</li>
           <li class="sep"></li>
           <li data-action="clear-results">Limpiar Resultados</li>
         </ul>
@@ -304,7 +306,7 @@
         <div id="result-summary"></div>
         <!-- P2-4: Colorbar -->
         <div id="colorbar-wrap" style="display:none;margin-top:4px;padding:4px 8px;
-            background:rgba(13,17,23,0.82);border:1px solid var(--border);
+            background:var(--glass);border:1px solid var(--border);
             border-radius:var(--radius);backdrop-filter:blur(4px)">
           <canvas id="colorbar-canvas" width="150" height="14"
             style="border-radius:3px;display:block"></canvas>
@@ -653,7 +655,7 @@
           <div>
             <h2 style="margin:0">PÓRTICO</h2>
             <p style="margin:2px 0 0;color:var(--text-muted)">Laboratorio virtual de análisis estructural 3D
-              · <b id="help-version">versión 61</b> · junio 2026</p>
+              · <b id="help-version">versión 62</b> · junio 2026</p>
           </div>
         </div>
         <p><b>Material docente</b> desarrollado por el <b>Dr. Juan Patricio Reyes C.</b> —
@@ -850,7 +852,7 @@
 
 <!-- numeric.js para solver (Fase 2+) -->
 <script src="lib/numeric.js"></script>
-<script type="module" src="js/app.js?v=61"></script>
+<script type="module" src="js/app.js?v=62"></script>
 
 <!-- PWA: registrar el service worker (offline). Solo en contexto seguro
      (https o localhost); el navegador deja navigator.serviceWorker undefined

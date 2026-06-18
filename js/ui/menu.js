@@ -101,6 +101,7 @@ export class MenuBar {
       case 'export-results': a.exportResults();              break;
       case 'export-modal':   a.exportModalResults();         break;
       case 'export-spectrum': a.exportSpectrumResults();     break;
+      case 'bases-calculo':  a.generarBasesCalculo();        break;
       case 'clear-results':  a.clearResults();               break;
     }
   }
