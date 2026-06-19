@@ -432,6 +432,13 @@ html, body { height: 100%; overflow: hidden; background: var(--bg); color: var(-
 :root[data-theme="dark"] .dc-warn { color: #fbbf24; }
 :root[data-theme="dark"] .dc-bad { color: #f87171; }
 
+/* ── Todas las cargas de un elemento/nodo ────────────────────── */
+.loads-all { margin: 8px 0; border: 1px solid var(--border); border-radius: 6px; }
+.loads-all > summary { cursor: pointer; padding: 6px 9px; font-size: 12px; font-weight: 600; color: var(--accent); }
+.loads-all-tbl { width: 100%; border-collapse: collapse; font-size: 10.5px; }
+.loads-all-tbl th, .loads-all-tbl td { border-top: 1px solid var(--border); padding: 3px 7px; text-align: left; vertical-align: top; }
+.loads-all-tbl th { background: var(--bg4); color: var(--text-muted); font-weight: 600; }
+
 .panel-hint {
   color: var(--text-muted);
   font-size: 12px;

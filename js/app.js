@@ -1,21 +1,21 @@
 // ──────────────────────────────────────────────────────────────────────────────
 // App — main orchestrator
 // ──────────────────────────────────────────────────────────────────────────────
-import { Model }           from './model/model.js?v=69';
-import { Serializer }      from './model/serializer.js?v=69';
-import { Viewport }        from './ui/viewport.js?v=69';
-import { PropertiesPanel } from './ui/properties.js?v=69';
-import { MenuBar }         from './ui/menu.js?v=69';
-import { UndoStack }       from './utils/undo.js?v=69';
-import { StaticSolver, ensureDefaultLC }   from './solver/static_solver.js?v=69';
-import { Results }                         from './solver/postprocess.js?v=69';
-import { ModalSolver }                     from './solver/modal_solver.js?v=69';
-import { buildNodeIndex, assembleK, getNodeDOFs } from './solver/assembler.js?v=69';
-import { ModalResults }                    from './solver/modal_results.js?v=69';
-import { SpectrumSolver }                  from './solver/spectrum_solver.js?v=69';
-import { autoDetectDiaphragms, computeFloorCR } from './solver/diaphragm.js?v=69';
-import { splitElement, splitByLength, discretizeAll, joinElements, intersectarElementos } from './model/discretize.js?v=69';
-import { localAxes, stiffnessMatrix, massMatrix, transformMatrix, globalStiffness, applyReleases } from './solver/timoshenko.js?v=69';
+import { Model }           from './model/model.js?v=71';
+import { Serializer }      from './model/serializer.js?v=71';
+import { Viewport }        from './ui/viewport.js?v=71';
+import { PropertiesPanel } from './ui/properties.js?v=71';
+import { MenuBar }         from './ui/menu.js?v=71';
+import { UndoStack }       from './utils/undo.js?v=71';
+import { StaticSolver, ensureDefaultLC }   from './solver/static_solver.js?v=71';
+import { Results }                         from './solver/postprocess.js?v=71';
+import { ModalSolver }                     from './solver/modal_solver.js?v=71';
+import { buildNodeIndex, assembleK, getNodeDOFs } from './solver/assembler.js?v=71';
+import { ModalResults }                    from './solver/modal_results.js?v=71';
+import { SpectrumSolver }                  from './solver/spectrum_solver.js?v=71';
+import { autoDetectDiaphragms, computeFloorCR } from './solver/diaphragm.js?v=71';
+import { splitElement, splitByLength, discretizeAll, joinElements, intersectarElementos } from './model/discretize.js?v=71';
+import { localAxes, stiffnessMatrix, massMatrix, transformMatrix, globalStiffness, applyReleases } from './solver/timoshenko.js?v=71';
 
 class App {
   constructor() {
@@ -32,6 +32,7 @@ class App {
     this._modalMode       = 0;      // currently displayed mode index (0-based)
     this._modalPlaying    = false;  // animation running?
     this._activeLcId      = null;   // active load case ID
+    this._config          = this._loadConfig();   // configuración de la app (memoria, visual, modificadores)
 
     // UI components
     this.viewport = new Viewport(
@@ -107,6 +108,7 @@ class App {
       this.viewport.setElevation({ axis, coord, name: opt ? opt.textContent : v });
     });
     document.getElementById('btn-toggle-ids')?.addEventListener('click', () => this.viewport.toggleIds());
+    document.getElementById('btn-config')?.addEventListener('click', () => this.configDialog());
     document.getElementById('btn-toggle-extrude')?.addEventListener('click', () => this.viewport.toggleExtruded());
     document.getElementById('btn-export-img')?.addEventListener('click', () => this.exportViewportPNG());
 
@@ -1587,6 +1589,13 @@ class App {
     // T* fundamental sugerido desde el análisis modal (si está disponible)
     const Tstar0 = this._modalResults?.period?.[0]
       ? this._modalResults.period[0].toFixed(3) : '';
+    // Selector de período: lista de modos del análisis modal o valor arbitrario.
+    const periodos = this._modalResults?.period || [];
+    const tmodeSelect = periodos.length
+      ? `<select id="sp-Tmode" style="width:100%;margin-bottom:3px">
+          <option value="__arb">Período arbitrario (escribir ↓)</option>
+          ${periodos.slice(0, 20).map((T, i) => `<option value="${(+T).toFixed(4)}" ${i === 0 ? 'selected' : ''}>Modo ${i + 1} — T = ${(+T).toFixed(3)} s</option>`).join('')}
+         </select>` : '';
 
     return new Promise(resolve => {
       const overlay = document.getElementById('modal-overlay');
@@ -1630,7 +1639,7 @@ class App {
   </div>
   <div class="prop-row cols3" style="margin-bottom:8px">
     <div class="prop-field"><label>Ro</label><input type="number" id="sp-Ro" value="11" step="0.5" min="1"></div>
-    <div class="prop-field"><label>T* (s) — del modal</label><input type="number" id="sp-Tstar" value="${Tstar0}" step="0.01" min="0" placeholder="opcional"></div>
+    <div class="prop-field"><label>T* (s) — período fundamental</label>${tmodeSelect}<input type="number" id="sp-Tstar" value="${Tstar0}" step="0.01" min="0" placeholder="período en s"></div>
     <div class="prop-field"><label>&nbsp;</label><button type="button" id="sp-gen" class="btn" style="width:100%">Generar curva</button></div>
   </div>
   <small id="sp-rstar" style="color:var(--text-muted);display:block">Sa(T)=S·Ao·I·α(T)/R*. Si T* está vacío, R*=1 (espectro elástico).</small>
@@ -1696,6 +1705,11 @@ class App {
 
       $('sp-gen').addEventListener('click', genNCh433);
       $('sp-spectrum').addEventListener('input', drawGraph);
+      // Selector de período (modo del análisis modal → rellena T*)
+      $('sp-Tmode')?.addEventListener('change', (e) => {
+        const v = e.target.value;
+        if (v && v !== '__arb') { $('sp-Tstar').value = v; if ($('sp-spectrum').value.trim()) genNCh433(); }
+      });
       drawGraph();
 
       overlay.classList.remove('hidden');
@@ -2334,7 +2348,7 @@ class App {
     this._showProgress('Generando el modelo…', 'Aplicando reglas y cargas normativas');
     try {
       const libs = await this._cargarBibliotecasAsistente();
-      const { generarModelo } = await import('../asistente/generador.js?v=69');
+      const { generarModelo } = await import('../asistente/generador.js?v=71');
       const modelo = generarModelo(ficha, libs);
 
       if (modo === 'sobreponer') {
@@ -2396,6 +2410,104 @@ class App {
         this.toast('Gracias — registrado como «no era lo solicitado»', 'ok');
       } catch (e) { this.toast('No se pudo enviar el feedback: ' + e.message, 'warn'); }
     };
+  }
+
+  // ── Configuración de la aplicación (persistida en localStorage) ─────────────
+  _defaultConfig() {
+    return {
+      memoria: {
+        titulo: 'Memoria de Cálculo',
+        kicker: 'ANÁLISIS Y DISEÑO ESTRUCTURAL',
+        institucion: 'UNIVERSIDAD AUSTRAL DE CHILE',
+        subInstitucion: 'Facultad de Ciencias de la Ingeniería · Instituto de Obras Civiles',
+        proyectista: '',
+        revisor: '',
+        descripcion: '',
+        footer: 'Producto académico · IOC · UACh — no sustituye la revisión de un profesional competente',
+        mostrarIds: true,      // mostrar IDs de nodos/elementos en las figuras
+        modosVisibles: true,   // amplificar las formas modales para que se noten
+      },
+      seccion_mod_default: { A: 1, Iy: 1, Iz: 1, J: 1 },
+    };
+  }
+  _loadConfig() {
+    const def = this._defaultConfig();
+    try {
+      const raw = JSON.parse(localStorage.getItem('portico_config') || '{}');
+      return {
+        memoria: { ...def.memoria, ...(raw.memoria || {}) },
+        seccion_mod_default: { ...def.seccion_mod_default, ...(raw.seccion_mod_default || {}) },
+      };
+    } catch { return def; }
+  }
+  _saveConfig() { try { localStorage.setItem('portico_config', JSON.stringify(this._config)); } catch (e) {} }
+
+  configDialog() {
+    const mm = this._config.memoria, sd = this._config.seccion_mod_default;
+    const overlay = document.getElementById('modal-overlay');
+    const ea = s => String(s ?? '').replace(/"/g, '&quot;');
+    document.getElementById('modal-title').textContent = '⚙ Configuración';
+    document.getElementById('modal-box')?.classList.add('modal-wide');
+    document.getElementById('modal-cancel').style.display = '';
+    document.getElementById('modal-body').innerHTML = `
+      <div style="display:flex;flex-direction:column;gap:14px;font-size:13px">
+        <fieldset style="border:1px solid var(--border);border-radius:6px;padding:10px 12px">
+          <legend style="padding:0 6px;color:var(--accent)">Memoria de cálculo — encabezado</legend>
+          <div class="prop-row cols2" style="gap:8px">
+            <div class="prop-field"><label>Título</label><input id="cfg-titulo" value="${ea(mm.titulo)}"></div>
+            <div class="prop-field"><label>Subtítulo (kicker)</label><input id="cfg-kicker" value="${ea(mm.kicker)}"></div>
+          </div>
+          <div class="prop-row cols2" style="gap:8px;margin-top:6px">
+            <div class="prop-field"><label>Institución</label><input id="cfg-inst" value="${ea(mm.institucion)}"></div>
+            <div class="prop-field"><label>Sub-institución / unidad</label><input id="cfg-subinst" value="${ea(mm.subInstitucion)}"></div>
+          </div>
+          <div class="prop-row cols2" style="gap:8px;margin-top:6px">
+            <div class="prop-field"><label>Proyectista</label><input id="cfg-proy" value="${ea(mm.proyectista)}"></div>
+            <div class="prop-field"><label>Revisó</label><input id="cfg-rev" value="${ea(mm.revisor)}"></div>
+          </div>
+          <div class="prop-field" style="margin-top:6px"><label>Descripción del proyecto</label>
+            <textarea id="cfg-desc" rows="3" style="width:100%">${ea(mm.descripcion)}</textarea></div>
+          <div class="prop-field" style="margin-top:6px"><label>Pie de página</label><input id="cfg-footer" value="${ea(mm.footer)}"></div>
+        </fieldset>
+        <fieldset style="border:1px solid var(--border);border-radius:6px;padding:10px 12px">
+          <legend style="padding:0 6px;color:var(--accent)">Visualización de la memoria</legend>
+          <label style="display:block;margin-bottom:5px"><input type="checkbox" id="cfg-ids" ${mm.mostrarIds ? 'checked' : ''}> Mostrar IDs de nodos y elementos en las figuras</label>
+          <label style="display:block"><input type="checkbox" id="cfg-modos" ${mm.modosVisibles ? 'checked' : ''}> Amplificar las formas modales para que se observen</label>
+        </fieldset>
+        <fieldset style="border:1px solid var(--border);border-radius:6px;padding:10px 12px">
+          <legend style="padding:0 6px;color:var(--accent)">Modificadores de sección por defecto (rigidez)</legend>
+          <p style="color:var(--text-muted);font-size:11px;margin-bottom:6px">Factores aplicados a A, I, J en el análisis (p.ej. sección agrietada ACI: viga 0.35, columna 0.70). Editables por sección en la pestaña Sec.</p>
+          <div class="prop-row cols4" style="gap:8px">
+            <div class="prop-field"><label>×A</label><input type="number" id="cfg-mA" value="${sd.A}" step="0.05" min="0.01"></div>
+            <div class="prop-field"><label>×Iy</label><input type="number" id="cfg-mIy" value="${sd.Iy}" step="0.05" min="0.01"></div>
+            <div class="prop-field"><label>×Iz</label><input type="number" id="cfg-mIz" value="${sd.Iz}" step="0.05" min="0.01"></div>
+            <div class="prop-field"><label>×J</label><input type="number" id="cfg-mJ" value="${sd.J}" step="0.05" min="0.01"></div>
+          </div>
+          <button type="button" id="cfg-apply-mod" class="btn" style="margin-top:8px">Aplicar estos modificadores a TODAS las secciones</button>
+        </fieldset>
+        <p style="color:var(--text-muted);font-size:11px">Los parámetros de diseño (Fy, f′c, φ, cuantía…) se editan en <code>asistente/diseno_params.json</code>.</p>
+      </div>`;
+    overlay.classList.remove('hidden');
+    document.getElementById('cfg-apply-mod')?.addEventListener('click', () => {
+      const mod = { A: +document.getElementById('cfg-mA').value || 1, Iy: +document.getElementById('cfg-mIy').value || 1,
+        Iz: +document.getElementById('cfg-mIz').value || 1, J: +document.getElementById('cfg-mJ').value || 1 };
+      for (const s of this.model.sections.values()) this.model.updateSection(s.id, { mod: { ...mod } });
+      this.markDirty(); this.panel.renderSections?.();
+      this.toast('Modificadores aplicados a todas las secciones', 'ok');
+    });
+    overlay._resolve = () => {
+      const v = id => document.getElementById(id)?.value ?? '';
+      mm.titulo = v('cfg-titulo'); mm.kicker = v('cfg-kicker'); mm.institucion = v('cfg-inst');
+      mm.subInstitucion = v('cfg-subinst'); mm.proyectista = v('cfg-proy'); mm.revisor = v('cfg-rev');
+      mm.descripcion = v('cfg-desc'); mm.footer = v('cfg-footer');
+      mm.mostrarIds = document.getElementById('cfg-ids')?.checked ?? true;
+      mm.modosVisibles = document.getElementById('cfg-modos')?.checked ?? true;
+      sd.A = +v('cfg-mA') || 1; sd.Iy = +v('cfg-mIy') || 1; sd.Iz = +v('cfg-mIz') || 1; sd.J = +v('cfg-mJ') || 1;
+      this._saveConfig();
+      document.getElementById('modal-box')?.classList.remove('modal-wide');
+      this.toast('Configuración guardada', 'ok');
+    };
+    overlay._reject = () => document.getElementById('modal-box')?.classList.remove('modal-wide');
   }
 
   /** Diálogo de 3 opciones cuando ya existe un modelo al generar desde el asistente. */
@@ -2976,7 +3088,7 @@ class App {
   // Verificación de diseño (flexión/corte/axial) por elemento, usando los
   // resultados actuales y los parámetros editables de asistente/diseno_params.json.
   async _calcularDiseno() {
-    const ver = '?v=69';
+    const ver = '?v=71';
     let params = null;
     try { params = await fetch('asistente/diseno_params.json' + ver).then(r => r.json()); }
     catch (e) { console.error('No se pudo cargar diseno_params.json:', e); return null; }
@@ -2986,35 +3098,78 @@ class App {
     }
     try {
       const mod = await import('./design/diseno.js' + ver);
-      const res = this._results;
-      const maxAbs = (eid, type) => {
+
+      // ── Conjunto de resultados de diseño: ENVOLVENTE sobre combinaciones ──
+      // (las combos son los estados ULS factorizados). Si no hay combos resueltas,
+      // se usan los casos estáticos individuales. _resultsByCase: lcId | 'C'+id.
+      if (!this._resultsByCase) { try { this._reconstructResultsFromCache(); } catch {} }
+      const byCase = this._resultsByCase;
+      const disResults = [];
+      if (byCase) {
+        for (const c of (this.model.combinations?.values() || [])) {
+          const r = byCase.get('C' + c.id); if (r) disResults.push({ nombre: c.name, res: r });
+        }
+        if (!disResults.length) {
+          for (const lc of this.model.loadCases.values()) {
+            if (lc.type === 'spectrum') continue;
+            const r = byCase.get(lc.id); if (r) disResults.push({ nombre: lc.name, res: r });
+          }
+        }
+      }
+      if (!disResults.length) {
+        const key = this._activeResultKey ?? this._activeLcId;
+        const nom = this.model.loadCases.get(key)?.name || this.model.combinations?.get(key)?.name || `caso ${key}`;
+        disResults.push({ nombre: nom, res: this._results });
+      }
+
+      const maxAbs = (res, eid, type) => {
         let d; try { d = res.getDiagramData(eid, type, 12); } catch { return 0; }
         let m = 0;
         for (const p of (d.pts || [])) m = Math.max(m, Math.abs(p.val));
         for (const e of (d.extremes || [])) m = Math.max(m, Math.abs(e.val));
         return m;
       };
+      // Flecha relativa a la cuerda: δ(ξ) = u(ξ) − interp(u1,u2). Máx sobre el vano.
+      const flechaMax = (res, el, L) => {
+        try {
+          const u1 = res.getNodeDisp(el.n1), u2 = res.getNodeDisp(el.n2);
+          if (!u1 || !u2) return 0;
+          let dmax = 0;
+          for (let k = 1; k < 10; k++) {
+            const xi = k / 10, d = res.getElemAtXi(el.id, xi); if (!d) continue;
+            const cx = u1[0] + xi * (u2[0] - u1[0]), cy = u1[1] + xi * (u2[1] - u1[1]), cz = u1[2] + xi * (u2[2] - u1[2]);
+            dmax = Math.max(dmax, Math.hypot(d.ux - cx, d.uy - cy, d.uz - cz));
+          }
+          return dmax;
+        } catch { return 0; }
+      };
+
+      const limFlecha = (params.flechas_admisibles || {}).viga_carga_total_L_sobre || 300;
       const filas = [];
       for (const el of this.model.elements.values()) {
-        const f = res.getElemForces(el.id);
         const sec = this.model.sections.get(el.secId);
         const mat = this.model.materials.get(el.matId);
-        if (!f || !sec || !mat) continue;
-        const fuerzas = {
-          N: (Math.sign(f.N) || 1) * maxAbs(el.id, 'N'),
-          Vy: maxAbs(el.id, 'Vy'), Vz: maxAbs(el.id, 'Vz'),
-          My: maxAbs(el.id, 'My'), Mz: maxAbs(el.id, 'Mz'), L: f.L,
-        };
-        const r = mod.verificarElemento({ fuerzas, sec, matNombre: mat.name, params });
-        filas.push({ id: el.id, mat: mat.name, sec: sec.name, fuerzas, ...r });
+        if (!sec || !mat) continue;
+        let peor = null, peorNom = null, peorFuerzas = null, defMax = 0;
+        for (const { nombre, res } of disResults) {
+          const f = res.getElemForces(el.id); if (!f) continue;
+          const fuerzas = {
+            N: (Math.sign(f.N) || 1) * maxAbs(res, el.id, 'N'),
+            Vy: maxAbs(res, el.id, 'Vy'), Vz: maxAbs(res, el.id, 'Vz'),
+            My: maxAbs(res, el.id, 'My'), Mz: maxAbs(res, el.id, 'Mz'), L: f.L,
+          };
+          const r = mod.verificarElemento({ fuerzas, sec, matNombre: mat.name, params });
+          if (!peor || r.ratioMax > peor.ratioMax) { peor = r; peorNom = nombre; peorFuerzas = fuerzas; }
+          defMax = Math.max(defMax, flechaMax(res, el, f.L));
+        }
+        if (!peor) continue;
+        const L = peorFuerzas.L || 1;
+        const flecha = { delta: defMax, limite: L / limFlecha, ratio: (L / limFlecha) > 1e-9 ? defMax / (L / limFlecha) : 0, Lsobre: limFlecha };
+        const estadoFlecha = flecha.ratio > 1 ? 'NO CUMPLE' : 'cumple';
+        filas.push({ id: el.id, mat: mat.name, sec: sec.name, fuerzas: peorFuerzas, combo: peorNom, flecha, estadoFlecha, ...peor });
       }
-      filas.sort((a, b) => b.ratioMax - a.ratioMax);
-      // Nombre del caso/combo de los resultados mostrados
-      const key = this._activeResultKey ?? this._activeLcId;
-      const lc = this.model.loadCases.get(key);
-      const combo = this.model.combinations?.get(key);
-      const caso = lc?.name || combo?.name || `caso ${key}`;
-      return { filas, params, caso };
+      filas.sort((a, b) => Math.max(b.ratioMax, b.flecha.ratio) - Math.max(a.ratioMax, a.flecha.ratio));
+      return { filas, params, caso: disResults.length > 1 ? `envolvente de ${disResults.length} estados` : disResults[0].nombre, envolvente: disResults.length > 1 };
     } catch (e) { console.error('Diseño falló:', e); return { filas: [], params, caso: null }; }
   }
 
@@ -3029,6 +3184,14 @@ class App {
     const modalVisible   = !document.getElementById('modal-analysis-overlay')?.classList.contains('hidden');
     const resultsVisible = !document.getElementById('results-overlay')?.classList.contains('hidden');
     const frame = () => new Promise(r => requestAnimationFrame(() => r()));
+    const cm = this._config?.memoria || {};
+    const b0  = this.model.getBounds();
+    const span = Math.max(b0.max.x - b0.min.x, b0.max.y - b0.min.y, b0.max.z - b0.min.z, 1);
+
+    // Mostrar IDs de nodos/elementos en las figuras (config)
+    const idsPrev = vp._showIds;
+    if (cm.mostrarIds && !vp._showIds) vp.toggleIds();
+    else if (!cm.mostrarIds && vp._showIds) vp.toggleIds();
 
     vp.setView('iso');
 
@@ -3044,20 +3207,24 @@ class App {
       out.deformada = vp.snapshot();
     }
 
-    // Hasta 3 modos de vibrar (si hay análisis modal)
+    // Hasta 3 modos de vibrar (si hay análisis modal). Escala NORMALIZADA a ~12%
+    // del span para que el modo se observe (antes span/5 quedaba muy chico).
     if (hadModal) {
       const mr = this._modalResults;
-      const b  = this.model.getBounds();
-      const span = Math.max(b.max.x - b.min.x, b.max.y - b.min.y, b.max.z - b.min.z, 1);
       const n = Math.min(3, mr.nModes);
       for (let i = 0; i < n; i++) {
-        vp.showModeShape(mr, i, span / 5);
+        let maxd = 0;
+        try { for (const d of mr.getModeShape(i).values()) maxd = Math.max(maxd, Math.hypot(d[0], d[1], d[2])); } catch {}
+        const base = maxd > 1e-9 ? (span * 0.14) / maxd : span / 5;
+        const scale = cm.modosVisibles !== false ? base : span / 5;
+        vp.showModeShape(mr, i, scale);
         await frame();
         out.modos.push({ n: i + 1, freq: mr.freq[i], period: mr.period[i], img: vp.snapshot() });
       }
     }
 
-    // Restaurar lo que el usuario tenía en pantalla
+    // Restaurar IDs y lo que el usuario tenía en pantalla
+    if (vp._showIds !== idsPrev) vp.toggleIds();
     vp.clearResults();
     if (hadModal && modalVisible) {
       document.getElementById('modal-analysis-overlay')?.classList.remove('hidden');
@@ -3079,6 +3246,7 @@ class App {
     const proyecto = (document.title || '').replace(/^●\s*/, '').replace(/\s*—\s*PÓRTICO.*$/i, '').trim() || 'Modelo sin título';
     const fecha = new Date().toLocaleDateString('es-CL', { year:'numeric', month:'long', day:'numeric' });
     const U = m.units || 'kN-m';
+    const cm = this._config?.memoria || {};
     const clasif = (n) => { n = String(n||'').toLowerCase();
       if (/(horm|concret|h\s*\d|fc)/.test(n)) return 'hormigon';
       if (/(mader|pino|wood|gl\b|lvl|conif)/.test(n)) return 'madera';
@@ -3093,10 +3261,12 @@ class App {
     // ── Secciones (con conteo de elementos que la usan) ─────────────────────
     const secCount = new Map();
     for (const el of m.elements.values()) secCount.set(el.secId, (secCount.get(el.secId) || 0) + 1);
+    const modTxt = (md) => { const o = md || {}; const a=o.A??1,iy=o.Iy??1,iz=o.Iz??1,j=o.J??1;
+      return (a===1&&iy===1&&iz===1&&j===1) ? '—' : `A·${a} Iy·${iy} Iz·${iz} J·${j}`; };
     const secRows = [...m.sections.values()].map(s => `<tr>
       <td>${esc(s.name)}</td><td>${fmt(s.A,5)}</td><td>${fmt(s.Iy,6)}</td><td>${fmt(s.Iz,6)}</td>
       <td>${fmt(s.J,6)}</td><td>${fmt(s.Avy,5)}</td><td>${fmt(s.Avz,5)}</td>
-      <td>${secCount.get(s.id) || 0}</td></tr>`).join('') || '<tr><td colspan="8">Sin secciones</td></tr>';
+      <td>${modTxt(s.mod)}</td><td>${secCount.get(s.id) || 0}</td></tr>`).join('') || '<tr><td colspan="9">Sin secciones</td></tr>';
 
     // ── Clasificación de casos y cargas ─────────────────────────────────────
     const tipoCaso = (lc) => {
@@ -3175,8 +3345,9 @@ class App {
     }
 
     // ── Imágenes del modelo ─────────────────────────────────────────────────
-    const figBase = imgs.base ? `<figure><img src="${imgs.base}" alt="Modelo base"><figcaption>Modelo estructural (geometría base)</figcaption></figure>` : '';
-    const figDef  = imgs.deformada ? `<figure><img src="${imgs.deformada}" alt="Deformada"><figcaption>Deformada (resultado estático)</figcaption></figure>`
+    const idsNota = cm.mostrarIds ? ' — con IDs de nodos y elementos' : '';
+    const figBase = imgs.base ? `<figure><img src="${imgs.base}" alt="Modelo base"><figcaption>Modelo estructural (geometría base${idsNota})</figcaption></figure>` : '';
+    const figDef  = imgs.deformada ? `<figure><img src="${imgs.deformada}" alt="Deformada"><figcaption>Deformada (resultado estático${idsNota})</figcaption></figure>`
       : '<p class="muted">Deformada no disponible — ejecute el análisis estático (F5).</p>';
 
     const s = m.getStats();
@@ -3226,59 +3397,67 @@ class App {
     const rClass = r => r > 1.0 ? 'r-bad' : r > 0.9 ? 'r-warn' : 'r-ok';
     if (diseno && diseno.filas && diseno.filas.length) {
       const f = diseno.filas;
-      const nOk = f.filter(x => x.estado === 'cumple').length;
-      const nAj = f.filter(x => x.estado === 'ajustado').length;
-      const nNo = f.filter(x => x.estado === 'NO CUMPLE').length;
+      const frr = x => x.flecha?.ratio ?? 0;
+      const malo = x => x.ratioMax > 1 || frr(x) > 1;
+      const aj   = x => !malo(x) && (x.ratioMax > 0.9 || frr(x) > 0.9);
+      const nNo = f.filter(malo).length;
+      const nAj = f.filter(aj).length;
+      const nOk = f.length - nNo - nAj;
       const top = f.slice(0, 60);
       const rows = top.map(x => `<tr>
-        <td>#${x.id}</td><td>${esc(x.sec)}</td><td>${esc(x.mat)}</td>
+        <td>#${x.id}</td><td>${esc(x.sec)}</td><td>${esc(x.mat)}</td><td title="${esc(x.combo||'')}">${esc((x.combo||'').slice(0,14))}</td>
         <td>${fmt(x.fuerzas.N,1)}</td><td>${fmt(Math.max(x.fuerzas.My,x.fuerzas.Mz),1)}</td><td>${fmt(Math.max(x.fuerzas.Vy,x.fuerzas.Vz),1)}</td>
         <td class="${rClass(x.flexion.ratio)}">${fmt(x.flexion.ratio,2)}</td>
         <td class="${rClass(x.corte.ratio)}">${fmt(x.corte.ratio,2)}</td>
         <td class="${rClass(x.axial.ratio)}">${fmt(x.axial.ratio,2)}</td>
+        <td class="${rClass(x.interaccion?.ratio)}">${fmt(x.interaccion?.ratio,2)}</td>
         <td>${x.gobierna}</td>
         <td class="${rClass(x.ratioMax)}"><b>${fmt(x.ratioMax,2)}</b></td>
-        <td class="${rClass(x.ratioMax)}">${x.estado}</td></tr>`).join('');
+        <td class="${rClass(frr(x))}">${fmt(frr(x),2)}</td>
+        <td class="${malo(x)?'r-bad':aj(x)?'r-warn':'r-ok'}">${malo(x)?'NO CUMPLE':aj(x)?'ajustado':'cumple'}</td></tr>`).join('');
       disenoHTML = `
-        <p>Verificación de los elementos para los esfuerzos del caso/combinación <b>«${esc(diseno.caso||'activo')}»</b>.
-        La razón <b>D/C = demanda/capacidad</b> debe ser ≤ 1.0. Parámetros en <code>asistente/diseno_params.json</code>.</p>
-        <table style="font-size:10px"><thead><tr>
-          <th>Elem</th><th>Sección</th><th>Material</th><th>N (kN)</th><th>M (kN·m)</th><th>V (kN)</th>
-          <th>D/C flex.</th><th>D/C corte</th><th>D/C axial</th><th>Gobierna</th><th>D/C máx</th><th>Estado</th>
+        <p>Verificación por <b>${diseno.envolvente ? 'envolvente de las combinaciones de carga' : `el estado «${esc(diseno.caso||'activo')}»`}</b>:
+        para cada elemento se reporta la combinación más desfavorable. La razón <b>D/C = demanda/capacidad</b> (resistencia)
+        y la <b>flecha δ</b> (servicio, vs L/${(dp?.flechas_admisibles?.viga_carga_total_L_sobre)||300}) deben ser ≤ 1.0.
+        Parámetros en <code>asistente/diseno_params.json</code>.</p>
+        <table style="font-size:9.5px"><thead><tr>
+          <th>Elem</th><th>Sección</th><th>Material</th><th>Combo</th><th>N (kN)</th><th>M (kN·m)</th><th>V (kN)</th>
+          <th>flex.</th><th>corte</th><th>axial</th><th>interac.</th><th>Gobierna</th><th>D/C máx</th><th>δ</th><th>Estado</th>
         </tr></thead><tbody>${rows}</tbody></table>
         <p class="muted">${f.length > 60 ? `Se muestran los 60 elementos más solicitados de ${f.length}. ` : ''}
         Resumen: <b class="r-ok">${nOk} cumplen</b> · <b class="r-warn">${nAj} ajustados</b> · <b class="r-bad">${nNo} no cumplen</b>.
-        Colores: verde ≤ 0.90 · ámbar 0.90–1.00 · rojo &gt; 1.00.</p>`;
+        D/C: flexión/corte/axial e interacción flexo-axial. δ = flecha relativa máxima respecto a la luz. Colores: verde ≤ 0.90 · ámbar 0.90–1.00 · rojo &gt; 1.00.</p>`;
     } else {
-      disenoHTML = '<p class="muted">No hay resultados de análisis para verificar. Ejecute el análisis estático (F5) y, si corresponde, seleccione la combinación última gobernante antes de generar la memoria.</p>';
+      disenoHTML = '<p class="muted">No hay resultados de análisis para verificar. Ejecute el análisis estático (F5) con sus combinaciones de carga antes de generar la memoria.</p>';
     }
 
-    // ── Portada (estilo institucional, como la portada de la app) ────────────
+    // ── Portada (estilo institucional, configurable) ────────────────────────
     const portada = `<section class="cover">
-      <div class="cover-inst">UNIVERSIDAD AUSTRAL DE CHILE<br><span>Facultad de Ciencias de la Ingeniería · Instituto de Obras Civiles</span></div>
+      <div class="cover-inst">${esc(cm.institucion || 'UNIVERSIDAD AUSTRAL DE CHILE')}<br><span>${esc(cm.subInstitucion || 'Facultad de Ciencias de la Ingeniería · Instituto de Obras Civiles')}</span></div>
       <svg class="cover-frame" viewBox="0 0 360 200" aria-hidden="true">
         <path d="M60 175 V55 H300 V175" fill="none" stroke="#0a3a57" stroke-width="4" stroke-linecap="round"/>
         <path d="M46 188 L74 188 L60 175 Z" fill="#0d9488"/><path d="M286 188 L314 188 L300 175 Z" fill="#0d9488"/>
         <path d="M44 188 H76 M284 188 H316" stroke="#0a3a57" stroke-width="2"/>
         <circle cx="60" cy="55" r="5" fill="#0e7fc0"/><circle cx="300" cy="55" r="5" fill="#0e7fc0"/>
       </svg>
-      <div class="cover-kicker">ANÁLISIS Y DISEÑO ESTRUCTURAL</div>
-      <h1 class="cover-title">Memoria de Cálculo</h1>
+      <div class="cover-kicker">${esc(cm.kicker || 'ANÁLISIS Y DISEÑO ESTRUCTURAL')}</div>
+      <h1 class="cover-title">${esc(cm.titulo || 'Memoria de Cálculo')}</h1>
       <div class="cover-proj">${esc(proyecto)}</div>
       <div class="cover-badge">Producto académico — generado con PÓRTICO, laboratorio virtual de análisis estructural 3D (IOC · UACh)</div>
       <table class="cover-meta"><tbody>
         <tr><th>Proyecto</th><td>${esc(proyecto)}</td></tr>
         <tr><th>Fecha</th><td>${esc(fecha)}</td></tr>
         <tr><th>Unidades</th><td>${esc(U.replace('-',' · '))}</td></tr>
-        <tr><th>Proyectista</th><td>&nbsp;</td></tr>
-        <tr><th>Revisó</th><td>&nbsp;</td></tr>
+        <tr><th>Proyectista</th><td>${esc(cm.proyectista) || '&nbsp;'}</td></tr>
+        <tr><th>Revisó</th><td>${esc(cm.revisor) || '&nbsp;'}</td></tr>
       </tbody></table>
       <p class="cover-note">Documento de carácter docente. Los resultados deben ser validados por un profesional competente antes de cualquier uso en obra.</p>
     </section>`;
+    const descripcionHTML = cm.descripcion ? `<p>${esc(cm.descripcion)}</p>` : '';
 
     return `<!DOCTYPE html><html lang="es"><head><meta charset="utf-8">
 <base href="${esc(location.origin)}/">
-<title>Memoria de Cálculo — ${esc(proyecto)}</title>
+<title>${esc(cm.titulo || 'Memoria de Cálculo')} — ${esc(proyecto)}</title>
 <style>
   :root{--ink:#1b2533;--mut:#5c6a7d;--bd:#cdd6e3;--ac:#0e7fc0;--head:#0a3a57;--teal:#0d9488;}
   *{box-sizing:border-box;}
@@ -3319,8 +3498,8 @@ class App {
   @media print{.print-btn{display:none;} h2{break-after:avoid;} table,figure{break-inside:avoid;} body{padding:0 40px 64px;}}
 </style></head><body>
 <button class="print-btn" onclick="window.print()">🖨 Imprimir / Guardar PDF</button>
-<div class="page-footer"><span><b>PÓRTICO</b> · Memoria de Cálculo — ${esc(proyecto)}</span>
-  <span>Producto académico · IOC · UACh — no sustituye la revisión de un profesional competente</span>
+<div class="page-footer"><span><b>PÓRTICO</b> · ${esc(cm.titulo || 'Memoria de Cálculo')} — ${esc(proyecto)}</span>
+  <span>${esc(cm.footer || 'Producto académico · IOC · UACh — no sustituye la revisión de un profesional competente')}</span>
   <span>${esc(fecha)}</span></div>
 
 ${portada}
@@ -3328,6 +3507,7 @@ ${portada}
 <h2>1. Bases de cálculo</h2>
 
 <h3>1.1 Descripción del modelo</h3>
+${descripcionHTML}
 <table><tbody>
   <tr><th>Nodos</th><td>${s.nodes}</td><th>Elementos</th><td>${s.elements}</td></tr>
   <tr><th>Materiales</th><td>${s.materials}</td><th>Secciones</th><td>${s.sections}</td></tr>
@@ -3346,7 +3526,7 @@ ${figBase}
 <tbody>${matRows}</tbody></table>
 
 <h3>1.5 Secciones</h3>
-<table><thead><tr><th>Sección</th><th>A (m²)</th><th>Iy (m⁴)</th><th>Iz (m⁴)</th><th>J (m⁴)</th><th>Avy (m²)</th><th>Avz (m²)</th><th># elem</th></tr></thead>
+<table><thead><tr><th>Sección</th><th>A (m²)</th><th>Iy (m⁴)</th><th>Iz (m⁴)</th><th>J (m⁴)</th><th>Avy (m²)</th><th>Avz (m²)</th><th>Modif. rigidez</th><th># elem</th></tr></thead>
 <tbody>${secRows}</tbody></table>
 
 <h3>1.6 Cargas y sobrecargas</h3>
@@ -3374,7 +3554,7 @@ ${disenoHTML}
 <ul style="font-size:11px;line-height:1.6">
   <li>Documento generado automáticamente por PÓRTICO con fines <b>docentes</b>; no reemplaza el criterio ni la firma de un profesional competente.</li>
   <li>La verificación de diseño usa propiedades de sección (A, I) y los parámetros editables de <code>asistente/diseno_params.json</code>; el hormigón armado se evalúa con la cuantía indicada y supuestos declarados.</li>
-  <li>No incluye diseño de uniones, fundaciones, pandeo lateral-torsional ni clasificación de perfiles; las razones D/C son una verificación preliminar de flexión, corte y axial.</li>
+  <li>La verificación cubre flexión, corte, axial, interacción flexo-axial (AISC H1 / NDS) y flecha de servicio por envolvente de combinaciones. NO incluye diseño de uniones, fundaciones, pandeo lateral-torsional, clasificación de perfiles ni efectos P-Δ.</li>
   <li>Las cargas de viento, nieve y sobrecargas se representan como casos de carga; verifique su clasificación y magnitud según la normativa aplicable.</li>
 </ul>
 </body></html>`;

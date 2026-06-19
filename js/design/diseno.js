@@ -60,19 +60,26 @@ function disenarAcero(F, P, prm) {
     { formula: 'φVn = φ·0.6·Fy·Aw·Cv' });
 
   // Axial
-  let axial;
+  let axial, Pc;
   if (F.N_signo >= 0) {   // tracción → fluencia
-    const Pn = (phi.axial_traccion ?? 0.9) * Fy * P.A;
-    axial = ratObj(F.N, Pn, { formula: 'φPn = φ·Fy·Ag', modo: 'tracción' });
+    Pc = (phi.axial_traccion ?? 0.9) * Fy * P.A;
+    axial = ratObj(F.N, Pc, { formula: 'φPn = φ·Fy·Ag', modo: 'tracción' });
   } else {                // compresión → AISC E3
     const slend = K * F.L / P.rmin;
     const Fe = Math.PI ** 2 * E / (slend * slend);
     const lim = 4.71 * Math.sqrt(E / Fy);
     const Fcr = slend <= lim ? Math.pow(0.658, Fy / Fe) * Fy : 0.877 * Fe;
-    const Pn = (phi.axial_compresion ?? 0.9) * Fcr * P.A;
-    axial = ratObj(F.N, Pn, { formula: 'φPn = φ·Fcr·Ag (AISC E3)', modo: 'compresión', esbeltez: +slend.toFixed(0) });
+    Pc = (phi.axial_compresion ?? 0.9) * Fcr * P.A;
+    axial = ratObj(F.N, Pc, { formula: 'φPn = φ·Fcr·Ag (AISC E3)', modo: 'compresión', esbeltez: +slend.toFixed(0) });
   }
-  return { material: 'acero', metodo: prm.metodo, flexion, corte, axial };
+
+  // Interacción flexo-axial (AISC 360 H1.1)
+  const pr = Pc > 1e-9 ? F.N / Pc : 0;
+  const mm = (Mnz > 1e-9 ? F.Mz / Mnz : 0) + (Mny > 1e-9 ? F.My / Mny : 0);
+  const H = pr >= 0.2 ? pr + (8 / 9) * mm : pr / 2 + mm;
+  const interaccion = ratObj(H, 1, { formula: pr >= 0.2 ? 'Pr/Pc + 8/9·(Mrx/Mcx+Mry/Mcy)' : 'Pr/2Pc + (Mrx/Mcx+Mry/Mcy)', adim: true });
+
+  return { material: 'acero', metodo: prm.metodo, flexion, corte, axial, interaccion };
 }
 
 // ── HORMIGÓN ARMADO — resistencia última (ACI 318), con cuantía editable ───────
@@ -94,17 +101,21 @@ function disenarHormigon(F, P, prm) {
   const corte = ratObj(Math.max(F.Vy, F.Vz), Vc, { formula: 'φVc = φ·0.17·√f′c·b·d (sin estribos)' });
 
   // Axial compresión: φPn = φ·0.80·(0.85·f'c·(Ag−Ast)+fy·Ast), Ast=ρ·Ag
-  let axial;
+  let axial, Pc;
+  const Ast = rho * P.A;
   if (F.N_signo < 0) {
-    const Ast = rho * P.A;
-    const Pn = (phi.axial_compresion ?? 0.65) * 0.80 * (0.85 * fc * (P.A - Ast) + fy * Ast);
-    axial = ratObj(F.N, Pn, { formula: 'φPn = φ·0.80·(0.85·f′c·(Ag−Ast)+fy·Ast)', modo: 'compresión' });
+    Pc = (phi.axial_compresion ?? 0.65) * 0.80 * (0.85 * fc * (P.A - Ast) + fy * Ast);
+    axial = ratObj(F.N, Pc, { formula: 'φPn = φ·0.80·(0.85·f′c·(Ag−Ast)+fy·Ast)', modo: 'compresión' });
   } else {
-    const Ast = rho * P.A;
-    const Pn = (phi.flexion ?? 0.9) * fy * Ast;   // tracción la toma la armadura
-    axial = ratObj(F.N, Pn, { formula: 'φPn = φ·fy·As (tracción → armadura)', modo: 'tracción' });
+    Pc = (phi.flexion ?? 0.9) * fy * Ast;   // tracción la toma la armadura
+    axial = ratObj(F.N, Pc, { formula: 'φPn = φ·fy·As (tracción → armadura)', modo: 'tracción' });
   }
-  return { material: 'hormigon', metodo: prm.metodo, flexion, corte, axial };
+
+  // Interacción P-M lineal simplificada (conservadora; verificar con diagrama P-M)
+  const H = (Pc > 1e-9 ? F.N / Pc : 0) + (Mn > 1e-9 ? Math.max(F.Mz, F.My) / Mn : 0);
+  const interaccion = ratObj(H, 1, { formula: 'Pu/φPn + Mu/φMn (lineal simplificada)', adim: true });
+
+  return { material: 'hormigon', metodo: prm.metodo, flexion, corte, axial, interaccion };
 }
 
 // ── MADERA — tensiones admisibles modificadas (NCh1198) ────────────────────────
@@ -127,10 +138,13 @@ function disenarMadera(F, P, prm) {
   const corte = ratObj(fv / MPA, Fv / MPA, { formula: "f_v = 1.5·V/A ≤ F'v", unidad: 'MPa' });
 
   // Axial
-  let axial;
+  let axial, interaccion;
   const fa = F.N / P.A;
   if (F.N_signo >= 0) {
     axial = ratObj(fa / MPA, Ft / MPA, { formula: "f_t = N/A ≤ F't", modo: 'tracción', unidad: 'MPa' });
+    // Interacción tracción + flexión: ft/F't + fb/F'b ≤ 1
+    const H = fa / Ft + fb / Fb;
+    interaccion = ratObj(H, 1, { formula: "f_t/F't + f_b/F'b", adim: true });
   } else {
     // Estabilidad de columna (Ylinen): FcE = 0.822·E/(le/d)² ; c=0.8
     const le = (prm.K_pandeo ?? 1) * F.L, lod = le / Math.max(P.dmin, 1e-4);
@@ -140,8 +154,12 @@ function disenarMadera(F, P, prm) {
     const CP = t - Math.sqrt(Math.max(t * t - alpha / c, 0));
     const Fcc = Fc * CP;
     axial = ratObj(fa / MPA, Fcc / MPA, { formula: "f_c = N/A ≤ F'c·CP (Ylinen)", modo: 'compresión', CP: +CP.toFixed(3), unidad: 'MPa' });
+    // Interacción compresión + flexión (NDS 3.9.2): (fc/F'c)² + fb/(F'b·(1−fc/FcE)) ≤ 1
+    const amp = (fa < FcE) ? (1 - fa / FcE) : 1e-6;
+    const H = Math.pow(fa / Fcc, 2) + fb / (Fb * amp);
+    interaccion = ratObj(H, 1, { formula: "(f_c/F'c)² + f_b/[F'b·(1−f_c/F_cE)]", adim: true });
   }
-  return { material: 'madera', metodo: prm.metodo, flexion, corte, axial };
+  return { material: 'madera', metodo: prm.metodo, flexion, corte, axial, interaccion };
 }
 
 // ── API principal ──────────────────────────────────────────────────────────────
@@ -162,9 +180,9 @@ export function verificarElemento({ fuerzas, sec, matNombre, params }) {
   else if (tipo === 'madera') r = disenarMadera(F, P, prm);
   else r = disenarAcero(F, P, prm);
 
-  const ratios = [r.flexion.ratio, r.corte.ratio, r.axial.ratio];
-  const nombres = ['flexión', 'corte', 'axial'];
-  let iMax = 0; for (let i = 1; i < 3; i++) if (ratios[i] > ratios[iMax]) iMax = i;
+  const ratios = [r.flexion.ratio, r.corte.ratio, r.axial.ratio, r.interaccion?.ratio ?? 0];
+  const nombres = ['flexión', 'corte', 'axial', 'interacción'];
+  let iMax = 0; for (let i = 1; i < ratios.length; i++) if (ratios[i] > ratios[iMax]) iMax = i;
   r.ratioMax = ratios[iMax];
   r.gobierna = nombres[iMax];
   const lim = params.limites || {};

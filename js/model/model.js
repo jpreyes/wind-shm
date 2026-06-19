@@ -154,8 +154,10 @@ export class Model {
       id, name: 'Sección',
       A: 0.09, Iz: 6.75e-4, Iy: 6.75e-4, J: 1.13e-4,
       Avy: 0.075, Avz: 0.075, kappay: 0.833, kappaz: 0.833,
+      mod: { A: 1, Iy: 1, Iz: 1, J: 1 },   // modificadores de rigidez (sección agrietada, etc.)
       ...props
     };
+    if (!sec.mod) sec.mod = { A: 1, Iy: 1, Iz: 1, J: 1 };
     this.sections.set(id, sec);
     return sec;
   }
@@ -163,9 +165,11 @@ export class Model {
   updateSection(id, props) {
     const s = this.sections.get(id);
     if (!s) return null;
+    if (props.mod) { s.mod = { ...(s.mod || { A:1, Iy:1, Iz:1, J:1 }), ...props.mod }; delete props.mod; }
     Object.assign(s, props);
     const nums = ['A','Iz','Iy','J','Avy','Avz','kappay','kappaz'];
     nums.forEach(k => { if (props[k] !== undefined) s[k] = +props[k]; });
+    if (!s.mod) s.mod = { A:1, Iy:1, Iz:1, J:1 };
     return s;
   }
 

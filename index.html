@@ -29,8 +29,8 @@
       window.dispatchEvent(new Event('pwa-installed'));
     });
   </script>
-  <link rel="stylesheet" href="style.css?v=69">
-  <link rel="stylesheet" href="ui-v2.css?v=69">
+  <link rel="stylesheet" href="style.css?v=71">
+  <link rel="stylesheet" href="ui-v2.css?v=71">
   <script type="importmap">
   {
     "imports": {
@@ -154,6 +154,8 @@
     </nav>
 
     <div class="menubar-right">
+      <button id="btn-config" type="button" title="Configuración (memoria, visualización, modificadores de sección)"
+        style="background:var(--bg4);border:1px solid var(--border2);color:var(--text);border-radius:6px;cursor:pointer;font-size:14px;line-height:1;padding:4px 8px;margin-right:6px">⚙</button>
       <button id="btn-theme" type="button" title="Cambiar tema claro/oscuro"
         style="background:var(--bg4);border:1px solid var(--border2);color:var(--text);border-radius:6px;cursor:pointer;font-size:14px;line-height:1;padding:4px 8px;margin-right:10px">🌙</button>
       <label class="unit-label" for="unit-select">Unidades</label>
@@ -667,7 +669,7 @@
           <div>
             <h2 style="margin:0">PÓRTICO</h2>
             <p style="margin:2px 0 0;color:var(--text-muted)">Laboratorio virtual de análisis estructural 3D
-              · <b id="help-version">versión 69</b> · junio 2026</p>
+              · <b id="help-version">versión 71</b> · junio 2026</p>
           </div>
         </div>
         <p><b>Material docente</b> desarrollado por el <b>Dr. Juan Patricio Reyes C.</b> —
@@ -866,7 +868,7 @@
 
 <!-- numeric.js para solver (Fase 2+) -->
 <script src="lib/numeric.js"></script>
-<script type="module" src="js/app.js?v=69"></script>
+<script type="module" src="js/app.js?v=71"></script>
 
 <!-- PWA: registrar el service worker (offline). Solo en contexto seguro
      (https o localhost); el navegador deja navigator.serviceWorker undefined

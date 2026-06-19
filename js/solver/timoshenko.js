@@ -49,7 +49,16 @@ export function localAxes(n1, n2) {
  */
 export function stiffnessMatrix(L, mat, sec) {
   const { E, G } = mat;
-  const { A, Iz, Iy, J, Avy, Avz } = sec;
+  // Modificadores de sección (rigidez efectiva, p.ej. sección agrietada ACI:
+  // viga 0.35·Ig, columna 0.70·Ig). Solo afectan la RIGIDEZ, no la masa.
+  const md = sec.mod || {};
+  const mA = md.A ?? 1, mIz = md.Iz ?? 1, mIy = md.Iy ?? 1, mJ = md.J ?? 1;
+  const A   = sec.A  * mA;
+  const Iz  = sec.Iz * mIz;
+  const Iy  = sec.Iy * mIy;
+  const J   = sec.J  * mJ;
+  const Avy = sec.Avy * mA;
+  const Avz = sec.Avz * mA;
 
   const Ke = Array.from({length:12}, () => Array(12).fill(0));
 

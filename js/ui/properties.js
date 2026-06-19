@@ -1,8 +1,8 @@
 // ──────────────────────────────────────────────────────────────────────────────
 // PropertiesPanel — right-side panel: node/element properties + mat/sec tabs
 // ──────────────────────────────────────────────────────────────────────────────
-import { computeFloorCR, computeFloorCM, computeTributaryWeights } from '../solver/diaphragm.js?v=69';
-import { localAxes } from '../solver/timoshenko.js?v=69';
+import { computeFloorCR, computeFloorCM, computeTributaryWeights } from '../solver/diaphragm.js?v=71';
+import { localAxes } from '../solver/timoshenko.js?v=71';
 
 export class PropertiesPanel {
   constructor(panelEl, app) {
@@ -89,20 +89,24 @@ export class PropertiesPanel {
       return;
     }
     const f = dis.filas;
-    const nOk = f.filter(x => x.estado === 'cumple').length;
-    const nAj = f.filter(x => x.estado === 'ajustado').length;
-    const nNo = f.filter(x => x.estado === 'NO CUMPLE').length;
+    const fr = x => x.flecha?.ratio ?? 0;
+    const malo = x => x.ratioMax > 1 || fr(x) > 1;
+    const aj   = x => !malo(x) && (x.ratioMax > 0.9 || fr(x) > 0.9);
+    const nNo = f.filter(malo).length;
+    const nAj = f.filter(aj).length;
+    const nOk = f.length - nNo - nAj;
     const cls = r => r > 1 ? 'dc-bad' : r > 0.9 ? 'dc-warn' : 'dc-ok';
     const fmt = v => (v == null || !isFinite(v)) ? '—' : (+v).toFixed(2);
-    const rows = f.map(x => `<tr class="dis-row" data-elem="${x.id}" title="flexión ${fmt(x.flexion.ratio)} · corte ${fmt(x.corte.ratio)} · axial ${fmt(x.axial.ratio)}">
+    const rows = f.map(x => `<tr class="dis-row" data-elem="${x.id}" title="${esc(x.combo||'')} — flexión ${fmt(x.flexion.ratio)} · corte ${fmt(x.corte.ratio)} · axial ${fmt(x.axial.ratio)} · interacción ${fmt(x.interaccion?.ratio)} · flecha ${fmt(fr(x))}">
       <td>#${x.id}</td><td>${esc(x.sec)}</td><td>${x.gobierna}</td>
       <td class="${cls(x.ratioMax)}"><b>${fmt(x.ratioMax)}</b></td>
-      <td class="${cls(x.ratioMax)}">${x.estado === 'NO CUMPLE' ? '✗' : x.estado === 'ajustado' ? '!' : '✓'}</td></tr>`).join('');
+      <td class="${cls(fr(x))}">${fmt(fr(x))}</td>
+      <td class="${malo(x) ? 'dc-bad' : aj(x) ? 'dc-warn' : 'dc-ok'}">${malo(x) ? '✗' : aj(x) ? '!' : '✓'}</td></tr>`).join('');
     body.innerHTML = `
-      <div class="dis-summary">Caso: <b>${esc(dis.caso || 'activo')}</b><br>
+      <div class="dis-summary">Estados: <b>${esc(dis.caso || 'activo')}</b><br>
         <span class="dc-ok">${nOk} cumplen</span> · <span class="dc-warn">${nAj} ajustados</span> · <span class="dc-bad">${nNo} no cumplen</span></div>
-      <table class="dis-table"><thead><tr><th>Elem</th><th>Sección</th><th>Gob.</th><th>D/C</th><th></th></tr></thead><tbody>${rows}</tbody></table>
-      <p class="panel-hint" style="margin-top:6px">D/C ≤ 1 cumple. Clic en una fila selecciona el elemento. Detalle completo en <b>Análisis → Memoria de Cálculo</b>.</p>`;
+      <table class="dis-table"><thead><tr><th>Elem</th><th>Sec.</th><th>Gob.</th><th>D/C</th><th>δ</th><th></th></tr></thead><tbody>${rows}</tbody></table>
+      <p class="panel-hint" style="margin-top:6px">D/C = resistencia (flexión/corte/axial/interacción) ≤ 1. δ = flecha vs L/${(dis.params?.flechas_admisibles?.viga_carga_total_L_sobre)||300}. Clic en fila selecciona el elemento; detalle en <b>Análisis → Memoria</b>.</p>`;
     body.querySelectorAll('.dis-row').forEach(tr => tr.addEventListener('click', () => {
       const id = +tr.dataset.elem;
       if (this.app.viewport.selectElements) this.app.viewport.selectElements([id]);
@@ -446,7 +450,8 @@ export class PropertiesPanel {
     this._tabContents.sel.innerHTML = this._nodeHTML(node)
       + diaphHTML
       + (results ? this._nodeResultsHTML(node, results) : '')
-      + this._nodeLoadsHTML(node);
+      + this._nodeLoadsHTML(node)
+      + this._cargasTodasHTML('node', node.id);
     this._bindNodeEvents(node);
     this._bindNodeLoadsEvents(node);
     if (focusSupports) {
@@ -462,9 +467,40 @@ export class PropertiesPanel {
     const results = this.app._results;
     this._tabContents.sel.innerHTML = this._elemHTML(elem)
       + (results ? this._elemResultsHTML(elem, results) : '')
-      + this._elemLoadsHTML(elem);
+      + this._elemLoadsHTML(elem)
+      + this._cargasTodasHTML('elem', elem.id);
     this._bindElemEvents(elem);
     this._bindElemLoadsEvents(elem);
+  }
+
+  // Lista TODAS las cargas (de todos los casos) sobre un elemento/nodo + las
+  // combinaciones que incluyen cada caso (con su factor).
+  _cargasTodasHTML(tipo, id) {
+    const m = this.app.model;
+    const esc = s => String(s ?? '').replace(/[&<>]/g, c => ({ '&':'&amp;','<':'&lt;','>':'&gt;' }[c]));
+    const f = (v) => (v == null || !isFinite(v)) ? '—' : (+v).toFixed(2);
+    const dir = { gravity:'Gravedad ↓', globalX:'+X', globalY:'+Y', globalZ:'+Z', localY:'local y', localZ:'local z' };
+    const combosDe = (lcId) => [...(m.combinations?.values() || [])]
+      .filter(c => (c.factors || []).some(fa => fa.lcId === lcId))
+      .map(c => { const fa = c.factors.find(x => x.lcId === lcId); return `${esc(c.name)} (×${f(fa.factor)})`; });
+    const rows = [];
+    for (const lc of m.loadCases.values()) {
+      const loads = (lc.loads || []).filter(ld => tipo === 'elem'
+        ? (ld.type === 'dist' && ld.elemId === id)
+        : (ld.type === 'nodal' && ld.nodeId === id));
+      if (!loads.length) continue;
+      const desc = loads.map(ld => ld.type === 'dist'
+        ? `w = ${f(ld.w)} kN/m (${dir[ld.dir] || ld.dir || 'grav'})`
+        : `F=(${f(ld.F[0])}, ${f(ld.F[1])}, ${f(ld.F[2])}) kN${(ld.F[3]||ld.F[4]||ld.F[5]) ? `<br>M=(${f(ld.F[3])}, ${f(ld.F[4])}, ${f(ld.F[5])})` : ''}`).join('<br>');
+      const cmb = combosDe(lc.id);
+      rows.push(`<tr><td>${esc(lc.name)}${lc.selfWeight ? ' <span class="muted">+pp</span>' : ''}</td><td>${desc}</td><td>${cmb.length ? cmb.join('<br>') : '<span class="muted">—</span>'}</td></tr>`);
+    }
+    const cuerpo = rows.length ? rows.join('')
+      : `<tr><td colspan="3" class="muted">Sin cargas asignadas a este ${tipo === 'elem' ? 'elemento' : 'nodo'} en ningún caso.</td></tr>`;
+    return `<details class="loads-all"${rows.length ? ' open' : ''}>
+      <summary>Cargas en todos los casos${rows.length ? ` (${rows.length})` : ''}</summary>
+      <table class="loads-all-tbl"><thead><tr><th>Caso</th><th>Carga</th><th>En combinaciones</th></tr></thead><tbody>${cuerpo}</tbody></table>
+    </details>`;
   }
 
   refresh(model) {
@@ -1516,6 +1552,15 @@ export class PropertiesPanel {
           ${fld('κy', 'kappay', '0.001')}
           ${fld('κz', 'kappaz', '0.001')}
         </div>
+        <div class="prop-field" style="margin-top:6px"><label style="color:var(--text-muted);font-size:11px">Modificadores de rigidez (× A, I, J — p.ej. sección agrietada ACI)</label></div>
+        <div class="prop-row">
+          <div class="prop-field"><label>×A</label><input type="number" data-m="A" value="${sec.mod?.A ?? 1}" step="0.05" min="0.01"></div>
+          <div class="prop-field"><label>×J</label><input type="number" data-m="J" value="${sec.mod?.J ?? 1}" step="0.05" min="0.01"></div>
+        </div>
+        <div class="prop-row">
+          <div class="prop-field"><label>×Iz</label><input type="number" data-m="Iz" value="${sec.mod?.Iz ?? 1}" step="0.05" min="0.01"></div>
+          <div class="prop-field"><label>×Iy</label><input type="number" data-m="Iy" value="${sec.mod?.Iy ?? 1}" step="0.05" min="0.01"></div>
+        </div>
         <div class="card-actions">
           <button class="btn-danger btn-del-sec" style="flex:1;">Eliminar</button>
         </div>
@@ -1534,6 +1579,17 @@ export class PropertiesPanel {
         this.app.model.updateSection(sec.id, updates);
         card.querySelector('.sec-card-name').textContent = updates.name || sec.name;
         this.app.markDirty();
+      });
+    });
+    // Modificadores de rigidez (data-m): actualizan sec.mod
+    card.querySelectorAll('[data-m]').forEach(inp => {
+      inp.addEventListener('change', () => {
+        this.app.snapshot();
+        const mod = {};
+        card.querySelectorAll('[data-m]').forEach(i => { mod[i.dataset.m] = +i.value || 1; });
+        this.app.model.updateSection(sec.id, { mod });
+        this.app.markDirty();
+        this.app.toast('Modificador de sección aplicado — recalcule el análisis (F5)', 'ok');
       });
     });
     card.querySelector('.btn-del-sec').addEventListener('click', () => {
@@ -1807,6 +1863,7 @@ export class PropertiesPanel {
     }
 
     const fv = v => {
+      if (v == null || !isFinite(v)) return '<td>—</td>';
       const a = Math.abs(v);
       const cls = a < 1e-10 ? '' : v > 0 ? ' vp' : ' vn';
       return `<td class="${cls.trim()}">${a < 1e-10 ? '—' : v.toExponential(3)}</td>`;
