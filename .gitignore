@@ -16,3 +16,7 @@ asistente/_sp001/
 # Cloudflare Worker: secretos locales y caché de build
 .dev.vars
 .wrangler/
+
+# Memoria de referencia (.docx): fuente local, no se versiona ni se publica
+referencias/*.docx
+*.docx
