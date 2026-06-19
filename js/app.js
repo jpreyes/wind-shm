@@ -1,21 +1,21 @@
 // ──────────────────────────────────────────────────────────────────────────────
 // App — main orchestrator
 // ──────────────────────────────────────────────────────────────────────────────
-import { Model }           from './model/model.js?v=67';
-import { Serializer }      from './model/serializer.js?v=67';
-import { Viewport }        from './ui/viewport.js?v=67';
-import { PropertiesPanel } from './ui/properties.js?v=67';
-import { MenuBar }         from './ui/menu.js?v=67';
-import { UndoStack }       from './utils/undo.js?v=67';
-import { StaticSolver, ensureDefaultLC }   from './solver/static_solver.js?v=67';
-import { Results }                         from './solver/postprocess.js?v=67';
-import { ModalSolver }                     from './solver/modal_solver.js?v=67';
-import { buildNodeIndex, assembleK, getNodeDOFs } from './solver/assembler.js?v=67';
-import { ModalResults }                    from './solver/modal_results.js?v=67';
-import { SpectrumSolver }                  from './solver/spectrum_solver.js?v=67';
-import { autoDetectDiaphragms, computeFloorCR } from './solver/diaphragm.js?v=67';
-import { splitElement, splitByLength, discretizeAll, joinElements, intersectarElementos } from './model/discretize.js?v=67';
-import { localAxes, stiffnessMatrix, massMatrix, transformMatrix, globalStiffness, applyReleases } from './solver/timoshenko.js?v=67';
+import { Model }           from './model/model.js?v=68';
+import { Serializer }      from './model/serializer.js?v=68';
+import { Viewport }        from './ui/viewport.js?v=68';
+import { PropertiesPanel } from './ui/properties.js?v=68';
+import { MenuBar }         from './ui/menu.js?v=68';
+import { UndoStack }       from './utils/undo.js?v=68';
+import { StaticSolver, ensureDefaultLC }   from './solver/static_solver.js?v=68';
+import { Results }                         from './solver/postprocess.js?v=68';
+import { ModalSolver }                     from './solver/modal_solver.js?v=68';
+import { buildNodeIndex, assembleK, getNodeDOFs } from './solver/assembler.js?v=68';
+import { ModalResults }                    from './solver/modal_results.js?v=68';
+import { SpectrumSolver }                  from './solver/spectrum_solver.js?v=68';
+import { autoDetectDiaphragms, computeFloorCR } from './solver/diaphragm.js?v=68';
+import { splitElement, splitByLength, discretizeAll, joinElements, intersectarElementos } from './model/discretize.js?v=68';
+import { localAxes, stiffnessMatrix, massMatrix, transformMatrix, globalStiffness, applyReleases } from './solver/timoshenko.js?v=68';
 
 class App {
   constructor() {
@@ -2334,7 +2334,7 @@ class App {
     this._showProgress('Generando el modelo…', 'Aplicando reglas y cargas normativas');
     try {
       const libs = await this._cargarBibliotecasAsistente();
-      const { generarModelo } = await import('../asistente/generador.js?v=67');
+      const { generarModelo } = await import('../asistente/generador.js?v=68');
       const modelo = generarModelo(ficha, libs);
 
       if (modo === 'sobreponer') {
@@ -2958,7 +2958,8 @@ class App {
     try { imgs = await this._capturarVistasMemoria(); }
     catch (e) { console.error('Captura de vistas falló:', e); }
 
-    const html = this._memoriaHTML(imgs);
+    const diseno = await this._calcularDiseno();   // verificación flexión/corte/axial (si hay resultados)
+    const html = this._memoriaHTML(imgs, diseno);
 
     const win = window.open('', '_blank');
     if (!win) {
@@ -2970,6 +2971,51 @@ class App {
     win.document.write(html);
     win.document.close();
     this.toast('Memoria generada — use «Imprimir → Guardar como PDF»', 'ok');
+  }
+
+  // Verificación de diseño (flexión/corte/axial) por elemento, usando los
+  // resultados actuales y los parámetros editables de asistente/diseno_params.json.
+  async _calcularDiseno() {
+    const ver = '?v=68';
+    let params = null;
+    try { params = await fetch('asistente/diseno_params.json' + ver).then(r => r.json()); }
+    catch (e) { console.error('No se pudo cargar diseno_params.json:', e); return null; }
+    // Sin resultados: igual devolvemos los parámetros (métodos/normas/flechas).
+    if (!this._results || typeof this._results.getElemForces !== 'function') {
+      return { filas: [], params, caso: null };
+    }
+    try {
+      const mod = await import('./design/diseno.js' + ver);
+      const res = this._results;
+      const maxAbs = (eid, type) => {
+        let d; try { d = res.getDiagramData(eid, type, 12); } catch { return 0; }
+        let m = 0;
+        for (const p of (d.pts || [])) m = Math.max(m, Math.abs(p.val));
+        for (const e of (d.extremes || [])) m = Math.max(m, Math.abs(e.val));
+        return m;
+      };
+      const filas = [];
+      for (const el of this.model.elements.values()) {
+        const f = res.getElemForces(el.id);
+        const sec = this.model.sections.get(el.secId);
+        const mat = this.model.materials.get(el.matId);
+        if (!f || !sec || !mat) continue;
+        const fuerzas = {
+          N: (Math.sign(f.N) || 1) * maxAbs(el.id, 'N'),
+          Vy: maxAbs(el.id, 'Vy'), Vz: maxAbs(el.id, 'Vz'),
+          My: maxAbs(el.id, 'My'), Mz: maxAbs(el.id, 'Mz'), L: f.L,
+        };
+        const r = mod.verificarElemento({ fuerzas, sec, matNombre: mat.name, params });
+        filas.push({ id: el.id, mat: mat.name, sec: sec.name, fuerzas, ...r });
+      }
+      filas.sort((a, b) => b.ratioMax - a.ratioMax);
+      // Nombre del caso/combo de los resultados mostrados
+      const key = this._activeResultKey ?? this._activeLcId;
+      const lc = this.model.loadCases.get(key);
+      const combo = this.model.combinations?.get(key);
+      const caso = lc?.name || combo?.name || `caso ${key}`;
+      return { filas, params, caso };
+    } catch (e) { console.error('Diseño falló:', e); return { filas: [], params, caso: null }; }
   }
 
   // Captura base, deformada y hasta 3 modos, y restaura la vista del usuario.
@@ -3025,14 +3071,19 @@ class App {
     return out;
   }
 
-  _memoriaHTML(imgs) {
+  _memoriaHTML(imgs, diseno) {
     const m = this.model;
     const esc = (s) => String(s ?? '').replace(/[&<>"]/g, c => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;' }[c]));
     const fmt = (v, d = 3) => (v == null || !isFinite(v)) ? '—'
       : (Math.abs(v) >= 1e5 || (Math.abs(v) > 0 && Math.abs(v) < 1e-3) ? (+v).toExponential(2) : (+v).toFixed(d));
     const proyecto = (document.title || '').replace(/^●\s*/, '').replace(/\s*—\s*PÓRTICO.*$/i, '').trim() || 'Modelo sin título';
-    const fecha = new Date().toLocaleString('es-CL');
+    const fecha = new Date().toLocaleDateString('es-CL', { year:'numeric', month:'long', day:'numeric' });
     const U = m.units || 'kN-m';
+    const clasif = (n) => { n = String(n||'').toLowerCase();
+      if (/(horm|concret|h\s*\d|fc)/.test(n)) return 'hormigon';
+      if (/(mader|pino|wood|gl\b|lvl|conif)/.test(n)) return 'madera';
+      return 'acero'; };
+    const dp = diseno?.params || null;
 
     // ── Materiales ──────────────────────────────────────────────────────────
     const matRows = [...m.materials.values()].map(mt => `<tr>
@@ -3129,21 +3180,119 @@ class App {
       : '<p class="muted">Deformada no disponible — ejecute el análisis estático (F5).</p>';
 
     const s = m.getStats();
+
+    // ── Métodos de diseño (solo materiales presentes) ───────────────────────
+    const tipos = new Set([...m.materials.values()].map(mt => clasif(mt.name)));
+    const nombreTipo = { acero:'Acero estructural', hormigon:'Hormigón armado', madera:'Madera' };
+    const metodosHTML = dp ? [...tipos].map(t => {
+      const p = dp[t] || {};
+      let det = '';
+      if (t === 'acero')    det = `Fy = ${fmt(p.Fy_MPa,0)} MPa · Fu = ${fmt(p.Fu_MPa,0)} MPa · E = ${fmt(p.E_MPa,0)} MPa · φ_b=${p.phi?.flexion} φ_v=${p.phi?.corte} φ_c=${p.phi?.axial_compresion}`;
+      if (t === 'hormigon') det = `f′c = ${fmt(p.fc_MPa,0)} MPa · fy = ${fmt(p.fy_refuerzo_MPa,0)} MPa · cuantía ρ = ${fmt(p.cuantia_long_rho,3)} · rec. = ${fmt(p.recubrimiento_mm,0)} mm · φ_b=${p.phi?.flexion} φ_v=${p.phi?.corte}`;
+      if (t === 'madera')   det = `Fb = ${fmt(p.Fb_MPa,1)} · Fv = ${fmt(p.Fv_MPa,1)} · Fc = ${fmt(p.Fc_MPa,1)} · Ft = ${fmt(p.Ft_MPa,1)} MPa · ∏Ki = ${fmt(Object.values(p.factores_modificacion||{}).reduce((a,b)=>a*b,1),2)}`;
+      return `<tr><th>${nombreTipo[t]}</th><td>${esc(p.metodo||'—')}<br><span class="muted">${det}</span></td></tr>`;
+    }).join('') : '<tr><td colspan="2" class="muted">Parámetros de diseño no disponibles.</td></tr>';
+
+    // ── Normas y códigos ────────────────────────────────────────────────────
+    const normas = [
+      ['Acción sísmica', 'NCh433.Of96 Mod.2009 · DS61 (espectro de diseño)'],
+      ['Cargas y sobrecargas', 'NCh1537.Of2009 (permanentes y sobrecargas de uso)'],
+      ['Combinaciones de carga', 'NCh3171.Of2010 (disposiciones generales)'],
+      ['Viento', 'NCh432.Of2010'],
+      ['Nieve', 'NCh431.Of2010'],
+      ['Acero estructural', 'NCh427/1 · ANSI/AISC 360-16 (LRFD)'],
+      ['Hormigón armado', 'NCh430 · ACI 318'],
+      ['Madera estructural', 'NCh1198 (tensiones admisibles modificadas)'],
+    ].map(([a,b]) => `<tr><th>${a}</th><td>${esc(b)}</td></tr>`).join('');
+
+    // ── Combinaciones de carga del modelo ───────────────────────────────────
+    const lcName = id => m.loadCases.get(id)?.name || m.combinations?.get(id)?.name || `LC${id}`;
+    const comboRows = [...(m.combinations?.values() || [])].map(c =>
+      `<tr><td>${esc(c.name)}</td><td>${(c.factors||[]).map(f => `${fmt(f.factor,2)}·${esc(lcName(f.lcId))}`).join('  +  ') || '—'}</td></tr>`).join('')
+      || '<tr><td colspan="2" class="muted">No hay combinaciones definidas.</td></tr>';
+
+    // ── Flechas admisibles ──────────────────────────────────────────────────
+    const fl = dp?.flechas_admisibles || {};
+    const flechasHTML = `<table><tbody>
+      <tr><th>Viga — carga total</th><td>L / ${fl.viga_carga_total_L_sobre ?? 300}</td>
+          <th>Viga — sobrecarga</th><td>L / ${fl.viga_sobrecarga_L_sobre ?? 360}</td></tr>
+      <tr><th>Voladizo</th><td>L / ${fl.voladizo_L_sobre ?? 150}</td>
+          <th>δ máx del modelo</th><td>${this._results?.getMaxDisp ? fmt(this._results.getMaxDisp(),5)+' m' : '—'}</td></tr>
+    </tbody></table>
+    <p class="muted">Límites como fracción de la luz L. La verificación de flecha por elemento debe contrastarse con la luz libre de cada vano.</p>`;
+
+    // ── Diseño de elementos: verificación flexión / corte / axial ───────────
+    let disenoHTML;
+    const rClass = r => r > 1.0 ? 'r-bad' : r > 0.9 ? 'r-warn' : 'r-ok';
+    if (diseno && diseno.filas && diseno.filas.length) {
+      const f = diseno.filas;
+      const nOk = f.filter(x => x.estado === 'cumple').length;
+      const nAj = f.filter(x => x.estado === 'ajustado').length;
+      const nNo = f.filter(x => x.estado === 'NO CUMPLE').length;
+      const top = f.slice(0, 60);
+      const rows = top.map(x => `<tr>
+        <td>#${x.id}</td><td>${esc(x.sec)}</td><td>${esc(x.mat)}</td>
+        <td>${fmt(x.fuerzas.N,1)}</td><td>${fmt(Math.max(x.fuerzas.My,x.fuerzas.Mz),1)}</td><td>${fmt(Math.max(x.fuerzas.Vy,x.fuerzas.Vz),1)}</td>
+        <td class="${rClass(x.flexion.ratio)}">${fmt(x.flexion.ratio,2)}</td>
+        <td class="${rClass(x.corte.ratio)}">${fmt(x.corte.ratio,2)}</td>
+        <td class="${rClass(x.axial.ratio)}">${fmt(x.axial.ratio,2)}</td>
+        <td>${x.gobierna}</td>
+        <td class="${rClass(x.ratioMax)}"><b>${fmt(x.ratioMax,2)}</b></td>
+        <td class="${rClass(x.ratioMax)}">${x.estado}</td></tr>`).join('');
+      disenoHTML = `
+        <p>Verificación de los elementos para los esfuerzos del caso/combinación <b>«${esc(diseno.caso||'activo')}»</b>.
+        La razón <b>D/C = demanda/capacidad</b> debe ser ≤ 1.0. Parámetros en <code>asistente/diseno_params.json</code>.</p>
+        <table style="font-size:10px"><thead><tr>
+          <th>Elem</th><th>Sección</th><th>Material</th><th>N (kN)</th><th>M (kN·m)</th><th>V (kN)</th>
+          <th>D/C flex.</th><th>D/C corte</th><th>D/C axial</th><th>Gobierna</th><th>D/C máx</th><th>Estado</th>
+        </tr></thead><tbody>${rows}</tbody></table>
+        <p class="muted">${f.length > 60 ? `Se muestran los 60 elementos más solicitados de ${f.length}. ` : ''}
+        Resumen: <b class="r-ok">${nOk} cumplen</b> · <b class="r-warn">${nAj} ajustados</b> · <b class="r-bad">${nNo} no cumplen</b>.
+        Colores: verde ≤ 0.90 · ámbar 0.90–1.00 · rojo &gt; 1.00.</p>`;
+    } else {
+      disenoHTML = '<p class="muted">No hay resultados de análisis para verificar. Ejecute el análisis estático (F5) y, si corresponde, seleccione la combinación última gobernante antes de generar la memoria.</p>';
+    }
+
+    // ── Portada (estilo institucional, como la portada de la app) ────────────
+    const portada = `<section class="cover">
+      <div class="cover-inst">UNIVERSIDAD AUSTRAL DE CHILE<br><span>Facultad de Ciencias de la Ingeniería · Instituto de Obras Civiles</span></div>
+      <svg class="cover-frame" viewBox="0 0 360 200" aria-hidden="true">
+        <path d="M60 175 V55 H300 V175" fill="none" stroke="#0a3a57" stroke-width="4" stroke-linecap="round"/>
+        <path d="M46 188 L74 188 L60 175 Z" fill="#0d9488"/><path d="M286 188 L314 188 L300 175 Z" fill="#0d9488"/>
+        <path d="M44 188 H76 M284 188 H316" stroke="#0a3a57" stroke-width="2"/>
+        <circle cx="60" cy="55" r="5" fill="#0e7fc0"/><circle cx="300" cy="55" r="5" fill="#0e7fc0"/>
+      </svg>
+      <div class="cover-kicker">ANÁLISIS Y DISEÑO ESTRUCTURAL</div>
+      <h1 class="cover-title">Memoria de Cálculo</h1>
+      <div class="cover-proj">${esc(proyecto)}</div>
+      <div class="cover-badge">Producto académico — generado con PÓRTICO, laboratorio virtual de análisis estructural 3D (IOC · UACh)</div>
+      <table class="cover-meta"><tbody>
+        <tr><th>Proyecto</th><td>${esc(proyecto)}</td></tr>
+        <tr><th>Fecha</th><td>${esc(fecha)}</td></tr>
+        <tr><th>Unidades</th><td>${esc(U.replace('-',' · '))}</td></tr>
+        <tr><th>Proyectista</th><td>&nbsp;</td></tr>
+        <tr><th>Revisó</th><td>&nbsp;</td></tr>
+      </tbody></table>
+      <p class="cover-note">Documento de carácter docente. Los resultados deben ser validados por un profesional competente antes de cualquier uso en obra.</p>
+    </section>`;
+
     return `<!DOCTYPE html><html lang="es"><head><meta charset="utf-8">
-<title>Bases de Cálculo — ${esc(proyecto)}</title>
+<base href="${esc(location.origin)}/">
+<title>Memoria de Cálculo — ${esc(proyecto)}</title>
 <style>
-  :root{--ink:#1b2533;--mut:#5c6a7d;--bd:#cdd6e3;--ac:#0e7fc0;--head:#0a3a57;}
+  :root{--ink:#1b2533;--mut:#5c6a7d;--bd:#cdd6e3;--ac:#0e7fc0;--head:#0a3a57;--teal:#0d9488;}
   *{box-sizing:border-box;}
-  body{font-family:'Segoe UI',system-ui,sans-serif;color:var(--ink);margin:0;padding:32px 40px;font-size:12px;line-height:1.5;}
+  body{font-family:'Segoe UI',system-ui,sans-serif;color:var(--ink);margin:0;padding:30px 40px 64px;font-size:12px;line-height:1.5;}
   h1{font-size:22px;color:var(--head);margin:0 0 2px;}
-  h2{font-size:15px;color:var(--head);border-bottom:2px solid var(--ac);padding-bottom:3px;margin:26px 0 10px;}
-  h3{font-size:13px;color:var(--head);margin:16px 0 6px;}
+  h2{font-size:15px;color:var(--head);border-bottom:2px solid var(--ac);padding-bottom:3px;margin:24px 0 10px;}
+  h3{font-size:13px;color:var(--head);margin:15px 0 6px;}
   .sub{color:var(--mut);font-size:12px;margin:0 0 4px;}
   table{width:100%;border-collapse:collapse;margin:6px 0 12px;font-size:11px;}
-  th,td{border:1px solid var(--bd);padding:4px 7px;text-align:left;}
+  th,td{border:1px solid var(--bd);padding:4px 7px;text-align:left;vertical-align:top;}
   th{background:#eef3f9;color:var(--head);font-weight:600;}
   td{font-variant-numeric:tabular-nums;}
-  .muted{color:var(--mut);font-style:italic;}
+  code{background:#eef3f9;padding:0 4px;border-radius:3px;font-size:11px;}
+  .muted{color:var(--mut);}
   .tag{display:inline-block;background:var(--ac);color:#fff;font-size:9px;padding:1px 7px;border-radius:9px;vertical-align:middle;font-weight:600;}
   .tag-pp{background:#15803d;}
   figure{margin:8px 0;text-align:center;}
@@ -3152,18 +3301,33 @@ class App {
   .figrow{display:flex;flex-wrap:wrap;gap:10px;}
   .figrow figure{flex:1 1 30%;min-width:200px;margin:4px 0;}
   .spec-graph{border:1px solid var(--bd);border-radius:6px;padding:6px;background:#f6f8fb;max-width:480px;}
-  .hdr{display:flex;justify-content:space-between;align-items:flex-end;border-bottom:3px solid var(--head);padding-bottom:8px;}
-  .meta{text-align:right;color:var(--mut);font-size:11px;}
-  .print-btn{position:fixed;top:12px;right:12px;background:var(--ac);color:#fff;border:none;padding:8px 16px;border-radius:6px;font-size:13px;cursor:pointer;box-shadow:0 2px 8px rgba(0,0,0,.2);}
-  @media print{.print-btn{display:none;} h2{break-after:avoid;} table,figure{break-inside:avoid;} body{padding:0;}}
+  .r-ok{background:#e8f6ed;color:#15803d;} .r-warn{background:#fdf3e2;color:#b45309;} .r-bad{background:#fde8e8;color:#dc2626;font-weight:700;}
+  .print-btn{position:fixed;top:12px;right:12px;background:var(--ac);color:#fff;border:none;padding:8px 16px;border-radius:6px;font-size:13px;cursor:pointer;box-shadow:0 2px 8px rgba(0,0,0,.2);z-index:10;}
+  .page-footer{position:fixed;bottom:0;left:0;right:0;height:42px;display:flex;align-items:center;justify-content:space-between;
+    padding:0 40px;font-size:9px;color:var(--mut);border-top:1px solid var(--bd);background:#fff;}
+  .page-footer b{color:var(--head);}
+  .cover{min-height:88vh;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;page-break-after:always;}
+  .cover-inst{font-size:12px;letter-spacing:.5px;color:var(--head);font-weight:600;margin-bottom:6px;}
+  .cover-inst span{display:block;font-weight:400;color:var(--mut);font-size:10px;letter-spacing:0;}
+  .cover-frame{width:240px;height:auto;margin:14px 0;}
+  .cover-kicker{letter-spacing:3px;font-size:12px;color:var(--teal);font-weight:600;}
+  .cover-title{font-size:38px;color:var(--head);margin:4px 0 2px;letter-spacing:1px;}
+  .cover-proj{font-size:16px;color:var(--ink);margin-bottom:14px;}
+  .cover-badge{max-width:480px;font-size:11px;color:var(--mut);border:1px dashed var(--bd);border-radius:8px;padding:8px 12px;margin-bottom:18px;}
+  .cover-meta{max-width:420px;font-size:12px;} .cover-meta th{width:120px;}
+  .cover-note{max-width:480px;font-size:10px;color:var(--mut);margin-top:16px;font-style:italic;}
+  @media print{.print-btn{display:none;} h2{break-after:avoid;} table,figure{break-inside:avoid;} body{padding:0 40px 64px;}}
 </style></head><body>
 <button class="print-btn" onclick="window.print()">🖨 Imprimir / Guardar PDF</button>
-<div class="hdr">
-  <div><h1>Bases de Cálculo Estructural</h1><p class="sub">PÓRTICO — Análisis estructural 3D</p></div>
-  <div class="meta">Proyecto: <b>${esc(proyecto)}</b><br>${esc(fecha)}<br>Unidades: ${esc(U.replace('-',' — '))}</div>
-</div>
+<div class="page-footer"><span><b>PÓRTICO</b> · Memoria de Cálculo — ${esc(proyecto)}</span>
+  <span>Producto académico · IOC · UACh — no sustituye la revisión de un profesional competente</span>
+  <span>${esc(fecha)}</span></div>
 
-<h2>1. Descripción del modelo</h2>
+${portada}
+
+<h2>1. Bases de cálculo</h2>
+
+<h3>1.1 Descripción del modelo</h3>
 <table><tbody>
   <tr><th>Nodos</th><td>${s.nodes}</td><th>Elementos</th><td>${s.elements}</td></tr>
   <tr><th>Materiales</th><td>${s.materials}</td><th>Secciones</th><td>${s.sections}</td></tr>
@@ -3171,29 +3335,48 @@ class App {
 </tbody></table>
 ${figBase}
 
-<h2>2. Materiales y propiedades</h2>
+<h3>1.2 Métodos de diseño</h3>
+<table><tbody>${metodosHTML}</tbody></table>
+
+<h3>1.3 Normas y códigos</h3>
+<table><tbody>${normas}</tbody></table>
+
+<h3>1.4 Materiales y propiedades mecánicas</h3>
 <table><thead><tr><th>Material</th><th>E (kN/m²)</th><th>G (kN/m²)</th><th>ν</th><th>ρ (t/m³)</th></tr></thead>
 <tbody>${matRows}</tbody></table>
 
-<h2>3. Secciones de los elementos</h2>
+<h3>1.5 Secciones</h3>
 <table><thead><tr><th>Sección</th><th>A (m²)</th><th>Iy (m⁴)</th><th>Iz (m⁴)</th><th>J (m⁴)</th><th>Avy (m²)</th><th>Avz (m²)</th><th># elem</th></tr></thead>
 <tbody>${secRows}</tbody></table>
 
-<h2>4. Cargas</h2>
+<h3>1.6 Cargas y sobrecargas</h3>
 ${cargasHTML}
 
-<h2>5. Acción sísmica</h2>
+<h3>1.7 Acción sísmica</h3>
 ${sismoHTML}
 
-<h2>6. Modelo deformado</h2>
-${figDef}
+<h3>1.8 Combinaciones de carga</h3>
+<table><thead><tr><th>Combinación</th><th>Factores</th></tr></thead><tbody>${comboRows}</tbody></table>
 
-<h2>7. Análisis modal — modos de vibrar</h2>
+<h3>1.9 Flechas admisibles</h3>
+${flechasHTML}
+
+<h2>2. Análisis estructural</h2>
+<h3>2.1 Modelo deformado</h3>
+${figDef}
+<h3>2.2 Análisis modal — modos de vibrar</h3>
 ${modalHTML}
 
-<p class="muted" style="margin-top:24px;border-top:1px solid var(--bd);padding-top:8px">
-  Documento generado automáticamente por PÓRTICO. Las propiedades y resultados corresponden al estado del modelo al momento de la generación.
-  Cargas de viento, nieve y sobrecargas se representan como casos de carga; verifique su clasificación según la normativa aplicable.</p>
+<h2>3. Diseño de elementos</h2>
+${disenoHTML}
+
+<h2>4. Limitaciones y alcances</h2>
+<ul style="font-size:11px;line-height:1.6">
+  <li>Documento generado automáticamente por PÓRTICO con fines <b>docentes</b>; no reemplaza el criterio ni la firma de un profesional competente.</li>
+  <li>La verificación de diseño usa propiedades de sección (A, I) y los parámetros editables de <code>asistente/diseno_params.json</code>; el hormigón armado se evalúa con la cuantía indicada y supuestos declarados.</li>
+  <li>No incluye diseño de uniones, fundaciones, pandeo lateral-torsional ni clasificación de perfiles; las razones D/C son una verificación preliminar de flexión, corte y axial.</li>
+  <li>Las cargas de viento, nieve y sobrecargas se representan como casos de carga; verifique su clasificación y magnitud según la normativa aplicable.</li>
+</ul>
 </body></html>`;
   }
 

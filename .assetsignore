@@ -6,6 +6,7 @@ node_modules/
 .wrangler/
 excel/
 worker/
+referencias/
 # La app carga examples/portico_simple.s3d al iniciar → NO excluir la carpeta;
 # solo el artefacto de prueba pesado.
 examples/portico_simple_v3.s3d
