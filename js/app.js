@@ -1,26 +1,26 @@
 // ──────────────────────────────────────────────────────────────────────────────
 // App — main orchestrator
 // ──────────────────────────────────────────────────────────────────────────────
-import { Model }           from './model/model.js?v=81';
-import { Serializer }      from './model/serializer.js?v=81';
-import { Viewport }        from './ui/viewport.js?v=81';
-import { PropertiesPanel } from './ui/properties.js?v=81';
-import { MenuBar }         from './ui/menu.js?v=81';
-import { UndoStack }       from './utils/undo.js?v=81';
-import { StaticSolver, ensureDefaultLC }   from './solver/static_solver.js?v=81';
-import { Results }                         from './solver/postprocess.js?v=81';
-import { ModalSolver }                     from './solver/modal_solver.js?v=81';
-import { buildNodeIndex, assembleK, assembleF, getNodeDOFs } from './solver/assembler.js?v=81';
-import { assembleSparseGlobal, extractFreeCSR } from './solver/sparse.js?v=81';
-import { solveNonlinear } from './solver/nl_lite.js?v=81';
-import { assembleKg } from './solver/geometric.js?v=81';
-import { denseFactor, triForward, triBackward, makeFactor } from './solver/linsolve.js?v=81';
-import { formFind } from './solver/formfind.js?v=81';
-import { ModalResults }                    from './solver/modal_results.js?v=81';
-import { SpectrumSolver }                  from './solver/spectrum_solver.js?v=81';
-import { autoDetectDiaphragms, computeFloorCR } from './solver/diaphragm.js?v=81';
-import { splitElement, splitByLength, discretizeAll, joinElements, intersectarElementos } from './model/discretize.js?v=81';
-import { localAxes, stiffnessMatrix, massMatrix, transformMatrix, globalStiffness, applyReleases } from './solver/timoshenko.js?v=81';
+import { Model }           from './model/model.js?v=82';
+import { Serializer }      from './model/serializer.js?v=82';
+import { Viewport }        from './ui/viewport.js?v=82';
+import { PropertiesPanel } from './ui/properties.js?v=82';
+import { MenuBar }         from './ui/menu.js?v=82';
+import { UndoStack }       from './utils/undo.js?v=82';
+import { StaticSolver, ensureDefaultLC }   from './solver/static_solver.js?v=82';
+import { Results }                         from './solver/postprocess.js?v=82';
+import { ModalSolver }                     from './solver/modal_solver.js?v=82';
+import { buildNodeIndex, assembleK, assembleF, getNodeDOFs } from './solver/assembler.js?v=82';
+import { assembleSparseGlobal, extractFreeCSR } from './solver/sparse.js?v=82';
+import { solveNonlinear, solveNonlinearDC } from './solver/nl_lite.js?v=82';
+import { assembleKg } from './solver/geometric.js?v=82';
+import { denseFactor, triForward, triBackward, makeFactor } from './solver/linsolve.js?v=82';
+import { formFind } from './solver/formfind.js?v=82';
+import { ModalResults }                    from './solver/modal_results.js?v=82';
+import { SpectrumSolver }                  from './solver/spectrum_solver.js?v=82';
+import { autoDetectDiaphragms, computeFloorCR } from './solver/diaphragm.js?v=82';
+import { splitElement, splitByLength, discretizeAll, joinElements, intersectarElementos } from './model/discretize.js?v=82';
+import { localAxes, stiffnessMatrix, massMatrix, transformMatrix, globalStiffness, applyReleases } from './solver/timoshenko.js?v=82';
 
 class App {
   constructor() {
@@ -1121,7 +1121,7 @@ class App {
   _staticWorkerSolve(K, nDOF, freeDOF, Flist, dense = false) {
     return new Promise((resolve, reject) => {
       let worker;
-      try { worker = new Worker(new URL('./solver/static_worker.js?v=81', import.meta.url), { type: 'module' }); }
+      try { worker = new Worker(new URL('./solver/static_worker.js?v=82', import.meta.url), { type: 'module' }); }
       catch (e) { reject(e); return; }
       this._staticWorker = worker;
       const cancelar = () => { try { worker.terminate(); } catch (e) {} this._staticWorker = null; this._hideProgress(); reject(new Error('cancelado')); };
@@ -1150,7 +1150,7 @@ class App {
   _staticWorkerSolveSparse(csr, cf, nDOF, freeDOF, Flist) {
     return new Promise((resolve, reject) => {
       let worker;
-      try { worker = new Worker(new URL('./solver/static_worker.js?v=81', import.meta.url), { type: 'module' }); }
+      try { worker = new Worker(new URL('./solver/static_worker.js?v=82', import.meta.url), { type: 'module' }); }
       catch (e) { reject(e); return; }
       this._staticWorker = worker;
       const cancelar = () => { try { worker.terminate(); } catch (e) {} this._staticWorker = null; this._hideProgress(); reject(new Error('cancelado')); };
@@ -2306,6 +2306,151 @@ class App {
     el.querySelector('#plastic-close').addEventListener('click', () => { el.remove(); this.viewport.clearResults(); });
   }
 
+  // ── NL-lite: arma el problema no lineal (barras/cables) desde el modelo ────
+  _buildNLProblem() {
+    const model = this.model;
+    const nodeIds = [...model.nodes.keys()];
+    const idxOf = new Map(nodeIds.map((id, i) => [id, i]));
+    const nNode = nodeIds.length;
+    const X = new Float64Array(3 * nNode);
+    nodeIds.forEach((id, i) => { const n = model.nodes.get(id); X[3 * i] = n.x; X[3 * i + 1] = n.y; X[3 * i + 2] = n.z; });
+    const elems = [], elemIds = [];
+    for (const el of model.elements.values()) {
+      const n1 = model.nodes.get(el.n1), n2 = model.nodes.get(el.n2);
+      const mat = model.materials.get(el.matId), sec = model.sections.get(el.secId);
+      if (!n1 || !n2 || !mat || !sec) continue;
+      const L = Math.hypot(n2.x - n1.x, n2.y - n1.y, n2.z - n1.z); if (L < 1e-12) continue;
+      elems.push({ n1: idxOf.get(el.n1), n2: idxOf.get(el.n2), EA: mat.E * sec.A, L0: (el.L0factor || 1) * L, cable: !!el.cable });
+      elemIds.push(el.id);
+    }
+    const is2D = model.mode === '2D';
+    const free = [];
+    nodeIds.forEach((id, i) => { const r = model.nodes.get(id).restraints; const fix = [r.ux, is2D ? 1 : r.uy, r.uz]; for (let c = 0; c < 3; c++) if (!fix[c]) free.push(3 * i + c); });
+    const Fref = new Float64Array(3 * nNode); let nCasos = 0;
+    const addN = (id, fx, fy, fz) => { const i = idxOf.get(id); if (i == null) return; Fref[3 * i] += fx; Fref[3 * i + 1] += fy; Fref[3 * i + 2] += fz; };
+    const dirVec = d => d === 'globalX' ? [1, 0, 0] : d === 'globalY' ? [0, 1, 0] : d === 'globalZ' ? [0, 0, 1] : [0, 0, -1];
+    for (const lc of model.loadCases.values()) {
+      if (lc.type === 'spectrum') continue; nCasos++;
+      for (const ld of (lc.loads || [])) {
+        if (ld.type === 'nodal') addN(ld.nodeId, ld.F[0] || 0, ld.F[1] || 0, ld.F[2] || 0);
+        else if (ld.type === 'dist') {
+          const el = model.elements.get(ld.elemId); if (!el) continue;
+          const n1 = model.nodes.get(el.n1), n2 = model.nodes.get(el.n2); if (!n1 || !n2) continue;
+          const L = Math.hypot(n2.x - n1.x, n2.y - n1.y, n2.z - n1.z);
+          const half = (ld.w || 0) * L / 2, g = dirVec(ld.dir || 'gravity');
+          addN(el.n1, half * g[0], half * g[1], half * g[2]); addN(el.n2, half * g[0], half * g[1], half * g[2]);
+        }
+      }
+      if (lc.selfWeight) for (const el of model.elements.values()) {
+        const mat = model.materials.get(el.matId), sec = model.sections.get(el.secId);
+        const n1 = model.nodes.get(el.n1), n2 = model.nodes.get(el.n2);
+        if (!mat || !sec || !n1 || !n2) continue;
+        const L = Math.hypot(n2.x - n1.x, n2.y - n1.y, n2.z - n1.z), w = mat.rho * sec.A * L / 2;
+        addN(el.n1, 0, 0, -w); addN(el.n2, 0, 0, -w);
+      }
+    }
+    return { X, elems, elemIds, free, Fref, nodeIds, idxOf, nNode, nCasos };
+  }
+
+  // ── NL-lite Fase 5: pushover por CONTROL DE DESPLAZAMIENTO + imperfecciones ─
+  // + curva carga–desplazamiento. Traza la trayectoria de equilibrio completa
+  // (snap-through / puntos límite). Imperfección inicial opcional para disparar
+  // inestabilidades. Trata los elementos como barras/cables (truss).
+  async runPushoverDC() {
+    if (!this._config?.analisis?.nlLite) { this.toast('Active «Análisis no lineal (NL-lite)» en ⚙ Configuración', 'warn'); this.configDialog?.(); return; }
+    const model = this.model;
+    if (model.nodes.size === 0 || model.elements.size === 0) { this.toast('Modelo vacío', 'warn'); return; }
+    const P = this._buildNLProblem();
+    if (!P.free.length) { this.toast('Sin GDL libres', 'warn'); return; }
+    if (!P.nCasos) { this.toast('Defina un caso de carga (patrón de referencia).', 'warn'); return; }
+
+    const impStr = await this._promptModal('Pushover — control de desplazamiento',
+      'Imperfección inicial (amplitud en m; 0 = perfecta). Se aplica en la forma de la respuesta para disparar inestabilidades:', '0');
+    if (impStr == null) return;
+    const imp = parseFloat(impStr) || 0;
+
+    // Respuesta lineal (1 paso, 1 iteración desde u=0) → GDL de control + forma de imperfección
+    const lin = solveNonlinear({ X: P.X, elems: P.elems, free: P.free, Fref: P.Fref, nSteps: 1, maxIter: 1, tol: 1e-30 });
+    const uLin = lin.steps[0]?.u || new Float64Array(P.X.length);
+    let cDOF = P.free[0], best = -1;
+    for (const d of P.free) { const v = Math.abs(uLin[d]); if (v > best) { best = v; cDOF = d; } }
+    if (best < 1e-30) { this.toast('La carga no produce desplazamiento (¿estructura indeformable?).', 'warn'); return; }
+
+    const Ximp = Float64Array.from(P.X);
+    if (imp > 0) {
+      let nrm = 0; for (const d of P.free) nrm += uLin[d] * uLin[d]; nrm = Math.sqrt(nrm) || 1;
+      for (const d of P.free) Ximp[d] += imp * uLin[d] / nrm;
+    }
+    const linCtrl = uLin[cDOF] || 1e-3;
+    const target = linCtrl * 25;   // empuja bien más allá de puntos límite (traza el snap-through completo)
+    const res = solveNonlinearDC({ X: Ximp, elems: P.elems, free: P.free, Fref: P.Fref, controlDOF: cDOF, targetDisp: target, nSteps: 60 });
+    if (!res.path || res.path.length < 2) { this.toast('Pushover DC: ' + (res.note || 'sin trayectoria'), 'error'); return; }
+
+    this._dcResult = { res, P, cDOF, imp, Ximp };
+    let peak = -Infinity, peakD = 0; for (const p of res.path) if (p.lambda > peak) { peak = p.lambda; peakD = p.disp; }
+    const ni = Math.floor(cDOF / 3), nodeId = P.nodeIds[ni], axis = 'XYZ'[cDOF % 3];
+    this._dcCtrlLabel = `nodo ${nodeId} · ${axis}`;
+    this.toast(`${res.ok ? 'Pushover DC OK' : res.note} · pico λ=${peak.toFixed(3)} (carga límite) · control ${this._dcCtrlLabel}${imp ? ` · imperfección ${imp} m` : ''}`, res.ok ? 'ok' : 'warn');
+    this._dcOpenOverlay();
+  }
+
+  _dcOpenOverlay() {
+    const { res } = this._dcResult;
+    const path = res.path;
+    // curva λ vs desplazamiento de control (SVG)
+    const W = 256, H = 120, ml = 4, mr = 4, mt = 6, mb = 4;
+    const ds = path.map(p => p.disp), ls = path.map(p => p.lambda);
+    const dmin = Math.min(...ds), dmax = Math.max(...ds), lmin = Math.min(...ls, 0), lmax = Math.max(...ls, 0);
+    const sx = d => ml + (W - ml - mr) * (Math.abs(dmax - dmin) < 1e-30 ? 0.5 : (d - dmin) / (dmax - dmin));
+    const sy = l => mt + (H - mt - mb) * (1 - (Math.abs(lmax - lmin) < 1e-30 ? 0.5 : (l - lmin) / (lmax - lmin)));
+    const poly = path.map(p => `${sx(p.disp).toFixed(1)},${sy(p.lambda).toFixed(1)}`).join(' ');
+    const y0 = sy(0).toFixed(1);
+    this._dcSVG = (k) => `<svg viewBox="0 0 ${W} ${H}" style="width:100%;height:${H}px;background:var(--bg3,#0b1220);border-radius:6px">
+      <line x1="${ml}" y1="${y0}" x2="${W - mr}" y2="${y0}" stroke="var(--border,#26324d)" stroke-width="1"/>
+      <polyline points="${poly}" fill="none" stroke="var(--accent,#38bdf8)" stroke-width="1.5"/>
+      <circle cx="${sx(path[k].disp).toFixed(1)}" cy="${sy(path[k].lambda).toFixed(1)}" r="3.5" fill="#f59e0b"/>
+    </svg>`;
+    let el = document.getElementById('dc-overlay');
+    if (!el) { el = document.createElement('div'); el.id = 'dc-overlay'; document.body.appendChild(el); }
+    el.style.cssText = 'position:fixed;right:16px;bottom:84px;z-index:50;background:var(--panel,#0f1830);border:1px solid var(--border,#26324d);border-radius:8px;padding:10px 12px;width:288px;box-shadow:0 8px 24px rgba(0,0,0,.4);font-size:12px;color:var(--text,#dbe4f5)';
+    el.innerHTML = `
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
+        <b style="color:var(--accent,#38bdf8)">Curva carga–desplazamiento</b>
+        <button id="dc-close" title="Cerrar" style="background:none;border:none;color:var(--text-muted,#94a3b8);cursor:pointer;font-size:16px;line-height:1">✕</button>
+      </div>
+      <div id="dc-plot"></div>
+      <div style="display:flex;align-items:center;gap:6px;margin:6px 0">
+        <button id="dc-play" class="btn-secondary" style="font-size:14px;padding:2px 8px">▶</button>
+        <input type="range" id="dc-step" min="0" max="${path.length - 1}" value="${path.length - 1}" style="flex:1">
+      </div>
+      <div id="dc-readout" style="color:var(--text-muted,#94a3b8);font-size:11px;line-height:1.5"></div>`;
+    const stepInp = el.querySelector('#dc-step'), playBtn = el.querySelector('#dc-play');
+    const redraw = () => this._dcShowStep(+stepInp.value);
+    stepInp.addEventListener('input', redraw);
+    el.querySelector('#dc-close').addEventListener('click', () => { this._dcStopPlay(); el.remove(); this.viewport.clearResults(); });
+    playBtn.addEventListener('click', () => {
+      if (this._dcPlayTimer) { this._dcStopPlay(); playBtn.textContent = '▶'; return; }
+      playBtn.textContent = '⏸';
+      this._dcPlayTimer = setInterval(() => { let v = +stepInp.value + 1; if (v > path.length - 1) v = 0; stepInp.value = v; redraw(); }, 120);
+    });
+    redraw();
+  }
+
+  _dcStopPlay() { if (this._dcPlayTimer) { clearInterval(this._dcPlayTimer); this._dcPlayTimer = null; } }
+
+  _dcShowStep(k) {
+    const { res, P } = this._dcResult;
+    const p = res.path[Math.max(0, Math.min(k, res.path.length - 1))]; if (!p) return;
+    const uByNode = new Map(), elemState = new Map();
+    P.nodeIds.forEach((id, i) => uByNode.set(id, [p.u[3 * i], p.u[3 * i + 1], p.u[3 * i + 2]]));
+    P.elemIds.forEach((eid, j) => elemState.set(eid, { N: p.N[j], cable: this.model.elements.get(eid)?.cable, taut: !(this.model.elements.get(eid)?.cable) || p.N[j] >= 0 }));
+    this.viewport.showNLDeformed(uByNode, elemState, 1,
+      `Pushover DC · λ=${p.lambda.toFixed(3)} · δ(${this._dcCtrlLabel})=${p.disp.toExponential(2)} m`);
+    const plot = document.getElementById('dc-plot'); if (plot) plot.innerHTML = this._dcSVG(k);
+    const ro = document.getElementById('dc-readout');
+    if (ro) ro.innerHTML = `λ = <b>${p.lambda.toFixed(4)}</b> (× carga de referencia)<br>δ control (${this._dcCtrlLabel}) = ${p.disp.toExponential(3)} m<br>punto ${k + 1}/${res.path.length}`;
+  }
+
   _spectrumDialog(defaultText) {
     const is2D = this.model.mode === '2D';
     // Preseleccionar la dirección del caso espectral activo (si lo hay)
@@ -3077,7 +3222,7 @@ class App {
     this._showProgress('Generando el modelo…', 'Aplicando reglas y cargas normativas');
     try {
       const libs = await this._cargarBibliotecasAsistente();
-      const { generarModelo } = await import('../asistente/generador.js?v=81');
+      const { generarModelo } = await import('../asistente/generador.js?v=82');
       const modelo = generarModelo(ficha, libs);
 
       if (modo === 'sobreponer') {
@@ -3953,7 +4098,7 @@ class App {
   // Verificación de diseño (flexión/corte/axial) por elemento, usando los
   // resultados actuales y los parámetros editables de asistente/diseno_params.json.
   async _calcularDiseno() {
-    const ver = '?v=81';
+    const ver = '?v=82';
     let params = null;
     try { params = await fetch('asistente/diseno_params.json' + ver).then(r => r.json()); }
     catch (e) { console.error('No se pudo cargar diseno_params.json:', e); return null; }

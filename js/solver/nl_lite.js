@@ -180,6 +180,64 @@ export function solveNonlinear(o) {
   return { converged, steps, reactions, nF, u };
 }
 
+// ── Solver no lineal con CONTROL DE DESPLAZAMIENTO (Fase 5) ────────────────────
+// Prescribe el incremento del GDL de control y halla el factor de carga λ; traza
+// la trayectoria de equilibrio COMPLETA, incluso pasando por puntos límite
+// (snap-through) donde el control de carga falla. Sistema aumentado [Δu; Δλ]
+// (robusto en el punto límite, donde Kt es singular pero el aumentado no).
+/**
+ * @param {object} o  como solveNonlinear + { controlDOF, targetDisp }
+ *   controlDOF  GDL global de control (3·nodo+c) — debe ser libre
+ *   targetDisp  desplazamiento de control objetivo (se alcanza en nSteps pasos)
+ * @returns { ok, path:[{lambda,disp,u,N}], note }
+ */
+export function solveNonlinearDC(o) {
+  const X = o.X, nNode = X.length / 3, nDOF = nNode * 3;
+  const elems = o.elems, slack = o.slack ?? 1e-6, maxIter = o.maxIter || 60, tol = o.tol ?? 1e-9;
+  const nSteps = o.nSteps || 40;
+  const dofMap = new Int32Array(nDOF).fill(-1); let nF = 0;
+  for (const d of o.free) dofMap[d] = nF++;
+  const Fref = o.Fref || new Float64Array(nDOF);
+  const FrefF = new Float64Array(nF);
+  for (let d = 0; d < nDOF; d++) if (dofMap[d] >= 0) FrefF[dofMap[d]] = Fref[d];
+  const cF = dofMap[o.controlDOF];
+  if (cF < 0) return { ok: false, path: [], note: 'El GDL de control no es libre.' };
+
+  const dq = o.targetDisp / nSteps;
+  const u = o.u0 ? Float64Array.from(o.u0) : new Float64Array(nDOF);
+  let lambda = 0;
+  const snap = () => ({ lambda, disp: u[o.controlDOF], u: Float64Array.from(u), N: assembleNL(X, u, elems, dofMap, nF, slack).Ndata.map(d => d.N) });
+  const path = [snap()];
+  const m = nF + 1;
+
+  for (let s = 0; s < nSteps; s++) {
+    let ok = false;
+    for (let it = 0; it < maxIter; it++) {
+      const { Fint, Kt } = assembleNL(X, u, elems, dofMap, nF, slack);
+      const r = new Float64Array(nF);
+      let rn = 0; for (let i = 0; i < nF; i++) { r[i] = lambda * FrefF[i] - Fint[i]; rn += r[i] * r[i]; }
+      if (it > 0 && Math.sqrt(rn) < tol * (1 + Math.abs(lambda))) { ok = true; break; }
+      // sistema aumentado: [Kt  −Fref; e_c  0]·[Δu; Δλ] = [r; (it==0?dq:0)]
+      const Aug = new Float64Array(m * m), rhs = new Float64Array(m);
+      for (let i = 0; i < nF; i++) {
+        const off = i * m, ko = i * nF;
+        for (let j = 0; j < nF; j++) Aug[off + j] = Kt[ko + j];
+        Aug[off + nF] = -FrefF[i]; rhs[i] = r[i];
+      }
+      for (let j = 0; j < nF; j++) Aug[nF * m + j] = (j === cF ? 1 : 0);
+      Aug[nF * m + nF] = 0; rhs[nF] = (it === 0 ? dq : 0);
+      const sol = solveDense(Aug, rhs, m);
+      if (!sol) return { ok: false, path, note: 'Sistema aumentado singular (¿GDL de control inadecuado?).' };
+      const dlam = sol[nF];
+      lambda += dlam;
+      for (let i = 0; i < nDOF; i++) { const fi = dofMap[i]; if (fi >= 0) u[i] += sol[fi]; }
+    }
+    path.push(snap());
+    if (!ok) return { ok: false, path, note: `No convergió en el paso ${s + 1}.` };
+  }
+  return { ok: true, path, note: '' };
+}
+
 // Fuerza interna en TODOS los GDL (para reacciones).
 function assembleNLfull(X, u, elems, nDOF, slack) {
   const Fint = new Float64Array(nDOF);

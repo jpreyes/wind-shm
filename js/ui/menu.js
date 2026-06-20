@@ -95,6 +95,7 @@ export class MenuBar {
       case 'run-buckling':   a.runBuckling();                break;
       case 'run-formfind':   a.runFormFinding();             break;
       case 'run-plastic':    a.runPlastic();                 break;
+      case 'run-pushover-dc': a.runPushoverDC();             break;
       case 'combos':         a.openCombosTab();              break;
       case 'asistente':      a.asistenteDialog();            break;
       case 'res-deformed':   a.setResultType('deformed');    break;
