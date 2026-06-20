@@ -1,25 +1,26 @@
 // ──────────────────────────────────────────────────────────────────────────────
 // App — main orchestrator
 // ──────────────────────────────────────────────────────────────────────────────
-import { Model }           from './model/model.js?v=79';
-import { Serializer }      from './model/serializer.js?v=79';
-import { Viewport }        from './ui/viewport.js?v=79';
-import { PropertiesPanel } from './ui/properties.js?v=79';
-import { MenuBar }         from './ui/menu.js?v=79';
-import { UndoStack }       from './utils/undo.js?v=79';
-import { StaticSolver, ensureDefaultLC }   from './solver/static_solver.js?v=79';
-import { Results }                         from './solver/postprocess.js?v=79';
-import { ModalSolver }                     from './solver/modal_solver.js?v=79';
-import { buildNodeIndex, assembleK, assembleF, getNodeDOFs } from './solver/assembler.js?v=79';
-import { assembleSparseGlobal, extractFreeCSR } from './solver/sparse.js?v=79';
-import { solveNonlinear } from './solver/nl_lite.js?v=79';
-import { assembleKg } from './solver/geometric.js?v=79';
-import { denseFactor, triForward, triBackward } from './solver/linsolve.js?v=79';
-import { ModalResults }                    from './solver/modal_results.js?v=79';
-import { SpectrumSolver }                  from './solver/spectrum_solver.js?v=79';
-import { autoDetectDiaphragms, computeFloorCR } from './solver/diaphragm.js?v=79';
-import { splitElement, splitByLength, discretizeAll, joinElements, intersectarElementos } from './model/discretize.js?v=79';
-import { localAxes, stiffnessMatrix, massMatrix, transformMatrix, globalStiffness, applyReleases } from './solver/timoshenko.js?v=79';
+import { Model }           from './model/model.js?v=80';
+import { Serializer }      from './model/serializer.js?v=80';
+import { Viewport }        from './ui/viewport.js?v=80';
+import { PropertiesPanel } from './ui/properties.js?v=80';
+import { MenuBar }         from './ui/menu.js?v=80';
+import { UndoStack }       from './utils/undo.js?v=80';
+import { StaticSolver, ensureDefaultLC }   from './solver/static_solver.js?v=80';
+import { Results }                         from './solver/postprocess.js?v=80';
+import { ModalSolver }                     from './solver/modal_solver.js?v=80';
+import { buildNodeIndex, assembleK, assembleF, getNodeDOFs } from './solver/assembler.js?v=80';
+import { assembleSparseGlobal, extractFreeCSR } from './solver/sparse.js?v=80';
+import { solveNonlinear } from './solver/nl_lite.js?v=80';
+import { assembleKg } from './solver/geometric.js?v=80';
+import { denseFactor, triForward, triBackward } from './solver/linsolve.js?v=80';
+import { formFind } from './solver/formfind.js?v=80';
+import { ModalResults }                    from './solver/modal_results.js?v=80';
+import { SpectrumSolver }                  from './solver/spectrum_solver.js?v=80';
+import { autoDetectDiaphragms, computeFloorCR } from './solver/diaphragm.js?v=80';
+import { splitElement, splitByLength, discretizeAll, joinElements, intersectarElementos } from './model/discretize.js?v=80';
+import { localAxes, stiffnessMatrix, massMatrix, transformMatrix, globalStiffness, applyReleases } from './solver/timoshenko.js?v=80';
 
 class App {
   constructor() {
@@ -1120,7 +1121,7 @@ class App {
   _staticWorkerSolve(K, nDOF, freeDOF, Flist, dense = false) {
     return new Promise((resolve, reject) => {
       let worker;
-      try { worker = new Worker(new URL('./solver/static_worker.js?v=79', import.meta.url), { type: 'module' }); }
+      try { worker = new Worker(new URL('./solver/static_worker.js?v=80', import.meta.url), { type: 'module' }); }
       catch (e) { reject(e); return; }
       this._staticWorker = worker;
       const cancelar = () => { try { worker.terminate(); } catch (e) {} this._staticWorker = null; this._hideProgress(); reject(new Error('cancelado')); };
@@ -1149,7 +1150,7 @@ class App {
   _staticWorkerSolveSparse(csr, cf, nDOF, freeDOF, Flist) {
     return new Promise((resolve, reject) => {
       let worker;
-      try { worker = new Worker(new URL('./solver/static_worker.js?v=79', import.meta.url), { type: 'module' }); }
+      try { worker = new Worker(new URL('./solver/static_worker.js?v=80', import.meta.url), { type: 'module' }); }
       catch (e) { reject(e); return; }
       this._staticWorker = worker;
       const cancelar = () => { try { worker.terminate(); } catch (e) {} this._staticWorker = null; this._hideProgress(); reject(new Error('cancelado')); };
@@ -2058,6 +2059,95 @@ class App {
       `P-Delta · δmax=${dPD.toExponential(2)} m · amplificación ×${amp.toFixed(2)} vs lineal · ${conv ? it + ' iter' : 'sin converger'}`);
   }
 
+  // ── NL-lite Fase 3: FORM-FINDING por densidades de fuerza (FDM) ───────────
+  // Halla la forma de equilibrio de la red de cables/barras y REPOSICIONA los
+  // nodos libres a esa geometría (queda como modelo base; Ctrl+Z deshace).
+  // Anclas = nodos con alguna restricción de traslación. q = densidad de fuerza.
+  async runFormFinding() {
+    if (!this._config?.analisis?.nlLite) { this.toast('Active «Análisis no lineal (NL-lite)» en ⚙ Configuración', 'warn'); this.configDialog?.(); return; }
+    const model = this.model;
+    if (model.nodes.size === 0 || model.elements.size === 0) { this.toast('Modelo vacío', 'warn'); return; }
+
+    const nodeIds = [...model.nodes.keys()];
+    const idxOf = new Map(nodeIds.map((id, i) => [id, i]));
+    const n = nodeIds.length;
+    const coords = new Float64Array(3 * n);
+    const fixed = [];
+    nodeIds.forEach((id, i) => {
+      const nd = model.nodes.get(id);
+      coords[3 * i] = nd.x; coords[3 * i + 1] = nd.y; coords[3 * i + 2] = nd.z;
+      const r = nd.restraints;
+      fixed.push(!!(r.ux || r.uy || r.uz));   // ancla = cualquier restricción de traslación
+    });
+    if (fixed.filter(Boolean).length < 2) { this.toast('El form-finding necesita ≥ 2 nodos ancla (apoyos). Restrinja algunos nodos.', 'warn'); return; }
+
+    const branches = [];
+    for (const el of model.elements.values()) {
+      const i = idxOf.get(el.n1), j = idxOf.get(el.n2);
+      if (i != null && j != null) branches.push([i, j]);
+    }
+    if (!branches.length) { this.toast('Sin elementos para formar la red.', 'warn'); return; }
+
+    const qStr = await this._promptModal('Form-finding (densidades de fuerza)',
+      'Densidad de fuerza q = N/L [kN/m], uniforme (mayor q → forma más tensa/recta):', '10');
+    if (qStr == null) return;
+    const q0 = parseFloat(qStr);
+    if (!(q0 > 0)) { this.toast('q debe ser un número > 0', 'warn'); return; }
+    const q = branches.map(() => q0);
+
+    // Cargas externas combinadas (todos los casos estáticos) sobre nodos libres.
+    const loads = nodeIds.map(() => [0, 0, 0]);
+    let hasLoad = false;
+    const dirVec = d => d === 'globalX' ? [1, 0, 0] : d === 'globalY' ? [0, 1, 0] : d === 'globalZ' ? [0, 0, 1] : [0, 0, -1];
+    for (const lc of model.loadCases.values()) {
+      if (lc.type === 'spectrum') continue;
+      for (const ld of (lc.loads || [])) {
+        if (ld.type === 'nodal') {
+          const i = idxOf.get(ld.nodeId);
+          if (i != null) { loads[i][0] += ld.F[0] || 0; loads[i][1] += ld.F[1] || 0; loads[i][2] += ld.F[2] || 0; hasLoad = true; }
+        } else if (ld.type === 'dist') {
+          const el = model.elements.get(ld.elemId); if (!el) continue;
+          const n1 = model.nodes.get(el.n1), n2 = model.nodes.get(el.n2); if (!n1 || !n2) continue;
+          const L = Math.hypot(n2.x - n1.x, n2.y - n1.y, n2.z - n1.z);
+          const half = (ld.w || 0) * L / 2, g = dirVec(ld.dir || 'gravity');
+          const a = idxOf.get(el.n1), b = idxOf.get(el.n2);
+          if (a != null) for (let c = 0; c < 3; c++) loads[a][c] += half * g[c];
+          if (b != null) for (let c = 0; c < 3; c++) loads[b][c] += half * g[c];
+          hasLoad = true;
+        }
+      }
+      if (lc.selfWeight) {
+        for (const el of model.elements.values()) {
+          const mat = model.materials.get(el.matId), sec = model.sections.get(el.secId);
+          const n1 = model.nodes.get(el.n1), n2 = model.nodes.get(el.n2);
+          if (!mat || !sec || !n1 || !n2) continue;
+          const L = Math.hypot(n2.x - n1.x, n2.y - n1.y, n2.z - n1.z);
+          const wgt = mat.rho * sec.A * L / 2;
+          const a = idxOf.get(el.n1), b = idxOf.get(el.n2);
+          if (a != null) loads[a][2] -= wgt; if (b != null) loads[b][2] -= wgt;
+          hasLoad = true;
+        }
+      }
+    }
+
+    const res = formFind({ coords, fixed, branches, q, loads: hasLoad ? loads : null });
+    if (!res.ok) { this.toast('Form-finding: ' + res.note, 'error'); return; }
+
+    // Reposicionar los nodos libres a la geometría de equilibrio (deshacer con Ctrl+Z).
+    this.snapshot();
+    let moved = 0, dmax = 0;
+    for (const i of res.freeIdx) {
+      const nd = model.nodes.get(nodeIds[i]);
+      const nx = res.coords[3 * i], ny = res.coords[3 * i + 1], nz = res.coords[3 * i + 2];
+      dmax = Math.max(dmax, Math.hypot(nx - nd.x, ny - nd.y, nz - nd.z));
+      nd.x = nx; nd.y = ny; nd.z = nz; moved++;
+    }
+    this.viewport.renderModel(model);
+    this.viewport.zoomExtents?.();
+    this.markDirty();
+    this.toast(`Form-finding OK · ${moved} nodos reposicionados (Δmáx ${dmax.toFixed(3)} m) · ${hasLoad ? 'forma funicular bajo carga' : 'red de longitud mínima'}. Geometría de equilibrio guardada (Ctrl+Z deshace).`, 'ok');
+  }
+
   _spectrumDialog(defaultText) {
     const is2D = this.model.mode === '2D';
     // Preseleccionar la dirección del caso espectral activo (si lo hay)
@@ -2829,7 +2919,7 @@ class App {
     this._showProgress('Generando el modelo…', 'Aplicando reglas y cargas normativas');
     try {
       const libs = await this._cargarBibliotecasAsistente();
-      const { generarModelo } = await import('../asistente/generador.js?v=79');
+      const { generarModelo } = await import('../asistente/generador.js?v=80');
       const modelo = generarModelo(ficha, libs);
 
       if (modo === 'sobreponer') {
@@ -3705,7 +3795,7 @@ class App {
   // Verificación de diseño (flexión/corte/axial) por elemento, usando los
   // resultados actuales y los parámetros editables de asistente/diseno_params.json.
   async _calcularDiseno() {
-    const ver = '?v=79';
+    const ver = '?v=80';
     let params = null;
     try { params = await fetch('asistente/diseno_params.json' + ver).then(r => r.json()); }
     catch (e) { console.error('No se pudo cargar diseno_params.json:', e); return null; }

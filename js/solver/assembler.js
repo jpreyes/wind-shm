@@ -5,8 +5,8 @@ import {
   localAxes, stiffnessMatrix, massMatrix,
   transformMatrix, globalStiffness,
   applyReleases, fixedEndForces, condenseFEF
-} from './timoshenko.js?v=79';
-import { applyDiaphragmConstraints, applyDiaphragmMass } from './diaphragm.js?v=79';
+} from './timoshenko.js?v=80';
+import { applyDiaphragmConstraints, applyDiaphragmMass } from './diaphragm.js?v=80';
 
 // ── Node index (contiguous 0-based numbering) ─────────────────────────────
 export function buildNodeIndex(model) {
