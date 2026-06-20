@@ -1,21 +1,21 @@
 // ──────────────────────────────────────────────────────────────────────────────
 // App — main orchestrator
 // ──────────────────────────────────────────────────────────────────────────────
-import { Model }           from './model/model.js?v=73';
-import { Serializer }      from './model/serializer.js?v=73';
-import { Viewport }        from './ui/viewport.js?v=73';
-import { PropertiesPanel } from './ui/properties.js?v=73';
-import { MenuBar }         from './ui/menu.js?v=73';
-import { UndoStack }       from './utils/undo.js?v=73';
-import { StaticSolver, ensureDefaultLC }   from './solver/static_solver.js?v=73';
-import { Results }                         from './solver/postprocess.js?v=73';
-import { ModalSolver }                     from './solver/modal_solver.js?v=73';
-import { buildNodeIndex, assembleK, assembleF, getNodeDOFs } from './solver/assembler.js?v=73';
-import { ModalResults }                    from './solver/modal_results.js?v=73';
-import { SpectrumSolver }                  from './solver/spectrum_solver.js?v=73';
-import { autoDetectDiaphragms, computeFloorCR } from './solver/diaphragm.js?v=73';
-import { splitElement, splitByLength, discretizeAll, joinElements, intersectarElementos } from './model/discretize.js?v=73';
-import { localAxes, stiffnessMatrix, massMatrix, transformMatrix, globalStiffness, applyReleases } from './solver/timoshenko.js?v=73';
+import { Model }           from './model/model.js?v=75';
+import { Serializer }      from './model/serializer.js?v=75';
+import { Viewport }        from './ui/viewport.js?v=75';
+import { PropertiesPanel } from './ui/properties.js?v=75';
+import { MenuBar }         from './ui/menu.js?v=75';
+import { UndoStack }       from './utils/undo.js?v=75';
+import { StaticSolver, ensureDefaultLC }   from './solver/static_solver.js?v=75';
+import { Results }                         from './solver/postprocess.js?v=75';
+import { ModalSolver }                     from './solver/modal_solver.js?v=75';
+import { buildNodeIndex, assembleK, assembleF, getNodeDOFs } from './solver/assembler.js?v=75';
+import { ModalResults }                    from './solver/modal_results.js?v=75';
+import { SpectrumSolver }                  from './solver/spectrum_solver.js?v=75';
+import { autoDetectDiaphragms, computeFloorCR } from './solver/diaphragm.js?v=75';
+import { splitElement, splitByLength, discretizeAll, joinElements, intersectarElementos } from './model/discretize.js?v=75';
+import { localAxes, stiffnessMatrix, massMatrix, transformMatrix, globalStiffness, applyReleases } from './solver/timoshenko.js?v=75';
 
 class App {
   constructor() {
@@ -1070,8 +1070,9 @@ class App {
     const Flist = staticLcs.map(lc => assembleF(model, nodeIndex, lc.id, !!lc.selfWeight));
     const map = new Map();
 
+    const dense = !!this._config?.analisis?.matrizDensa;
     let out = null;
-    try { out = await this._staticWorkerSolve(K, nDOF, Int32Array.from(freeDOF), Flist); }
+    try { out = await this._staticWorkerSolve(K, nDOF, Int32Array.from(freeDOF), Flist, dense); }
     catch (e) {
       if (e?.message === 'cancelado') throw e;   // cancelación → abortar, no usar respaldo
       console.warn('Worker estático falló, se usa el solver de respaldo:', e?.message || e); out = null;
@@ -1100,10 +1101,10 @@ class App {
   }
 
   // Lanza el worker estático y resuelve con progreso + cancelar.
-  _staticWorkerSolve(K, nDOF, freeDOF, Flist) {
+  _staticWorkerSolve(K, nDOF, freeDOF, Flist, dense = false) {
     return new Promise((resolve, reject) => {
       let worker;
-      try { worker = new Worker(new URL('./solver/static_worker.js?v=73', import.meta.url), { type: 'module' }); }
+      try { worker = new Worker(new URL('./solver/static_worker.js?v=75', import.meta.url), { type: 'module' }); }
       catch (e) { reject(e); return; }
       this._staticWorker = worker;
       const cancelar = () => { try { worker.terminate(); } catch (e) {} this._staticWorker = null; this._hideProgress(); reject(new Error('cancelado')); };
@@ -1123,7 +1124,7 @@ class App {
       };
       worker.onerror = (ev) => { try { worker.terminate(); } catch (e) {} this._staticWorker = null; this._hideProgress(); reject(new Error(ev.message || 'error en worker estático')); };
       // K se transfiere (zero-copy); Flist se copia (el main lo necesita para los Results).
-      worker.postMessage({ Kflat: K, nDOF, freeDOF, Flist }, [K.buffer, freeDOF.buffer]);
+      worker.postMessage({ Kflat: K, nDOF, freeDOF, Flist, dense }, [K.buffer, freeDOF.buffer]);
     });
   }
 
@@ -1344,9 +1345,10 @@ class App {
       }
 
       // ── Run Stodola in a Web Worker (non-blocking) ───────────────────────────
+      const denseModal = !!this._config?.analisis?.matrizDensa;
       const modes = await new Promise((resolve, reject) => {
-        const worker = new Worker(new URL('./solver/modal_worker.js', import.meta.url));
-        worker.postMessage({ Kff_flat, Mff_flat, nF, nModes },
+        const worker = new Worker(new URL('./solver/modal_worker.js', import.meta.url), { type: 'module' });
+        worker.postMessage({ Kff_flat, Mff_flat, nF, nModes, dense: denseModal },
           [Kff_flat.buffer, Mff_flat.buffer]); // transfer — zero copy
         worker.onmessage = (ev) => {
           worker.terminate();
@@ -2430,7 +2432,7 @@ class App {
     this._showProgress('Generando el modelo…', 'Aplicando reglas y cargas normativas');
     try {
       const libs = await this._cargarBibliotecasAsistente();
-      const { generarModelo } = await import('../asistente/generador.js?v=73');
+      const { generarModelo } = await import('../asistente/generador.js?v=75');
       const modelo = generarModelo(ficha, libs);
 
       if (modo === 'sobreponer') {
@@ -2511,7 +2513,7 @@ class App {
         mostrarIds: true,      // mostrar IDs de nodos/elementos en las figuras
         modosVisibles: true,   // amplificar las formas modales para que se noten
       },
-      analisis: { motor: 'normal' },   // PRO los demás motores (no implementados)
+      analisis: { motor: 'normal', shellTipos: [], matrizDensa: false },   // matrizDensa: false = solver en banda (rápido); true = denso (académico). motor/área: PRO.
       seccion_mod_default: { A: 1, Iy: 1, Iz: 1, J: 1 },
     };
   }
@@ -2636,17 +2638,19 @@ class App {
         </fieldset>
 
         <fieldset style="border:1px solid var(--border);border-radius:6px;padding:10px 12px">
+          <legend style="padding:0 6px;color:var(--accent)">Análisis</legend>
+          <label style="display:block"><input type="checkbox" id="cfg-densa" ${this._config.analisis.matrizDensa ? 'checked' : ''}> Usar matriz de rigidez <b>densa</b> (exploración académica; más lenta)</label>
+          <small style="color:var(--text-muted);font-size:10.5px">Por defecto se usa la versión <b>condensada en banda</b> (rápida, factorización única). La densa arma y factoriza la matriz completa tal cual — útil para entender cómo se construye, pero O(n³).</small>
+        </fieldset>
+
+        <fieldset style="border:1px solid var(--border);border-radius:6px;padding:10px 12px">
           <legend style="padding:0 6px;color:var(--accent)">Funciones avanzadas (profesional)${lock}</legend>
-          <div class="prop-field"><label>Motor de análisis</label>
-            <select id="cfg-motor" ${G}>${motores.map(([v, t]) => `<option value="${v}" ${an.motor === v ? 'selected' : ''}>${t}</option>`).join('')}</select></div>
-          <div class="prop-field" style="margin-top:6px"><label>Elementos de área (membrana / placa / Shell lineal elástico)</label>
-            <select id="cfg-shell" ${G}>
-              <option value="">— no usar —</option>
-              <option value="membrana">Membrana (no implementado)</option>
-              <option value="placa">Placa (no implementado)</option>
-              <option value="shell">Shell lineal elástico (no implementado)</option>
-            </select>
-            <small style="color:var(--text-muted);font-size:10.5px">Mostrará tensiones, deformaciones y esfuerzos; con subdivisión configurable (N divisiones horizontales/verticales). Disponible en la versión avanzada.</small>
+          <div class="prop-field"><label>Motor de análisis (elija uno)</label>
+            <div>${motores.map(([v, t]) => `<label style="display:block;font-size:12px;margin:1px 0"><input type="checkbox" class="cfg-motor-cb" value="${v}" ${an.motor === v ? 'checked' : ''} ${G}> ${t}</label>`).join('')}</div></div>
+          <div class="prop-field" style="margin-top:8px"><label>Elementos de área (membrana / placa / Shell lineal elástico)</label>
+            ${[['membrana', 'Membrana (no implementado)'], ['placa', 'Placa (no implementado)'], ['shell', 'Shell lineal elástico (no implementado)']]
+              .map(([v, t]) => `<label style="display:block;font-size:12px;margin:1px 0"><input type="checkbox" class="cfg-shell-cb" value="${v}" ${(an.shellTipos || []).includes(v) ? 'checked' : ''} ${G}> ${t}</label>`).join('')}
+            <small style="color:var(--text-muted);font-size:10.5px">Mostrarán tensiones, deformaciones y esfuerzos; con subdivisión configurable (N divisiones horizontales/verticales). Disponible en la versión avanzada.</small>
           </div>
         </fieldset>
 
@@ -2681,6 +2685,11 @@ class App {
       rd.readAsDataURL(f);
     });
     document.getElementById('cfg-logo-clear')?.addEventListener('click', () => { if (pro) { mm.logoEmpresa = ''; document.getElementById('cfg-logo-prev')?.remove(); } });
+    // Motor de análisis: checkboxes con selección única (radio-like)
+    document.querySelectorAll('.cfg-motor-cb').forEach(cb => cb.addEventListener('change', () => {
+      if (cb.checked) document.querySelectorAll('.cfg-motor-cb').forEach(o => { if (o !== cb) o.checked = false; });
+      else cb.checked = true;   // siempre debe haber uno marcado
+    }));
     document.getElementById('cfg-apply-mod')?.addEventListener('click', () => {
       const mod = { A: +document.getElementById('cfg-mA').value || 1, Iy: +document.getElementById('cfg-mIy').value || 1,
         Iz: +document.getElementById('cfg-mIz').value || 1, J: +document.getElementById('cfg-mJ').value || 1 };
@@ -2693,14 +2702,16 @@ class App {
       mm.titulo = v('cfg-titulo'); mm.proyectista = v('cfg-proy'); mm.revisor = v('cfg-rev');
       mm.mostrarIds = document.getElementById('cfg-ids')?.checked ?? true;
       mm.modosVisibles = document.getElementById('cfg-modos')?.checked ?? true;
+      an.matrizDensa = document.getElementById('cfg-densa')?.checked ?? false;   // densa/banda: académico, sin token
       if (pro) {   // campos profesionales solo si hay token
         mm.kicker = v('cfg-kicker'); mm.institucion = v('cfg-inst'); mm.subInstitucion = v('cfg-subinst');
         mm.descripcion = v('cfg-desc'); mm.footer = v('cfg-footer'); mm.limitaciones = v('cfg-limit');
-        const motorSel = v('cfg-motor');
-        if (motorSel && motorSel !== 'normal') this.toast('El motor seleccionado no está implementado en esta versión; se usará Normal.', 'warn');
-        an.motor = motorSel || 'normal';
-        const shellSel = v('cfg-shell');
-        if (shellSel) this.toast('Los elementos de área (membrana/placa/Shell) no están implementados aún (versión avanzada).', 'warn');
+        const motorSel = [...document.querySelectorAll('.cfg-motor-cb')].find(c => c.checked)?.value || 'normal';
+        if (motorSel !== 'normal') this.toast('El motor seleccionado no está implementado en esta versión; se usará Normal.', 'warn');
+        an.motor = motorSel;
+        const shellSel = [...document.querySelectorAll('.cfg-shell-cb')].filter(c => c.checked).map(c => c.value);
+        if (shellSel.length) this.toast('Los elementos de área (membrana/placa/Shell) no están implementados aún (versión avanzada).', 'warn');
+        an.shellTipos = shellSel;
       }
       sd.A = +v('cfg-mA') || 1; sd.Iy = +v('cfg-mIy') || 1; sd.Iz = +v('cfg-mIz') || 1; sd.J = +v('cfg-mJ') || 1;
       this._saveConfig();
@@ -3292,7 +3303,7 @@ class App {
   // Verificación de diseño (flexión/corte/axial) por elemento, usando los
   // resultados actuales y los parámetros editables de asistente/diseno_params.json.
   async _calcularDiseno() {
-    const ver = '?v=73';
+    const ver = '?v=75';
     let params = null;
     try { params = await fetch('asistente/diseno_params.json' + ver).then(r => r.json()); }
     catch (e) { console.error('No se pudo cargar diseno_params.json:', e); return null; }
