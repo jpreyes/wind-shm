@@ -1,26 +1,26 @@
 // ──────────────────────────────────────────────────────────────────────────────
 // App — main orchestrator
 // ──────────────────────────────────────────────────────────────────────────────
-import { Model }           from './model/model.js?v=80';
-import { Serializer }      from './model/serializer.js?v=80';
-import { Viewport }        from './ui/viewport.js?v=80';
-import { PropertiesPanel } from './ui/properties.js?v=80';
-import { MenuBar }         from './ui/menu.js?v=80';
-import { UndoStack }       from './utils/undo.js?v=80';
-import { StaticSolver, ensureDefaultLC }   from './solver/static_solver.js?v=80';
-import { Results }                         from './solver/postprocess.js?v=80';
-import { ModalSolver }                     from './solver/modal_solver.js?v=80';
-import { buildNodeIndex, assembleK, assembleF, getNodeDOFs } from './solver/assembler.js?v=80';
-import { assembleSparseGlobal, extractFreeCSR } from './solver/sparse.js?v=80';
-import { solveNonlinear } from './solver/nl_lite.js?v=80';
-import { assembleKg } from './solver/geometric.js?v=80';
-import { denseFactor, triForward, triBackward } from './solver/linsolve.js?v=80';
-import { formFind } from './solver/formfind.js?v=80';
-import { ModalResults }                    from './solver/modal_results.js?v=80';
-import { SpectrumSolver }                  from './solver/spectrum_solver.js?v=80';
-import { autoDetectDiaphragms, computeFloorCR } from './solver/diaphragm.js?v=80';
-import { splitElement, splitByLength, discretizeAll, joinElements, intersectarElementos } from './model/discretize.js?v=80';
-import { localAxes, stiffnessMatrix, massMatrix, transformMatrix, globalStiffness, applyReleases } from './solver/timoshenko.js?v=80';
+import { Model }           from './model/model.js?v=81';
+import { Serializer }      from './model/serializer.js?v=81';
+import { Viewport }        from './ui/viewport.js?v=81';
+import { PropertiesPanel } from './ui/properties.js?v=81';
+import { MenuBar }         from './ui/menu.js?v=81';
+import { UndoStack }       from './utils/undo.js?v=81';
+import { StaticSolver, ensureDefaultLC }   from './solver/static_solver.js?v=81';
+import { Results }                         from './solver/postprocess.js?v=81';
+import { ModalSolver }                     from './solver/modal_solver.js?v=81';
+import { buildNodeIndex, assembleK, assembleF, getNodeDOFs } from './solver/assembler.js?v=81';
+import { assembleSparseGlobal, extractFreeCSR } from './solver/sparse.js?v=81';
+import { solveNonlinear } from './solver/nl_lite.js?v=81';
+import { assembleKg } from './solver/geometric.js?v=81';
+import { denseFactor, triForward, triBackward, makeFactor } from './solver/linsolve.js?v=81';
+import { formFind } from './solver/formfind.js?v=81';
+import { ModalResults }                    from './solver/modal_results.js?v=81';
+import { SpectrumSolver }                  from './solver/spectrum_solver.js?v=81';
+import { autoDetectDiaphragms, computeFloorCR } from './solver/diaphragm.js?v=81';
+import { splitElement, splitByLength, discretizeAll, joinElements, intersectarElementos } from './model/discretize.js?v=81';
+import { localAxes, stiffnessMatrix, massMatrix, transformMatrix, globalStiffness, applyReleases } from './solver/timoshenko.js?v=81';
 
 class App {
   constructor() {
@@ -1121,7 +1121,7 @@ class App {
   _staticWorkerSolve(K, nDOF, freeDOF, Flist, dense = false) {
     return new Promise((resolve, reject) => {
       let worker;
-      try { worker = new Worker(new URL('./solver/static_worker.js?v=80', import.meta.url), { type: 'module' }); }
+      try { worker = new Worker(new URL('./solver/static_worker.js?v=81', import.meta.url), { type: 'module' }); }
       catch (e) { reject(e); return; }
       this._staticWorker = worker;
       const cancelar = () => { try { worker.terminate(); } catch (e) {} this._staticWorker = null; this._hideProgress(); reject(new Error('cancelado')); };
@@ -1150,7 +1150,7 @@ class App {
   _staticWorkerSolveSparse(csr, cf, nDOF, freeDOF, Flist) {
     return new Promise((resolve, reject) => {
       let worker;
-      try { worker = new Worker(new URL('./solver/static_worker.js?v=80', import.meta.url), { type: 'module' }); }
+      try { worker = new Worker(new URL('./solver/static_worker.js?v=81', import.meta.url), { type: 'module' }); }
       catch (e) { reject(e); return; }
       this._staticWorker = worker;
       const cancelar = () => { try { worker.terminate(); } catch (e) {} this._staticWorker = null; this._hideProgress(); reject(new Error('cancelado')); };
@@ -2148,6 +2148,164 @@ class App {
     this.toast(`Form-finding OK · ${moved} nodos reposicionados (Δmáx ${dmax.toFixed(3)} m) · ${hasLoad ? 'forma funicular bajo carga' : 'red de longitud mínima'}. Geometría de equilibrio guardada (Ctrl+Z deshace).`, 'ok');
   }
 
+  // ── NL-lite Fase 4: material bilineal + RÓTULAS PLÁSTICAS ──────────────────
+  // Ensambla K (densa) con las liberaciones actuales (rótulas formadas) y guarda
+  // por elemento {ed, T, KeCond} para recuperar los momentos de extremo.
+  _plasticAssemble(nodeIndex, releasesByElem) {
+    const model = this.model;
+    const nDOF = nodeIndex.size * 6;
+    const K = new Float64Array(nDOF * nDOF);
+    const elems = [];
+    for (const el of model.elements.values()) {
+      const n1 = model.nodes.get(el.n1), n2 = model.nodes.get(el.n2);
+      const mat = model.materials.get(el.matId), sec = model.sections.get(el.secId);
+      if (!n1 || !n2 || !mat || !sec) continue;
+      const { ex, ey, ez, L } = localAxes(n1, n2);
+      let Ke = stiffnessMatrix(L, mat, sec);
+      const rel = releasesByElem.get(el.id);
+      const relBool = rel ? rel.map(r => !!r) : null;
+      if (relBool && relBool.some(Boolean)) Ke = applyReleases(Ke, relBool);
+      const T = transformMatrix(ex, ey, ez);
+      const KG = globalStiffness(Ke, T);
+      const ed = [...getNodeDOFs(nodeIndex, el.n1), ...getNodeDOFs(nodeIndex, el.n2)];
+      for (let i = 0; i < 12; i++) for (let j = 0; j < 12; j++) K[ed[i] * nDOF + ed[j]] += KG[i][j];
+      elems.push({ id: el.id, ed, T, KeCond: Ke });
+    }
+    return { K, nDOF, elems };
+  }
+
+  // Análisis incremental EVENTO-A-EVENTO con rótulas plásticas (pushover plástico).
+  // Material elasto-perfectamente-plástico: cada extremo forma rótula al alcanzar
+  // el momento plástico Mp; se libera ese GDL de giro y su momento queda fijo en
+  // Mp. El colapso ocurre cuando se forma un MECANISMO (K singular).
+  async runPlastic() {
+    if (!this._config?.analisis?.nlLite) { this.toast('Active «Análisis no lineal (NL-lite)» en ⚙ Configuración', 'warn'); this.configDialog?.(); return; }
+    const model = this.model;
+    if (model.nodes.size === 0 || model.elements.size === 0) { this.toast('Modelo vacío', 'warn'); return; }
+
+    const MpStr = await this._promptModal('Rótulas plásticas (material elasto-plástico)',
+      'Momento plástico Mp [kN·m], uniforme (capacidad de cada rótula):', '100');
+    if (MpStr == null) return;
+    const Mp = parseFloat(MpStr);
+    if (!(Mp > 0)) { this.toast('Mp debe ser un número > 0', 'warn'); return; }
+
+    const nodeIndex = buildNodeIndex(model);
+    const nDOF = nodeIndex.size * 6;
+    const is2D = model.mode === '2D';
+    const freeDOF = [];
+    for (const node of model.nodes.values()) {
+      const d = getNodeDOFs(nodeIndex, node.id), r = node.restraints;
+      const rArr = [r.ux, is2D ? 1 : r.uy, r.uz, is2D ? 1 : r.rx, r.ry, is2D ? 1 : r.rz];
+      d.forEach((gi, li) => { if (!rArr[li]) freeDOF.push(gi); });
+    }
+    if (!freeDOF.length) { this.toast('Sin GDL libres', 'warn'); return; }
+    const nF = freeDOF.length;
+
+    // Carga de referencia combinada (factor 1)
+    const F = new Float64Array(nDOF);
+    let nCasos = 0;
+    for (const lc of model.loadCases.values()) {
+      if (lc.type === 'spectrum') continue;
+      const Fi = assembleF(model, nodeIndex, lc.id, !!lc.selfWeight);
+      for (let i = 0; i < nDOF; i++) F[i] += Fi[i];
+      nCasos++;
+    }
+    if (!nCasos) { this.toast('Defina al menos un caso de carga (patrón de carga del pushover).', 'warn'); return; }
+
+    const releasesByElem = new Map();
+    for (const el of model.elements.values()) releasesByElem.set(el.id, (el.releases || Array(12).fill(0)).slice());
+    const Macc = new Map(), hinged = new Set();
+    let lambda = 0; const u = new Float64Array(nDOF);
+    const events = []; let collapsed = false;
+    const maxEvents = 6 * model.elements.size + 12;
+
+    for (let k = 0; k < maxEvents; k++) {
+      const { K, elems } = this._plasticAssemble(nodeIndex, releasesByElem);
+      const Kff = new Float64Array(nF * nF);
+      for (let i = 0; i < nF; i++) { const ri = freeDOF[i] * nDOF; for (let j = 0; j < nF; j++) Kff[i * nF + j] = K[ri + freeDOF[j]]; }
+      const fac = makeFactor(Kff, nF, false);
+      if (!fac.ok) { collapsed = true; break; }   // mecanismo → colapso
+
+      const Ff = new Float64Array(nF); for (let i = 0; i < nF; i++) Ff[i] = F[freeDOF[i]];
+      const uf = fac.solve(Ff);
+      const uUnit = new Float64Array(nDOF); for (let i = 0; i < nF; i++) uUnit[freeDOF[i]] = uf[i];
+
+      // Tasa de momento por extremo/eje (no rotulado): m_unit = KeCond·(T·ue)
+      const rates = [];
+      for (const e of elems) {
+        const ue = e.ed.map(d => uUnit[d]);
+        const ul = new Array(12).fill(0);
+        for (let i = 0; i < 12; i++) { let s = 0; for (let j = 0; j < 12; j++) s += e.T[i][j] * ue[j]; ul[i] = s; }
+        const fl = new Array(12).fill(0);
+        for (let i = 0; i < 12; i++) { let s = 0; for (let j = 0; j < 12; j++) s += e.KeCond[i][j] * ul[j]; fl[i] = s; }
+        for (const [end, dl, axis] of [[1, 4, 'My'], [1, 5, 'Mz'], [2, 10, 'My'], [2, 11, 'Mz']]) {
+          const key = `${e.id}:${end}:${axis}`;
+          if (hinged.has(key)) continue;
+          rates.push({ key, elemId: e.id, end, axis, dofLocal: dl, mr: fl[dl] });
+        }
+      }
+
+      // Δλ mínimo para alcanzar ±Mp en algún extremo
+      let dlam = Infinity;
+      const cand = [];   // {r, dl} candidatos a rotular
+      for (const r of rates) {
+        if (Math.abs(r.mr) < 1e-9) continue;
+        const M0 = Macc.get(r.key) || 0;
+        let best = Infinity;
+        for (const tgt of [Mp, -Mp]) { const dl = (tgt - M0) / r.mr; if (dl > 1e-9 && dl < best) best = dl; }
+        if (isFinite(best)) { cand.push({ r, dl: best }); if (best < dlam) dlam = best; }
+      }
+      if (!cand.length || !isFinite(dlam)) break;   // no hay más fluencia (carga insuficiente para colapsar)
+
+      lambda += dlam;
+      for (const r of rates) Macc.set(r.key, (Macc.get(r.key) || 0) + dlam * r.mr);
+      for (let i = 0; i < nDOF; i++) u[i] += dlam * uUnit[i];
+      let dctrl = 0;
+      for (const node of model.nodes.values()) { const d = getNodeDOFs(nodeIndex, node.id); dctrl = Math.max(dctrl, Math.hypot(u[d[0]], u[d[1]], u[d[2]])); }
+      // Rotular TODOS los extremos que alcanzan Mp a la misma carga (casos
+      // simétricos/degenerados forman varias rótulas simultáneas).
+      const tol = Math.max(1e-9, dlam * 1e-6);
+      for (const c of cand) {
+        if (c.dl > dlam + tol) continue;
+        releasesByElem.get(c.r.elemId)[c.r.dofLocal] = 1;   // insertar rótula
+        hinged.add(c.r.key);
+        const nd = model.elements.get(c.r.elemId);
+        events.push({ lambda, elemId: c.r.elemId, nodeId: c.r.end === 1 ? nd.n1 : nd.n2, axis: c.r.axis, dctrl });
+      }
+    }
+
+    if (!events.length) { this.toast('Ningún extremo alcanza Mp con esta carga (Mp demasiado alto o carga muy baja).', 'warn'); return; }
+    this._plasticResult = { events, lambda, collapsed, u: Float64Array.from(u), nodeIndex, Mp, nCasos };
+
+    // Mostrar mecanismo de colapso (deformada) + secuencia de rótulas
+    const uByNode = new Map();
+    for (const node of model.nodes.values()) { const d = getNodeDOFs(nodeIndex, node.id); uByNode.set(node.id, [u[d[0]], u[d[1]], u[d[2]]]); }
+    this.viewport.showNLDeformed(uByNode, new Map(), 1,
+      collapsed ? `Colapso plástico · λc = ${lambda.toFixed(3)} · ${events.length} rótulas · mecanismo` : `Plástico · λ = ${lambda.toFixed(3)} · ${events.length} rótulas (sin mecanismo)`);
+    this.toast(collapsed ? `Colapso plástico: λc = ${lambda.toFixed(3)} × carga de referencia · ${events.length} rótulas` : `Plástico: ${events.length} rótulas, sin mecanismo (λ=${lambda.toFixed(3)})`, collapsed ? 'ok' : 'warn');
+    this._plasticOpenOverlay();
+  }
+
+  _plasticOpenOverlay() {
+    const { events, lambda, collapsed, Mp } = this._plasticResult;
+    let el = document.getElementById('plastic-overlay');
+    if (!el) { el = document.createElement('div'); el.id = 'plastic-overlay'; document.body.appendChild(el); }
+    el.style.cssText = 'position:fixed;right:16px;bottom:84px;z-index:50;background:var(--panel,#0f1830);border:1px solid var(--border,#26324d);border-radius:8px;padding:10px 12px;width:280px;max-height:60vh;overflow:auto;box-shadow:0 8px 24px rgba(0,0,0,.4);font-size:12px;color:var(--text,#dbe4f5)';
+    const rows = events.map((e, i) => `<tr><td>${i + 1}</td><td>#${e.elemId}</td><td>${e.nodeId}</td><td>${e.axis}</td><td>${e.lambda.toFixed(3)}</td><td>${e.dctrl.toExponential(1)}</td></tr>`).join('');
+    el.innerHTML = `
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
+        <b style="color:var(--accent,#38bdf8)">Rótulas plásticas</b>
+        <button id="plastic-close" title="Cerrar" style="background:none;border:none;color:var(--text-muted,#94a3b8);cursor:pointer;font-size:16px;line-height:1">✕</button>
+      </div>
+      <div style="margin-bottom:6px">${collapsed
+        ? `<b style="color:#34d399">Colapso · λc = ${lambda.toFixed(3)}</b><br><span style="color:var(--text-muted,#94a3b8)">Carga de colapso = ${lambda.toFixed(3)} × carga de referencia. Mp = ${Mp} kN·m.</span>`
+        : `<b style="color:#fbbf24">Sin mecanismo</b><br><span style="color:var(--text-muted,#94a3b8)">${events.length} rótulas; la carga no completa un mecanismo.</span>`}</div>
+      <table style="width:100%;border-collapse:collapse;font-size:10.5px"><thead><tr style="color:var(--text-muted,#94a3b8)">
+        <th>#</th><th>Elem</th><th>Nodo</th><th>Eje</th><th>λ</th><th>δctrl</th></tr></thead><tbody>${rows}</tbody></table>
+      <p style="color:var(--text-muted,#94a3b8);font-size:10px;margin-top:6px">Secuencia de formación de rótulas (λ = factor de carga). δctrl = desplazamiento máximo (curva carga-desplazamiento).</p>`;
+    el.querySelector('#plastic-close').addEventListener('click', () => { el.remove(); this.viewport.clearResults(); });
+  }
+
   _spectrumDialog(defaultText) {
     const is2D = this.model.mode === '2D';
     // Preseleccionar la dirección del caso espectral activo (si lo hay)
@@ -2919,7 +3077,7 @@ class App {
     this._showProgress('Generando el modelo…', 'Aplicando reglas y cargas normativas');
     try {
       const libs = await this._cargarBibliotecasAsistente();
-      const { generarModelo } = await import('../asistente/generador.js?v=80');
+      const { generarModelo } = await import('../asistente/generador.js?v=81');
       const modelo = generarModelo(ficha, libs);
 
       if (modo === 'sobreponer') {
@@ -3795,7 +3953,7 @@ class App {
   // Verificación de diseño (flexión/corte/axial) por elemento, usando los
   // resultados actuales y los parámetros editables de asistente/diseno_params.json.
   async _calcularDiseno() {
-    const ver = '?v=80';
+    const ver = '?v=81';
     let params = null;
     try { params = await fetch('asistente/diseno_params.json' + ver).then(r => r.json()); }
     catch (e) { console.error('No se pudo cargar diseno_params.json:', e); return null; }

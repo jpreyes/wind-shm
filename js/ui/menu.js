@@ -94,6 +94,7 @@ export class MenuBar {
       case 'run-pdelta':     a.runPDelta();                  break;
       case 'run-buckling':   a.runBuckling();                break;
       case 'run-formfind':   a.runFormFinding();             break;
+      case 'run-plastic':    a.runPlastic();                 break;
       case 'combos':         a.openCombosTab();              break;
       case 'asistente':      a.asistenteDialog();            break;
       case 'res-deformed':   a.setResultType('deformed');    break;
