@@ -201,23 +201,36 @@ function _floorCM(nodes, weights) {
   return { x: wx, y: wy };  // weights already sum to 1
 }
 
+// ── Writers ───────────────────────────────────────────────────────────────────
+// Abstracción mínima para escribir en la matriz global: el camino DENSO escribe
+// en un Float64Array (n×n), el camino DISPERSO escribe en un SparseSym. Así la
+// lógica de penalización/masa de diafragma queda en UNA sola fuente.
+function denseWriter(K, nDOF) {
+  return { add: (i, j, v) => { K[i * nDOF + j] += v; }, diag: (i) => K[i * nDOF + i] };
+}
+
 // ── Diaphragm constraints ─────────────────────────────────────────────────────
 export function applyDiaphragmConstraints(K, model, nodeIndex, nDOF) {
+  applyDiaphragmConstraintsW(denseWriter(K, nDOF), model, nodeIndex, nDOF);
+}
+
+// Variante con writer (denso o disperso).
+export function applyDiaphragmConstraintsW(W, model, nodeIndex, nDOF) {
   if (model.diaphragms.size === 0) return;
 
   let maxKii = 0;
   for (let i = 0; i < nDOF; i++) {
-    const v = K[i*nDOF + i];
+    const v = W.diag(i);
     if (v > maxKii) maxKii = v;
   }
   const alpha = maxKii > 0 ? maxKii * PENALTY_FACTOR : 1e12;
 
   for (const d of model.diaphragms.values()) {
-    _constrainDiaphragm(K, d, model, nodeIndex, nDOF, alpha);
+    _constrainDiaphragm(W, d, model, nodeIndex, alpha);
   }
 }
 
-function _constrainDiaphragm(K, diaphragm, model, nodeIndex, nDOF, alpha) {
+function _constrainDiaphragm(W, diaphragm, model, nodeIndex, alpha) {
   const nodeIds = diaphragm.nodes.filter(id => model.nodes.has(id));
   if (nodeIds.length < 2) return;
 
@@ -240,16 +253,16 @@ function _constrainDiaphragm(K, diaphragm, model, nodeIndex, nDOF, alpha) {
     const dx = slave.x - master.x;
     const dy = slave.y - master.y;
 
-    _addPenalty(K, nDOF, alpha, [SUX, MUX, MRZ], [1, -1, dy]);   // ux_s - ux_m + dy·rz_m = 0
-    _addPenalty(K, nDOF, alpha, [SUY, MUY, MRZ], [1, -1, -dx]);  // uy_s - uy_m - dx·rz_m = 0
-    _addPenalty(K, nDOF, alpha, [SRZ, MRZ],      [1, -1]);        // rz_s - rz_m = 0
+    _addPenalty(W, alpha, [SUX, MUX, MRZ], [1, -1, dy]);   // ux_s - ux_m + dy·rz_m = 0
+    _addPenalty(W, alpha, [SUY, MUY, MRZ], [1, -1, -dx]);  // uy_s - uy_m - dx·rz_m = 0
+    _addPenalty(W, alpha, [SRZ, MRZ],      [1, -1]);        // rz_s - rz_m = 0
   }
 }
 
-function _addPenalty(K, nDOF, alpha, dofs, coeffs) {
+function _addPenalty(W, alpha, dofs, coeffs) {
   for (let i = 0; i < dofs.length; i++)
     for (let j = 0; j < dofs.length; j++)
-      K[dofs[i]*nDOF + dofs[j]] += alpha * coeffs[i] * coeffs[j];
+      W.add(dofs[i], dofs[j], alpha * coeffs[i] * coeffs[j]);
 }
 
 // ── Diaphragm mass — tributary + accidental eccentricity ──────────────────────
@@ -275,6 +288,12 @@ function _addPenalty(K, nDOF, alpha, dofs, coeffs) {
  * Step 3 — Optional explicit Icm at master RZ (user-supplied correction).
  */
 export function applyDiaphragmMass(M, model, nodeIndex, nDOF) {
+  applyDiaphragmMassW(denseWriter(M, nDOF), model, nodeIndex);
+}
+
+// Variante con writer (denso o disperso). nDOF no se usa (el writer encapsula el
+// almacenamiento); se conserva la firma densa por compatibilidad.
+export function applyDiaphragmMassW(W, model, nodeIndex) {
   for (const diaphragm of model.diaphragms.values()) {
     const { mass, eccentricity, nodes } = diaphragm;
     if (!mass) continue;
@@ -308,8 +327,8 @@ export function applyDiaphragmMass(M, model, nodeIndex, nDOF) {
         if (idx == null) continue;
         const mi = m * (weights.get(node.id) || 0);
         if (mi < 1e-30) continue;
-        M[(6*idx)   * nDOF + (6*idx)  ] += mi;   // UX
-        M[(6*idx+1) * nDOF + (6*idx+1)] += mi;   // UY
+        W.add(6*idx,   6*idx,   mi);   // UX
+        W.add(6*idx+1, 6*idx+1, mi);   // UY
       }
 
       // ── Step 2: accidental eccentricity correction at master ─────────────
@@ -321,21 +340,21 @@ export function applyDiaphragmMass(M, model, nodeIndex, nDOF) {
         const ey_n = cm_fresh.y - (master?.y ?? 0);
 
         // Off-diagonal coupling from accidental shift
-        M[MUX*nDOF + MRZ] -= m * ey_a;
-        M[MRZ*nDOF + MUX] -= m * ey_a;
-        M[MUY*nDOF + MRZ] += m * ex_a;
-        M[MRZ*nDOF + MUY] += m * ex_a;
+        W.add(MUX, MRZ, -m * ey_a);
+        W.add(MRZ, MUX, -m * ey_a);
+        W.add(MUY, MRZ,  m * ex_a);
+        W.add(MRZ, MUY,  m * ex_a);
 
         // Steiner correction: ΔIo = m·(ea²) + 2m·(e_nat·e_acc)
         const deltaIo = m * (ex_a*ex_a + ey_a*ey_a)
                       + 2*m * (ex_n*ex_a + ey_n*ey_a);
-        M[MRZ*nDOF + MRZ] += deltaIo;
+        W.add(MRZ, MRZ, deltaIo);
       }
     }
 
     // ── Step 3: optional explicit Icm at master ────────────────────────────
     if (Icm > 0 && im != null) {
-      M[(6*im+5)*nDOF + (6*im+5)] += Icm;
+      W.add(6*im+5, 6*im+5, Icm);
     }
   }
 }

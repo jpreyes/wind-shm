@@ -1,21 +1,22 @@
 // ──────────────────────────────────────────────────────────────────────────────
 // App — main orchestrator
 // ──────────────────────────────────────────────────────────────────────────────
-import { Model }           from './model/model.js?v=75';
-import { Serializer }      from './model/serializer.js?v=75';
-import { Viewport }        from './ui/viewport.js?v=75';
-import { PropertiesPanel } from './ui/properties.js?v=75';
-import { MenuBar }         from './ui/menu.js?v=75';
-import { UndoStack }       from './utils/undo.js?v=75';
-import { StaticSolver, ensureDefaultLC }   from './solver/static_solver.js?v=75';
-import { Results }                         from './solver/postprocess.js?v=75';
-import { ModalSolver }                     from './solver/modal_solver.js?v=75';
-import { buildNodeIndex, assembleK, assembleF, getNodeDOFs } from './solver/assembler.js?v=75';
-import { ModalResults }                    from './solver/modal_results.js?v=75';
-import { SpectrumSolver }                  from './solver/spectrum_solver.js?v=75';
-import { autoDetectDiaphragms, computeFloorCR } from './solver/diaphragm.js?v=75';
-import { splitElement, splitByLength, discretizeAll, joinElements, intersectarElementos } from './model/discretize.js?v=75';
-import { localAxes, stiffnessMatrix, massMatrix, transformMatrix, globalStiffness, applyReleases } from './solver/timoshenko.js?v=75';
+import { Model }           from './model/model.js?v=76';
+import { Serializer }      from './model/serializer.js?v=76';
+import { Viewport }        from './ui/viewport.js?v=76';
+import { PropertiesPanel } from './ui/properties.js?v=76';
+import { MenuBar }         from './ui/menu.js?v=76';
+import { UndoStack }       from './utils/undo.js?v=76';
+import { StaticSolver, ensureDefaultLC }   from './solver/static_solver.js?v=76';
+import { Results }                         from './solver/postprocess.js?v=76';
+import { ModalSolver }                     from './solver/modal_solver.js?v=76';
+import { buildNodeIndex, assembleK, assembleF, getNodeDOFs } from './solver/assembler.js?v=76';
+import { assembleSparseGlobal, extractFreeCSR } from './solver/sparse.js?v=76';
+import { ModalResults }                    from './solver/modal_results.js?v=76';
+import { SpectrumSolver }                  from './solver/spectrum_solver.js?v=76';
+import { autoDetectDiaphragms, computeFloorCR } from './solver/diaphragm.js?v=76';
+import { splitElement, splitByLength, discretizeAll, joinElements, intersectarElementos } from './model/discretize.js?v=76';
+import { localAxes, stiffnessMatrix, massMatrix, transformMatrix, globalStiffness, applyReleases } from './solver/timoshenko.js?v=76';
 
 class App {
   constructor() {
@@ -1055,24 +1056,36 @@ class App {
   async _solveStaticCases(staticLcs) {
     const model = this.model;
     const nodeIndex = buildNodeIndex(model);
-    const { K, nDOF } = assembleK(model, nodeIndex);
+    const nDOF = nodeIndex.size * 6;
 
     const is2D = model.mode === '2D';
     const freeDOF = [];
+    const freeMap = new Int32Array(nDOF).fill(-1);
     for (const node of model.nodes.values()) {
       const d = getNodeDOFs(nodeIndex, node.id);
       const r = node.restraints;
       const rArr = [r.ux, is2D ? 1 : r.uy, r.uz, is2D ? 1 : r.rx, r.ry, is2D ? 1 : r.rz];
-      d.forEach((gi, li) => { if (!rArr[li]) freeDOF.push(gi); });
+      d.forEach((gi, li) => { if (!rArr[li]) { freeMap[gi] = freeDOF.length; freeDOF.push(gi); } });
     }
     if (!freeDOF.length) throw new Error('El modelo no tiene grados de libertad libres (¿todos los nodos están empotrados?)');
 
     const Flist = staticLcs.map(lc => assembleF(model, nodeIndex, lc.id, !!lc.selfWeight));
     const map = new Map();
 
+    // Por defecto: ensamblaje DISPERSO (CSR) → sin matriz densa nDOF². El modo
+    // «matriz densa» (académico) usa el ensamblaje denso clásico.
     const dense = !!this._config?.analisis?.matrizDensa;
     let out = null;
-    try { out = await this._staticWorkerSolve(K, nDOF, Int32Array.from(freeDOF), Flist, dense); }
+    try {
+      if (dense) {
+        const { K } = assembleK(model, nodeIndex);
+        out = await this._staticWorkerSolve(K, nDOF, Int32Array.from(freeDOF), Flist, true);
+      } else {
+        const { S } = assembleSparseGlobal(model, nodeIndex, { withMass: false });
+        const { csr, cf } = extractFreeCSR(S, freeMap, freeDOF.length);
+        out = await this._staticWorkerSolveSparse(csr, cf, nDOF, Int32Array.from(freeDOF), Flist);
+      }
+    }
     catch (e) {
       if (e?.message === 'cancelado') throw e;   // cancelación → abortar, no usar respaldo
       console.warn('Worker estático falló, se usa el solver de respaldo:', e?.message || e); out = null;
@@ -1104,7 +1117,7 @@ class App {
   _staticWorkerSolve(K, nDOF, freeDOF, Flist, dense = false) {
     return new Promise((resolve, reject) => {
       let worker;
-      try { worker = new Worker(new URL('./solver/static_worker.js?v=75', import.meta.url), { type: 'module' }); }
+      try { worker = new Worker(new URL('./solver/static_worker.js?v=76', import.meta.url), { type: 'module' }); }
       catch (e) { reject(e); return; }
       this._staticWorker = worker;
       const cancelar = () => { try { worker.terminate(); } catch (e) {} this._staticWorker = null; this._hideProgress(); reject(new Error('cancelado')); };
@@ -1125,6 +1138,39 @@ class App {
       worker.onerror = (ev) => { try { worker.terminate(); } catch (e) {} this._staticWorker = null; this._hideProgress(); reject(new Error(ev.message || 'error en worker estático')); };
       // K se transfiere (zero-copy); Flist se copia (el main lo necesita para los Results).
       worker.postMessage({ Kflat: K, nDOF, freeDOF, Flist, dense }, [K.buffer, freeDOF.buffer]);
+    });
+  }
+
+  // Igual que _staticWorkerSolve pero por el camino DISPERSO (CSR): nunca se
+  // transfiere la matriz densa, solo los no-ceros.
+  _staticWorkerSolveSparse(csr, cf, nDOF, freeDOF, Flist) {
+    return new Promise((resolve, reject) => {
+      let worker;
+      try { worker = new Worker(new URL('./solver/static_worker.js?v=76', import.meta.url), { type: 'module' }); }
+      catch (e) { reject(e); return; }
+      this._staticWorker = worker;
+      const cancelar = () => { try { worker.terminate(); } catch (e) {} this._staticWorker = null; this._hideProgress(); reject(new Error('cancelado')); };
+      this._showProgress('Analizando…', 'Resolviendo K·u = F (matriz dispersa, en segundo plano)', cancelar);
+      worker.onmessage = (ev) => {
+        const d = ev.data;
+        if (d && d.progress) {
+          const sub = d.progress === 'factorizando' ? 'Factorizando la matriz de rigidez (dispersa)…'
+            : `Resolviendo caso ${d.done}/${d.total}…`;
+          this._showProgress('Analizando…', sub, cancelar);
+          return;
+        }
+        try { worker.terminate(); } catch (e) {}
+        this._staticWorker = null;
+        this._hideProgress();
+        resolve(d);
+      };
+      worker.onerror = (ev) => { try { worker.terminate(); } catch (e) {} this._staticWorker = null; this._hideProgress(); reject(new Error(ev.message || 'error en worker estático')); };
+      // Solo se transfieren los no-ceros (zero-copy); Flist se copia.
+      worker.postMessage({ csr, cf, nDOF, freeDOF, Flist }, [
+        csr.rowPtr.buffer, csr.colIdx.buffer, csr.val.buffer,
+        cf.rowDof.buffer, cf.ptr.buffer, cf.freeIdx.buffer, cf.val.buffer,
+        freeDOF.buffer,
+      ]);
     });
   }
 
@@ -2432,7 +2478,7 @@ class App {
     this._showProgress('Generando el modelo…', 'Aplicando reglas y cargas normativas');
     try {
       const libs = await this._cargarBibliotecasAsistente();
-      const { generarModelo } = await import('../asistente/generador.js?v=75');
+      const { generarModelo } = await import('../asistente/generador.js?v=76');
       const modelo = generarModelo(ficha, libs);
 
       if (modo === 'sobreponer') {
@@ -3303,7 +3349,7 @@ class App {
   // Verificación de diseño (flexión/corte/axial) por elemento, usando los
   // resultados actuales y los parámetros editables de asistente/diseno_params.json.
   async _calcularDiseno() {
-    const ver = '?v=75';
+    const ver = '?v=76';
     let params = null;
     try { params = await fetch('asistente/diseno_params.json' + ver).then(r => r.json()); }
     catch (e) { console.error('No se pudo cargar diseno_params.json:', e); return null; }

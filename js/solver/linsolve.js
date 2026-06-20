@@ -81,7 +81,14 @@ export function bandFactor(Kff, n, permIn = null) {
     const j0 = i - m < 0 ? 0 : i - m;
     for (let j = j0; j <= i; j++) L[i * w + (j - i + m)] = Kff[pi * n + perm[j]];
   }
-  // Cholesky en banda (in-place): L·Lᵀ = A_perm
+  if (!_choleskyBand(L, n, w, m)) return { ok: false, m };   // no SPD
+  return { ok: true, L, w, m, perm, n };
+}
+
+// Cholesky en banda IN-PLACE sobre el almacenamiento perfil L[i*w + (j-i+m)]
+// (semibanda m, ancho w=m+1). Devuelve true si SPD, false si pivote ≤ 0.
+// Compartido por la factorización densa-→banda y la CSR-→banda.
+function _choleskyBand(L, n, w, m) {
   for (let i = 0; i < n; i++) {
     const j0 = i - m < 0 ? 0 : i - m;
     for (let j = j0; j <= i; j++) {
@@ -89,14 +96,14 @@ export function bandFactor(Kff, n, permIn = null) {
       const k0 = Math.max(j0, j - m);
       for (let k = k0; k < j; k++) s -= L[i * w + (k - i + m)] * L[j * w + (k - j + m)];
       if (i === j) {
-        if (s <= 0 || !isFinite(s)) return { ok: false, m };   // no SPD
+        if (s <= 0 || !isFinite(s)) return false;   // no SPD
         L[i * w + m] = Math.sqrt(s);
       } else {
         L[i * w + (j - i + m)] = s / L[j * w + m];
       }
     }
   }
-  return { ok: true, L, w, m, perm, n };
+  return true;
 }
 
 // Resuelve K·x = b usando un factor de bandFactor. Devuelve Float64Array(n).
@@ -160,6 +167,83 @@ export function makeFactor(Kff, n, dense = false, perm = null) {
   const f = bandFactor(Kff, n, perm);
   if (!f.ok) return { ok: false, kind: 'banda' };
   return { ok: true, kind: 'banda', m: f.m, solve: (b, out) => bandSolve(f, b, out) };
+}
+
+// ── Camino DISPERSO (CSR) ───────────────────────────────────────────────────
+// La matriz simétrica llega en formato CSR completo (ambos triángulos):
+//   csr = { n, rowPtr:Int32Array(n+1), colIdx:Int32Array(nnz), val:Float64Array(nnz) }
+// Esto evita materializar la matriz densa n×n: el ensamblaje, el reordenamiento
+// RCM, la factorización en banda y los productos matriz·vector trabajan solo
+// sobre los no-ceros (O(nnz)).
+
+// Adyacencia (vecinos por fila, sin la diagonal) desde CSR — para RCM.
+export function adjacencyFromCSR(csr) {
+  const { n, rowPtr, colIdx } = csr;
+  const adj = Array.from({ length: n }, () => []);
+  for (let i = 0; i < n; i++) {
+    for (let p = rowPtr[i]; p < rowPtr[i + 1]; p++) {
+      const j = colIdx[p];
+      if (j !== i) adj[i].push(j);
+    }
+  }
+  return adj;
+}
+
+// Permutación RCM directamente desde CSR.
+export function permRCMcsr(csr) { return rcm(csr.n, adjacencyFromCSR(csr)); }
+
+// Factoriza una matriz SPD en CSR con RCM + Cholesky en banda, SIN densificarla.
+// permIn: permutación a usar (si null, RCM). Devuelve { ok, L, w, m, perm, n }
+// compatible con bandSolve.
+export function bandFactorCSR(csr, permIn = null) {
+  const { n, rowPtr, colIdx, val } = csr;
+  if (n === 0) return { ok: true, L: new Float64Array(0), w: 1, m: 0, perm: new Int32Array(0), n: 0 };
+
+  const perm = permIn || rcm(n, adjacencyFromCSR(csr));
+  const pos = new Int32Array(n);
+  for (let i = 0; i < n; i++) pos[perm[i]] = i;
+
+  // ancho de semibanda tras el reordenamiento (sobre los no-ceros)
+  let m = 0;
+  for (let i = 0; i < n; i++) {
+    const pi = pos[i];
+    for (let p = rowPtr[i]; p < rowPtr[i + 1]; p++) {
+      const d = Math.abs(pi - pos[colIdx[p]]);
+      if (d > m) m = d;
+    }
+  }
+
+  const w = m + 1;
+  const L = new Float64Array(n * w);
+  // Rellenar el triángulo inferior en el espacio permutado desde los no-ceros.
+  for (let origI = 0; origI < n; origI++) {
+    const ni = pos[origI];
+    for (let p = rowPtr[origI]; p < rowPtr[origI + 1]; p++) {
+      const nj = pos[colIdx[p]];
+      if (nj <= ni) L[ni * w + (nj - ni + m)] = val[p];
+    }
+  }
+  if (!_choleskyBand(L, n, w, m)) return { ok: false, m };
+  return { ok: true, L, w, m, perm, n };
+}
+
+// Selector CSR: factoriza y devuelve { ok, solve(b,out), kind, m }.
+export function makeFactorCSR(csr, perm = null) {
+  const f = bandFactorCSR(csr, perm);
+  if (!f.ok) return { ok: false, kind: 'banda' };
+  return { ok: true, kind: 'banda', m: f.m, solve: (b, out) => bandSolve(f, b, out) };
+}
+
+// Producto y = A·x con A en CSR (O(nnz)). Usado por el modal disperso.
+export function csrMv(csr, x, out) {
+  const { n, rowPtr, colIdx, val } = csr;
+  const y = out || new Float64Array(n);
+  for (let i = 0; i < n; i++) {
+    let s = 0;
+    for (let p = rowPtr[i]; p < rowPtr[i + 1]; p++) s += val[p] * x[colIdx[p]];
+    y[i] = s;
+  }
+  return y;
 }
 
 // Extensión por filas de la sparsity (banda variable): lo[i]/hi[i] = primera y
