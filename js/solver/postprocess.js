@@ -7,9 +7,9 @@
 // For UDL this reduces to the exact parabolic formula.
 // Displacements at arbitrary xi use cubic Hermite shape functions.
 // ──────────────────────────────────────────────────────────────────────────────
-import { localAxes, stiffnessMatrix, transformMatrix, fixedEndForces, applyReleases, condenseFEF, recoverReleasedDisp } from './timoshenko.js?v=86';
-import { getNodeDOFs } from './assembler.js?v=86';
-import { areaStress, vonMises } from './membrane.js?v=86';
+import { localAxes, stiffnessMatrix, transformMatrix, fixedEndForces, applyReleases, condenseFEF, recoverReleasedDisp } from './timoshenko.js?v=87';
+import { getNodeDOFs } from './assembler.js?v=87';
+import { areaStress, vonMises } from './membrane.js?v=87';
 
 function _toLocalLoad(load, ex, ey, ez) {
   const w   = load.w;
@@ -111,6 +111,22 @@ export class Results {
     }
     this._areaStress.set(areaId, res);
     return res;
+  }
+
+  // Suavizado NODAL de tensiones (estilo BESTFIT): promedia la von Mises de los
+  // elementos de área conectados a cada nodo → campo nodal CONTINUO para contornos
+  // suaves. Devuelve Map(nodeId → vmPromedio).
+  getNodalAreaVM() {
+    if (this._nodalAreaVM) return this._nodalAreaVM;
+    const sum = new Map(), cnt = new Map();
+    for (const area of (this.model.areas?.values() || [])) {
+      const s = this.getAreaStress(area.id); if (!s) continue;
+      for (const nid of area.nodes) { sum.set(nid, (sum.get(nid) || 0) + s.vm); cnt.set(nid, (cnt.get(nid) || 0) + 1); }
+    }
+    const out = new Map();
+    for (const [nid, sv] of sum) out.set(nid, sv / (cnt.get(nid) || 1));
+    this._nodalAreaVM = out;
+    return out;
   }
 
   _computeAllElemForces() {

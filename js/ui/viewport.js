@@ -443,15 +443,42 @@ export class Viewport {
     if (g) { this._scene.remove(g); this._areaMeshes.delete(areaId); }
   }
 
-  // Colorea los elementos de área por tensión de von Mises (modo resultados).
+  // Colorea los elementos de área por von Mises con SUAVIZADO NODAL (BESTFIT):
+  // color por vértice = vM nodal promediada → contorno continuo interpolado.
   colorAreasByVM(results) {
     const model = this.app.model;
-    if (!model.areas || model.areas.size === 0 || !results || typeof results.getAreaStress !== 'function') return;
-    let mn = Infinity, mx = -Infinity; const vals = new Map();
-    for (const a of model.areas.values()) { const s = results.getAreaStress(a.id); const v = s ? s.vm : 0; vals.set(a.id, v); if (v < mn) mn = v; if (v > mx) mx = v; }
+    if (!model.areas || model.areas.size === 0 || !results || typeof results.getNodalAreaVM !== 'function') return;
+    const nodal = results.getNodalAreaVM();
+    let mn = Infinity, mx = -Infinity;
+    for (const v of nodal.values()) { if (v < mn) mn = v; if (v > mx) mx = v; }
+    if (!isFinite(mn)) return;
     const span = (mx - mn) || 1;
-    for (const a of model.areas.values()) this.addAreaMesh(a, _dispColor((vals.get(a.id) - mn) / span));
+    for (const a of model.areas.values()) this.addAreaMeshSmooth(a, nodal, mn, span);
     this._areaVMrange = [mn, mx];
+    this._drawColorbar(mn, mx);   // barra de color de von Mises (sobrescribe la de δ)
+  }
+
+  // Igual que addAreaMesh pero con color por vértice (suavizado nodal).
+  addAreaMeshSmooth(area, nodal, mn, span) {
+    this.removeAreaMesh(area.id);
+    const pts = area.nodes.map(id => { const n = this.app.model.nodes.get(id); return n ? this.m2t(n.x, n.y, n.z) : null; });
+    if (pts.some(p => !p)) return;
+    const cols = area.nodes.map(id => new THREE.Color(_dispColor(((nodal.get(id) ?? mn) - mn) / span)));
+    const idx = pts.length === 3 ? [0, 1, 2] : [0, 1, 2, 0, 2, 3];
+    const pos = [], col = [];
+    for (const k of idx) { pos.push(pts[k].x, pts[k].y, pts[k].z); col.push(cols[k].r, cols[k].g, cols[k].b); }
+    const geo = new THREE.BufferGeometry();
+    geo.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+    geo.setAttribute('color', new THREE.Float32BufferAttribute(col, 3));
+    const grp = new THREE.Group();
+    const fill = new THREE.Mesh(geo, new THREE.MeshBasicMaterial({ vertexColors: true, transparent: true, opacity: 0.9, side: THREE.DoubleSide, depthWrite: false }));
+    fill.userData = { type: 'area', id: area.id };
+    grp.add(fill);
+    const loop = [...pts, pts[0]];
+    grp.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints(loop), new THREE.LineBasicMaterial({ color: 0x334155, transparent: true, opacity: 0.5 })));
+    grp.userData = { type: 'area', id: area.id };
+    this._scene.add(grp);
+    this._areaMeshes.set(area.id, grp);
   }
 
   resetAreaColors() {
