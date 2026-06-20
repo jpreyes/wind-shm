@@ -1,8 +1,8 @@
 // ──────────────────────────────────────────────────────────────────────────────
 // PropertiesPanel — right-side panel: node/element properties + mat/sec tabs
 // ──────────────────────────────────────────────────────────────────────────────
-import { computeFloorCR, computeFloorCM, computeTributaryWeights } from '../solver/diaphragm.js?v=76';
-import { localAxes } from '../solver/timoshenko.js?v=76';
+import { computeFloorCR, computeFloorCM, computeTributaryWeights } from '../solver/diaphragm.js?v=78';
+import { localAxes } from '../solver/timoshenko.js?v=78';
 
 export class PropertiesPanel {
   constructor(panelEl, app) {
@@ -89,24 +89,22 @@ export class PropertiesPanel {
       return;
     }
     const f = dis.filas;
-    const fr = x => x.flecha?.ratio ?? 0;
-    const malo = x => x.ratioMax > 1 || fr(x) > 1;
-    const aj   = x => !malo(x) && (x.ratioMax > 0.9 || fr(x) > 0.9);
+    const malo = x => x.ratioMax > 1;
+    const aj   = x => !malo(x) && x.ratioMax > 0.9;
     const nNo = f.filter(malo).length;
     const nAj = f.filter(aj).length;
     const nOk = f.length - nNo - nAj;
     const cls = r => r > 1 ? 'dc-bad' : r > 0.9 ? 'dc-warn' : 'dc-ok';
     const fmt = v => (v == null || !isFinite(v)) ? '—' : (+v).toFixed(2);
-    const rows = f.map(x => `<tr class="dis-row" data-elem="${x.id}" title="${esc(x.combo||'')} — flexión ${fmt(x.flexion.ratio)} · corte ${fmt(x.corte.ratio)} · axial ${fmt(x.axial.ratio)} · interacción ${fmt(x.interaccion?.ratio)} · flecha ${fmt(fr(x))}">
+    const rows = f.map(x => `<tr class="dis-row" data-elem="${x.id}" title="${esc(x.combo||'')} — flexión ${fmt(x.flexion.ratio)} · corte ${fmt(x.corte.ratio)} · axial ${fmt(x.axial.ratio)} · interacción ${fmt(x.interaccion?.ratio)}">
       <td>#${x.id}</td><td>${esc(x.sec)}</td><td>${x.gobierna}</td>
       <td class="${cls(x.ratioMax)}"><b>${fmt(x.ratioMax)}</b></td>
-      <td class="${cls(fr(x))}">${fmt(fr(x))}</td>
       <td class="${malo(x) ? 'dc-bad' : aj(x) ? 'dc-warn' : 'dc-ok'}">${malo(x) ? '✗' : aj(x) ? '!' : '✓'}</td></tr>`).join('');
     body.innerHTML = `
       <div class="dis-summary">Estados: <b>${esc(dis.caso || 'activo')}</b><br>
         <span class="dc-ok">${nOk} cumplen</span> · <span class="dc-warn">${nAj} ajustados</span> · <span class="dc-bad">${nNo} no cumplen</span></div>
-      <table class="dis-table"><thead><tr><th>Elem</th><th>Sec.</th><th>Gob.</th><th>D/C</th><th>δ</th><th></th></tr></thead><tbody>${rows}</tbody></table>
-      <p class="panel-hint" style="margin-top:6px">D/C = resistencia (flexión/corte/axial/interacción) ≤ 1. δ = flecha vs L/${(dis.params?.flechas_admisibles?.viga_carga_total_L_sobre)||300}. Clic en fila selecciona el elemento; detalle en <b>Análisis → Memoria</b>.</p>`;
+      <table class="dis-table"><thead><tr><th>Elem</th><th>Sec.</th><th>Gob.</th><th>D/C</th><th></th></tr></thead><tbody>${rows}</tbody></table>
+      <p class="panel-hint" style="margin-top:6px">D/C = resistencia (flexión/corte/axial/interacción) ≤ 1. Las deformaciones (servicio) y derivas se documentan en <b>Análisis → Memoria</b>.</p>`;
     body.querySelectorAll('.dis-row').forEach(tr => tr.addEventListener('click', () => {
       const id = +tr.dataset.elem;
       if (this.app.viewport.selectElements) this.app.viewport.selectElements([id]);
@@ -1014,6 +1012,19 @@ export class PropertiesPanel {
       </div>
 
       <div class="prop-section">
+        <div class="prop-title">Cable / No lineal (NL-lite)</div>
+        <label style="display:flex;align-items:center;gap:6px;font-size:12px;cursor:pointer" title="El elemento se comporta como cable: solo resiste tracción (queda flojo en compresión, N=0). Para el análisis no lineal.">
+          <input type="checkbox" id="e-cable" ${elem.cable ? 'checked' : ''}> Cable (solo tracción)
+        </label>
+        <div class="prop-row cols1">
+          <div class="prop-field"><label title="Longitud natural (sin tensión) ÷ longitud geométrica. 1 = sin pretensar. Menor que 1 = pretensado (tracción en reposo).">L₀ / L (pretensado si &lt;1)</label>
+            <input type="number" id="e-l0f" value="${(elem.L0factor ?? 1)}" min="0.5" max="1.5" step="0.005">
+          </div>
+        </div>
+        <p class="rel-warn" style="color:var(--text-muted)">Se usa en <b>Análisis → No lineal</b> (actívalo en ⚙ Configuración). El análisis lineal (F5) ignora estos campos.</p>
+      </div>
+
+      <div class="prop-section">
         <div class="prop-title">Herramientas Didácticas</div>
         <button class="btn-add" id="btn-elem-matrices" style="width:100%"
           title="Ver Ke local, T, Ke global y Me de este elemento — para comparar con el cálculo manual del curso">
@@ -1065,7 +1076,9 @@ export class PropertiesPanel {
       sel.querySelectorAll('[data-rel]').forEach(cb => {
         releases[+cb.dataset.rel] = cb.checked ? 1 : 0;
       });
-      this.app.model.updateElement(elem.id, { n1, n2, matId, secId, releases });
+      const cable    = sel.querySelector('#e-cable')?.checked || false;
+      const L0factor = parseFloat(sel.querySelector('#e-l0f')?.value) || 1;
+      this.app.model.updateElement(elem.id, { n1, n2, matId, secId, releases, cable, L0factor });
       this.app.viewport.refreshElem(this.app.model.elements.get(elem.id));
       this.app.markDirty();
     };
@@ -1076,6 +1089,7 @@ export class PropertiesPanel {
     sel.querySelectorAll('[data-rel]').forEach(cb =>
       cb.addEventListener('change', save)
     );
+    sel.querySelector('#e-cable')?.addEventListener('change', save);
 
     // Visor de matrices del elemento
     sel.querySelector('#btn-elem-matrices')?.addEventListener('click', () => {

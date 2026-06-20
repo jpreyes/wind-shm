@@ -434,15 +434,20 @@ html, body { height: 100%; overflow: hidden; background: var(--bg); color: var(-
 
 /* ── Aviso de rotación (móvil en vertical) ───────────────────── */
 #rotate-hint { display: none; }
+/* Banner inferior NO bloqueante: la app se usa también en vertical. */
 @media (orientation: portrait) and (max-width: 860px) {
   #rotate-hint {
-    display: flex; flex-direction: column; align-items: center; justify-content: center;
-    position: fixed; inset: 0; z-index: 99999; background: var(--bg); color: var(--text);
-    text-align: center; padding: 32px; gap: 6px;
+    display: flex; align-items: center; gap: 10px;
+    position: fixed; left: 8px; right: 8px; bottom: 8px; z-index: 1000;
+    background: var(--bg3, var(--bg)); color: var(--text);
+    border: 1px solid var(--border); border-radius: 10px;
+    padding: 8px 12px; box-shadow: 0 6px 20px rgba(0,0,0,.4);
+    text-align: left;
   }
-  #rotate-hint .rotate-ico { font-size: 56px; margin-bottom: 8px; animation: rot-wiggle 1.6s ease-in-out infinite; }
-  #rotate-hint p { max-width: 320px; color: var(--text-muted); }
-  #rotate-hint p b { color: var(--text); font-size: 18px; }
+  #rotate-hint .rotate-ico { font-size: 22px; flex: none; animation: rot-wiggle 1.6s ease-in-out infinite; }
+  #rotate-hint .rotate-txt { flex: 1; color: var(--text-muted); font-size: 12px; line-height: 1.35; }
+  #rotate-hint .rotate-txt b { color: var(--text); }
+  #rotate-hint .rotate-close { flex: none; background: none; border: none; color: var(--text-muted); font-size: 16px; line-height: 1; cursor: pointer; padding: 2px 6px; }
   @keyframes rot-wiggle { 0%,100%{ transform: rotate(-12deg);} 50%{ transform: rotate(12deg);} }
 }
 

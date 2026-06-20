@@ -1932,6 +1932,66 @@ export class Viewport {
     this._drawColorbar(0, maxD);
   }
 
+  // ── Deformada NO LINEAL (NL-lite): solo desplazamientos nodales ────────────
+  // Dibuja los elementos como rectas entre los nodos deformados (barra/cable son
+  // de dos fuerzas → rectos). Colorea: cable flojo = gris punteado, tracción =
+  // teal, compresión = naranja. uByNode: Map(id → [ux,uy,uz]); elemState:
+  // Map(elemId → {taut,N,cable}); factor relativo sobre la escala auto.
+  showNLDeformed(uByNode, elemState, factor, infoText) {
+    this.clearLoads();
+    this.clearResults();
+    this._resultObjects = [];
+    this._inResultsMode = true;
+    this._currentDiagramType = null;
+
+    let maxD = 0;
+    for (const u of uByNode.values()) maxD = Math.max(maxD, Math.hypot(u[0], u[1], u[2]));
+    const b = this.app.model.getBounds();
+    const span = Math.max(b.max.x - b.min.x, b.max.y - b.min.y, b.max.z - b.min.z, 1);
+    const autoBase = maxD > 1e-12 ? span / 50 / maxD : 1;
+    const f = (factor == null || !isFinite(factor) || factor <= 0) ? 1 : factor;
+    const scale = autoBase * f;
+    const sc = document.getElementById('result-scale'); if (sc) sc.value = +f.toPrecision(3);
+
+    // Ghost del modelo original
+    for (const [, line] of this._elemLines) line.material.color.set(0x222840);
+    for (const [, mesh] of this._nodeMeshes) mesh.visible = false;
+    for (const [, grp]  of this._suppGroups)  grp.visible  = false;
+
+    const defPos = (node) => {
+      const u = uByNode.get(node.id) || [0, 0, 0];
+      return this.m2t(node.x + scale * u[0], node.y + scale * u[1], node.z + scale * u[2]);
+    };
+
+    for (const elem of this.app.model.elements.values()) {
+      const n1 = this.app.model.nodes.get(elem.n1);
+      const n2 = this.app.model.nodes.get(elem.n2);
+      if (!n1 || !n2) continue;
+      const st = elemState?.get(elem.id) || {};
+      let color = 0x38bdf8, dashed = false;          // tracción (teal)
+      if (st.cable && st.taut === false) { color = 0x64748b; dashed = true; }   // cable flojo
+      else if (st.N < 0)                 { color = 0xf59e0b; }                   // compresión (naranja)
+      const geo = new THREE.BufferGeometry().setFromPoints([defPos(n1), defPos(n2)]);
+      const mat = dashed
+        ? new THREE.LineDashedMaterial({ color, dashSize: 0.15, gapSize: 0.1 })
+        : new THREE.LineBasicMaterial({ color });
+      const line = new THREE.Line(geo, mat);
+      if (dashed) line.computeLineDistances();
+      this._scene.add(line);
+      this._resultObjects.push(line);
+    }
+    for (const node of this.app.model.nodes.values()) {
+      const mesh = new THREE.Mesh(
+        new THREE.SphereGeometry(NODE_R * 0.8, 6, 6),
+        new THREE.MeshBasicMaterial({ color: 0x38bdf8 })
+      );
+      mesh.position.copy(defPos(node));
+      this._scene.add(mesh);
+      this._resultObjects.push(mesh);
+    }
+    this._showResultsUI(infoText || `Deformada no lineal ×${_fmt(scale)} | δmax=${_fmt(maxD)}`);
+  }
+
   // factor = multiplicador RELATIVO sobre la escala auto-normalizada (1 = ajuste
   // automático). El diagrama SIEMPRE se normaliza a ~15% del span, sin importar
   // la magnitud del esfuerzo (N en kN vs M en kN·m, etc.).

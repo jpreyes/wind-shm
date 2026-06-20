@@ -111,6 +111,10 @@ export class Model {
     if (props.matId  !== undefined) el.matId  = +props.matId;
     if (props.secId  !== undefined) el.secId  = +props.secId;
     if (props.releases) el.releases = [...props.releases];
+    // NL-lite (Fase 1): cable «tension-only» + pretensado por longitud natural.
+    // L0factor = longitud natural / longitud geométrica (1 = sin pretensar, <1 = pretensado).
+    if (props.cable    !== undefined) el.cable    = !!props.cable;
+    if (props.L0factor !== undefined) el.L0factor = +props.L0factor || 1;
     return el;
   }
 

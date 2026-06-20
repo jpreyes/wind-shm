@@ -29,8 +29,8 @@
       window.dispatchEvent(new Event('pwa-installed'));
     });
   </script>
-  <link rel="stylesheet" href="style.css?v=76">
-  <link rel="stylesheet" href="ui-v2.css?v=76">
+  <link rel="stylesheet" href="style.css?v=78">
+  <link rel="stylesheet" href="ui-v2.css?v=78">
   <script type="importmap">
   {
     "imports": {
@@ -119,6 +119,7 @@
           <li data-action="run-force">↻ Recalcular (forzar, ignora resultados guardados)</li>
           <li data-action="run-modal">▶ Análisis Modal… <kbd>F6</kbd></li>
           <li data-action="run-spectrum">▶ Espectro de Respuesta… <kbd>F7</kbd></li>
+          <li data-action="run-nonlinear">▶ Análisis No Lineal (NL-lite)…</li>
           <li class="sep"></li>
           <li data-action="combos">Combinaciones de Carga… <kbd>F8</kbd></li>
           <li data-action="global-matrices">Ver Matrices Globales K · M…</li>
@@ -670,7 +671,7 @@
           <div>
             <h2 style="margin:0">PÓRTICO</h2>
             <p style="margin:2px 0 0;color:var(--text-muted)">Laboratorio virtual de análisis estructural 3D
-              · <b id="help-version">versión 76</b> · junio 2026</p>
+              · <b id="help-version">versión 78</b> · junio 2026</p>
           </div>
         </div>
         <p><b>Material docente</b> desarrollado por el <b>Dr. Juan Patricio Reyes C.</b> —
@@ -867,17 +868,17 @@
 })();
 </script>
 
-<!-- Aviso de rotación: en teléfonos en vertical, PÓRTICO se usa en horizontal
-     (apaisado) para que se vean las barras laterales. -->
+<!-- Aviso de rotación: banner inferior NO bloqueante. En vertical sugiere girar
+     a horizontal, pero la app sigue siendo usable; se puede cerrar. -->
 <div id="rotate-hint">
-  <div class="rotate-ico">⟲📱</div>
-  <p><b>Gira el dispositivo</b></p>
-  <p>PÓRTICO se usa en horizontal (apaisado) para ver las barras laterales.</p>
+  <span class="rotate-ico">⟲📱</span>
+  <span class="rotate-txt"><b>Mejor en horizontal</b> — PÓRTICO se ve mejor apaisado, pero puedes seguir usándolo en vertical.</span>
+  <button type="button" class="rotate-close" onclick="this.parentElement.style.display='none'" aria-label="Cerrar aviso">✕</button>
 </div>
 
 <!-- numeric.js para solver (Fase 2+) -->
 <script src="lib/numeric.js"></script>
-<script type="module" src="js/app.js?v=76"></script>
+<script type="module" src="js/app.js?v=78"></script>
 
 <!-- PWA: registrar el service worker (offline). Solo en contexto seguro
      (https o localhost); el navegador deja navigator.serviceWorker undefined

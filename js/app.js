@@ -1,22 +1,23 @@
 // ──────────────────────────────────────────────────────────────────────────────
 // App — main orchestrator
 // ──────────────────────────────────────────────────────────────────────────────
-import { Model }           from './model/model.js?v=76';
-import { Serializer }      from './model/serializer.js?v=76';
-import { Viewport }        from './ui/viewport.js?v=76';
-import { PropertiesPanel } from './ui/properties.js?v=76';
-import { MenuBar }         from './ui/menu.js?v=76';
-import { UndoStack }       from './utils/undo.js?v=76';
-import { StaticSolver, ensureDefaultLC }   from './solver/static_solver.js?v=76';
-import { Results }                         from './solver/postprocess.js?v=76';
-import { ModalSolver }                     from './solver/modal_solver.js?v=76';
-import { buildNodeIndex, assembleK, assembleF, getNodeDOFs } from './solver/assembler.js?v=76';
-import { assembleSparseGlobal, extractFreeCSR } from './solver/sparse.js?v=76';
-import { ModalResults }                    from './solver/modal_results.js?v=76';
-import { SpectrumSolver }                  from './solver/spectrum_solver.js?v=76';
-import { autoDetectDiaphragms, computeFloorCR } from './solver/diaphragm.js?v=76';
-import { splitElement, splitByLength, discretizeAll, joinElements, intersectarElementos } from './model/discretize.js?v=76';
-import { localAxes, stiffnessMatrix, massMatrix, transformMatrix, globalStiffness, applyReleases } from './solver/timoshenko.js?v=76';
+import { Model }           from './model/model.js?v=78';
+import { Serializer }      from './model/serializer.js?v=78';
+import { Viewport }        from './ui/viewport.js?v=78';
+import { PropertiesPanel } from './ui/properties.js?v=78';
+import { MenuBar }         from './ui/menu.js?v=78';
+import { UndoStack }       from './utils/undo.js?v=78';
+import { StaticSolver, ensureDefaultLC }   from './solver/static_solver.js?v=78';
+import { Results }                         from './solver/postprocess.js?v=78';
+import { ModalSolver }                     from './solver/modal_solver.js?v=78';
+import { buildNodeIndex, assembleK, assembleF, getNodeDOFs } from './solver/assembler.js?v=78';
+import { assembleSparseGlobal, extractFreeCSR } from './solver/sparse.js?v=78';
+import { solveNonlinear } from './solver/nl_lite.js?v=78';
+import { ModalResults }                    from './solver/modal_results.js?v=78';
+import { SpectrumSolver }                  from './solver/spectrum_solver.js?v=78';
+import { autoDetectDiaphragms, computeFloorCR } from './solver/diaphragm.js?v=78';
+import { splitElement, splitByLength, discretizeAll, joinElements, intersectarElementos } from './model/discretize.js?v=78';
+import { localAxes, stiffnessMatrix, massMatrix, transformMatrix, globalStiffness, applyReleases } from './solver/timoshenko.js?v=78';
 
 class App {
   constructor() {
@@ -1117,7 +1118,7 @@ class App {
   _staticWorkerSolve(K, nDOF, freeDOF, Flist, dense = false) {
     return new Promise((resolve, reject) => {
       let worker;
-      try { worker = new Worker(new URL('./solver/static_worker.js?v=76', import.meta.url), { type: 'module' }); }
+      try { worker = new Worker(new URL('./solver/static_worker.js?v=78', import.meta.url), { type: 'module' }); }
       catch (e) { reject(e); return; }
       this._staticWorker = worker;
       const cancelar = () => { try { worker.terminate(); } catch (e) {} this._staticWorker = null; this._hideProgress(); reject(new Error('cancelado')); };
@@ -1146,7 +1147,7 @@ class App {
   _staticWorkerSolveSparse(csr, cf, nDOF, freeDOF, Flist) {
     return new Promise((resolve, reject) => {
       let worker;
-      try { worker = new Worker(new URL('./solver/static_worker.js?v=76', import.meta.url), { type: 'module' }); }
+      try { worker = new Worker(new URL('./solver/static_worker.js?v=78', import.meta.url), { type: 'module' }); }
       catch (e) { reject(e); return; }
       this._staticWorker = worker;
       const cancelar = () => { try { worker.terminate(); } catch (e) {} this._staticWorker = null; this._hideProgress(); reject(new Error('cancelado')); };
@@ -1705,6 +1706,164 @@ class App {
         document.getElementById('sb-mode').textContent = 'Modo: Espectro';
       }
     }, 20);
+  }
+
+  // ── Análisis NO LINEAL geométrico (NL-lite, Fase 1) ───────────────────────
+  // Trata TODOS los elementos como barras de dos fuerzas (truss); los marcados
+  // como «cable» resisten solo tracción. Pretensado por longitud natural L0.
+  // Combina todos los casos estáticos a factor 1 (cargas nodales + peso propio +
+  // distribuidas concentradas a los nodos extremos). Newton incremental.
+  runNonlinear() {
+    if (!this._config?.analisis?.nlLite) {
+      this.toast('Active «Análisis no lineal (NL-lite)» en ⚙ Configuración primero', 'warn');
+      this.configDialog?.();
+      return;
+    }
+    if (this.model.nodes.size === 0 || this.model.elements.size === 0) {
+      this.toast('Modelo vacío: agregue nodos y elementos', 'warn'); return;
+    }
+
+    // Índice de nodos (0-based) y coordenadas de referencia
+    const nodeIds = [...this.model.nodes.keys()];
+    const idxOf = new Map(nodeIds.map((id, i) => [id, i]));
+    const nNode = nodeIds.length;
+    const X = new Float64Array(3 * nNode);
+    nodeIds.forEach((id, i) => { const n = this.model.nodes.get(id); X[3*i] = n.x; X[3*i+1] = n.y; X[3*i+2] = n.z; });
+
+    // Elementos barra/cable
+    const elems = [], elemIds = [];
+    for (const el of this.model.elements.values()) {
+      const n1 = this.model.nodes.get(el.n1), n2 = this.model.nodes.get(el.n2);
+      const mat = this.model.materials.get(el.matId), sec = this.model.sections.get(el.secId);
+      if (!n1 || !n2 || !mat || !sec) continue;
+      const L = Math.hypot(n2.x-n1.x, n2.y-n1.y, n2.z-n1.z);
+      if (L < 1e-12) continue;
+      const L0 = (el.L0factor || 1) * L;
+      elems.push({ n1: idxOf.get(el.n1), n2: idxOf.get(el.n2), EA: mat.E * sec.A, L0, cable: !!el.cable });
+      elemIds.push(el.id);
+    }
+    if (!elems.length) { this.toast('No hay elementos válidos para el análisis no lineal', 'warn'); return; }
+
+    // GDL libres (solo traslaciones; en 2D, uy fijo)
+    const is2D = this.model.mode === '2D';
+    const free = [];
+    nodeIds.forEach((id, i) => {
+      const r = this.model.nodes.get(id).restraints;
+      const fix = [r.ux, is2D ? 1 : r.uy, r.uz];
+      for (let c = 0; c < 3; c++) if (!fix[c]) free.push(3*i + c);
+    });
+    if (!free.length) { this.toast('Todos los nodos están restringidos (sin GDL libres)', 'warn'); return; }
+
+    // Carga de referencia: combina todos los casos estáticos a factor 1
+    const Fref = new Float64Array(3 * nNode);
+    const addNode = (id, fx, fy, fz) => { const i = idxOf.get(id); if (i==null) return; Fref[3*i]+=fx; Fref[3*i+1]+=fy; Fref[3*i+2]+=fz; };
+    const dirVec = (dir) => dir==='globalX' ? [1,0,0] : dir==='globalY' ? [0,1,0] : dir==='globalZ' ? [0,0,1] : [0,0,-1]; // gravity = −Z
+    let nCasos = 0;
+    for (const lc of this.model.loadCases.values()) {
+      if (lc.type === 'spectrum') continue;
+      nCasos++;
+      for (const load of (lc.loads || [])) {
+        if (load.type === 'nodal') addNode(load.nodeId, load.F[0]||0, load.F[1]||0, load.F[2]||0);
+        else if (load.type === 'dist') {
+          const el = this.model.elements.get(load.elemId);
+          if (!el) continue;
+          const n1 = this.model.nodes.get(el.n1), n2 = this.model.nodes.get(el.n2);
+          if (!n1 || !n2) continue;
+          const L = Math.hypot(n2.x-n1.x, n2.y-n1.y, n2.z-n1.z);
+          const half = (load.w || 0) * L / 2;
+          const g = dirVec(load.dir || 'gravity');
+          addNode(el.n1, half*g[0], half*g[1], half*g[2]);
+          addNode(el.n2, half*g[0], half*g[1], half*g[2]);
+        }
+      }
+      if (lc.selfWeight) {   // peso propio concentrado a los nodos (−Z)
+        for (const el of this.model.elements.values()) {
+          const n1 = this.model.nodes.get(el.n1), n2 = this.model.nodes.get(el.n2);
+          const mat = this.model.materials.get(el.matId), sec = this.model.sections.get(el.secId);
+          if (!n1 || !n2 || !mat || !sec) continue;
+          const L = Math.hypot(n2.x-n1.x, n2.y-n1.y, n2.z-n1.z);
+          const w = mat.rho * sec.A * L / 2;   // mitad a cada nodo
+          addNode(el.n1, 0, 0, -w); addNode(el.n2, 0, 0, -w);
+        }
+      }
+    }
+
+    const nSteps = Math.max(1, Math.min(200, Math.round(parseFloat(this._nlSteps) || 12)));
+    let res;
+    try {
+      res = solveNonlinear({ X, elems, free, Fref, nSteps, maxIter: 60, tol: 1e-8, slack: 1e-6 });
+    } catch (e) { this.toast(`Error no lineal: ${e.message}`, 'error'); console.error(e); return; }
+
+    if (!res.steps.length || !res.steps[0]) { this.toast('El análisis no lineal no produjo pasos (¿mecanismo?)', 'error'); return; }
+    this._nlResult = { res, X, nodeIds, idxOf, elemIds };
+    if (!res.converged) this.toast(`No convergió en el paso ${res.steps.length}/${nSteps} (tangente singular o carga excesiva). Se muestran los pasos logrados.`, 'warn');
+    else this.toast(`No lineal OK · ${res.steps.length} pasos · ${nCasos} caso(s) combinados`, 'ok');
+    this._nlOpenOverlay();
+  }
+
+  // Panel flotante con control paso a paso de la deformada no lineal.
+  _nlOpenOverlay() {
+    const steps = this._nlResult.res.steps;
+    let el = document.getElementById('nl-overlay');
+    if (!el) {
+      el = document.createElement('div');
+      el.id = 'nl-overlay';
+      el.style.cssText = 'position:fixed;right:16px;bottom:84px;z-index:50;background:var(--panel,#0f1830);border:1px solid var(--border,#26324d);border-radius:8px;padding:10px 12px;width:260px;box-shadow:0 8px 24px rgba(0,0,0,.4);font-size:12px;color:var(--text,#dbe4f5)';
+      document.body.appendChild(el);
+    }
+    el.innerHTML = `
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
+        <b style="color:var(--accent,#38bdf8)">Deformada no lineal</b>
+        <button id="nl-close" title="Cerrar" style="background:none;border:none;color:var(--text-muted,#94a3b8);cursor:pointer;font-size:16px;line-height:1">✕</button>
+      </div>
+      <div style="display:flex;align-items:center;gap:6px;margin-bottom:6px">
+        <button id="nl-play" class="btn-secondary" style="font-size:14px;padding:2px 8px">▶</button>
+        <input type="range" id="nl-step" min="1" max="${steps.length}" value="${steps.length}" style="flex:1">
+      </div>
+      <div id="nl-readout" style="color:var(--text-muted,#94a3b8);font-size:11px;line-height:1.5;margin-bottom:6px"></div>
+      <div style="display:flex;align-items:center;gap:6px">
+        <label style="color:var(--text-muted,#94a3b8)">Escala ×</label>
+        <input type="number" id="nl-scale" value="1" min="0.05" step="0.25" style="width:64px">
+      </div>`;
+    const stepInp = el.querySelector('#nl-step');
+    const scaleInp = el.querySelector('#nl-scale');
+    const playBtn = el.querySelector('#nl-play');
+    const redraw = () => this._nlShowStep(+stepInp.value - 1);
+    stepInp.addEventListener('input', redraw);
+    scaleInp.addEventListener('input', redraw);
+    el.querySelector('#nl-close').addEventListener('click', () => { this._nlStopPlay(); el.remove(); this.viewport.clearResults(); });
+    playBtn.addEventListener('click', () => {
+      if (this._nlPlayTimer) { this._nlStopPlay(); playBtn.textContent = '▶'; return; }
+      playBtn.textContent = '⏸';
+      this._nlPlayTimer = setInterval(() => {
+        let v = +stepInp.value + 1; if (v > steps.length) v = 1;
+        stepInp.value = v; redraw();
+      }, 350);
+    });
+    redraw();
+  }
+
+  _nlStopPlay() { if (this._nlPlayTimer) { clearInterval(this._nlPlayTimer); this._nlPlayTimer = null; } }
+
+  _nlShowStep(s) {
+    const { res, nodeIds, idxOf, elemIds } = this._nlResult;
+    const step = res.steps[Math.max(0, Math.min(s, res.steps.length - 1))];
+    if (!step) return;
+    const uByNode = new Map();
+    nodeIds.forEach((id) => { const i = idxOf.get(id); uByNode.set(id, [step.u[3*i], step.u[3*i+1], step.u[3*i+2]]); });
+    const elemState = new Map();
+    elemIds.forEach((eid, k) => elemState.set(eid, { N: step.N[k], taut: step.taut[k], cable: this.model.elements.get(eid)?.cable }));
+    const factor = parseFloat(document.getElementById('nl-scale')?.value) || 1;
+    let maxD = 0; for (const u of uByNode.values()) maxD = Math.max(maxD, Math.hypot(u[0], u[1], u[2]));
+    this.viewport.showNLDeformed(uByNode, elemState, factor,
+      `No lineal · paso ${Math.round(step.lambda * res.steps.length)}/${res.steps.length} · λ=${step.lambda.toFixed(2)} · δmax=${maxD.toExponential(2)} m · ${step.iters} iter`);
+    const ro = document.getElementById('nl-readout');
+    if (ro) {
+      const taut = step.taut.filter(t => t !== false).length;
+      const slack = step.taut.length - taut;
+      const Nmax = Math.max(0, ...step.N.map(Math.abs));
+      ro.innerHTML = `λ = <b>${step.lambda.toFixed(3)}</b> · iter ${step.iters} · resid ${step.resid.toExponential(1)}<br>|N|máx = ${Nmax.toFixed(2)} kN · cables tensos ${taut}${slack ? ` · flojos ${slack}` : ''}`;
+    }
   }
 
   _spectrumDialog(defaultText) {
@@ -2478,7 +2637,7 @@ class App {
     this._showProgress('Generando el modelo…', 'Aplicando reglas y cargas normativas');
     try {
       const libs = await this._cargarBibliotecasAsistente();
-      const { generarModelo } = await import('../asistente/generador.js?v=76');
+      const { generarModelo } = await import('../asistente/generador.js?v=78');
       const modelo = generarModelo(ficha, libs);
 
       if (modo === 'sobreponer') {
@@ -2559,7 +2718,7 @@ class App {
         mostrarIds: true,      // mostrar IDs de nodos/elementos en las figuras
         modosVisibles: true,   // amplificar las formas modales para que se noten
       },
-      analisis: { motor: 'normal', shellTipos: [], matrizDensa: false },   // matrizDensa: false = solver en banda (rápido); true = denso (académico). motor/área: PRO.
+      analisis: { motor: 'normal', shellTipos: [], matrizDensa: false, nlLite: false },   // matrizDensa: false = solver en banda (rápido); true = denso (académico). nlLite: análisis no lineal geométrico (sin token). motor/área: PRO.
       seccion_mod_default: { A: 1, Iy: 1, Iz: 1, J: 1 },
     };
   }
@@ -2570,7 +2729,7 @@ class App {
     return [
       'Documento generado automáticamente por PÓRTICO con fines <b>docentes</b>; no reemplaza el criterio ni la firma de un profesional competente.',
       'La verificación de diseño usa propiedades de sección (A, I) y los parámetros editables de <code>asistente/diseno_params.json</code>; el hormigón armado se evalúa con la cuantía indicada y supuestos declarados.',
-      'La verificación cubre flexión, corte, axial, interacción flexo-axial (AISC H1 / NDS) y flecha de servicio por envolvente de combinaciones. NO incluye diseño de uniones, fundaciones, pandeo lateral-torsional, clasificación de perfiles ni efectos P-Δ.',
+      'La verificación de <b>resistencia</b> cubre flexión, corte, axial e interacción flexo-axial (AISC H1 / NDS) por envolvente de combinaciones. La de <b>servicio</b> cubre la flecha de vigas bajo sobrecarga de uso sin mayorar y las derivas de entrepiso (NCh433, límite 2/1000·h, entre centros de masa y entre nodos externos). NO incluye diseño de uniones, fundaciones, pandeo lateral-torsional, clasificación de perfiles ni efectos P-Δ.',
       'Las cargas de viento, nieve y sobrecargas se representan como casos de carga; verifique su clasificación y magnitud según la normativa aplicable.',
     ];
   }
@@ -2687,6 +2846,8 @@ class App {
           <legend style="padding:0 6px;color:var(--accent)">Análisis</legend>
           <label style="display:block"><input type="checkbox" id="cfg-densa" ${this._config.analisis.matrizDensa ? 'checked' : ''}> Usar matriz de rigidez <b>densa</b> (exploración académica; más lenta)</label>
           <small style="color:var(--text-muted);font-size:10.5px">Por defecto se usa la versión <b>condensada en banda</b> (rápida, factorización única). La densa arma y factoriza la matriz completa tal cual — útil para entender cómo se construye, pero O(n³).</small>
+          <label style="display:block;margin-top:8px"><input type="checkbox" id="cfg-nllite" ${this._config.analisis.nlLite ? 'checked' : ''}> Habilitar <b>análisis no lineal (NL-lite)</b></label>
+          <small style="color:var(--text-muted);font-size:10.5px">Activa <b>Análisis → No lineal</b>: cables (solo tracción), pretensado por longitud natural y no linealidad geométrica (corotacional, Newton incremental) con deformada paso a paso. Marca elementos como «cable» en la pestaña Elem. Sin token.</small>
         </fieldset>
 
         <fieldset style="border:1px solid var(--border);border-radius:6px;padding:10px 12px">
@@ -2749,6 +2910,7 @@ class App {
       mm.mostrarIds = document.getElementById('cfg-ids')?.checked ?? true;
       mm.modosVisibles = document.getElementById('cfg-modos')?.checked ?? true;
       an.matrizDensa = document.getElementById('cfg-densa')?.checked ?? false;   // densa/banda: académico, sin token
+      an.nlLite = document.getElementById('cfg-nllite')?.checked ?? false;        // no lineal: sin token
       if (pro) {   // campos profesionales solo si hay token
         mm.kicker = v('cfg-kicker'); mm.institucion = v('cfg-inst'); mm.subInstitucion = v('cfg-subinst');
         mm.descripcion = v('cfg-desc'); mm.footer = v('cfg-footer'); mm.limitaciones = v('cfg-limit');
@@ -3331,8 +3493,10 @@ class App {
     try { imgs = await this._capturarVistasMemoria(); }
     catch (e) { console.error('Captura de vistas falló:', e); }
 
-    const diseno = await this._calcularDiseno();   // verificación flexión/corte/axial (si hay resultados)
-    const html = this._memoriaHTML(imgs, diseno);
+    const diseno = await this._calcularDiseno();   // verificación de resistencia (si hay resultados)
+    const deflex = this._calcularDeflexionesVigas(diseno?.params);   // servicio: flecha de vigas (sobrecarga sin mayorar)
+    const drift  = this._calcularDrift();                            // servicio: derivas de entrepiso NCh433
+    const html = this._memoriaHTML(imgs, diseno, deflex, drift);
 
     const win = window.open('', '_blank');
     if (!win) {
@@ -3349,7 +3513,7 @@ class App {
   // Verificación de diseño (flexión/corte/axial) por elemento, usando los
   // resultados actuales y los parámetros editables de asistente/diseno_params.json.
   async _calcularDiseno() {
-    const ver = '?v=76';
+    const ver = '?v=78';
     let params = null;
     try { params = await fetch('asistente/diseno_params.json' + ver).then(r => r.json()); }
     catch (e) { console.error('No se pudo cargar diseno_params.json:', e); return null; }
@@ -3390,28 +3554,15 @@ class App {
         for (const e of (d.extremes || [])) m = Math.max(m, Math.abs(e.val));
         return m;
       };
-      // Flecha relativa a la cuerda: δ(ξ) = u(ξ) − interp(u1,u2). Máx sobre el vano.
-      const flechaMax = (res, el, L) => {
-        try {
-          const u1 = res.getNodeDisp(el.n1), u2 = res.getNodeDisp(el.n2);
-          if (!u1 || !u2) return 0;
-          let dmax = 0;
-          for (let k = 1; k < 10; k++) {
-            const xi = k / 10, d = res.getElemAtXi(el.id, xi); if (!d) continue;
-            const cx = u1[0] + xi * (u2[0] - u1[0]), cy = u1[1] + xi * (u2[1] - u1[1]), cz = u1[2] + xi * (u2[2] - u1[2]);
-            dmax = Math.max(dmax, Math.hypot(d.ux - cx, d.uy - cy, d.uz - cz));
-          }
-          return dmax;
-        } catch { return 0; }
-      };
-
-      const limFlecha = (params.flechas_admisibles || {}).viga_carga_total_L_sobre || 300;
+      // La verificación de DEFORMACIONES se hace aparte (servicio): tabla de
+      // flechas de vigas bajo sobrecarga de uso sin mayorar (_calcularDeflexionesVigas)
+      // y derivas de entrepiso (_calcularDrift). Aquí solo resistencia (D/C).
       const filas = [];
       for (const el of this.model.elements.values()) {
         const sec = this.model.sections.get(el.secId);
         const mat = this.model.materials.get(el.matId);
         if (!sec || !mat) continue;
-        let peor = null, peorNom = null, peorFuerzas = null, defMax = 0;
+        let peor = null, peorNom = null, peorFuerzas = null;
         for (const { nombre, res } of disResults) {
           const f = res.getElemForces(el.id); if (!f) continue;
           const fuerzas = {
@@ -3421,17 +3572,115 @@ class App {
           };
           const r = mod.verificarElemento({ fuerzas, sec, matNombre: mat.name, params });
           if (!peor || r.ratioMax > peor.ratioMax) { peor = r; peorNom = nombre; peorFuerzas = fuerzas; }
-          defMax = Math.max(defMax, flechaMax(res, el, f.L));
         }
         if (!peor) continue;
-        const L = peorFuerzas.L || 1;
-        const flecha = { delta: defMax, limite: L / limFlecha, ratio: (L / limFlecha) > 1e-9 ? defMax / (L / limFlecha) : 0, Lsobre: limFlecha };
-        const estadoFlecha = flecha.ratio > 1 ? 'NO CUMPLE' : 'cumple';
-        filas.push({ id: el.id, mat: mat.name, sec: sec.name, fuerzas: peorFuerzas, combo: peorNom, flecha, estadoFlecha, ...peor });
+        filas.push({ id: el.id, mat: mat.name, sec: sec.name, fuerzas: peorFuerzas, combo: peorNom, ...peor });
       }
-      filas.sort((a, b) => Math.max(b.ratioMax, b.flecha.ratio) - Math.max(a.ratioMax, a.flecha.ratio));
+      filas.sort((a, b) => b.ratioMax - a.ratioMax);
       return { filas, params, caso: disResults.length > 1 ? `envolvente de ${disResults.length} estados` : disResults[0].nombre, envolvente: disResults.length > 1 };
     } catch (e) { console.error('Diseño falló:', e); return { filas: [], params, caso: null }; }
+  }
+
+  // ── Servicio: deformaciones de VIGAS bajo SOBRECARGA DE USO sin mayorar ────
+  // Tabla solo de elementos viga (casi horizontales), flecha relativa a la cuerda
+  // usando exclusivamente el caso de sobrecarga de uso (factor 1, sin combinar).
+  _calcularDeflexionesVigas(params) {
+    const out = { rows: [], note: '', caso: null, limSobre: (params?.flechas_admisibles?.viga_sobrecarga_L_sobre) || 360 };
+    if (!this._resultsByCase) { try { this._reconstructResultsFromCache(); } catch {} }
+    const byCase = this._resultsByCase;
+    const isLive = lc => lc.type !== 'spectrum' && !lc.selfWeight && /viva|sobrecarga|uso|\bcv\b|live/i.test(lc.name || '');
+    const lcLive = [...this.model.loadCases.values()].find(isLive);
+    if (!lcLive) { out.note = 'No se identificó el caso de sobrecarga de uso. Nómbrelo con «sobrecarga», «viva», «uso» o «CV» (y sin peso propio).'; return out; }
+    out.caso = lcLive.name;
+    const res = byCase?.get(lcLive.id);
+    if (!res || typeof res.getElemAtXi !== 'function') { out.note = `Ejecute el análisis estático (F5) para tener resultados del caso «${lcLive.name}».`; return out; }
+
+    // Flecha máxima relativa a la cuerda recta entre los nodos (sag del vano).
+    const flechaMax = (el) => {
+      try {
+        const u1 = res.getNodeDisp(el.n1), u2 = res.getNodeDisp(el.n2);
+        if (!u1 || !u2) return 0;
+        let dmax = 0;
+        for (let k = 1; k < 10; k++) {
+          const xi = k / 10, d = res.getElemAtXi(el.id, xi); if (!d) continue;
+          const cx = u1[0] + xi * (u2[0] - u1[0]), cy = u1[1] + xi * (u2[1] - u1[1]), cz = u1[2] + xi * (u2[2] - u1[2]);
+          dmax = Math.max(dmax, Math.hypot(d.ux - cx, d.uy - cy, d.uz - cz));
+        }
+        return dmax;
+      } catch { return 0; }
+    };
+
+    for (const el of this.model.elements.values()) {
+      const n1 = this.model.nodes.get(el.n1), n2 = this.model.nodes.get(el.n2);
+      if (!n1 || !n2) continue;
+      const L = Math.hypot(n2.x - n1.x, n2.y - n1.y, n2.z - n1.z);
+      if (L < 1e-9) continue;
+      if (Math.abs(n2.z - n1.z) > 0.2 * L) continue;   // solo vigas (casi horizontales)
+      const delta = flechaMax(el);
+      const lim = L / out.limSobre;
+      out.rows.push({ id: el.id, sec: this.model.sections.get(el.secId)?.name || '', L, delta, lim, ratio: lim > 1e-9 ? delta / lim : 0 });
+    }
+    out.rows.sort((a, b) => b.ratio - a.ratio);
+    return out;
+  }
+
+  // ── Servicio: DERIVAS de entrepiso (drift) según NCh433 ────────────────────
+  // (1) entre CENTROS DE MASA (nodos maestros de diafragma) y (2) entre los nodos
+  // EXTERNOS (máximo desplazamiento del nivel). Ambas ≤ 0.002·h (2/1000 de la
+  // altura de entrepiso). Usa los desplazamientos sísmicos (espectro F6+F7).
+  _calcularDrift() {
+    const limit = 0.002;
+    const out = { limit, dirs: [], note: '', hasCM: false };
+    const spec = this._spectrumResults;
+    const dirDefs = [['X', 0, 'espX'], ['Y', 1, 'espY']].filter(([, , k]) => spec?.get(k)?.result);
+    if (!dirDefs.length) { out.note = 'Las derivas usan los resultados sísmicos: ejecute Análisis Modal (F6) y Espectro de Respuesta (F7) en X y/o Y.'; return out; }
+
+    // Niveles de piso: diafragmas (maestro = CM) si existen; si no, agrupar nodos por z.
+    let levels;
+    const diaphs = [...this.model.diaphragms.values()];
+    if (diaphs.length) {
+      levels = diaphs.map(d => ({ z: d.z, masterId: d.masterId, nodeIds: (d.nodes || []).filter(id => this.model.nodes.has(id)) }));
+      out.hasCM = true;
+    } else {
+      const byZ = new Map();
+      for (const n of this.model.nodes.values()) {
+        if (Math.abs(n.z) < 0.01) continue;   // base
+        const zk = Math.round(n.z * 100) / 100;
+        if (!byZ.has(zk)) byZ.set(zk, []);
+        byZ.get(zk).push(n.id);
+      }
+      levels = [...byZ.entries()].map(([z, ids]) => ({ z, masterId: null, nodeIds: ids }));
+      out.note = 'Sin diafragmas rígidos: la deriva entre centros de masa requiere definir diafragmas (Análisis → diafragmas). Se reporta solo la deriva entre nodos externos por nivel de Z.';
+    }
+    levels.sort((a, b) => a.z - b.z);
+    if (!levels.length) { out.note = 'No hay niveles de entrepiso (todos los nodos están en la base).'; return out; }
+
+    for (const [dir, idx, key] of dirDefs) {
+      const res = spec.get(key).result;
+      const dispH = id => { try { return Math.abs(res.getNodeDisp(id)[idx]); } catch { return 0; } };
+      const lvlData = levels.map(L => ({
+        z: L.z,
+        cm: L.masterId != null ? dispH(L.masterId) : null,
+        ext: L.nodeIds.reduce((mx, id) => Math.max(mx, dispH(id)), 0),
+      }));
+      // Referencia de base (suelo) en z=0 con u=0
+      let prev = { z: 0, cm: 0, ext: 0 };
+      const stories = [];
+      lvlData.forEach((cur, i) => {
+        const h = cur.z - prev.z;
+        if (h <= 1e-6) { prev = cur; return; }
+        const driftCM = (cur.cm != null && prev.cm != null) ? Math.abs(cur.cm - prev.cm) / h : null;
+        const driftExt = Math.abs(cur.ext - prev.ext) / h;
+        stories.push({
+          piso: i + 1, z: cur.z, h,
+          driftCM, ratioCM: driftCM != null ? driftCM / limit : null, okCM: driftCM != null ? driftCM <= limit : null,
+          driftExt, ratioExt: driftExt / limit, okExt: driftExt <= limit,
+        });
+        prev = cur;
+      });
+      out.dirs.push({ dir, stories });
+    }
+    return out;
   }
 
   // Captura base, deformada y hasta 3 modos, y restaura la vista del usuario.
@@ -3499,7 +3748,7 @@ class App {
     return out;
   }
 
-  _memoriaHTML(imgs, diseno) {
+  _memoriaHTML(imgs, diseno, deflex, drift) {
     const m = this.model;
     const esc = (s) => String(s ?? '').replace(/[&<>"]/g, c => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;' }[c]));
     const fmt = (v, d = 3) => (v == null || !isFinite(v)) ? '—'
@@ -3653,14 +3902,14 @@ class App {
     </tbody></table>
     <p class="muted">Límites como fracción de la luz L. La verificación de flecha por elemento debe contrastarse con la luz libre de cada vano.</p>`;
 
-    // ── Diseño de elementos: verificación flexión / corte / axial ───────────
+    // ── Diseño de elementos: verificación de RESISTENCIA flexión/corte/axial ──
+    // (las DEFORMACIONES de servicio van en su propia sección, no aquí).
     let disenoHTML;
     const rClass = r => r > 1.0 ? 'r-bad' : r > 0.9 ? 'r-warn' : 'r-ok';
     if (diseno && diseno.filas && diseno.filas.length) {
       const f = diseno.filas;
-      const frr = x => x.flecha?.ratio ?? 0;
-      const malo = x => x.ratioMax > 1 || frr(x) > 1;
-      const aj   = x => !malo(x) && (x.ratioMax > 0.9 || frr(x) > 0.9);
+      const malo = x => x.ratioMax > 1;
+      const aj   = x => !malo(x) && x.ratioMax > 0.9;
       const nNo = f.filter(malo).length;
       const nAj = f.filter(aj).length;
       const nOk = f.length - nNo - nAj;
@@ -3674,22 +3923,68 @@ class App {
         <td class="${rClass(x.interaccion?.ratio)}">${fmt(x.interaccion?.ratio,2)}</td>
         <td>${x.gobierna}</td>
         <td class="${rClass(x.ratioMax)}"><b>${fmt(x.ratioMax,2)}</b></td>
-        <td class="${rClass(frr(x))}">${fmt(frr(x),2)}</td>
         <td class="${malo(x)?'r-bad':aj(x)?'r-warn':'r-ok'}">${malo(x)?'NO CUMPLE':aj(x)?'ajustado':'cumple'}</td></tr>`).join('');
       disenoHTML = `
-        <p>Verificación por <b>${diseno.envolvente ? 'envolvente de las combinaciones de carga' : `el estado «${esc(diseno.caso||'activo')}»`}</b>:
-        para cada elemento se reporta la combinación más desfavorable. La razón <b>D/C = demanda/capacidad</b> (resistencia)
-        y la <b>flecha δ</b> (servicio, vs L/${(dp?.flechas_admisibles?.viga_carga_total_L_sobre)||300}) deben ser ≤ 1.0.
-        Parámetros en <code>asistente/diseno_params.json</code>.</p>
+        <p>Verificación de <b>resistencia</b> por <b>${diseno.envolvente ? 'envolvente de las combinaciones de carga' : `el estado «${esc(diseno.caso||'activo')}»`}</b>:
+        para cada elemento se reporta la combinación más desfavorable. La razón <b>D/C = demanda/capacidad</b> debe ser ≤ 1.0.
+        Las deformaciones (servicio) se verifican en la sección de deformaciones de vigas. Parámetros en <code>asistente/diseno_params.json</code>.</p>
         <table style="font-size:9.5px"><thead><tr>
           <th>Elem</th><th>Sección</th><th>Material</th><th>Combo</th><th>N (kN)</th><th>M (kN·m)</th><th>V (kN)</th>
-          <th>flex.</th><th>corte</th><th>axial</th><th>interac.</th><th>Gobierna</th><th>D/C máx</th><th>δ</th><th>Estado</th>
+          <th>flex.</th><th>corte</th><th>axial</th><th>interac.</th><th>Gobierna</th><th>D/C máx</th><th>Estado</th>
         </tr></thead><tbody>${rows}</tbody></table>
         <p class="muted">${f.length > 60 ? `Se muestran los 60 elementos más solicitados de ${f.length}. ` : ''}
         Resumen: <b class="r-ok">${nOk} cumplen</b> · <b class="r-warn">${nAj} ajustados</b> · <b class="r-bad">${nNo} no cumplen</b>.
-        D/C: flexión/corte/axial e interacción flexo-axial. δ = flecha relativa máxima respecto a la luz. Colores: verde ≤ 0.90 · ámbar 0.90–1.00 · rojo &gt; 1.00.</p>`;
+        D/C: flexión/corte/axial e interacción flexo-axial. Colores: verde ≤ 0.90 · ámbar 0.90–1.00 · rojo &gt; 1.00.</p>`;
     } else {
       disenoHTML = '<p class="muted">No hay resultados de análisis para verificar. Ejecute el análisis estático (F5) con sus combinaciones de carga antes de generar la memoria.</p>';
+    }
+
+    // ── Deformaciones de vigas (servicio · sobrecarga de uso sin mayorar) ─────
+    let deflexHTML;
+    if (deflex && deflex.rows && deflex.rows.length) {
+      const dr = deflex.rows.slice(0, 60);
+      const rows = dr.map(x => `<tr>
+        <td>#${x.id}</td><td>${esc(x.sec)}</td><td>${fmt(x.L,2)}</td>
+        <td>${fmt(x.delta*1000,2)}</td><td>L/${deflex.limSobre} = ${fmt(x.lim*1000,2)}</td>
+        <td class="${rClass(x.ratio)}"><b>${fmt(x.ratio,2)}</b></td>
+        <td class="${x.ratio>1?'r-bad':x.ratio>0.9?'r-warn':'r-ok'}">${x.ratio>1?'NO CUMPLE':x.ratio>0.9?'ajustado':'cumple'}</td></tr>`).join('');
+      const nNo = deflex.rows.filter(x => x.ratio > 1).length;
+      deflexHTML = `
+        <p>Flecha de las <b>vigas</b> (elementos casi horizontales) bajo el caso de <b>sobrecarga de uso «${esc(deflex.caso)}» sin mayorar</b>
+        (factor 1.0), medida respecto a la cuerda recta del vano. Límite de servicio L/${deflex.limSobre}.</p>
+        <table style="font-size:9.5px"><thead><tr>
+          <th>Viga</th><th>Sección</th><th>L (m)</th><th>δ (mm)</th><th>δ admisible (mm)</th><th>δ/δadm</th><th>Estado</th>
+        </tr></thead><tbody>${rows}</tbody></table>
+        <p class="muted">${deflex.rows.length > 60 ? `Se muestran las 60 vigas más deformadas de ${deflex.rows.length}. ` : ''}
+        ${nNo ? `<b class="r-bad">${nNo} viga(s) superan el límite.</b> ` : 'Todas cumplen el límite de servicio. '}
+        δ = flecha relativa máxima en el vano por sobrecarga de uso (sin mayorar).</p>`;
+    } else {
+      deflexHTML = `<p class="muted">${esc(deflex?.note || 'Sin datos de deformaciones de vigas.')}</p>`;
+    }
+
+    // ── Derivas sísmicas de entrepiso (NCh433) ────────────────────────────────
+    let driftHTML;
+    if (drift && drift.dirs && drift.dirs.length) {
+      const cls = ok => ok === false ? 'r-bad' : ok === true ? 'r-ok' : '';
+      const lblOk = ok => ok === false ? 'NO CUMPLE' : ok === true ? 'cumple' : '—';
+      const cell = (v, d = 5) => v == null ? '—' : fmt(v, d);
+      driftHTML = drift.dirs.map(D => {
+        const rows = D.stories.map(s => `<tr>
+          <td>${s.piso}</td><td>${fmt(s.z,2)}</td><td>${fmt(s.h,2)}</td>
+          <td>${cell(s.driftCM)}</td><td class="${cls(s.okCM)}">${cell(s.ratioCM,2)}</td><td class="${cls(s.okCM)}">${lblOk(s.okCM)}</td>
+          <td>${cell(s.driftExt)}</td><td class="${cls(s.okExt)}">${cell(s.ratioExt,2)}</td><td class="${cls(s.okExt)}">${lblOk(s.okExt)}</td></tr>`).join('');
+        return `<h3>Dirección sísmica ${esc(D.dir)}</h3>
+        <table style="font-size:9.5px"><thead><tr>
+          <th>Piso</th><th>Z (m)</th><th>h (m)</th>
+          <th>δ/h (CM)</th><th>·/0.002</th><th>Estado CM</th>
+          <th>δ/h (ext.)</th><th>·/0.002</th><th>Estado ext.</th>
+        </tr></thead><tbody>${rows || '<tr><td colspan="9" class="muted">Sin entrepisos.</td></tr>'}</tbody></table>`;
+      }).join('');
+      driftHTML += `<p class="muted">Deriva de entrepiso δ/h = desplazamiento relativo entre pisos consecutivos ÷ altura de entrepiso.
+        <b>Límite NCh433: 0.002</b> (2/1000) tanto entre <b>centros de masa</b> (Art. 5.9.2) como entre <b>nodos externos</b> del piso (Art. 5.9.3).
+        Calculada con los desplazamientos del espectro de respuesta.${drift.hasCM ? '' : ' <i>Sin diafragmas: se reporta solo la deriva entre nodos externos.</i>'}</p>`;
+    } else {
+      driftHTML = `<p class="muted">${esc(drift?.note || 'Sin datos de derivas sísmicas.')}</p>`;
     }
 
     // ── Portada (estilo institucional, configurable) ────────────────────────
@@ -3823,10 +4118,16 @@ ${figDef}
 <h3>2.2 Análisis modal — modos de vibrar</h3>
 ${modalHTML}
 
-<h2>3. Diseño de elementos</h2>
+<h2>3. Diseño de elementos (resistencia)</h2>
 ${disenoHTML}
 
-<h2>4. Limitaciones y alcances</h2>
+<h2>4. Verificaciones de servicio</h2>
+<h3>4.1 Deformaciones de vigas — sobrecarga de uso (sin mayorar)</h3>
+${deflexHTML}
+<h3>4.2 Derivas sísmicas de entrepiso — NCh433 (límite 2/1000·h)</h3>
+${driftHTML}
+
+<h2>5. Limitaciones y alcances</h2>
 <ul style="font-size:11px;line-height:1.6">${limitHTML}</ul>
 </body></html>`;
   }

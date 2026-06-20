@@ -90,6 +90,7 @@ export class MenuBar {
       case 'run-force':      a.runAnalysis(true);            break;
       case 'run-modal':      a.runModal();                   break;
       case 'run-spectrum':   a.runSpectrum();                break;
+      case 'run-nonlinear':  a.runNonlinear();               break;
       case 'combos':         a.openCombosTab();              break;
       case 'asistente':      a.asistenteDialog();            break;
       case 'res-deformed':   a.setResultType('deformed');    break;
