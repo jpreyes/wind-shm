@@ -1,26 +1,27 @@
 // ──────────────────────────────────────────────────────────────────────────────
 // App — main orchestrator
 // ──────────────────────────────────────────────────────────────────────────────
-import { Model }           from './model/model.js?v=85';
-import { Serializer }      from './model/serializer.js?v=85';
-import { Viewport }        from './ui/viewport.js?v=85';
-import { PropertiesPanel } from './ui/properties.js?v=85';
-import { MenuBar }         from './ui/menu.js?v=85';
-import { UndoStack }       from './utils/undo.js?v=85';
-import { StaticSolver, ensureDefaultLC }   from './solver/static_solver.js?v=85';
-import { Results }                         from './solver/postprocess.js?v=85';
-import { ModalSolver }                     from './solver/modal_solver.js?v=85';
-import { buildNodeIndex, assembleK, assembleF, getNodeDOFs } from './solver/assembler.js?v=85';
-import { assembleSparseGlobal, extractFreeCSR } from './solver/sparse.js?v=85';
-import { solveNonlinear, solveNonlinearDC } from './solver/nl_lite.js?v=85';
-import { assembleKg } from './solver/geometric.js?v=85';
-import { denseFactor, triForward, triBackward, makeFactor } from './solver/linsolve.js?v=85';
-import { formFind } from './solver/formfind.js?v=85';
-import { ModalResults }                    from './solver/modal_results.js?v=85';
-import { SpectrumSolver }                  from './solver/spectrum_solver.js?v=85';
-import { autoDetectDiaphragms, computeFloorCR } from './solver/diaphragm.js?v=85';
-import { splitElement, splitByLength, discretizeAll, joinElements, intersectarElementos } from './model/discretize.js?v=85';
-import { localAxes, stiffnessMatrix, massMatrix, transformMatrix, globalStiffness, applyReleases } from './solver/timoshenko.js?v=85';
+import { Model }           from './model/model.js?v=86';
+import { Serializer }      from './model/serializer.js?v=86';
+import { Viewport }        from './ui/viewport.js?v=86';
+import { PropertiesPanel } from './ui/properties.js?v=86';
+import { MenuBar }         from './ui/menu.js?v=86';
+import { UndoStack }       from './utils/undo.js?v=86';
+import { StaticSolver, ensureDefaultLC }   from './solver/static_solver.js?v=86';
+import { Results }                         from './solver/postprocess.js?v=86';
+import { ModalSolver }                     from './solver/modal_solver.js?v=86';
+import { buildNodeIndex, assembleK, assembleF, getNodeDOFs } from './solver/assembler.js?v=86';
+import { assembleSparseGlobal, extractFreeCSR } from './solver/sparse.js?v=86';
+import { solveNonlinear, solveNonlinearDC } from './solver/nl_lite.js?v=86';
+import { assembleKg } from './solver/geometric.js?v=86';
+import { denseFactor, triForward, triBackward, makeFactor } from './solver/linsolve.js?v=86';
+import { formFind } from './solver/formfind.js?v=86';
+import { ModalResults }                    from './solver/modal_results.js?v=86';
+import { SpectrumSolver }                  from './solver/spectrum_solver.js?v=86';
+import { autoDetectDiaphragms, computeFloorCR } from './solver/diaphragm.js?v=86';
+import { splitElement, splitByLength, discretizeAll, joinElements, intersectarElementos } from './model/discretize.js?v=86';
+import { localAxes, stiffnessMatrix, massMatrix, transformMatrix, globalStiffness, applyReleases } from './solver/timoshenko.js?v=86';
+import { bilinearGrid, blockCells, cornerGridIndices } from './model/mesher.js?v=86';
 
 class App {
   constructor() {
@@ -372,6 +373,43 @@ class App {
     const ey = [ez[1] * ex[2] - ez[2] * ex[1], ez[2] * ex[0] - ez[0] * ex[2], ez[0] * ex[1] - ez[1] * ex[0]];
     const ang = p => { const d = [p.x - c.x, p.y - c.y, p.z - c.z]; return Math.atan2(d[0] * ey[0] + d[1] * ey[1] + d[2] * ey[2], d[0] * ex[0] + d[1] * ex[1] + d[2] * ex[2]); };
     return [...P].sort((a, b) => ang(a) - ang(b)).map(p => p.id);
+  }
+
+  // Malla un panel: 4 nodos esquina → grilla estructurada nx×ny de membranas
+  // (MESHGEN, interpolación bilineal del bloque). Reutiliza los 4 nodos esquina.
+  async mallarPanelSeleccion() {
+    const ids = this._selNodes();
+    if (ids.length !== 4) { this.toast('Seleccione 4 nodos esquina del panel (en cualquier orden)', 'warn'); return; }
+    const str = await this._promptModal('Mallar panel (4 esquinas → membrana)',
+      'Divisiones nx, ny, espesor t (m) y tipo (Q=quad / T=tri), separados por coma. Ej: 6,2,0.2,Q', '4,2,0.2,Q');
+    if (str == null) return;
+    const p = str.split(',').map(s => s.trim());
+    const nx = Math.round(+p[0]), ny = Math.round(+p[1]), t = parseFloat(p[2]);
+    const tri = (p[3] || 'Q').toUpperCase().startsWith('T');
+    if (!(nx >= 1 && ny >= 1 && t > 0)) { this.toast('Valores inválidos (nx, ny ≥ 1; t > 0)', 'warn'); return; }
+    if (nx * ny > 2500) { this.toast('Demasiados elementos (>2500). Reduzca nx·ny.', 'warn'); return; }
+
+    const ordered = this._ordenarCuad(ids);
+    const corners = ordered.map(id => { const n = this.model.nodes.get(id); return [n.x, n.y, n.z]; });
+    const pts = bilinearGrid(corners, nx, ny);
+    const ci = cornerGridIndices(nx, ny);   // [P1,P2,P3,P4] índices de grilla
+    const cornerMap = new Map([[ci[0], ordered[0]], [ci[1], ordered[1]], [ci[2], ordered[2]], [ci[3], ordered[3]]]);
+
+    this.snapshot();
+    const nodeId = [];
+    for (let g = 0; g < pts.length; g++) {
+      if (cornerMap.has(g)) nodeId[g] = cornerMap.get(g);
+      else { const q = pts[g]; nodeId[g] = this.model.addNode(q[0], q[1], q[2]).id; }
+    }
+    const matId = [...this.model.materials.keys()][0];
+    let created = 0;
+    for (const cell of blockCells(nx, ny, tri)) {
+      const a = this.model.addArea(cell.map(g => nodeId[g]), matId, { thickness: t });
+      if (a) created++;
+    }
+    this.viewport.renderModel(this.model);
+    this.markDirty(); this._updateStats?.();
+    this.toast(`Panel mallado: ${created} ${tri ? 'CST' : 'QUAD'} (${nx}×${ny}), ${pts.length - 4} nodos nuevos · t=${t} m`, 'ok');
   }
 
   // ── Acciones masivas sobre NODOS ────────────────────────────────────────────
@@ -1174,7 +1212,7 @@ class App {
   _staticWorkerSolve(K, nDOF, freeDOF, Flist, dense = false) {
     return new Promise((resolve, reject) => {
       let worker;
-      try { worker = new Worker(new URL('./solver/static_worker.js?v=85', import.meta.url), { type: 'module' }); }
+      try { worker = new Worker(new URL('./solver/static_worker.js?v=86', import.meta.url), { type: 'module' }); }
       catch (e) { reject(e); return; }
       this._staticWorker = worker;
       const cancelar = () => { try { worker.terminate(); } catch (e) {} this._staticWorker = null; this._hideProgress(); reject(new Error('cancelado')); };
@@ -1203,7 +1241,7 @@ class App {
   _staticWorkerSolveSparse(csr, cf, nDOF, freeDOF, Flist) {
     return new Promise((resolve, reject) => {
       let worker;
-      try { worker = new Worker(new URL('./solver/static_worker.js?v=85', import.meta.url), { type: 'module' }); }
+      try { worker = new Worker(new URL('./solver/static_worker.js?v=86', import.meta.url), { type: 'module' }); }
       catch (e) { reject(e); return; }
       this._staticWorker = worker;
       const cancelar = () => { try { worker.terminate(); } catch (e) {} this._staticWorker = null; this._hideProgress(); reject(new Error('cancelado')); };
@@ -3275,7 +3313,7 @@ class App {
     this._showProgress('Generando el modelo…', 'Aplicando reglas y cargas normativas');
     try {
       const libs = await this._cargarBibliotecasAsistente();
-      const { generarModelo } = await import('../asistente/generador.js?v=85');
+      const { generarModelo } = await import('../asistente/generador.js?v=86');
       const modelo = generarModelo(ficha, libs);
 
       if (modo === 'sobreponer') {
@@ -4151,7 +4189,7 @@ class App {
   // Verificación de diseño (flexión/corte/axial) por elemento, usando los
   // resultados actuales y los parámetros editables de asistente/diseno_params.json.
   async _calcularDiseno() {
-    const ver = '?v=85';
+    const ver = '?v=86';
     let params = null;
     try { params = await fetch('asistente/diseno_params.json' + ver).then(r => r.json()); }
     catch (e) { console.error('No se pudo cargar diseno_params.json:', e); return null; }
