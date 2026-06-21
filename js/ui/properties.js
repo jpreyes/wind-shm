@@ -1,8 +1,8 @@
 // ──────────────────────────────────────────────────────────────────────────────
 // PropertiesPanel — right-side panel: node/element properties + mat/sec tabs
 // ──────────────────────────────────────────────────────────────────────────────
-import { computeFloorCR, computeFloorCM, computeTributaryWeights } from '../solver/diaphragm.js?v=97';
-import { localAxes } from '../solver/timoshenko.js?v=97';
+import { computeFloorCR, computeFloorCM, computeTributaryWeights } from '../solver/diaphragm.js?v=98';
+import { localAxes } from '../solver/timoshenko.js?v=98';
 
 export class PropertiesPanel {
   constructor(panelEl, app) {
@@ -1885,7 +1885,10 @@ export class PropertiesPanel {
       if (shape === 'rect') {
         const b = g('sc-b'), h = g('sc-h');
         A = b * h; Iz = b * h ** 3 / 12; Iy = h * b ** 3 / 12;
-        J = (b < h ? b : h) ** 3 * (b > h ? b : h) / 3 * (1 - 0.63 * Math.min(b,h)/Math.max(b,h));
+        // Constante de torsión de St. Venant (serie de Roark, a=lado mayor, t=menor):
+        // J = a·t³·[1/3 − 0.21·(t/a)·(1 − (t/a)⁴/12)]  (≈0.1406·a⁴ para cuadrado)
+        { const a = Math.max(b, h), t = Math.min(b, h), r = t / a;
+          J = a * t ** 3 * (1 / 3 - 0.21 * r * (1 - r ** 4 / 12)); }
         Avy = kappa * b * h; Avz = kappa * b * h;
         name = `Rect ${(b*100).toFixed(0)}×${(h*100).toFixed(0)}cm`;
       } else if (shape === 'circ') {

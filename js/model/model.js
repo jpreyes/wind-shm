@@ -40,7 +40,7 @@ export class Model {
     this.addMaterial({ name: 'Concreto H30', E: 2.87e7, G: 1.19e7, nu: 0.2, rho: 2.5 });
     this.addSection({
       name: 'Col 30×30',
-      A: 0.09, Iz: 6.75e-4, Iy: 6.75e-4, J: 1.13e-4,
+      A: 0.09, Iz: 6.75e-4, Iy: 6.75e-4, J: 1.14e-3,   // St. Venant 0.30x0.30 (0.1406 a^4); antes 1.13e-4 (10x bajo)
       Avy: 0.075, Avz: 0.075, kappay: 0.833, kappaz: 0.833
     });
   }
@@ -192,7 +192,7 @@ export class Model {
     const id = this._next('sections');
     const sec = {
       id, name: 'Sección',
-      A: 0.09, Iz: 6.75e-4, Iy: 6.75e-4, J: 1.13e-4,
+      A: 0.09, Iz: 6.75e-4, Iy: 6.75e-4, J: 1.14e-3,   // St. Venant 0.30x0.30 (0.1406 a^4); antes 1.13e-4 (10x bajo)
       Avy: 0.075, Avz: 0.075, kappay: 0.833, kappaz: 0.833,
       mod: { A: 1, Iy: 1, Iz: 1, J: 1 },   // modificadores de rigidez (sección agrietada, etc.)
       ...props
