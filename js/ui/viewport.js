@@ -2032,6 +2032,7 @@ export class Viewport {
     }
     for (const [, line] of this._elemLines) {
       line.material.color.set(COL.ELEM);
+      line.material.opacity = 1; line.material.transparent = false;   // deshacer el fantasma del modal
       line.visible = true;
     }
     for (const [, grp] of this._suppGroups) grp.visible = true;
@@ -2562,8 +2563,13 @@ export class Viewport {
     this._animMeshNodes = [];
     this._animLineElems = [];
 
-    // Dim original model
-    for (const [, line] of this._elemLines) line.material.color.set(0x1e2840);
+    // Estructura ORIGINAL como fantasma tenue (gris translúcido) para identificar
+    // el movimiento del modo sin que compita visualmente con él.
+    for (const [, line] of this._elemLines) {
+      line.material.color.set(0x8a9bb0);
+      line.material.transparent = true;
+      line.material.opacity = 0.28;
+    }
     for (const [, mesh] of this._nodeMeshes) mesh.visible = false;
     for (const [, grp]  of this._suppGroups) grp.visible  = false;
 

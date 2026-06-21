@@ -1,27 +1,27 @@
 // ──────────────────────────────────────────────────────────────────────────────
 // App — main orchestrator
 // ──────────────────────────────────────────────────────────────────────────────
-import { Model }           from './model/model.js?v=94';
-import { Serializer }      from './model/serializer.js?v=94';
-import { Viewport }        from './ui/viewport.js?v=94';
-import { PropertiesPanel } from './ui/properties.js?v=94';
-import { MenuBar }         from './ui/menu.js?v=94';
-import { UndoStack }       from './utils/undo.js?v=94';
-import { StaticSolver, ensureDefaultLC }   from './solver/static_solver.js?v=94';
-import { Results }                         from './solver/postprocess.js?v=94';
-import { ModalSolver }                     from './solver/modal_solver.js?v=94';
-import { buildNodeIndex, assembleK, assembleF, getNodeDOFs } from './solver/assembler.js?v=94';
-import { assembleSparseGlobal, extractFreeCSR } from './solver/sparse.js?v=94';
-import { solveNonlinear, solveNonlinearDC } from './solver/nl_lite.js?v=94';
-import { assembleKg } from './solver/geometric.js?v=94';
-import { denseFactor, triForward, triBackward, makeFactor } from './solver/linsolve.js?v=94';
-import { formFind } from './solver/formfind.js?v=94';
-import { ModalResults }                    from './solver/modal_results.js?v=94';
-import { SpectrumSolver }                  from './solver/spectrum_solver.js?v=94';
-import { autoDetectDiaphragms, computeFloorCR } from './solver/diaphragm.js?v=94';
-import { splitElement, splitByLength, discretizeAll, joinElements, intersectarElementos } from './model/discretize.js?v=94';
-import { localAxes, stiffnessMatrix, massMatrix, transformMatrix, globalStiffness, applyReleases } from './solver/timoshenko.js?v=94';
-import { bilinearGrid, blockCells, cornerGridIndices } from './model/mesher.js?v=94';
+import { Model }           from './model/model.js?v=95';
+import { Serializer }      from './model/serializer.js?v=95';
+import { Viewport }        from './ui/viewport.js?v=95';
+import { PropertiesPanel } from './ui/properties.js?v=95';
+import { MenuBar }         from './ui/menu.js?v=95';
+import { UndoStack }       from './utils/undo.js?v=95';
+import { StaticSolver, ensureDefaultLC }   from './solver/static_solver.js?v=95';
+import { Results }                         from './solver/postprocess.js?v=95';
+import { ModalSolver }                     from './solver/modal_solver.js?v=95';
+import { buildNodeIndex, assembleK, assembleF, getNodeDOFs } from './solver/assembler.js?v=95';
+import { assembleSparseGlobal, extractFreeCSR } from './solver/sparse.js?v=95';
+import { solveNonlinear, solveNonlinearDC } from './solver/nl_lite.js?v=95';
+import { assembleKg } from './solver/geometric.js?v=95';
+import { denseFactor, triForward, triBackward, makeFactor } from './solver/linsolve.js?v=95';
+import { formFind } from './solver/formfind.js?v=95';
+import { ModalResults }                    from './solver/modal_results.js?v=95';
+import { SpectrumSolver }                  from './solver/spectrum_solver.js?v=95';
+import { autoDetectDiaphragms, computeFloorCR } from './solver/diaphragm.js?v=95';
+import { splitElement, splitByLength, discretizeAll, joinElements, intersectarElementos } from './model/discretize.js?v=95';
+import { localAxes, stiffnessMatrix, massMatrix, transformMatrix, globalStiffness, applyReleases } from './solver/timoshenko.js?v=95';
+import { bilinearGrid, blockCells, cornerGridIndices } from './model/mesher.js?v=95';
 
 class App {
   constructor() {
@@ -1407,7 +1407,7 @@ class App {
   _staticWorkerSolve(K, nDOF, freeDOF, Flist, dense = false) {
     return new Promise((resolve, reject) => {
       let worker;
-      try { worker = new Worker(new URL('./solver/static_worker.js?v=94', import.meta.url), { type: 'module' }); }
+      try { worker = new Worker(new URL('./solver/static_worker.js?v=95', import.meta.url), { type: 'module' }); }
       catch (e) { reject(e); return; }
       this._staticWorker = worker;
       const cancelar = () => { try { worker.terminate(); } catch (e) {} this._staticWorker = null; this._hideProgress(); reject(new Error('cancelado')); };
@@ -1436,7 +1436,7 @@ class App {
   _staticWorkerSolveSparse(csr, cf, nDOF, freeDOF, Flist) {
     return new Promise((resolve, reject) => {
       let worker;
-      try { worker = new Worker(new URL('./solver/static_worker.js?v=94', import.meta.url), { type: 'module' }); }
+      try { worker = new Worker(new URL('./solver/static_worker.js?v=95', import.meta.url), { type: 'module' }); }
       catch (e) { reject(e); return; }
       this._staticWorker = worker;
       const cancelar = () => { try { worker.terminate(); } catch (e) {} this._staticWorker = null; this._hideProgress(); reject(new Error('cancelado')); };
@@ -1643,6 +1643,9 @@ class App {
     if (!hasSupport) {
       this.toast('El modelo no tiene apoyos', 'warn'); return;
     }
+    // Salir del modo resultados (p.ej. deformada estática) antes de correr el
+    // modal, para hacerlo "desde afuera" sobre el modelo limpio.
+    if (this.viewport._inResultsMode) this.viewport.clearResults();
 
     // HTML modal instead of native prompt()
     const nModes = await this._modalNModesDialog();
@@ -3508,7 +3511,7 @@ class App {
     this._showProgress('Generando el modelo…', 'Aplicando reglas y cargas normativas');
     try {
       const libs = await this._cargarBibliotecasAsistente();
-      const { generarModelo } = await import('../asistente/generador.js?v=94');
+      const { generarModelo } = await import('../asistente/generador.js?v=95');
       const modelo = generarModelo(ficha, libs);
 
       if (modo === 'sobreponer') {
@@ -4384,7 +4387,7 @@ class App {
   // Verificación de diseño (flexión/corte/axial) por elemento, usando los
   // resultados actuales y los parámetros editables de asistente/diseno_params.json.
   async _calcularDiseno() {
-    const ver = '?v=94';
+    const ver = '?v=95';
     let params = null;
     try { params = await fetch('asistente/diseno_params.json' + ver).then(r => r.json()); }
     catch (e) { console.error('No se pudo cargar diseno_params.json:', e); return null; }
