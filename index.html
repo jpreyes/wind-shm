@@ -29,8 +29,8 @@
       window.dispatchEvent(new Event('pwa-installed'));
     });
   </script>
-  <link rel="stylesheet" href="style.css?v=90">
-  <link rel="stylesheet" href="ui-v2.css?v=90">
+  <link rel="stylesheet" href="style.css?v=92">
+  <link rel="stylesheet" href="ui-v2.css?v=92">
   <script type="importmap">
   {
     "imports": {
@@ -212,6 +212,16 @@
         </svg>
         <span>Elem.</span>
       </button>
+      <button class="tool" data-mode="addarea" title="Agregar Área (membrana/placa/shell): clic en 3–4 nodos, Enter para crear">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6">
+          <polygon points="4,6 20,5 19,18 5,19" fill="currentColor" fill-opacity="0.18"/>
+          <circle cx="4" cy="6" r="1.8" fill="currentColor" stroke="none"/>
+          <circle cx="20" cy="5" r="1.8" fill="currentColor" stroke="none"/>
+          <circle cx="19" cy="18" r="1.8" fill="currentColor" stroke="none"/>
+          <circle cx="5" cy="19" r="1.8" fill="currentColor" stroke="none"/>
+        </svg>
+        <span>Área</span>
+      </button>
       <button class="tool" data-mode="addsupport" title="Asignar Apoyo  R">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
           <circle cx="12" cy="5" r="2.5" fill="currentColor" stroke="none"/>
@@ -260,6 +270,13 @@
         <div class="vp-ctrl">
           <label>Snap</label>
           <input type="number" id="snap-size" value="0.5" step="0.25" min="0" max="20" title="Tamaño del snap a grilla">
+        </div>
+        <div class="vp-ctrl">
+          <label style="display:flex;align-items:center;gap:5px;cursor:pointer;font-size:11px;color:var(--text-muted)"
+            title="Imán a nodos: al crear elementos, los extremos se pegan al nodo existente más cercano (lo reutilizan en vez de duplicar). Desactívalo para crear un nodo nuevo aunque haya otro al lado.">
+            <input type="checkbox" id="magnet-snap" checked style="accent-color:var(--accent);cursor:pointer">
+            Imán
+          </label>
         </div>
         <div class="vp-ctrl">
           <label style="display:flex;align-items:center;gap:5px;cursor:pointer;font-size:11px;color:var(--text-muted)"
@@ -892,7 +909,7 @@
 
 <!-- numeric.js para solver (Fase 2+) -->
 <script src="lib/numeric.js"></script>
-<script type="module" src="js/app.js?v=90"></script>
+<script type="module" src="js/app.js?v=92"></script>
 
 <!-- PWA: registrar el service worker (offline). Solo en contexto seguro
      (https o localhost); el navegador deja navigator.serviceWorker undefined

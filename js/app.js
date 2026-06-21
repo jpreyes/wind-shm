@@ -1,27 +1,27 @@
 // ──────────────────────────────────────────────────────────────────────────────
 // App — main orchestrator
 // ──────────────────────────────────────────────────────────────────────────────
-import { Model }           from './model/model.js?v=90';
-import { Serializer }      from './model/serializer.js?v=90';
-import { Viewport }        from './ui/viewport.js?v=90';
-import { PropertiesPanel } from './ui/properties.js?v=90';
-import { MenuBar }         from './ui/menu.js?v=90';
-import { UndoStack }       from './utils/undo.js?v=90';
-import { StaticSolver, ensureDefaultLC }   from './solver/static_solver.js?v=90';
-import { Results }                         from './solver/postprocess.js?v=90';
-import { ModalSolver }                     from './solver/modal_solver.js?v=90';
-import { buildNodeIndex, assembleK, assembleF, getNodeDOFs } from './solver/assembler.js?v=90';
-import { assembleSparseGlobal, extractFreeCSR } from './solver/sparse.js?v=90';
-import { solveNonlinear, solveNonlinearDC } from './solver/nl_lite.js?v=90';
-import { assembleKg } from './solver/geometric.js?v=90';
-import { denseFactor, triForward, triBackward, makeFactor } from './solver/linsolve.js?v=90';
-import { formFind } from './solver/formfind.js?v=90';
-import { ModalResults }                    from './solver/modal_results.js?v=90';
-import { SpectrumSolver }                  from './solver/spectrum_solver.js?v=90';
-import { autoDetectDiaphragms, computeFloorCR } from './solver/diaphragm.js?v=90';
-import { splitElement, splitByLength, discretizeAll, joinElements, intersectarElementos } from './model/discretize.js?v=90';
-import { localAxes, stiffnessMatrix, massMatrix, transformMatrix, globalStiffness, applyReleases } from './solver/timoshenko.js?v=90';
-import { bilinearGrid, blockCells, cornerGridIndices } from './model/mesher.js?v=90';
+import { Model }           from './model/model.js?v=92';
+import { Serializer }      from './model/serializer.js?v=92';
+import { Viewport }        from './ui/viewport.js?v=92';
+import { PropertiesPanel } from './ui/properties.js?v=92';
+import { MenuBar }         from './ui/menu.js?v=92';
+import { UndoStack }       from './utils/undo.js?v=92';
+import { StaticSolver, ensureDefaultLC }   from './solver/static_solver.js?v=92';
+import { Results }                         from './solver/postprocess.js?v=92';
+import { ModalSolver }                     from './solver/modal_solver.js?v=92';
+import { buildNodeIndex, assembleK, assembleF, getNodeDOFs } from './solver/assembler.js?v=92';
+import { assembleSparseGlobal, extractFreeCSR } from './solver/sparse.js?v=92';
+import { solveNonlinear, solveNonlinearDC } from './solver/nl_lite.js?v=92';
+import { assembleKg } from './solver/geometric.js?v=92';
+import { denseFactor, triForward, triBackward, makeFactor } from './solver/linsolve.js?v=92';
+import { formFind } from './solver/formfind.js?v=92';
+import { ModalResults }                    from './solver/modal_results.js?v=92';
+import { SpectrumSolver }                  from './solver/spectrum_solver.js?v=92';
+import { autoDetectDiaphragms, computeFloorCR } from './solver/diaphragm.js?v=92';
+import { splitElement, splitByLength, discretizeAll, joinElements, intersectarElementos } from './model/discretize.js?v=92';
+import { localAxes, stiffnessMatrix, massMatrix, transformMatrix, globalStiffness, applyReleases } from './solver/timoshenko.js?v=92';
+import { bilinearGrid, blockCells, cornerGridIndices } from './model/mesher.js?v=92';
 
 class App {
   constructor() {
@@ -383,6 +383,7 @@ class App {
     const p = str.split(',').map(s => s.trim());
     const t = parseFloat(p[0]); if (!(t > 0)) { this.toast('Espesor inválido', 'warn'); return; }
     const behavior = this._behaviorCode(p[1]);
+    this._lastAreaOpts = { thickness: t, behavior };   // recordado para la herramienta Área
     const ordered = ids.length === 4 ? this._ordenarCuad(ids) : ids;
     this.snapshot();
     const matId = [...this.model.materials.keys()][0];
@@ -391,6 +392,22 @@ class App {
     this.viewport.addAreaMesh(a);
     this.markDirty(); this._updateStats?.();
     this.toast(`Elemento de área ${a.kind} #${a.id} (${this._behaviorLabel(behavior)}, t=${t} m) creado`, 'ok');
+  }
+
+  // Crea un área a partir de 3/4 nodos (herramienta Área de la barra lateral),
+  // con las últimas opciones usadas (espesor/comportamiento) — sin diálogo. El
+  // usuario ajusta material/espesor/comportamiento después en el panel del área.
+  crearAreaDesdeNodos(ids) {
+    if (!ids || (ids.length !== 3 && ids.length !== 4)) { this.toast('Un área necesita 3 (CST) o 4 (QUAD) nodos', 'warn'); return; }
+    const opts = this._lastAreaOpts || (this._lastAreaOpts = { thickness: 0.2, behavior: 'membrane' });
+    const ordered = ids.length === 4 ? this._ordenarCuad(ids) : ids;
+    this.snapshot();
+    const matId = [...this.model.materials.keys()][0];
+    const a = this.model.addArea(ordered, matId, { ...opts });
+    if (!a) { this.toast('No se pudo crear el área (nodos repetidos o inexistentes)', 'warn'); return; }
+    this.viewport.addAreaMesh(a);
+    this.markDirty(); this._updateStats?.();
+    this.toast(`Área ${a.kind} #${a.id} (${this._behaviorLabel(opts.behavior)}, t=${opts.thickness} m) — ajusta sus propiedades en el panel`, 'ok');
   }
 
   // Códigos/etiquetas de comportamiento de área.
@@ -1269,7 +1286,7 @@ class App {
   _staticWorkerSolve(K, nDOF, freeDOF, Flist, dense = false) {
     return new Promise((resolve, reject) => {
       let worker;
-      try { worker = new Worker(new URL('./solver/static_worker.js?v=90', import.meta.url), { type: 'module' }); }
+      try { worker = new Worker(new URL('./solver/static_worker.js?v=92', import.meta.url), { type: 'module' }); }
       catch (e) { reject(e); return; }
       this._staticWorker = worker;
       const cancelar = () => { try { worker.terminate(); } catch (e) {} this._staticWorker = null; this._hideProgress(); reject(new Error('cancelado')); };
@@ -1298,7 +1315,7 @@ class App {
   _staticWorkerSolveSparse(csr, cf, nDOF, freeDOF, Flist) {
     return new Promise((resolve, reject) => {
       let worker;
-      try { worker = new Worker(new URL('./solver/static_worker.js?v=90', import.meta.url), { type: 'module' }); }
+      try { worker = new Worker(new URL('./solver/static_worker.js?v=92', import.meta.url), { type: 'module' }); }
       catch (e) { reject(e); return; }
       this._staticWorker = worker;
       const cancelar = () => { try { worker.terminate(); } catch (e) {} this._staticWorker = null; this._hideProgress(); reject(new Error('cancelado')); };
@@ -3370,7 +3387,7 @@ class App {
     this._showProgress('Generando el modelo…', 'Aplicando reglas y cargas normativas');
     try {
       const libs = await this._cargarBibliotecasAsistente();
-      const { generarModelo } = await import('../asistente/generador.js?v=90');
+      const { generarModelo } = await import('../asistente/generador.js?v=92');
       const modelo = generarModelo(ficha, libs);
 
       if (modo === 'sobreponer') {
@@ -4246,7 +4263,7 @@ class App {
   // Verificación de diseño (flexión/corte/axial) por elemento, usando los
   // resultados actuales y los parámetros editables de asistente/diseno_params.json.
   async _calcularDiseno() {
-    const ver = '?v=90';
+    const ver = '?v=92';
     let params = null;
     try { params = await fetch('asistente/diseno_params.json' + ver).then(r => r.json()); }
     catch (e) { console.error('No se pudo cargar diseno_params.json:', e); return null; }

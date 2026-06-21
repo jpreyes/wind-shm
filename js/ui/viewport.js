@@ -183,6 +183,11 @@ export class Viewport {
     document.getElementById('snap-size').addEventListener('input', e => {
       this._snapSize = Math.max(0, parseFloat(e.target.value) || 0);
     });
+    // Imán a nodos al crear elementos (por defecto activado).
+    this._magnetSnap = true;
+    document.getElementById('magnet-snap')?.addEventListener('change', e => {
+      this._magnetSnap = e.target.checked;
+    });
 
     // Escape cancels addelem
     document.addEventListener('keydown', e => {
@@ -193,7 +198,12 @@ export class Viewport {
           this._previewLine.visible = false;
           document.getElementById('sb-sel').textContent = 'Sin selección';
         }
+        if (this.mode === 'addarea' && this._areaPick?.length) {
+          this._cancelAreaPick();
+          document.getElementById('sb-sel').textContent = 'Área: selección reiniciada';
+        }
       }
+      if (e.key === 'Enter' && this.mode === 'addarea') { e.preventDefault(); this._finishArea(); }
     });
 
     this._animate();
@@ -1247,6 +1257,7 @@ export class Viewport {
       case 'select':     this._clickSelect(e.ctrlKey || e.metaKey); break;
       case 'addnode':    this._clickAddNode();     break;
       case 'addelem':    this._clickAddElem();     break;
+      case 'addarea':    this._clickAddArea();      break;
       case 'addsupport': this._clickAddSupport(e);  break;
     }
   }
@@ -1524,9 +1535,11 @@ export class Viewport {
   }
 
   // ── Add Element mode ───────────────────────────────────────────────────────
+  // Con imán activo, se pega al nodo cercano (lo resalta). Sin imán o sin nodo
+  // cerca, usa el punto de la grilla (se creará un nodo nuevo al hacer clic).
   _previewAddElem(fp) {
     this._renderer.domElement.style.cursor = 'crosshair';
-    const snap = this._nearestNodeSnap();
+    const snap = this._magnetSnap ? this._nearestNodeSnap() : null;
     const snapPos = snap ? this._nodeMeshes.get(snap.id).position : fp;
 
     if (snapPos) {
@@ -1544,24 +1557,64 @@ export class Viewport {
     }
   }
 
+  // Resuelve el extremo de un elemento: nodo existente (imán) o nodo NUEVO en la
+  // grilla (creado al vuelo con malla). Devuelve un id de nodo, o null.
+  _resolveElemEndpoint() {
+    const snap = this._magnetSnap ? this._nearestNodeSnap() : null;
+    if (snap) return snap.id;
+    const fp = this._floorPoint();
+    if (!fp) return null;
+    const mc = this.t2m(fp);
+    return this.app.addNode(mc.x, mc.y, mc.z).id;   // crea nodo + malla + undo
+  }
+
   _clickAddElem() {
-    const snap = this._nearestNodeSnap();
-    if (!snap) {
-      this.app.toast('Haga clic sobre un nodo existente', 'warn');
-      return;
-    }
+    const id = this._resolveElemEndpoint();
+    if (id == null) { this.app.toast('Haga clic dentro del área de trabajo', 'warn'); return; }
     if (this._addElemFirst === null) {
-      this._addElemFirst = snap.id;
-      this._setColor('node', snap.id, COL.NODE_SEL, null);
-      document.getElementById('sb-sel').textContent = `Nodo #${snap.id} → clic en nodo destino`;
+      this._addElemFirst = id;
+      this._setColor('node', id, COL.NODE_SEL, null);
+      document.getElementById('sb-sel').textContent = `Nodo #${id} → clic en nodo destino (o en la grilla)`;
     } else {
-      const n1 = this._addElemFirst, n2 = snap.id;
+      const n1 = this._addElemFirst, n2 = id;
       this._refreshColor('node', n1);
       this._addElemFirst = null;
       this._previewLine.visible = false;
       if (n1 === n2) { this.app.toast('Los nodos deben ser distintos', 'warn'); return; }
       this.app.addElement(n1, n2);
     }
+  }
+
+  // ── Add Area mode ──────────────────────────────────────────────────────────
+  // Se eligen 3 (CST) o 4 (QUAD) nodos con clic; Enter crea, Esc reinicia, el 4º
+  // nodo crea el QUAD automáticamente. Re-clic en un nodo lo quita de la selección.
+  _clickAddArea() {
+    const snap = this._nearestNodeSnap();
+    if (!snap) { this.app.toast('Clic sobre un nodo (las áreas se forman con nodos)', 'warn'); return; }
+    if (!this._areaPick) this._areaPick = [];
+    const i = this._areaPick.indexOf(snap.id);
+    if (i >= 0) { this._areaPick.splice(i, 1); this._refreshColor('node', snap.id); }
+    else {
+      if (this._areaPick.length >= 4) { this.app.toast('Máximo 4 nodos. Enter para crear o Esc para reiniciar.', 'warn'); return; }
+      this._areaPick.push(snap.id); this._setColor('node', snap.id, COL.NODE_SEL, null);
+    }
+    const n = this._areaPick.length;
+    document.getElementById('sb-sel').textContent =
+      n >= 3 ? `Área: ${n} nodo(s) · Enter para crear (${n === 3 ? 'CST' : 'QUAD'})` : `Área: ${n} nodo(s) · faltan ${3 - n}`;
+    if (n === 4) this._finishArea();
+  }
+
+  _finishArea() {
+    const ids = (this._areaPick || []);
+    if (ids.length < 3) { this.app.toast('Seleccione 3 (CST) o 4 (QUAD) nodos', 'warn'); return; }
+    const copy = ids.slice();
+    this._cancelAreaPick();
+    this.app.crearAreaDesdeNodos(copy);
+  }
+
+  _cancelAreaPick() {
+    for (const id of (this._areaPick || [])) this._refreshColor('node', id);
+    this._areaPick = [];
   }
 
   // ── Add Support mode ───────────────────────────────────────────────────────
@@ -1723,7 +1776,7 @@ export class Viewport {
     // Si se elige una herramienta de MODELADO mientras se ven resultados, salir
     // del modo resultados: si no, _onPointerUp intercepta el clic (_clickResults)
     // y la herramienta (p.ej. Apoyo) "no hace nada".
-    if (this._inResultsMode && (mode === 'addnode' || mode === 'addelem' || mode === 'addsupport')) {
+    if (this._inResultsMode && (mode === 'addnode' || mode === 'addelem' || mode === 'addarea' || mode === 'addsupport')) {
       this.clearResults();
       this.app?.toast?.('Resultados ocultos para editar el modelo', 'info');
     }
@@ -1736,6 +1789,7 @@ export class Viewport {
     if (mode !== 'addnode' && mode !== 'addelem') {
       this._previewSphere.visible = false;
     }
+    if (mode !== 'addarea' && this._areaPick?.length) this._cancelAreaPick();
     // PAN (manito): arrastrar con la izquierda panea en vez de orbitar. Al salir
     // del modo se restaura el orbit (salvo en vista 2D/elevación, que ya panea).
     if (mode === 'pan') {
@@ -1755,6 +1809,7 @@ export class Viewport {
       pan:        'Mover vista (PAN)',
       addnode:    'Agregar Nodo',
       addelem:    'Agregar Elemento',
+      addarea:    'Agregar Área',
       addsupport: 'Asignar Apoyo'
     };
     document.getElementById('sb-mode').textContent = `Modo: ${names[mode] || mode}`;
@@ -1762,14 +1817,15 @@ export class Viewport {
     const hints = {
       pan:        'Arrastra con el botón izquierdo para mover la vista',
       addnode:    'Clic en la grilla para crear nodo',
-      addelem:    'Clic en nodo origen → nodo destino  |  Esc para cancelar',
+      addelem:    'Clic en un nodo o en la grilla (crea nodo) → destino  ·  Imán: pega a nodo cercano  ·  Esc cancela',
+      addarea:    'Clic en 3 nodos (CST) o 4 (QUAD) → Enter para crear  ·  Esc reinicia',
       addsupport: 'Clic en un nodo para editar sus restricciones'
     };
     const el = document.getElementById('vp-hint');
     el.textContent = hints[mode] || '';
     el.classList.toggle('visible', !!hints[mode]);
     // Cursor
-    const cur = (mode === 'addnode' || mode === 'addelem') ? 'crosshair'
+    const cur = (mode === 'addnode' || mode === 'addelem' || mode === 'addarea') ? 'crosshair'
               : mode === 'pan' ? 'grab' : 'default';
     this._renderer.domElement.style.cursor = cur;
   }

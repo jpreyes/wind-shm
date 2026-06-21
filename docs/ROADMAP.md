@@ -19,9 +19,9 @@ similaridad. `[#]` referencia el pedido original. Estado: ⬜ pendiente · 🟡 
 - ✅ **Grillas más tenues** (opacidad 0.7→0.38) → los elementos resaltan. `[#9]`
 - ✅ **Ocultar los ejes**: Vista → Ejes XYZ (`toggleAxes`). `[#10]`
 
-## G4 · Modelado e interacción de edición *(parcial)*
-- ⬜ **Crear elementos sin nodos previos + imán a nodos cercanos (toggleable).** Clicar en el espacio crea los nodos; si hay un nodo cerca, el extremo se magnetiza a él (reusa, no duplica); imán desactivable; indicador visual de a qué nodo se pega. `[#6]`
-- ⬜ **Herramienta "Área" en la barra lateral izquierda** (junto a Nodo/Elem/Apoyo): clicar 3–4 nodos → crea el área, con selector de comportamiento/espesor/material; sub-modo para mallar panel. `[#nuevo]`
+## G4 · Modelado e interacción de edición ✅
+- ✅ **Crear elementos sin nodos previos + imán a nodos cercanos (toggle).** En modo Elemento, clic en la grilla crea el nodo; con Imán (casilla en la barra superior, por defecto ON) el extremo se pega al nodo cercano (lo reutiliza); apagando el imán crea uno nuevo aunque haya otro al lado. `[#6]`
+- ✅ **Herramienta "Área" en la barra lateral** (Nodo/Elem/**Área**/Apoyo): clic en 3 (CST) o 4 (QUAD) nodos; el 4º crea el QUAD, Enter crea el CST, Esc reinicia. Usa las últimas opciones (espesor/comportamiento) y se ajustan luego en el panel del área. `[#nuevo]`
 - ✅ **Acciones + Mover/Copiar con un solo elemento** seleccionado (antes solo con multi-selección). `[#7]`
 - ✅ **Copiar elemento = copiar también sus cargas (dist/temp), cable/L0, y grupos.** `[#11]`
 
