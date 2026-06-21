@@ -38,8 +38,8 @@ similaridad. `[#]` referencia el pedido original. Estado: ⬜ pendiente · 🟡 
 ## G7 · Gestión de proyecto multi-modelo
 - ⬜ **Un proyecto con varios modelos** (edificio principal, cercha plana, viga de fundación…) que se integran en **una sola memoria**. `[#17]` *(cambio más arquitectónico: serializer, estado de la app, generador de memoria).*
 
-## G8 · Robustez y diagnóstico
-- ⬜ **Diagnóstico de inestabilidades**: localizar y **resaltar el nodo/GDL culpable** (el caso del nodo "invisible"). `[#15]`
+## G8 · Robustez y diagnóstico ✅
+- ✅ **Diagnóstico de inestabilidades**: `diagnoseInstability()` detecta los GDL libres con rigidez nula (diagonal de K ≈ 0) → nodo/GDL culpable. `runStabilityDiagnosis()` (menú Análisis → "Diagnosticar estabilidad") los **resalta en rojo, agranda y centra la vista**; se invoca **automáticamente** cuando un análisis falla por singular/mecanismo. Verificado: nodo aislado "invisible" detectado con sus 6 GDL y resaltado. `[#15]` *(Nota: cubre el caso común de rigidez nula; mecanismos multi-GDL acoplados se avisan pero no se localizan.)*
 
 ## G9 · Verificación documentada y documentación
 - ⬜ **Casos de la literatura SAP2000** (en `referencias/`) → convertirlos a formato Pórtico, **comparar/verificar y documentar**; quedan en **Ejemplos** como casos de verificación. `[#19]`

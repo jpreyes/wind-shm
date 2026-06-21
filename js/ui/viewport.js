@@ -1399,6 +1399,11 @@ export class Viewport {
       if (t === 'diaphragm') this._setDiaHighlight(+sid, false);
       else this._refreshColor(t, +sid);
     }
+    // restaurar tamaño de los nodos marcados por el diagnóstico de estabilidad
+    if (this._flaggedNodes) {
+      for (const id of this._flaggedNodes) { const m = this._nodeMeshes.get(id); if (m) m.scale.setScalar(1); }
+      this._flaggedNodes = null;
+    }
     this._selected.clear();
     document.getElementById('sb-sel').textContent = 'Sin selección';
   }
@@ -1422,6 +1427,26 @@ export class Viewport {
     for (const id of this._areaMeshes.keys()) {
       this._selected.add(`area:${id}`);
       this._setAreaHL(id, COL.AREA_SEL);
+    }
+  }
+
+  // Resalta y selecciona un conjunto de nodos (diagnóstico de estabilidad) y
+  // centra la vista en ellos para que sean fáciles de encontrar.
+  flagNodes(ids) {
+    this.clearSelection();
+    for (const id of ids) {
+      const m = this._nodeMeshes.get(id);
+      if (m) { m.material.color.set(0xff2d55); m.scale.setScalar(1.8); this._selected.add(`node:${id}`); }
+    }
+    document.getElementById('sb-sel').textContent = `${ids.length} nodo(s) inestables resaltados`;
+    // restaurar la escala al deseleccionar
+    this._flaggedNodes = ids.slice();
+    // centrar la cámara en el centroide de los nodos marcados
+    if (ids.length) {
+      const c = new THREE.Vector3();
+      let k = 0;
+      for (const id of ids) { const m = this._nodeMeshes.get(id); if (m) { c.add(m.position); k++; } }
+      if (k) { c.multiplyScalar(1 / k); this._controls.target.copy(c); this._controls.update(); }
     }
   }
 
