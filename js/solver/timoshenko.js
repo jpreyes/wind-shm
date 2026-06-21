@@ -324,29 +324,36 @@ function invertSmall(M) {
 // ── Fixed-end forces for distributed loads ────────────────────────────────
 /**
  * Returns 12-element array of fixed-end forces in LOCAL coordinates.
- * load: {dir: 'y'|'z'|'x', w: number}  (uniform load per unit length in local dir)
+ * load: {dir:'y'|'z'|'x', w:number, w2?:number}
+ *   w  = intensidad en el extremo i (nodo 1).
+ *   w2 = intensidad en el extremo j (nodo 2); si se omite, carga uniforme (w2=w).
+ * Trapecial = uniforme(w1) + triangular(g = w2−w1, creciente 0→g de i a j).
+ * FEM triangular clamped-clamped: V1=3gL/20, V2=7gL/20, M1=gL²/30, M2=gL²/20.
  */
 export function fixedEndForces(L, load) {
   const f = Array(12).fill(0);
-  const { dir, w } = load;
-  const wL = w * L;
+  const { dir } = load;
+  const w1 = load.w;
+  const w2 = (load.w2 == null) ? w1 : load.w2;
+  const g  = w2 - w1;                    // parte triangular (0 en i → g en j)
+  const L2 = L * L;
 
   if (dir === 'x') {
-    // Axial distributed load: f[0] = f[6] = w·L/2
-    f[0]  = -wL/2;
-    f[6]  = -wL/2;
+    // Axial: uniforme(w1) reparte L/2-L/2; triangular usa N lineales → gL/6, gL/3
+    f[0]  = -(w1*L/2 + g*L/6);
+    f[6]  = -(w1*L/2 + g*L/3);
   } else if (dir === 'y') {
     // Transverse y — XY bending
-    f[1]  = -wL/2;          // Vy1
-    f[5]  = -wL*L/12;       // Mz1
-    f[7]  = -wL/2;          // Vy2
-    f[11] =  wL*L/12;       // Mz2
+    f[1]  = -(w1*L/2  + 3*g*L/20);   // Vy1
+    f[5]  = -(w1*L2/12 + g*L2/30);   // Mz1
+    f[7]  = -(w1*L/2  + 7*g*L/20);   // Vy2
+    f[11] =  (w1*L2/12 + g*L2/20);   // Mz2
   } else if (dir === 'z') {
-    // Transverse z — XZ bending
-    f[2]  = -wL/2;          // Vz1
-    f[4]  =  wL*L/12;       // My1
-    f[8]  = -wL/2;          // Vz2
-    f[10] = -wL*L/12;       // My2
+    // Transverse z — XZ bending (momentos con signo opuesto a 'y')
+    f[2]  = -(w1*L/2  + 3*g*L/20);   // Vz1
+    f[4]  =  (w1*L2/12 + g*L2/30);   // My1
+    f[8]  = -(w1*L/2  + 7*g*L/20);   // Vz2
+    f[10] = -(w1*L2/12 + g*L2/20);   // My2
   }
   return f;
 }

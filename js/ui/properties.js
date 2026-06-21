@@ -1415,10 +1415,14 @@ export class PropertiesPanel {
             <option value="localZ"  ${ex?.dir==='localZ' ?'selected':''}>Local z</option>
           </select>
         </div>
-        <div class="prop-field"><label>w (kN/m)</label>
+        <div class="prop-field"><label>w en i (kN/m)</label>
           <input type="number" id="dist-w" value="${ex?.w ?? 0}" step="1">
         </div>
+        <div class="prop-field"><label>w en j (kN/m)</label>
+          <input type="number" id="dist-w2" value="${ex?.w2 ?? ''}" step="1" placeholder="= w (uniforme)">
+        </div>
       </div>
+      <small style="color:var(--text-muted);display:block;margin-top:2px">Deja <b>w en j</b> vacío para carga uniforme; complétalo para una carga <b>trapecial</b> (w en el nodo i → w en el nodo j).</small>
       <div style="display:flex;gap:6px;margin-top:6px;">
         <button class="btn-primary" id="btn-apply-dist" style="flex:1;font-size:11px;">Aplicar</button>
         <button class="btn-secondary" id="btn-clear-dist" style="flex:1;font-size:11px;">Limpiar</button>
@@ -1439,13 +1443,16 @@ export class PropertiesPanel {
       const lc = this.app.model.loadCases.get(this.app._activeLcId);
       if (!lc) { this.app.toast('No hay caso de carga activo', 'warn'); return; }
       const w   = parseFloat(sel.querySelector('#dist-w')?.value) || 0;
+      const w2raw = sel.querySelector('#dist-w2')?.value;
       const dir = sel.querySelector('#dist-dir')?.value || 'globalZ';
       const idx = lc.loads.findIndex(l => l.type === 'dist' && l.elemId === elem.id);
       const load = { type: 'dist', elemId: elem.id, dir, w };
+      // w2 sólo si se completó y difiere de w → carga trapecial
+      if (w2raw != null && w2raw !== '' && isFinite(+w2raw) && +w2raw !== w) load.w2 = +w2raw;
       if (idx >= 0) lc.loads[idx] = load; else lc.loads.push(load);
       this.app.markDirty();
       this.app.refreshLoads();
-      this.app.toast('Carga distribuida aplicada', 'ok');
+      this.app.toast(load.w2 != null ? 'Carga trapecial aplicada' : 'Carga distribuida aplicada', 'ok');
     });
     sel.querySelector('#btn-clear-dist')?.addEventListener('click', () => {
       this.app.snapshot();

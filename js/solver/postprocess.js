@@ -13,20 +13,21 @@ import { areaStress, areaBendingStress, vonMises } from './membrane.js?v=104';
 
 function _toLocalLoad(load, ex, ey, ez) {
   const w   = load.w;
+  const w2  = (load.w2 == null) ? w : load.w2;   // trapecial: intensidad en el extremo j
   const dir = load.dir || 'gravity';
-  if (dir === 'localY') return [{ d: 'y', w }];
-  if (dir === 'localZ') return [{ d: 'z', w }];
-  if (dir === 'localX') return [{ d: 'x', w }];
+  if (dir === 'localY') return [{ d: 'y', w, w2 }];
+  if (dir === 'localZ') return [{ d: 'z', w, w2 }];
+  if (dir === 'localX') return [{ d: 'x', w, w2 }];
   const g = dir === 'globalX' ? [1,0,0]
           : dir === 'globalY' ? [0,1,0]
           : [0,0,-1];   // 'gravity' and legacy 'globalZ' both mean downward (positive w = ↓)
-  const wx = w * (g[0]*ex[0] + g[1]*ex[1] + g[2]*ex[2]);
-  const wy = w * (g[0]*ey[0] + g[1]*ey[1] + g[2]*ey[2]);
-  const wz = w * (g[0]*ez[0] + g[1]*ez[1] + g[2]*ez[2]);
+  const px = g[0]*ex[0] + g[1]*ex[1] + g[2]*ex[2];
+  const py = g[0]*ey[0] + g[1]*ey[1] + g[2]*ey[2];
+  const pz = g[0]*ez[0] + g[1]*ez[1] + g[2]*ez[2];
   const res = [];
-  if (Math.abs(wx) > 1e-14) res.push({ d: 'x', w: wx });
-  if (Math.abs(wy) > 1e-14) res.push({ d: 'y', w: wy });
-  if (Math.abs(wz) > 1e-14) res.push({ d: 'z', w: wz });
+  if (Math.abs(w*px) > 1e-14 || Math.abs(w2*px) > 1e-14) res.push({ d: 'x', w: w*px, w2: w2*px });
+  if (Math.abs(w*py) > 1e-14 || Math.abs(w2*py) > 1e-14) res.push({ d: 'y', w: w*py, w2: w2*py });
+  if (Math.abs(w*pz) > 1e-14 || Math.abs(w2*pz) > 1e-14) res.push({ d: 'z', w: w*pz, w2: w2*pz });
   return res;
 }
 
@@ -202,7 +203,7 @@ export class Results {
     }
 
     // Actual distributed load intensities (local y, z) — needed for correct M(x), V(x)
-    const { qy, qz } = this._computeActualLoads(elem, ex, ey, ez);
+    const { qy, qz, qy1, qy2, qz1, qz2 } = this._computeActualLoads(elem, ex, ey, ez);
 
     return {
       N:    -fe[0],
@@ -218,7 +219,8 @@ export class Results {
       Vmax:  Math.max(Math.abs(fe[1]), Math.abs(fe[7]), Math.abs(fe[2]), Math.abs(fe[8])),
       Mmax:  Math.max(Math.abs(fe[5]), Math.abs(fe[11]), Math.abs(fe[4]), Math.abs(fe[10])),
       Nabs:  Math.abs(fe[0]),
-      qy, qz,   // actual load intensity (local coords) — NOT inferred from end forces
+      qy, qz,             // intensidad en el extremo i (compat. — rigidez geométrica, etc.)
+      qy1, qy2, qz1, qz2, // intensidad en ambos extremos (trapecial) — fuente de M(x)/V(x)
       ex, ey, ez, L,
       EIz: mat.E * sec.Iz,   // para la burbuja de deflexión por carga distribuida
       EIy: mat.E * sec.Iy,
@@ -233,8 +235,8 @@ export class Results {
     if (lc) {
       for (const load of lc.loads) {
         if (load.type === 'dist' && load.elemId === elem.id) {
-          for (const { d, w } of _toLocalLoad(load, ex, ey, ez)) {
-            const f = fixedEndForces(L, { dir: d, w });
+          for (const { d, w, w2 } of _toLocalLoad(load, ex, ey, ez)) {
+            const f = fixedEndForces(L, { dir: d, w, w2 });
             for (let i = 0; i < 12; i++) fef[i] += f[i];
           }
         }
@@ -256,8 +258,8 @@ export class Results {
       const sec = this.model.sections.get(elem.secId);
       if (mat && sec && mat.rho > 0) {
         const w_sw = +(mat.rho * sec.A);
-        for (const { d, w } of _toLocalLoad({ w: w_sw, dir: 'gravity' }, ex, ey, ez)) {
-          const f = fixedEndForces(L, { dir: d, w });
+        for (const { d, w, w2 } of _toLocalLoad({ w: w_sw, dir: 'gravity' }, ex, ey, ez)) {
+          const f = fixedEndForces(L, { dir: d, w, w2 });
           for (let i = 0; i < 12; i++) fef[i] += f[i];
         }
       }
@@ -265,32 +267,31 @@ export class Results {
     return fef;
   }
 
-  // Returns actual distributed load {qy, qz} on element in local coords.
+  // Returns actual distributed load intensities at BOTH ends in local coords:
+  // {qy1,qy2, qz1,qz2} (trapezoidal). For uniform loads q1==q2.
   // This is the source-of-truth for M(x)/V(x) — never infer q from end forces.
+  // qy/qz (start-end) kept for backward compatibility (geometric stiffness, etc.).
   _computeActualLoads(elem, ex, ey, ez) {
-    let qy = 0, qz = 0;
+    let qy1 = 0, qy2 = 0, qz1 = 0, qz2 = 0;
+    const add = (load) => {
+      for (const { d, w, w2 } of _toLocalLoad(load, ex, ey, ez)) {
+        if (d === 'y')      { qy1 += w; qy2 += (w2 == null ? w : w2); }
+        else if (d === 'z') { qz1 += w; qz2 += (w2 == null ? w : w2); }
+      }
+    };
     const lc = this.lcId ? this.model.loadCases.get(this.lcId) : null;
     if (lc) {
       for (const load of lc.loads) {
         if (load.type !== 'dist' || load.elemId !== elem.id) continue;
-        for (const { d, w } of _toLocalLoad(load, ex, ey, ez)) {
-          if (d === 'y') qy += w;
-          else if (d === 'z') qz += w;
-        }
+        add(load);
       }
     }
     if (this.selfWeight) {
       const mat = this.model.materials.get(elem.matId);
       const sec = this.model.sections.get(elem.secId);
-      if (mat && sec && mat.rho > 0) {
-        const w_sw = +(mat.rho * sec.A);
-        for (const { d, w } of _toLocalLoad({ w: w_sw, dir: 'gravity' }, ex, ey, ez)) {
-          if (d === 'y') qy += w;
-          else if (d === 'z') qz += w;
-        }
-      }
+      if (mat && sec && mat.rho > 0) add({ w: +(mat.rho * sec.A), dir: 'gravity' });
     }
-    return { qy, qz };
+    return { qy: qy1, qz: qz1, qy1, qy2, qz1, qz2 };
   }
 
   // ── Global summary ───────────────────────────────────────────────────────────
@@ -391,9 +392,10 @@ export class Results {
 
     // Use ACTUAL distributed load from element forces (not inferred from end shears).
     // Inferred q = (V1+V2)/L is wrong when nodal forces co-exist with dist. loads.
-    const qy = f.qy ?? 0;   // local-y distributed load intensity
-    const qz = f.qz ?? 0;   // local-z distributed load intensity
-    const q  = isMz ? qy : isMy ? qz : isVy ? qy : isVz ? qz : 0;
+    // Trapezoidal: q(x) = q1 + (q2−q1)·x/L  (q1 at node i, q2 at node j).
+    const q1 = (isMz || isVy) ? (f.qy1 ?? f.qy ?? 0) : (isMy || isVz) ? (f.qz1 ?? f.qz ?? 0) : 0;
+    const q2 = (isMz || isVy) ? (f.qy2 ?? f.qy ?? 0) : (isMy || isVz) ? (f.qz2 ?? f.qz ?? 0) : 0;
+    const dq = q2 - q1;                      // pendiente · L
     const V1 = isMz ? f.Vy1 : isMy ? f.Vz1 : isVy ? f.Vy1 : isVz ? f.Vz1 : 0;
 
     const N   = Math.max(nPts, 20);
@@ -405,9 +407,11 @@ export class Results {
       const x   = xi * L;
       let v;
       if (isMoment) {
-        v = val1 - V1*x - 0.5*q*x*x;   // M(x) = M₀ − V�?x − ½qx²  (FEM sign: M'=−V)
+        // M(x) = M₀ − V₀·x − ½q₁x² − (Δq)x³/(6L)    (FEM sign: M' = −V)
+        v = val1 - V1*x - 0.5*q1*x*x - dq*x*x*x/(6*L);
       } else if (isShear) {
-        v = V1 + q*x;                   // V(x) = V�? + qx            (from left free body)
+        // V(x) = V₀ + q₁·x + (Δq)x²/(2L)
+        v = V1 + q1*x + dq*x*x/(2*L);
       } else {
         v = val1*(1 - xi) + val2*xi;    // linear (axial, torsion)
       }
@@ -421,13 +425,25 @@ export class Results {
       pts.push({ pos, val: v });
     }
 
-    // Inner extreme for moments: x* where V(x*)=0 → V1 + q·x* = 0 → x* = −V1/q
+    // Inner extreme for moments: x* where V(x*)=0.
+    //   uniforme: V1 + q1·x = 0 → x* = −V1/q1
+    //   trapecial: (Δq/2L)x² + q1·x + V1 = 0  (cuadrática)
+    const Mx = (xS) => val1 - V1*xS - 0.5*q1*xS*xS - dq*xS*xS*xS/(6*L);
     const extremes = [];
-    if (isMoment && Math.abs(q) > 1e-12) {
-      const xS = -V1 / q;
+    const roots = [];
+    if (isMoment) {
+      const aa = dq/(2*L), bb = q1, cc = V1;
+      if (Math.abs(aa) < 1e-12) {                 // uniforme/sin pendiente
+        if (Math.abs(bb) > 1e-12) roots.push(-cc/bb);
+      } else {
+        const disc = bb*bb - 4*aa*cc;
+        if (disc >= 0) { const sd = Math.sqrt(disc); roots.push((-bb+sd)/(2*aa), (-bb-sd)/(2*aa)); }
+      }
+    }
+    for (const xS of roots) {
       if (xS > L*1e-4 && xS < L*(1 - 1e-4)) {
         const xi  = xS / L;
-        const vE  = val1 - V1*xS - 0.5*q*xS*xS;
+        const vE  = Mx(xS);
         const pos = {
           x: n1.x + xi*(n2.x-n1.x),
           y: n1.y + xi*(n2.y-n1.y),
@@ -456,15 +472,20 @@ export class Results {
     const x   = xi * L;
 
     // ── Forces by equilibrium (use stored actual loads, not inferred from ends) ──
-    const qy  = f.qy ?? 0;
-    const qz  = f.qz ?? 0;
+    // Trapezoidal q(x) = q1 + (Δq)·x/L.
+    const qy1 = f.qy1 ?? f.qy ?? 0, qy2 = f.qy2 ?? f.qy ?? 0, dqy = qy2 - qy1;
+    const qz1 = f.qz1 ?? f.qz ?? 0, qz2 = f.qz2 ?? f.qz ?? 0, dqz = qz2 - qz1;
+    // Burbuja de deflexión: la solución particular exacta es para UDL; para
+    // trapecial usamos q promedio (aprox. de 2º orden, sólo afecta la curva
+    // dibujada entre nodos — los nodos y las fuerzas son exactos).
+    const qy  = 0.5*(qy1+qy2), qz = 0.5*(qz1+qz2);
 
     const N_val  = f.N;
     const T_val  = f.T;
-    const Vy_val = f.Vy1 + qy * x;                  // V(x) = V�? + qy·x
-    const Vz_val = f.Vz1 + qz * x;                  // V(x) = V�? + qz·x
-    const Mz_val = f.Mz1 - f.Vy1*x - 0.5*qy*x*x;   // M(x) = M�? − V�?·x − ½qy·x²
-    const My_val = f.My1 - f.Vz1*x - 0.5*qz*x*x;
+    const Vy_val = f.Vy1 + qy1*x + dqy*x*x/(2*L);                       // V(x)
+    const Vz_val = f.Vz1 + qz1*x + dqz*x*x/(2*L);
+    const Mz_val = f.Mz1 - f.Vy1*x - 0.5*qy1*x*x - dqy*x*x*x/(6*L);     // M(x)
+    const My_val = f.My1 - f.Vz1*x - 0.5*qz1*x*x - dqz*x*x*x/(6*L);
 
     // ── Displacements by Hermite interpolation ────────────────────────────
     const ue = f._ue;   // local DOFs stored by _computeElemForces

@@ -4033,7 +4033,7 @@ class App {
       const dlc = dst.loadCases.get(dstLcId);
       for (const ld of (lc.loads || [])) {
         if (ld.type === 'nodal') { const id = nodeMap.get(ld.nodeId); if (id != null) dlc.loads.push({ type: 'nodal', nodeId: id, F: [...ld.F] }); }
-        else if (ld.type === 'dist') { const id = elemMap.get(ld.elemId); if (id != null) dlc.loads.push({ type: 'dist', elemId: id, dir: ld.dir, w: ld.w }); }
+        else if (ld.type === 'dist') { const id = elemMap.get(ld.elemId); if (id != null) { const d = { type: 'dist', elemId: id, dir: ld.dir, w: ld.w }; if (ld.w2 != null) d.w2 = ld.w2; dlc.loads.push(d); } }
       }
     }
 

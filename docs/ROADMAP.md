@@ -35,7 +35,7 @@ similaridad. `[#]` referencia el pedido original. Estado: ⬜ pendiente · 🟡 
 - ⬜ **Asistente en la barra lateral derecha**: exponerlo como pestaña junto a **Modelo / Diseño / Resultados** (no solo en un diálogo modal). `[#23]`
 - ⬜ **Combos de servicio / tensiones admisibles**: agregar a la generación automática (además de LRFD), las combinaciones de servicio (D+L, etc.) para verificación de deformaciones/tensiones admisibles. `[#25a]`
 - ⬜ **Creación automática de combos accesible en dos lugares**: en el diálogo de creación de combos **y** en la pestaña de combos de la barra lateral derecha. `[#25b]`
-- ⬜ **Cargas trapeciales (trapezoidales)** en elementos (hoy solo uniforme/puntual). `[#35]`
+- ✅ **Cargas trapeciales (trapezoidales)** en elementos: campo "w en j" en el panel del elemento (vacío = uniforme). FEF exacta (uniforme + triangular), diagramas V(x)/M(x) con q lineal y extremo por cuadrática, interpolación correcta al discretizar (auto-disc) y al unir/partir, round-trip JSON y CSV (w2 opcional). Verificado: viga SS con carga triangular → reacciones w₀L/6 y w₀L/3 exactas, M_max=w₀L²/(9√3)=10.264 en x=L/√3, idéntico con 1/4/10 sub-elementos. `[#35]`
 
 ## G6 · Diseño, memoria y reportes *(parcial)*
 - ✅ **Tabla de diseño explorable**: wrapper con scroll (max-height 58vh) hasta el último elemento + columna **|δ| mm** (desplazamiento máx. de los nodos del elemento en el caso/combo mostrado). `[#12]`

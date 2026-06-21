@@ -54,14 +54,23 @@ export function splitElement(model, elemId, nParts) {
     }
   }
 
-  // Cargas distribuidas: replicar en cada sub-elemento (todos los casos)
+  // Cargas distribuidas: repartir en cada sub-elemento (todos los casos).
+  // Trapecial → se interpola la intensidad en los extremos de cada tramo;
+  // uniforme → se replica tal cual (w2 ausente).
+  const nSub = newIds.length;
   for (const lc of model.loadCases.values()) {
     const distLoads = lc.loads.filter(l => l.type === 'dist' && l.elemId === elemId);
     if (!distLoads.length) continue;
     lc.loads = lc.loads.filter(l => !(l.type === 'dist' && l.elemId === elemId));
     for (const dl of distLoads) {
-      for (const id of newIds) {
-        lc.loads.push({ ...dl, elemId: id });
+      const w1 = dl.w;
+      const w2 = (dl.w2 == null) ? null : dl.w2;
+      for (let k = 0; k < nSub; k++) {
+        if (w2 == null) { lc.loads.push({ ...dl, elemId: newIds[k] }); continue; }
+        const ta = k / nSub, tb = (k + 1) / nSub;     // tramos del elemento original
+        const wa = w1 + (w2 - w1) * ta;
+        const wb = w1 + (w2 - w1) * tb;
+        lc.loads.push({ ...dl, elemId: newIds[k], w: wa, w2: wb });
       }
     }
   }
@@ -80,11 +89,23 @@ function splitElementEnNodo(model, elemId, nodeId) {
   if (elem.releases && e1 && e2) {
     for (let i = 0; i < 6; i++) { e1.releases[i] = elem.releases[i] || 0; e2.releases[6 + i] = elem.releases[6 + i] || 0; }
   }
+  // Parámetro del nodo de corte a lo largo del elemento (para cargas trapeciales)
+  const a = model.nodes.get(elem.n1), b = model.nodes.get(elem.n2), c = model.nodes.get(nodeId);
+  let tSplit = 0.5;
+  if (a && b && c) {
+    const dx=b.x-a.x, dy=b.y-a.y, dz=b.z-a.z, L2=dx*dx+dy*dy+dz*dz;
+    if (L2 > 1e-20) tSplit = Math.min(1, Math.max(0, ((c.x-a.x)*dx+(c.y-a.y)*dy+(c.z-a.z)*dz)/L2));
+  }
   for (const lc of model.loadCases.values()) {
     const dl = lc.loads.filter(l => l.type === 'dist' && l.elemId === elemId);
     if (!dl.length) continue;
     lc.loads = lc.loads.filter(l => !(l.type === 'dist' && l.elemId === elemId));
-    for (const d of dl) for (const id of newIds) lc.loads.push({ ...d, elemId: id });
+    for (const d of dl) {
+      if (d.w2 == null) { for (const id of newIds) lc.loads.push({ ...d, elemId: id }); continue; }
+      const wSplit = d.w + (d.w2 - d.w) * tSplit;
+      lc.loads.push({ ...d, elemId: newIds[0], w: d.w,    w2: wSplit });   // n1 → nodo
+      lc.loads.push({ ...d, elemId: newIds[1], w: wSplit, w2: d.w2 });     // nodo → n2
+    }
   }
   model.elements.delete(elemId);
   return newIds;
@@ -269,22 +290,23 @@ export function joinElements(model, elemIds) {
     }
   }
 
-  // Cargas distribuidas: unir solo si todos los tramos tienen la MISMA carga por caso
-  const mergedDist = [];   // {lcId, dir, w}
+  // Cargas distribuidas: unir solo si todos los tramos tienen la MISMA carga por
+  // caso (incluido w2: dos trapecios con igual w pero distinto w2 NO se unen).
+  const mergedDist = [];   // {lcId, dir, w, w2}
   for (const lc of model.loadCases.values()) {
     const sig = e => {
       const dl = lc.loads.filter(l => l.type === 'dist' && l.elemId === e.id);
       if (dl.length === 0) return 'none';
       if (dl.length > 1) return 'multi';
-      return `${dl[0].dir || 'gravity'}|${dl[0].w}`;
+      return `${dl[0].dir || 'gravity'}|${dl[0].w}|${dl[0].w2 ?? ''}`;
     };
     const sigs = elems.map(sig);
     if (!sigs.every(s => s === sigs[0])) {
       return { ok: false, reason: `Cargas distribuidas distintas entre tramos (caso "${lc.name}")` };
     }
     if (sigs[0] !== 'none' && sigs[0] !== 'multi') {
-      const [dir, w] = sigs[0].split('|');
-      mergedDist.push({ lcId: lc.id, dir, w: +w });
+      const [dir, w, w2] = sigs[0].split('|');
+      mergedDist.push({ lcId: lc.id, dir, w: +w, w2: (w2 === '' ? null : +w2) });
     }
   }
 
@@ -308,7 +330,9 @@ export function joinElements(model, elemIds) {
     merged.releases[6 + i] = relB[i] ? 1 : 0;
   }
   for (const md of mergedDist) {
-    model.loadCases.get(md.lcId)?.loads.push({ type: 'dist', elemId: merged.id, dir: md.dir, w: md.w });
+    const load = { type: 'dist', elemId: merged.id, dir: md.dir, w: md.w };
+    if (md.w2 != null) load.w2 = md.w2;
+    model.loadCases.get(md.lcId)?.loads.push(load);
   }
 
   return { ok: true, elemId: merged.id, removedNodes: midNodes };

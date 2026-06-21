@@ -151,7 +151,9 @@ export class Serializer {
           if (load.type === 'nodal') {
             lines.push(`LOAD_NODAL, ${lc.id}, ${load.nodeId}, ${load.F.map(fmt).join(', ')}`);
           } else if (load.type === 'dist') {
-            lines.push(`LOAD_DIST, ${lc.id}, ${load.elemId}, ${load.dir || 'gravity'}, ${fmt(load.w)}`);
+            // w2 opcional (trapecial); se omite si es uniforme para compatibilidad.
+            const w2 = (load.w2 == null || load.w2 === load.w) ? '' : `, ${fmt(load.w2)}`;
+            lines.push(`LOAD_DIST, ${lc.id}, ${load.elemId}, ${load.dir || 'gravity'}, ${fmt(load.w)}${w2}`);
           }
         }
       }
@@ -315,13 +317,15 @@ export class Serializer {
 
     // ── Distributed Loads ─────────────────────────────────────────────────────
     for (const { cols, line } of parsed.LOAD_DIST) {
-      // LOAD_DIST, lc_id, elem_id, dir, w
+      // LOAD_DIST, lc_id, elem_id, dir, w [, w2]   (w2 opcional → trapecial)
       if (cols.length < 5) { errors.push(`Línea ${line}: LOAD_DIST necesita 5 columnas`); continue; }
-      const [, lcId, elemId, dir, w] = cols;
+      const [, lcId, elemId, dir, w, w2] = cols;
       const lc = model.loadCases.get(+lcId);
       if (!lc) { errors.push(`Línea ${line}: caso de carga ${lcId} no existe`); continue; }
       if (!model.elements.has(+elemId)) { errors.push(`Línea ${line}: elemento ${elemId} no existe`); continue; }
-      lc.loads.push({ type: 'dist', elemId: +elemId, dir: dir || 'gravity', w: +w });
+      const load = { type: 'dist', elemId: +elemId, dir: dir || 'gravity', w: +w };
+      if (w2 != null && w2 !== '' && isFinite(+w2)) load.w2 = +w2;
+      lc.loads.push(load);
     }
 
     // ── Node Masses ───────────────────────────────────────────────────────────

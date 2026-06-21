@@ -226,23 +226,25 @@ export function assembleF(model, nodeIndex, lcId, selfWeight = false) {
 // Includes axial projection so gravity on vertical columns gets correct axial FEF.
 function _toLocalDistLoad(load, ex, ey, ez) {
   const w   = load.w;
+  const w2  = (load.w2 == null) ? w : load.w2;   // trapecial: intensidad en el extremo j
   const dir = load.dir || 'gravity';
 
-  if (dir === 'localY') return [{ dir: 'y', w }];
-  if (dir === 'localZ') return [{ dir: 'z', w }];
-  if (dir === 'localX') return [{ dir: 'x', w }];
+  if (dir === 'localY') return [{ dir: 'y', w, w2 }];
+  if (dir === 'localZ') return [{ dir: 'z', w, w2 }];
+  if (dir === 'localX') return [{ dir: 'x', w, w2 }];
 
   const g = dir === 'globalX' ? [1,0,0]
           : dir === 'globalY' ? [0,1,0]
           : [0,0,-1];   // 'gravity' and legacy 'globalZ' both mean downward (positive w = ↓)
 
-  const wx = w * (g[0]*ex[0] + g[1]*ex[1] + g[2]*ex[2]);
-  const wy = w * (g[0]*ey[0] + g[1]*ey[1] + g[2]*ey[2]);
-  const wz = w * (g[0]*ez[0] + g[1]*ez[1] + g[2]*ez[2]);
+  // Misma proyección para ambos extremos (la dirección no cambia a lo largo).
+  const px = g[0]*ex[0] + g[1]*ex[1] + g[2]*ex[2];
+  const py = g[0]*ey[0] + g[1]*ey[1] + g[2]*ey[2];
+  const pz = g[0]*ez[0] + g[1]*ez[1] + g[2]*ez[2];
   const res = [];
-  if (Math.abs(wx) > 1e-14) res.push({ dir: 'x', w: wx });
-  if (Math.abs(wy) > 1e-14) res.push({ dir: 'y', w: wy });
-  if (Math.abs(wz) > 1e-14) res.push({ dir: 'z', w: wz });
+  if (Math.abs(w*px) > 1e-14 || Math.abs(w2*px) > 1e-14) res.push({ dir: 'x', w: w*px, w2: w2*px });
+  if (Math.abs(w*py) > 1e-14 || Math.abs(w2*py) > 1e-14) res.push({ dir: 'y', w: w*py, w2: w2*py });
+  if (Math.abs(w*pz) > 1e-14 || Math.abs(w2*pz) > 1e-14) res.push({ dir: 'z', w: w*pz, w2: w2*pz });
   return res;
 }
 
