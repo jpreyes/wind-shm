@@ -1,8 +1,8 @@
 // ──────────────────────────────────────────────────────────────────────────────
 // PropertiesPanel — right-side panel: node/element properties + mat/sec tabs
 // ──────────────────────────────────────────────────────────────────────────────
-import { computeFloorCR, computeFloorCM, computeTributaryWeights } from '../solver/diaphragm.js?v=89';
-import { localAxes } from '../solver/timoshenko.js?v=89';
+import { computeFloorCR, computeFloorCM, computeTributaryWeights } from '../solver/diaphragm.js?v=90';
+import { localAxes } from '../solver/timoshenko.js?v=90';
 
 export class PropertiesPanel {
   constructor(panelEl, app) {
@@ -519,12 +519,17 @@ export class PropertiesPanel {
     this._switchVTab('modelo');
     this._switchTab('sel');
     const results = this.app._results;
+    const one = [{ type: 'elem', id: elem.id }];
     this._tabContents.sel.innerHTML = this._elemHTML(elem)
       + (results ? this._elemResultsHTML(elem, results) : '')
       + this._elemLoadsHTML(elem)
-      + this._cargasTodasHTML('elem', elem.id);
+      + this._cargasTodasHTML('elem', elem.id)
+      + this._accionesSelHTML(one)   // Acciones (material/sección/carga/grupo…) también con 1 elemento
+      + this._transformHTML(1);       // Mover / Copiar también con 1 elemento
     this._bindElemEvents(elem);
     this._bindElemLoadsEvents(elem);
+    this._bindAccionesSel([elem.id]);
+    this._bindTransform();
   }
 
   // ── Elemento de ÁREA (membrana / placa / shell) ───────────────────────────

@@ -1,27 +1,27 @@
 // ──────────────────────────────────────────────────────────────────────────────
 // App — main orchestrator
 // ──────────────────────────────────────────────────────────────────────────────
-import { Model }           from './model/model.js?v=89';
-import { Serializer }      from './model/serializer.js?v=89';
-import { Viewport }        from './ui/viewport.js?v=89';
-import { PropertiesPanel } from './ui/properties.js?v=89';
-import { MenuBar }         from './ui/menu.js?v=89';
-import { UndoStack }       from './utils/undo.js?v=89';
-import { StaticSolver, ensureDefaultLC }   from './solver/static_solver.js?v=89';
-import { Results }                         from './solver/postprocess.js?v=89';
-import { ModalSolver }                     from './solver/modal_solver.js?v=89';
-import { buildNodeIndex, assembleK, assembleF, getNodeDOFs } from './solver/assembler.js?v=89';
-import { assembleSparseGlobal, extractFreeCSR } from './solver/sparse.js?v=89';
-import { solveNonlinear, solveNonlinearDC } from './solver/nl_lite.js?v=89';
-import { assembleKg } from './solver/geometric.js?v=89';
-import { denseFactor, triForward, triBackward, makeFactor } from './solver/linsolve.js?v=89';
-import { formFind } from './solver/formfind.js?v=89';
-import { ModalResults }                    from './solver/modal_results.js?v=89';
-import { SpectrumSolver }                  from './solver/spectrum_solver.js?v=89';
-import { autoDetectDiaphragms, computeFloorCR } from './solver/diaphragm.js?v=89';
-import { splitElement, splitByLength, discretizeAll, joinElements, intersectarElementos } from './model/discretize.js?v=89';
-import { localAxes, stiffnessMatrix, massMatrix, transformMatrix, globalStiffness, applyReleases } from './solver/timoshenko.js?v=89';
-import { bilinearGrid, blockCells, cornerGridIndices } from './model/mesher.js?v=89';
+import { Model }           from './model/model.js?v=90';
+import { Serializer }      from './model/serializer.js?v=90';
+import { Viewport }        from './ui/viewport.js?v=90';
+import { PropertiesPanel } from './ui/properties.js?v=90';
+import { MenuBar }         from './ui/menu.js?v=90';
+import { UndoStack }       from './utils/undo.js?v=90';
+import { StaticSolver, ensureDefaultLC }   from './solver/static_solver.js?v=90';
+import { Results }                         from './solver/postprocess.js?v=90';
+import { ModalSolver }                     from './solver/modal_solver.js?v=90';
+import { buildNodeIndex, assembleK, assembleF, getNodeDOFs } from './solver/assembler.js?v=90';
+import { assembleSparseGlobal, extractFreeCSR } from './solver/sparse.js?v=90';
+import { solveNonlinear, solveNonlinearDC } from './solver/nl_lite.js?v=90';
+import { assembleKg } from './solver/geometric.js?v=90';
+import { denseFactor, triForward, triBackward, makeFactor } from './solver/linsolve.js?v=90';
+import { formFind } from './solver/formfind.js?v=90';
+import { ModalResults }                    from './solver/modal_results.js?v=90';
+import { SpectrumSolver }                  from './solver/spectrum_solver.js?v=90';
+import { autoDetectDiaphragms, computeFloorCR } from './solver/diaphragm.js?v=90';
+import { splitElement, splitByLength, discretizeAll, joinElements, intersectarElementos } from './model/discretize.js?v=90';
+import { localAxes, stiffnessMatrix, massMatrix, transformMatrix, globalStiffness, applyReleases } from './solver/timoshenko.js?v=90';
+import { bilinearGrid, blockCells, cornerGridIndices } from './model/mesher.js?v=90';
 
 class App {
   constructor() {
@@ -511,8 +511,21 @@ class App {
         const a = map.get(e.n1), b = map.get(e.n2); if (a == null || b == null || a === b) continue;
         const pk = `${Math.min(a, b)}-${Math.max(a, b)}`; if (pares.has(pk)) continue; pares.add(pk);
         const ne = this.model.addElement(a, b, e.matId, e.secId);
-        if (ne && e.releases && e.releases.some(x => x)) this.model.updateElement(ne.id, { releases: [...e.releases] });
-        if (ne) k++;
+        if (!ne) continue;
+        // Propiedades del elemento: liberaciones, cable / pretensado.
+        const upd = {};
+        if (e.releases && e.releases.some(x => x)) upd.releases = [...e.releases];
+        if (e.cable) upd.cable = true;
+        if (e.L0factor != null && e.L0factor !== 1) upd.L0factor = e.L0factor;
+        if (Object.keys(upd).length) this.model.updateElement(ne.id, upd);
+        // Cargas del elemento (todas las dist/temp de todos los casos) → copia.
+        for (const lc of this.model.loadCases.values())
+          for (const ld of (lc.loads || []))
+            if (ld.elemId === e.id && (ld.type === 'dist' || ld.type === 'temp'))
+              lc.loads.push({ ...ld, elemId: ne.id });
+        // Pertenencia a grupos (estado de sesión).
+        if (this._grupos) for (const set of this._grupos.values()) if (set.has(e.id)) set.add(ne.id);
+        k++;
       }
       return k;
     };
@@ -1256,7 +1269,7 @@ class App {
   _staticWorkerSolve(K, nDOF, freeDOF, Flist, dense = false) {
     return new Promise((resolve, reject) => {
       let worker;
-      try { worker = new Worker(new URL('./solver/static_worker.js?v=89', import.meta.url), { type: 'module' }); }
+      try { worker = new Worker(new URL('./solver/static_worker.js?v=90', import.meta.url), { type: 'module' }); }
       catch (e) { reject(e); return; }
       this._staticWorker = worker;
       const cancelar = () => { try { worker.terminate(); } catch (e) {} this._staticWorker = null; this._hideProgress(); reject(new Error('cancelado')); };
@@ -1285,7 +1298,7 @@ class App {
   _staticWorkerSolveSparse(csr, cf, nDOF, freeDOF, Flist) {
     return new Promise((resolve, reject) => {
       let worker;
-      try { worker = new Worker(new URL('./solver/static_worker.js?v=89', import.meta.url), { type: 'module' }); }
+      try { worker = new Worker(new URL('./solver/static_worker.js?v=90', import.meta.url), { type: 'module' }); }
       catch (e) { reject(e); return; }
       this._staticWorker = worker;
       const cancelar = () => { try { worker.terminate(); } catch (e) {} this._staticWorker = null; this._hideProgress(); reject(new Error('cancelado')); };
@@ -3357,7 +3370,7 @@ class App {
     this._showProgress('Generando el modelo…', 'Aplicando reglas y cargas normativas');
     try {
       const libs = await this._cargarBibliotecasAsistente();
-      const { generarModelo } = await import('../asistente/generador.js?v=89');
+      const { generarModelo } = await import('../asistente/generador.js?v=90');
       const modelo = generarModelo(ficha, libs);
 
       if (modo === 'sobreponer') {
@@ -4233,7 +4246,7 @@ class App {
   // Verificación de diseño (flexión/corte/axial) por elemento, usando los
   // resultados actuales y los parámetros editables de asistente/diseno_params.json.
   async _calcularDiseno() {
-    const ver = '?v=89';
+    const ver = '?v=90';
     let params = null;
     try { params = await fetch('asistente/diseno_params.json' + ver).then(r => r.json()); }
     catch (e) { console.error('No se pudo cargar diseno_params.json:', e); return null; }

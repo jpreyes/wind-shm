@@ -19,11 +19,11 @@ similaridad. `[#]` referencia el pedido original. Estado: ⬜ pendiente · 🟡 
 - ✅ **Grillas más tenues** (opacidad 0.7→0.38) → los elementos resaltan. `[#9]`
 - ✅ **Ocultar los ejes**: Vista → Ejes XYZ (`toggleAxes`). `[#10]`
 
-## G4 · Modelado e interacción de edición
+## G4 · Modelado e interacción de edición *(parcial)*
 - ⬜ **Crear elementos sin nodos previos + imán a nodos cercanos (toggleable).** Clicar en el espacio crea los nodos; si hay un nodo cerca, el extremo se magnetiza a él (reusa, no duplica); imán desactivable; indicador visual de a qué nodo se pega. `[#6]`
 - ⬜ **Herramienta "Área" en la barra lateral izquierda** (junto a Nodo/Elem/Apoyo): clicar 3–4 nodos → crea el área, con selector de comportamiento/espesor/material; sub-modo para mallar panel. `[#nuevo]`
-- ⬜ **Acciones + Mover/Copiar con un solo elemento** seleccionado (hoy solo con multi-selección). `[#7]`
-- ⬜ **Copiar elemento = copiar también sus cargas, grupos, etc.** `[#11]`
+- ✅ **Acciones + Mover/Copiar con un solo elemento** seleccionado (antes solo con multi-selección). `[#7]`
+- ✅ **Copiar elemento = copiar también sus cargas (dist/temp), cable/L0, y grupos.** `[#11]`
 
 ## G5 · Cargas, normativa y asistente de modificación
 - ⬜ **Casos de carga y combinaciones de la norma por defecto** (creados automáticamente). `[#16]`
