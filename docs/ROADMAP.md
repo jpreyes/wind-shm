@@ -5,11 +5,11 @@ similaridad. `[#]` referencia el pedido original. Estado: ⬜ pendiente · 🟡 
 
 ---
 
-## G1 · Panel de análisis y acceso a resultados *(parcial)*
+## G1 · Panel de análisis y acceso a resultados ✅
 *El cuello de botella del flujo: lanzar análisis y reusar resultados.*
 - ✅ **Ventana flotante de análisis** (Centro de análisis): el botón "Análisis" de la barra lateral abre un panel con TODOS los análisis (Estático, Modal, Espectro + 6 avanzados NL-lite), cada uno con botón Ejecutar. `[#4]`
 - 🟡 **Acceso a resultados ya corridos**: badges ✓/sin-ejecutar por análisis y botón **Ver** que re-muestra sin recalcular (estático, modal, y cada caso espectral listado). Falta: indicador permanente fuera del hub. `[#1]`
-- ✅ **Modal/progreso**: el modal **sale del modo resultados antes de correr**; la **estructura original** se dibuja como **fantasma tenue** (0.28) durante la animación; la **caja flotante de progreso** del estático (`_showProgress/_hideProgress`) ahora también aparece en **Modal** y **Espectro**. ⬜ Pendiente menor: los 6 NL-lite son síncronos (rápidos) — para mostrarles la caja habría que volverlos async. `[#2]`
+- ✅ **Modal/progreso**: el modal **sale del modo resultados antes de correr**; la **estructura original** se dibuja como **fantasma tenue** (0.28); la **caja flotante de progreso** aparece en estático, **Modal**, **Espectro** y los NL-lite síncronos sin diálogo (No lineal / P-Delta / Pandeo, vía `_runByAction` con yield). Los NL-lite con diálogo (form-finding/plástico/pushover-DC) gestionan su propio flujo. `[#2]`
 
 ## G2 · Motor modal y rendimiento ✅
 - ✅ **Método modal alternativo + selector**: además de la iteración inversa (Stodola, modo a modo), nueva **iteración de subespacio (Bathe)** que extrae los modos menores en bloque (rápida con muchos modos), con un eigensolver generalizado pequeño (Cholesky + Jacobi). Selector en la ventana modal. Verificado: subspace ≡ Stodola en frecuencias (portal 3D: 6.21, 6.21, 7.02, 9.94 Hz idénticas) y eigensolver pequeño exacto vs solución analítica. `[#3]`

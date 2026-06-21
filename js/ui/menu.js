@@ -93,9 +93,9 @@ export class MenuBar {
       case 'run-force':      a.runAnalysis(true);            break;
       case 'run-modal':      a.runModal();                   break;
       case 'run-spectrum':   a.runSpectrum();                break;
-      case 'run-nonlinear':  a.runNonlinear();               break;
-      case 'run-pdelta':     a.runPDelta();                  break;
-      case 'run-buckling':   a.runBuckling();                break;
+      case 'run-nonlinear':  a._runByAction('run-nonlinear'); break;
+      case 'run-pdelta':     a._runByAction('run-pdelta');    break;
+      case 'run-buckling':   a._runByAction('run-buckling');  break;
       case 'run-formfind':   a.runFormFinding();             break;
       case 'run-plastic':    a.runPlastic();                 break;
       case 'run-pushover-dc': a.runPushoverDC();             break;
