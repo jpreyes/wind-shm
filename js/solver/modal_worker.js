@@ -8,7 +8,7 @@
 //   Main → Worker: { Kff_flat, Mff_flat, nF, nModes, dense }
 //   Worker → Main: { modes: [{omega2, vec}] }  |  { error }
 // ──────────────────────────────────────────────────────────────────────────────
-import { makeFactor, rowBands, permRCM } from './linsolve.js?v=100';
+import { makeFactor, rowBands, permRCM } from './linsolve.js?v=101';
 
 // Producto A·x usando la extensión por filas (banda variable) → O(n·b)
 function _mvBand(A, x, n, lo, hi) {
@@ -82,8 +82,93 @@ function _stodola(mvK, mvM, solveK, nF, nModes) {
   return found.map(m => ({ omega2: m.omega2, vec: Array.from(m.vec) }));
 }
 
+// ── Autovalores generalizados pequeños (q×q):  K·v = λ·M·v ────────────────────
+// Reducción de Cholesky M=L·Lᵀ → problema estándar A·y=λ·y con A=L⁻¹K L⁻ᵀ, luego
+// Jacobi clásico.  Devuelve { vals (ascendente), vecs (columnas, M-ortonormales) }.
+function _smallGenEig(K, M, n) {
+  // Cholesky de M (SPD tras regularización)
+  const L = []; for (let i = 0; i < n; i++) L.push(new Float64Array(n));
+  for (let j = 0; j < n; j++) {
+    let s = M[j][j]; for (let k = 0; k < j; k++) s -= L[j][k] * L[j][k];
+    L[j][j] = Math.sqrt(Math.max(s, 1e-300));
+    for (let i = j + 1; i < n; i++) {
+      let t = M[i][j]; for (let k = 0; k < j; k++) t -= L[i][k] * L[j][k];
+      L[i][j] = t / L[j][j];
+    }
+  }
+  const fwd = b => { const y = new Float64Array(n); for (let i = 0; i < n; i++) { let s = b[i]; for (let k = 0; k < i; k++) s -= L[i][k] * y[k]; y[i] = s / L[i][i]; } return y; };
+  const bwd = b => { const y = new Float64Array(n); for (let i = n - 1; i >= 0; i--) { let s = b[i]; for (let k = i + 1; k < n; k++) s -= L[k][i] * y[k]; y[i] = s / L[i][i]; } return y; };
+  // A = L⁻¹ K L⁻ᵀ : por columnas, A = fwd(K·(L⁻ᵀ e_j)) — se simetriza al final
+  const A = []; for (let i = 0; i < n; i++) A.push(new Float64Array(n));
+  for (let j = 0; j < n; j++) {
+    const ej = new Float64Array(n); ej[j] = 1;
+    const w = bwd(ej);                                  // w = L⁻ᵀ e_j
+    const Kw = new Float64Array(n);
+    for (let i = 0; i < n; i++) { let s = 0; for (let k = 0; k < n; k++) s += K[i][k] * w[k]; Kw[i] = s; }
+    const col = fwd(Kw);                                // A[:,j]
+    for (let i = 0; i < n; i++) A[i][j] = col[i];
+  }
+  for (let i = 0; i < n; i++) for (let j = i + 1; j < n; j++) { const m = 0.5 * (A[i][j] + A[j][i]); A[i][j] = A[j][i] = m; }
+  // Jacobi simétrico estándar → autovalores en diag(A), autovectores en V
+  const V = []; for (let i = 0; i < n; i++) { V.push(new Float64Array(n)); V[i][i] = 1; }
+  for (let sweep = 0; sweep < 100; sweep++) {
+    let off = 0; for (let p = 0; p < n; p++) for (let q = p + 1; q < n; q++) off += A[p][q] * A[p][q];
+    if (off < 1e-22) break;
+    for (let p = 0; p < n; p++) for (let q = p + 1; q < n; q++) {
+      if (Math.abs(A[p][q]) < 1e-18) continue;
+      const th = (A[q][q] - A[p][p]) / (2 * A[p][q]);
+      const tt = Math.sign(th || 1) / (Math.abs(th) + Math.sqrt(th * th + 1));
+      const c = 1 / Math.sqrt(tt * tt + 1), s = tt * c;
+      for (let i = 0; i < n; i++) { const aip = A[i][p], aiq = A[i][q]; A[i][p] = c * aip - s * aiq; A[i][q] = s * aip + c * aiq; }
+      for (let i = 0; i < n; i++) { const api = A[p][i], aqi = A[q][i]; A[p][i] = c * api - s * aqi; A[q][i] = s * api + c * aqi; }
+      for (let i = 0; i < n; i++) { const vip = V[i][p], viq = V[i][q]; V[i][p] = c * vip - s * viq; V[i][q] = s * vip + c * viq; }
+    }
+  }
+  // autovectores del problema generalizado: v = L⁻ᵀ y  (y = columnas de V)
+  const pairs = [];
+  for (let j = 0; j < n; j++) {
+    const y = new Float64Array(n); for (let i = 0; i < n; i++) y[i] = V[i][j];
+    pairs.push({ lam: A[j][j], v: bwd(y) });
+  }
+  pairs.sort((a, b) => a.lam - b.lam);
+  return { vals: pairs.map(p => p.lam), vecs: pairs.map(p => p.v) };
+}
+
+// ── Iteración de subespacio (Bathe) — extrae los p modos menores en bloque ────
+function _subspace(mvK, mvM, solveK, nF, nModes) {
+  const p = nModes;
+  const q = Math.min(nF, Math.max(p + 8, 2 * p));   // tamaño del subespacio
+  let X = [];
+  for (let c = 0; c < q; c++) {
+    const v = new Float64Array(nF);
+    for (let i = 0; i < nF; i++) v[i] = Math.sin((c + 1) * 0.7 * (i + 1)) + 0.3 * Math.cos((c + 1) * (i + 0.5)) + (c === 0 ? 1 : 0);
+    X.push(v);
+  }
+  let prev = null, lastVals = null;
+  for (let iter = 0; iter < 40; iter++) {
+    const Xb = X.map(col => solveK(mvM(col)));         // K⁻¹ M X
+    const KXb = Xb.map(col => mvK(col)), MXb = Xb.map(col => mvM(col));
+    const Kr = [], Mr = [];
+    for (let a = 0; a < q; a++) { Kr.push(new Float64Array(q)); Mr.push(new Float64Array(q));
+      for (let b = 0; b < q; b++) { Kr[a][b] = _dot(Xb[a], KXb[b], nF); Mr[a][b] = _dot(Xb[a], MXb[b], nF); } }
+    const { vals, vecs } = _smallGenEig(Kr, Mr, q);
+    const Xnew = [];
+    for (let c = 0; c < q; c++) {
+      const v = new Float64Array(nF);
+      for (let k = 0; k < q; k++) { const qc = vecs[c][k], xk = Xb[k]; if (qc) for (let i = 0; i < nF; i++) v[i] += qc * xk[i]; }
+      Xnew.push(v);
+    }
+    X = Xnew; lastVals = vals;
+    if (prev) { let ok = true; for (let i = 0; i < p; i++) if (Math.abs(vals[i] - prev[i]) / Math.max(Math.abs(vals[i]), 1e-12) > 1e-6) { ok = false; break; } if (ok && iter >= 2) break; }
+    prev = vals.slice(0, p);
+  }
+  const out = [];
+  for (let i = 0; i < p && i < q; i++) if (isFinite(lastVals[i]) && lastVals[i] >= 0) out.push({ omega2: lastVals[i], vec: Array.from(X[i]) });
+  return out;
+}
+
 self.onmessage = (e) => {
-  const { Kff_flat, Mff_flat, nF, nModes, dense } = e.data;
+  const { Kff_flat, Mff_flat, nF, nModes, dense, method } = e.data;
   try {
     // Regularizar diagonal de M (masas nulas → mínimo positivo)
     let maxMd = 0;
@@ -116,7 +201,9 @@ self.onmessage = (e) => {
     const mvM = (x) => _mvBand(Mp, x, nF, MB.lo, MB.hi);
     const solveK = (b) => fac.solve(b);
 
-    const modes = _stodola(mvK, mvM, solveK, nF, nModes);
+    const modes = (method === 'subspace')
+      ? _subspace(mvK, mvM, solveK, nF, nModes)
+      : _stodola(mvK, mvM, solveK, nF, nModes);
     if (!modes.length) { self.postMessage({ error: 'Sin modos estructurales. Verifique masa (ρ en material o diafragmas) y apoyos.' }); return; }
     // Des-permutar los vectores modales al orden original
     if (perm) for (const md of modes) {

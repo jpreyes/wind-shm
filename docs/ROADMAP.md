@@ -11,8 +11,8 @@ similaridad. `[#]` referencia el pedido original. Estado: ⬜ pendiente · 🟡 
 - 🟡 **Acceso a resultados ya corridos**: badges ✓/sin-ejecutar por análisis y botón **Ver** que re-muestra sin recalcular (estático, modal, y cada caso espectral listado). Falta: indicador permanente fuera del hub. `[#1]`
 - ✅ **Modal/progreso**: el modal **sale del modo resultados antes de correr**; la **estructura original** se dibuja como **fantasma tenue** (0.28) durante la animación; la **caja flotante de progreso** del estático (`_showProgress/_hideProgress`) ahora también aparece en **Modal** y **Espectro**. ⬜ Pendiente menor: los 6 NL-lite son síncronos (rápidos) — para mostrarles la caja habría que volverlos async. `[#2]`
 
-## G2 · Motor modal y rendimiento
-- ⬜ **Método modal alternativo** (el de las referencias) + **selector de método** en la ventana modal; el modal actual es lento. `[#3]`
+## G2 · Motor modal y rendimiento ✅
+- ✅ **Método modal alternativo + selector**: además de la iteración inversa (Stodola, modo a modo), nueva **iteración de subespacio (Bathe)** que extrae los modos menores en bloque (rápida con muchos modos), con un eigensolver generalizado pequeño (Cholesky + Jacobi). Selector en la ventana modal. Verificado: subspace ≡ Stodola en frecuencias (portal 3D: 6.21, 6.21, 7.02, 9.94 Hz idénticas) y eigensolver pequeño exacto vs solución analítica. `[#3]`
 
 ## G3 · Navegación y legibilidad del viewport *(quick wins)* ✅
 - ✅ **PAN (manito)** además de orbitar. Herramienta en la barra lateral (modo `pan`): arrastrar con la izquierda panea, restaura orbit al salir. `[#8]`
