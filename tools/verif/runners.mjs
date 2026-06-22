@@ -1,6 +1,7 @@
 // runners.mjs — corre los solvers de Pórtico HEADLESS (Node), reusando el código
 // real de la app. numeric.js se carga como global (shim de window) una sola vez.
 import { ModalSolver } from '../../js/solver/modal_solver.js';
+import { StaticSolver } from '../../js/solver/static_solver.js';
 
 let _num = false;
 export async function ensureNumeric() {
@@ -25,10 +26,18 @@ export async function runModal(model, nModes = 6) {
   return new ModalSolver().solve(model, nModes);
 }
 
-// Despacho por tipo de análisis (se irá ampliando: static, buckling, …).
+// Análisis estático lineal — devuelve el Results real (getNodeDisp, esfuerzos…).
+export async function runStatic(model, lcId = null, selfWeight = false) {
+  await ensureNumeric();
+  apply2D(model);
+  return new StaticSolver().solve(model, lcId, selfWeight);
+}
+
+// Despacho por tipo de análisis (se irá ampliando: buckling, espectro, …).
 export async function runAnalysis(model, spec) {
   switch (spec.analysis) {
     case 'modal': return { type: 'modal', res: await runModal(model, spec.nModes || 6) };
+    case 'static': return { type: 'static', res: await runStatic(model, spec.lcId ?? null, !!spec.selfWeight) };
     default: throw new Error('Análisis no soportado en el harness: ' + spec.analysis);
   }
 }

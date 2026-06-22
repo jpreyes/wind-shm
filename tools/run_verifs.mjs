@@ -40,21 +40,33 @@ function buildFigure(model, out, caseDef) {
   for (const c of nodes.values()) for (let k = 0; k < 3; k++) { mn[k] = Math.min(mn[k], c[k]); mx[k] = Math.max(mx[k], c[k]); }
   const diag = Math.hypot(mx[0] - mn[0], mx[1] - mn[1], mx[2] - mn[2]) || 1;
   let deformed = null;
-  if (caseDef.figure && out.type === 'modal') {
-    const amp = 0.18 * diag;   // la forma modal viene normalizada a máx. traslación = 1
-    const shape = out.res.getModeShape((caseDef.figure.mode || 1) - 1);
-    deformed = new Map();
-    for (const [id, c] of nodes) { const s = shape.get(id) || [0, 0, 0]; deformed.set(id, [c[0] + amp * s[0], c[1] + amp * s[1], c[2] + amp * s[2]]); }
+  if (caseDef.figure) {
+    // campo de deformación crudo (modal: forma del modo; estático: desplazamientos)
+    const defo = new Map(); let maxT = 0;
+    for (const id of nodes.keys()) {
+      let d = [0, 0, 0];
+      if (out.type === 'modal') { const s = out.res.getModeShape((caseDef.figure.mode || 1) - 1).get(id); if (s) d = [s[0], s[1], s[2]]; }
+      else if (out.type === 'static') { const s = out.res.getNodeDisp(id); if (s) d = [s[0], s[1], s[2]]; }
+      defo.set(id, d); maxT = Math.max(maxT, Math.hypot(d[0], d[1], d[2]));
+    }
+    if (maxT > 0) {
+      const amp = 0.16 * diag / maxT;   // escala para que la deformada sea visible
+      deformed = new Map();
+      for (const [id, c] of nodes) { const d = defo.get(id); deformed.set(id, [c[0] + amp * d[0], c[1] + amp * d[1], c[2] + amp * d[2]]); }
+    }
   }
+  // optimización: la forma modal sólo se calcula una vez por nodo arriba; recalcular
+  // getModeShape en el bucle es O(n²) pero los modelos de verificación son chicos.
   return renderModelSVG({ nodes, elements, supports, deformed, width: 900 });
 }
 
 function buildComparison(cmp, out) {
   const pv = cmp.portico(out.res);
-  const header = ['Modo', 'Descripción', `Independiente (${cmp.unit})`, `SAP2000 (${cmp.unit})`, 'dif. SAP', `**Pórtico (${cmp.unit})**`, '**dif. Pórtico**'];
+  const idxLabel = cmp.indexLabel || 'Modo';
+  const header = [idxLabel, 'Descripción', `Independiente (${cmp.unit})`, `SAP2000 (${cmp.unit})`, 'dif. SAP', `**Pórtico (${cmp.unit})**`, '**dif. Pórtico**'];
   const rows = cmp.rows.map((r, i) => {
     const p = pv[i];
-    return [String(i + 1), r.desc, r.indep.toFixed(cmp.decimals), r.sap.toFixed(cmp.decimals), pct(r.sap, r.indep),
+    return [String(r.idx ?? (i + 1)), r.desc, r.indep.toFixed(cmp.decimals), r.sap.toFixed(cmp.decimals), pct(r.sap, r.indep),
       `**${p.toFixed(cmp.decimals)}**`, `**${pct(p, r.indep)}**`];
   });
   return { table: mdTable(header, rows), pv };
