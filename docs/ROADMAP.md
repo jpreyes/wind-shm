@@ -107,7 +107,7 @@ similaridad. `[#]` referencia el pedido original. Estado: ⬜ pendiente · 🟡 
 
 ## G13 · Backlog — ideas nuevas detectadas en uso ⬜
 *Mejoras de mayor alcance pedidas durante el uso; sin implementar aún.*
-- ⬜ **Mesheador automático con motor tipo Gmsh** `[#52]`: reemplazar/complementar el mallado actual (`mallar-panel`, `discretize`) por un **mallador automático** robusto (estilo **Gmsh** u OpenCASCADE/Triangle/jigsaw) que genere mallas de calidad para áreas y volúmenes y **respete nuestras metodologías** (convención Z-up, GDL, tipos de elemento membrana/placa/cáscara, diafragmas). Objetivos: mallado de geometrías arbitrarias, control de tamaño/gradación, transición de malla, y reuso en navegador (WASM de Gmsh o equivalente). *(Decidir: Gmsh-WASM embebido vs. servicio; cómo mapear su salida a `model.areas`.)*
+- ⬜ **Mesheador automático con motor tipo Gmsh** `[#52]`: complementar el mallado actual (`mallar-panel`, `discretize`) por un **mallador automático** robusto (estilo **Gmsh** u OpenCASCADE/Triangle/jigsaw) que genere mallas de calidad para áreas y volúmenes y **respete nuestras metodologías** (convención Z-up, GDL, tipos de elemento membrana/placa/cáscara, diafragmas). Objetivos: mallado de geometrías arbitrarias, control de tamaño/gradación, transición de malla, y reuso en navegador (WASM de Gmsh o equivalente). *(Decidir: Gmsh-WASM embebido vs. servicio; cómo mapear su salida a `model.areas`.)*
 - ⬜ **La IA entiende una torre de alta tensión** `[#53]`: extender el asistente (`asistente/generador.js` + Worker) para describir/generar **torres de transmisión** (celosías 3D): patas, crucetas, ménsulas, diagonales/redundantes, conexiones articuladas (releases), cargas de viento/cable/hielo y combinaciones. Requiere vocabulario de *ficha* para celosías espaciales y un generador paramétrico de torre. *(Caso de uso real del IOC; encaja con NL-lite de cables para los conductores.)*
 
 ## G14 · Implementar capacidades parciales / ausentes (detectadas en verificación) ⬜
@@ -128,20 +128,36 @@ similaridad. `[#]` referencia el pedido original. Estado: ⬜ pendiente · 🟡 
 
 ---
 
-## Secuencia sugerida (revisada)
-1. ✅ **G8 `[#42]` — CRÍTICO**: pérdida irreversible de modelo (Limpiar resultados / auto-disc) — **hecho**.
-2. ✅ **G11 `[#46]`**: bugs de rótulas/pushover (compartían causa con `[#42]`) + diagnósticos claros — **hecho**.
-3. ✅ **G1 `[#36]`–`[#40]`** + ✅ **G11 `[#44]`**: auto-disc para los análisis de pórtico, indicadores NL, lote sin diálogos, parámetros persistidos en `.s3d`, sub-pestañas del hub — **hechos**; `[#44]` completo (P-Delta/Rótulas en banda + caja de progreso + No lineal/Pushover en Web Worker).
-4. ✅ **G8 `[#43]`** + **G6 `[#41]`**: autoguardado periódico/recuperación múltiple y memoria por proyecto — **hechos**.
-5. ✅ **G11 `[#45]`/`[#47]`**: elegir caso/combo en rótulas y visualizar la secuencia de formación — **hechos**.
-6. 🟡 **G12** — análisis dinámico time-history; se apoya en G2 y G11. **Lineal CERRADO**: `[#48a]` motor (Duhamel/Nigam–Jennings, verificado vs Newmark) + `[#48c]` entrada de acelerograma (parser, demos sintéticos, escala) + `[#48d]` integración en worker, animación en el tiempo y export CSV. Falta sólo `[#48b]` (time-history **no lineal** incremental con rótulas), diferido como extensión avanzada.
-7. ✅ **G10 `[#49]`** — postproceso de elementos de área (tensiones/deformada/selección) + análisis de modelos sólo-área (muros/losas) — **hecho**.
-8. **G9** + **G10/contorno** — verificación y documentación. **G7** — multi-modelo al final (rediseño mayor).
+## Secuencia sugerida — qué sigue, de lo MÁS FÁCIL a lo más difícil
+
+*El grueso histórico (G1–G8, G10, G11) está hecho; G12 lineal cerrado. Lo abierto, ordenado por
+esfuerzo creciente:*
+
+**🟢 Fáciles (sin código nuevo o cambio mínimo y acotado)**
+1. **Materializar más verificaciones** (G9) con el pipeline ya armado — **sin código nuevo**, sólo construir `.s3d` + manifiesto. Siguientes: `1-001` (cargas generales), `1-007` (releases), `1-002` (térmica). *(El runner de espectro habilita después los edificios `1-020`/`1-024`.)*
+2. **`[#56]` Miembros compression-only** — espejo exacto del cable *tension-only* del NL-lite (`barState` en `nl_lite.js`: N=0 en tracción en vez de compresión). Cambio mínimo. **Decisión pendiente D1.**
+3. **`[#54]` Desplazamiento prescrito de nodo/apoyo** — cambio **acotado** al solver (partición libre/prescrito), **alto valor**: habilita asentamientos (`1-005`), patch tests (`2-001`/`3-001`) y puentes. **Decisión pendiente D2.**
+
+**🟡 Medias (reusan motores existentes)**
+4. **`[#55]` Modal con rigidez geométrica (Kg)** — reusa `assembleKg`; modal sobre `K+Kg(estado)`. Habilita `1-017` (cuerda tensa). **Decisión pendiente D3.**
+5. **`[#57]` Gradiente térmico en el espesor de áreas** — momento térmico en placa/cáscara. Habilita `2-014`. **Decisión pendiente D4.**
+6. **`[#58]` Tensión/deformación plana** en membrana — flag de constitutiva (plane-stress / plane-strain). Habilita `3-002/3-003` y `3-004`. **Decisión pendiente D5.**
+
+**🔴 Mayores (cambios de flujo o features grandes)**
+7. **`[#48b]`** time-history **no lineal** incremental (G12) · **`[#59]`/`[#60]`/`[#61]`** puentes (etapas, pretensado, cargas móviles) · **`[#52]`** mesheador Gmsh (G13) · **`[#53]`** IA torre (G13) · **G7** multi-modelo (rediseño mayor).
 
 ## Decisiones tomadas
 *Todas resueltas y ya reflejadas en los grupos correspondientes.*
 - ✅ **G2 (método modal)**: usar **iteración de subespacio** (Bathe). *(Implementado — ver G2.)*
 - ✅ **G7 (multi-modelo)**: modelos unidos **sólo en la memoria**, sin vínculo geométrico. *(Reflejado en G7.)*
 - ✅ **G9 (verificación SAP2000)**: priorizar en el orden **análisis dinámico modal → viga → pórtico → muro/shell** (el modal va primero). *(Reflejado en G9.)*
+- ✅ **G9 (figuras/pipeline)**: leer las figuras de los PDF con **poppler** y batchear con un **harness headless** + figuras SVG; lo único caso-a-caso es construir el `.s3d` y validar. *(Implementado.)*
 - ✅ **G12 (time-history)**: integración por **Duhamel** por modo (es lineal); registros de ejemplo **Llolleo y Constitución 2010**; excitación **uniforme en la base** (sin multi-apoyo). *(Reflejado en G12.)*
 - ✅ **G6 `[#41]` (memoria por proyecto)**: migrar los datos de memoria al `.s3d` **conservando compatibilidad** con archivos viejos. *(Implementado — ver G6.)*
+
+## Decisiones a tomar *(antes de implementar G14; resolverlas aquí)*
+- **D1 — `[#56]` compression-only**: ¿cómo se marca? Propuesta: **flag por elemento** análogo a `cable` (p.ej. `el.strut`/`compressionOnly`), excluyentes entre sí. *Falta decidir: nombre y si va en el panel del elemento junto al check «cable».* **→ Decisión:** _por definir._
+- **D2 — `[#54]` desplazamiento prescrito**: ¿dónde se ingresa el valor? (a) como **carga dentro de un caso** (`type:'disp'`, `nodeId`, `dof`, valor → combinable y por caso) — *recomendado*; o (b) como **propiedad del nodo** (estado base, no combinable). *Falta decidir: a/b y la convención de signo + cómo se reportan las reacciones del GDL prescrito.* **→ Decisión:** _por definir._
+- **D3 — `[#55]` modal con Kg**: ¿qué estado genera `Kg`? Propuesta: un **caso o combinación de referencia** elegido por el usuario (la carga de pre-esfuerzo/gravedad), con un **toggle «incluir P-Δ (Kg) en el modal»** en el diálogo modal. *Falta decidir: usar un caso/combo existente vs. una carga propia del modal.* **→ Decisión:** _por definir._
+- **D4 — `[#57]` gradiente térmico en área**: ¿cómo se ingresa? (a) `ΔT_sup` y `ΔT_inf` (caras) — *recomendado, explícito*; o (b) `ΔT_medio` + `gradiente`. *Falta decidir: a/b y reuso del tipo `type:'temp'` de área con un campo extra de gradiente.* **→ Decisión:** _por definir._
+- **D5 — `[#58]` tensión/deformación plana**: ¿el modo (plane-stress / plane-strain) es propiedad **del material**, **del área**, o un **flag global del modelo**? Propuesta: **por área** (una losa puede ser plane-stress y otra región plane-strain). *Falta decidir: dónde vive el flag.* **→ Decisión:** _por definir._
