@@ -30,6 +30,7 @@ class App {
     this.undoStack  = new UndoStack(60);
 
     this._dirty           = false;
+    this._sessionId       = Date.now().toString(36) + Math.random().toString(36).slice(2, 6);  // slot de autoguardado de esta sesión (#43)
     this._fileHandle      = null;
     this._filePath        = null;   // Electron: native file path (string)
     this._results         = null;   // static / spectral Results object (viewport)
@@ -59,6 +60,10 @@ class App {
     this._bindKeys();
     this._bindModal();
     this._bindElectronMenu();
+
+    // Autoguardado periódico cada 5 min (además del debounced y el beforeunload):
+    // tolerante a cierre/corte de luz incluso durante ediciones largas (#43).
+    this._autosaveInterval = setInterval(() => { if (this._dirty) this._autosaveNow(); }, 5 * 60 * 1000);
 
     // Initial render
     this.viewport.renderModel(this.model);
@@ -4956,30 +4961,109 @@ class App {
     this._autosaveT = setTimeout(() => this._autosaveNow(), 1500);
   }
 
+  // ── Autoguardado multi-slot (#43) ───────────────────────────────────────────
+  // Cada SESIÓN escribe en su propio slot `portico_autosave_<sid>` (se sobrescribe
+  // con el último estado). Un índice `portico_autosaves` lista los slots para que
+  // la portada pueda ofrecer recuperar CUALQUIERA de las sesiones recientes, no
+  // sólo la última. Se conservan los 6 más recientes (se purga el más viejo).
+  static get _AUTOSAVE_MAX() { return 6; }
   _autosaveNow() {
     try {
-      localStorage.setItem('portico_autosave',
-        JSON.stringify({ ts: Date.now(), json: this._modelJSONForSave() }));
+      const json = this._modelJSONForSave();
+      // No autoguardar el modelo "nuevo" vacío (no ensucia el índice con basura).
+      if (this.model.nodes.size === 0) return;
+      const key = 'portico_autosave_' + this._sessionId;
+      const name = this._modelName || 'Sin título';
+      const meta = { sid: this._sessionId, key, ts: Date.now(), name,
+                     n: this.model.nodes.size, e: this.model.elements.size + (this.model.areas?.size || 0) };
+      localStorage.setItem(key, JSON.stringify({ ...meta, json }));
+      // Índice: upsert de esta sesión, ordenado por ts desc, cap a _AUTOSAVE_MAX.
+      let idx = [];
+      try { idx = JSON.parse(localStorage.getItem('portico_autosaves') || '[]'); } catch {}
+      idx = idx.filter(x => x && x.sid !== this._sessionId);
+      idx.unshift(meta);
+      while (idx.length > App._AUTOSAVE_MAX) {
+        const drop = idx.pop();
+        if (drop?.key) try { localStorage.removeItem(drop.key); } catch {}
+      }
+      localStorage.setItem('portico_autosaves', JSON.stringify(idx));
     } catch { /* cuota de localStorage llena — ignorar */ }
   }
 
-  // Al arrancar: ofrecer recuperar la sesión autoguardada; si no, cargar ejemplo.
+  // Lista de autoguardados recuperables (índice nuevo + clave legada), recientes
+  // primero. Cada entrada: { key, ts, name, n, e, legacy? }.
+  _autosaveList() {
+    const out = [];
+    try {
+      const idx = JSON.parse(localStorage.getItem('portico_autosaves') || '[]');
+      for (const x of idx) if (x && x.key && localStorage.getItem(x.key)) out.push(x);
+    } catch {}
+    // Compatibilidad: clave única antigua `portico_autosave`.
+    try {
+      const raw = localStorage.getItem('portico_autosave');
+      if (raw) { const o = JSON.parse(raw); out.push({ key: 'portico_autosave', ts: o.ts || 0, name: 'Sesión anterior', n: '?', e: '?', legacy: true }); }
+    } catch {}
+    return out.sort((a, b) => (b.ts || 0) - (a.ts || 0));
+  }
+
+  // Diálogo de recuperación: lista los autoguardados y deja reanudar cualquiera,
+  // borrar uno, o empezar nuevo. Resuelve con el JSON elegido o null (nuevo).
+  _autosaveRecoveryDialog(list) {
+    return new Promise(resolve => {
+      document.getElementById('autosave-recover')?.remove();
+      const fmt = ts => ts ? new Date(ts).toLocaleString('es-CL') : '—';
+      const el = document.createElement('div');
+      el.id = 'autosave-recover';
+      el.style.cssText = 'position:fixed;inset:0;z-index:100001;display:flex;align-items:center;justify-content:center;background:rgba(6,10,18,.74);backdrop-filter:blur(2px)';
+      const rows = list.map((x, i) => `
+        <div class="asr-row" style="display:flex;align-items:center;gap:8px;padding:8px 10px;border:1px solid var(--border,#334);border-radius:7px;margin-bottom:6px">
+          <div style="flex:1;min-width:0">
+            <div style="font-weight:600;font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${(x.name || 'Sin título').replace(/[&<>]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]))}</div>
+            <div style="font-size:11px;color:var(--text-muted,#9aa)">${fmt(x.ts)} · ${x.n} nodos · ${x.e} elem.</div>
+          </div>
+          <button class="btn-primary asr-load" data-i="${i}" style="font-size:12px;padding:5px 10px">Reanudar</button>
+          <button class="asr-del" data-i="${i}" title="Eliminar" style="background:none;border:none;color:var(--text-muted,#9aa);cursor:pointer;font-size:15px">🗑</button>
+        </div>`).join('');
+      el.innerHTML = `
+        <div style="width:min(480px,92%);background:var(--bg-elev,#141b27);border:1px solid var(--border,#334);border-radius:10px;box-shadow:0 12px 40px rgba(0,0,0,.5);color:var(--text,#e6edf3);padding:16px 18px">
+          <div style="font-size:15px;font-weight:700;margin-bottom:4px">Recuperar trabajo autoguardado</div>
+          <div style="font-size:12px;color:var(--text-muted,#9aa);margin-bottom:12px">Se encontraron modelos guardados automáticamente. Reanude cualquiera o empiece uno nuevo.</div>
+          <div id="asr-list">${rows}</div>
+          <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:10px">
+            <button id="asr-new" class="btn" style="font-size:12px;padding:6px 12px">Empezar nuevo (vacío)</button>
+          </div>
+        </div>`;
+      document.body.appendChild(el);
+      const done = (val) => { el.remove(); resolve(val); };
+      el.querySelectorAll('.asr-load').forEach(b => b.addEventListener('click', () => {
+        const x = list[+b.dataset.i];
+        try { const o = JSON.parse(localStorage.getItem(x.key)); done({ json: o.json, name: x.name }); }
+        catch { this.toast('No se pudo leer el autoguardado', 'error'); done(null); }
+      }));
+      el.querySelectorAll('.asr-del').forEach(b => b.addEventListener('click', () => {
+        const x = list[+b.dataset.i];
+        try { localStorage.removeItem(x.key); } catch {}
+        if (!x.legacy) { try { const idx = JSON.parse(localStorage.getItem('portico_autosaves') || '[]').filter(y => y.key !== x.key); localStorage.setItem('portico_autosaves', JSON.stringify(idx)); } catch {} }
+        list.splice(+b.dataset.i, 1);
+        if (!list.length) done(null);
+        else { el.remove(); this._autosaveRecoveryDialog(list).then(resolve); }
+      }));
+      el.querySelector('#asr-new').addEventListener('click', () => done(null));
+    });
+  }
+
+  // Al arrancar: ofrecer recuperar alguna sesión autoguardada; si no, modelo nuevo.
   // Tras tener el modelo, ofrecer los resultados guardados si coinciden.
   async _restoreOrLoadExample() {
     let restored = false;
     try {
-      const raw = localStorage.getItem('portico_autosave');
-      if (raw) {
-        const { ts, json } = JSON.parse(raw);
-        const when = new Date(ts).toLocaleString('es-CL');
-        const ok = await this._confirm(
-          `Hay un modelo autoguardado de la sesión anterior (${when}).<br>¿Desea recuperarlo?`);
-        if (ok) {
-          this._loadJSON(json, 'autoguardado', true);   // keepResults: conservar caché de resultados
-          this.toast('Sesión anterior recuperada', 'ok');
+      const list = this._autosaveList();
+      if (list.length) {
+        const choice = await this._autosaveRecoveryDialog(list);
+        if (choice && choice.json) {
+          this._loadJSON(choice.json, choice.name || 'autoguardado', true);   // keepResults
+          this.toast('Trabajo autoguardado recuperado', 'ok');
           restored = true;
-        } else {
-          localStorage.removeItem('portico_autosave');
         }
       }
     } catch (e) { console.warn('Autosave: no se pudo recuperar', e); }
@@ -5004,7 +5088,8 @@ class App {
   _updateTitle(filename) {
     const name = filename
       ? filename.replace(/\.[^.]+$/, '')
-      : (this._fileHandle ? 'modelo' : 'Sin título');
+      : (this._modelName || (this._fileHandle ? 'modelo' : 'Sin título'));
+    if (filename) this._modelName = name;   // recordado para el autoguardado (#43)
     document.title = (this._dirty ? '● ' : '') + `${name} — PÓRTICO`;
   }
 
