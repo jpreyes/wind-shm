@@ -7,9 +7,9 @@
 // For UDL this reduces to the exact parabolic formula.
 // Displacements at arbitrary xi use cubic Hermite shape functions.
 // ──────────────────────────────────────────────────────────────────────────────
-import { localAxes, stiffnessMatrix, transformMatrix, fixedEndForces, applyReleases, condenseFEF, recoverReleasedDisp } from './timoshenko.js?v=117';
-import { getNodeDOFs } from './assembler.js?v=117';
-import { areaStress, areaBendingStress, vonMises } from './membrane.js?v=117';
+import { localAxes, stiffnessMatrix, transformMatrix, fixedEndForces, applyReleases, condenseFEF, recoverReleasedDisp } from './timoshenko.js?v=118';
+import { getNodeDOFs } from './assembler.js?v=118';
+import { areaStress, areaBendingStress, areaStrain, areaCurvature, vonMises } from './membrane.js?v=118';
 
 function _toLocalLoad(load, ex, ey, ez) {
   const w   = load.w;
@@ -108,6 +108,14 @@ export class Results {
         const [sx, sy, txy] = s;
         const c = (sx + sy) / 2, r = Math.hypot((sx - sy) / 2, txy);
         res = { sx, sy, txy, vm: vonMises(s), s1: c + r, s2: c - r };
+        // Deformaciones unitarias de membrana ε = [εx, εy, γxy] + principales
+        // (ε₁≥ε₂). El círculo de Mohr usa γ/2 para el término de cizalla.
+        const e = areaStrain(area, this.model, this.nodeIndex, this.u);
+        if (e) {
+          const [ex, ey, gxy] = e;
+          const ec = (ex + ey) / 2, er = Math.hypot((ex - ey) / 2, gxy / 2);
+          res.ex = ex; res.ey = ey; res.gxy = gxy; res.e1 = ec + er; res.e2 = ec - er;
+        }
         // Flexión (placa/shell): tensión de superficie = membrana ± 6M/t².  La
         // envolvente max(vM cara sup, vM cara inf) NO depende del signo de M.
         const sb = areaBendingStress(area, this.model, this.nodeIndex, this.u);
@@ -118,6 +126,12 @@ export class Results {
           res.vmMembrane = res.vm;
           res.vmSurf = Math.max(res.vmTop, res.vmBot);   // envolvente de superficie
           res.vm = res.vmSurf;                            // el contorno usa la envolvente
+          // Momentos de placa por unidad de ancho (centro): σ_superficie = 6·M/t² → M = σ·t²/6.
+          const t2_6 = (area.thickness * area.thickness) / 6;
+          res.Mx = sb[0] * t2_6; res.My = sb[1] * t2_6; res.Mxy = sb[2] * t2_6;
+          // Curvaturas de flexión [κx, κy, κxy] (deformación de placa/shell).
+          const k = areaCurvature(area, this.model, this.nodeIndex, this.u);
+          if (k) { res.kx = k[0]; res.ky = k[1]; res.kxy = k[2]; }
         }
       }
     }

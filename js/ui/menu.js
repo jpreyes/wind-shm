@@ -110,6 +110,7 @@ export class MenuBar {
       case 'res-T':          a.setResultType('T');           break;
       case 'res-My':         a.setResultType('My');          break;
       case 'res-Mz':         a.setResultType('Mz');          break;
+      case 'res-vm':         a.setResultType('vm');          break;
       case 'export-results': a.exportResults();              break;
       case 'export-modal':   a.exportModalResults();         break;
       case 'export-spectrum': a.exportSpectrumResults();     break;

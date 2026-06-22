@@ -1,8 +1,8 @@
 // ──────────────────────────────────────────────────────────────────────────────
 // PropertiesPanel — right-side panel: node/element properties + mat/sec tabs
 // ──────────────────────────────────────────────────────────────────────────────
-import { computeFloorCR, computeFloorCM, computeTributaryWeights } from '../solver/diaphragm.js?v=117';
-import { localAxes } from '../solver/timoshenko.js?v=117';
+import { computeFloorCR, computeFloorCM, computeTributaryWeights } from '../solver/diaphragm.js?v=118';
+import { localAxes } from '../solver/timoshenko.js?v=118';
 
 export class PropertiesPanel {
   constructor(panelEl, app) {
@@ -678,15 +678,25 @@ export class PropertiesPanel {
     `;
   }
 
-  // Tensiones (von Mises e invariantes) del área si hay resultados.
+  // Tensiones (von Mises e invariantes), momentos de placa y desplazamientos
+  // nodales del área si hay resultados.
   _areaResultsHTML(area) {
     const res = this.app._results;
     if (!res || typeof res.getAreaStress !== 'function') return '';
     let s = null; try { s = res.getAreaStress(area.id); } catch { /* sin resultados válidos */ }
-    if (!s) return '';
+    // Desplazamientos de los nodos del área (siempre disponibles si hay u).
+    let dispRows = '';
+    if (typeof res.getNodeDisp === 'function') {
+      const fd = v => (v == null || !isFinite(v)) ? '—' : (+v).toExponential(2);
+      for (const nid of area.nodes) {
+        let d = null; try { d = res.getNodeDisp(nid); } catch { /* nodo sin GDL */ }
+        if (!d) continue;
+        dispRows += `<tr><td>#${nid}</td><td style="text-align:right;font-family:var(--font-mono);font-size:10px">${fd(d[0])}, ${fd(d[1])}, ${fd(d[2])}</td></tr>`;
+      }
+    }
+    if (!s && !dispRows) return '';
     const f = v => (v == null || !isFinite(v)) ? '—' : (+v).toExponential(3);
-    return `
-      <div class="prop-section" style="border:1px solid var(--warn);border-radius:6px;padding:8px">
+    const stressBlock = s ? `
         <div class="prop-title" style="color:var(--warn);margin-top:0">Tensiones (centro)</div>
         <table class="res-table"><tbody>
           <tr><td>von Mises${s.vmSurf != null ? ' (superficie)' : ' (membrana)'}</td><td style="text-align:right;font-family:var(--font-mono)">${f(s.vm)}</td></tr>
@@ -695,7 +705,29 @@ export class PropertiesPanel {
           <tr><td>σ₁ (principal, membrana)</td><td style="text-align:right;font-family:var(--font-mono)">${f(s.s1)}</td></tr>
           <tr><td>σ₂ (principal, membrana)</td><td style="text-align:right;font-family:var(--font-mono)">${f(s.s2)}</td></tr>
           <tr><td>σx, σy, τxy (membrana, local)</td><td style="text-align:right;font-family:var(--font-mono);font-size:10px">${f(s.sx)}, ${f(s.sy)}, ${f(s.txy)}</td></tr>
-        </tbody></table>
+        </tbody></table>` : '';
+    const momentBlock = (s && s.Mx != null) ? `
+        <div class="prop-title" style="margin-top:8px">Momentos de placa (kN·m/m, centro, local)</div>
+        <table class="res-table"><tbody>
+          <tr><td>Mx, My, Mxy</td><td style="text-align:right;font-family:var(--font-mono);font-size:11px">${f(s.Mx)}, ${f(s.My)}, ${f(s.Mxy)}</td></tr>
+        </tbody></table>` : '';
+    const strainBlock = (s && s.ex != null) ? `
+        <div class="prop-title" style="margin-top:8px">Deformaciones de membrana (ε, centro, local)</div>
+        <table class="res-table"><tbody>
+          <tr><td>εx, εy, γxy</td><td style="text-align:right;font-family:var(--font-mono);font-size:10px">${f(s.ex)}, ${f(s.ey)}, ${f(s.gxy)}</td></tr>
+          <tr><td>ε₁, ε₂ (principales)</td><td style="text-align:right;font-family:var(--font-mono);font-size:11px">${f(s.e1)}, ${f(s.e2)}</td></tr>
+        </tbody></table>` : '';
+    const curvBlock = (s && s.kx != null) ? `
+        <div class="prop-title" style="margin-top:8px">Curvaturas de flexión (κ, 1/m, centro, local)</div>
+        <table class="res-table"><tbody>
+          <tr><td>κx, κy, κxy</td><td style="text-align:right;font-family:var(--font-mono);font-size:10px">${f(s.kx)}, ${f(s.ky)}, ${f(s.kxy)}</td></tr>
+        </tbody></table>` : '';
+    const dispBlock = dispRows ? `
+        <div class="prop-title" style="margin-top:8px">Desplazamientos nodales (δx, δy, δz)</div>
+        <table class="res-table"><tbody>${dispRows}</tbody></table>` : '';
+    return `
+      <div class="prop-section" style="border:1px solid var(--warn);border-radius:6px;padding:8px">
+        ${stressBlock}${strainBlock}${momentBlock}${curvBlock}${dispBlock}
       </div>`;
   }
 

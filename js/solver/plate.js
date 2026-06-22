@@ -237,16 +237,15 @@ export function dktPlate(coords, E, nu, t) {
 // Momentos por unidad de longitud [Mx, My, Mxy] en el centro del elemento, a
 // partir de los GDL locales dLocal = [w,θx,θy]×nN (NUESTRA convención).  Sirven
 // para la tensión de fibra superficie σ = ±6·M/t².
-export function plateMoments(coords, E, nu, t, dLocal) {
-  const { Db } = plateD(E, nu, t);
+// Curvaturas de placa [κx, κy, κxy] en el centro (centroide en DKT). Sólo
+// dependen de la geometría y los GDL locales [w,θx,θy] por nodo, no del material.
+export function plateCurvatures(coords, dLocal) {
   const nN = coords.length;
   let B, nD, d = dLocal;
   if (nN === 4) {
     B = bBendingQ4(coords, 0, 0).Bb;   // centro (ξ=η=0)
     nD = 12;
   } else {
-    // DKT: B está en convención de Batoz → llevar dLocal a Batoz (signo de las
-    // rotaciones) antes de aplicar B (mismo flip que en la rigidez).
     d = dLocal.slice();
     for (let aN = 0; aN < 3; aN++) { d[3 * aN + 1] *= -1; d[3 * aN + 2] *= -1; }
     B = _dktBMat(coords).bMat(1 / 3, 1 / 3);   // centroide
@@ -254,6 +253,12 @@ export function plateMoments(coords, E, nu, t, dLocal) {
   }
   const kappa = [0, 0, 0];
   for (let r = 0; r < 3; r++) { let s = 0; for (let k = 0; k < nD; k++) s += B[r][k] * d[k]; kappa[r] = s; }
+  return kappa;
+}
+
+export function plateMoments(coords, E, nu, t, dLocal) {
+  const { Db } = plateD(E, nu, t);
+  const kappa = plateCurvatures(coords, dLocal);
   return [
     Db[0][0] * kappa[0] + Db[0][1] * kappa[1] + Db[0][2] * kappa[2],
     Db[1][0] * kappa[0] + Db[1][1] * kappa[1] + Db[1][2] * kappa[2],

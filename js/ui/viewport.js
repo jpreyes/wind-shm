@@ -458,7 +458,9 @@ export class Viewport {
 
   // Colorea los elementos de área por von Mises con SUAVIZADO NODAL (BESTFIT):
   // color por vértice = vM nodal promediada → contorno continuo interpolado.
-  colorAreasByVM(results) {
+  // dispScale > 0 dibuja las caras en su posición DEFORMADA (los nodos se mueven
+  // con los desplazamientos del resultado); 0 = geometría original.
+  colorAreasByVM(results, dispScale = 0) {
     const model = this.app.model;
     if (!model.areas || model.areas.size === 0 || !results || typeof results.getNodalAreaVM !== 'function') return;
     const nodal = results.getNodalAreaVM();
@@ -466,15 +468,24 @@ export class Viewport {
     for (const v of nodal.values()) { if (v < mn) mn = v; if (v > mx) mx = v; }
     if (!isFinite(mn)) return;
     const span = (mx - mn) || 1;
-    for (const a of model.areas.values()) this.addAreaMeshSmooth(a, nodal, mn, span);
+    // Posición (deformada o no) de un nodo en coords Three.js.
+    const dispFn = (dispScale && typeof results.getDeformedCoords === 'function')
+      ? (id => { const c = results.getDeformedCoords(id, dispScale); return this.m2t(c.x, c.y, c.z); })
+      : null;
+    for (const a of model.areas.values()) this.addAreaMeshSmooth(a, nodal, mn, span, dispFn);
     this._areaVMrange = [mn, mx];
     this._drawColorbar(mn, mx);   // barra de color de von Mises (sobrescribe la de δ)
   }
 
   // Igual que addAreaMesh pero con color por vértice (suavizado nodal).
-  addAreaMeshSmooth(area, nodal, mn, span) {
+  // dispFn(nodeId) → THREE.Vector3 ya en coords Three.js (deformada); si es null
+  // se usa la posición original del nodo.
+  addAreaMeshSmooth(area, nodal, mn, span, dispFn = null) {
     this.removeAreaMesh(area.id);
-    const pts = area.nodes.map(id => { const n = this.app.model.nodes.get(id); return n ? this.m2t(n.x, n.y, n.z) : null; });
+    const pts = area.nodes.map(id => {
+      if (dispFn) return dispFn(id);
+      const n = this.app.model.nodes.get(id); return n ? this.m2t(n.x, n.y, n.z) : null;
+    });
     if (pts.some(p => !p)) return;
     const cols = area.nodes.map(id => new THREE.Color(_dispColor(((nodal.get(id) ?? mn) - mn) / span)));
     const idx = pts.length === 3 ? [0, 1, 2] : [0, 1, 2, 0, 2, 3];
@@ -2158,7 +2169,34 @@ export class Viewport {
     }
     this._showResultsUI(`Deformada ×${_fmt(scale)} (factor ×${+f.toPrecision(3)}) | δmax=${_fmt(maxD)}`);
     this._drawColorbar(0, maxD);
-    this.colorAreasByVM(results);   // tensión de membrana (von Mises) si hay áreas
+    // Las caras se deforman con los nodos y se colorean por von Mises (si hay áreas).
+    this.colorAreasByVM(results, scale);
+  }
+
+  // ── Contorno de TENSIONES de áreas (von Mises) ─────────────────────────────
+  // Vista dedicada: barras en gris (fantasma) y caras coloreadas por la von Mises
+  // nodal suavizada sobre la geometría real (sin deformar). Para shells es la
+  // envolvente de superficie; para membranas, la von Mises en-plano.
+  showAreaStress(results) {
+    this.clearLoads();
+    this.clearResults();
+    this._resultObjects = [];
+    this._inResultsMode = true;
+    this._results = results;
+    this._currentDiagramType = 'vm';
+
+    const model = this.app.model;
+    const hasAreas = model.areas && model.areas.size > 0;
+    // Barras y nodos en fantasma para que las caras destaquen.
+    for (const [, line] of this._elemLines) line.material.color.set(0x222840);
+    for (const [, mesh] of this._nodeMeshes) mesh.visible = false;
+    for (const [, grp]  of this._suppGroups)  grp.visible  = false;
+
+    this.colorAreasByVM(results, 0);   // contorno von Mises sobre geometría real
+    const [mn, mx] = this._areaVMrange || [0, 0];
+    this._showResultsUI(hasAreas
+      ? `von Mises (áreas) | máx = ${_fmt(mx)}`
+      : 'Tensiones: el modelo no tiene elementos de área');
   }
 
   // ── Deformada NO LINEAL (NL-lite): solo desplazamientos nodales ────────────
@@ -2346,6 +2384,7 @@ export class Viewport {
   _clickResults(e) {
     const elemHits = this._raycaster.intersectObjects([...this._elemLines.values()].filter(l => l.visible));
     const nodeHits = this._raycaster.intersectObjects([...this._nodeMeshes.values()]);
+    const areaHits = this._raycaster.intersectObjects(this._areaFills());
 
     if (elemHits.length) {
       const elemId = elemHits[0].object.userData.id;
@@ -2353,6 +2392,12 @@ export class Viewport {
     } else if (nodeHits.length) {
       const nodeId = nodeHits[0].object.userData.id;
       if (this._results) this._showNodeInspector(nodeId, e.clientX, e.clientY);
+    } else if (areaHits.length) {
+      // Las áreas no tienen inspector flotante: se muestran en el panel derecho
+      // (tensiones, momentos de placa y desplazamientos nodales).
+      const areaId = areaHits[0].object.userData.id;
+      const area = this.app.model.areas.get(areaId);
+      if (area) { this._hideInspector(); this.app.panel.showArea(area); }
     } else {
       this._hideInspector();
     }

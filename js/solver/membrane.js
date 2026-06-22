@@ -14,7 +14,7 @@
 // Convención de GDL local: [u1,v1, u2,v2, ...] (x,y en el plano del elemento).
 // ──────────────────────────────────────────────────────────────────────────────
 
-import { mitc4Plate, dktPlate, plateMoments } from './plate.js?v=117';
+import { mitc4Plate, dktPlate, plateMoments, plateCurvatures } from './plate.js?v=118';
 
 // Matriz constitutiva D (3×3) plana. planeStrain=false → tensión plana.
 export function Dmatrix(E, nu, planeStrain = false) {
@@ -283,6 +283,44 @@ export function areaStress(area, model, nodeIndex, u, dT = 0) {
   }
   return nN === 3 ? cstStress(cstElement(local, D, area.thickness).B, D, ul, e0)
                   : quadStressCenter(local, D, ul, e0);
+}
+
+// Deformación unitaria de MEMBRANA (en el centro) a partir del campo global u:
+// ε = B·ul = [εx, εy, γxy] en el marco local. Es la deformación geométrica total
+// (no descuenta ε₀ térmica → es lo que realmente se deforma el material).
+export function areaStrain(area, model, nodeIndex, u) {
+  if (!hasMembrane(area)) return null;
+  const S = _areaSetup(area, model, nodeIndex, [0, 0, 0]); if (!S) return null;
+  const { D, ex, ey, gdof, nN, local } = S;
+  const ul = [];
+  for (let a = 0; a < nN; a++) {
+    const U = [u[gdof[a]] || 0, u[gdof[a] + 1] || 0, u[gdof[a] + 2] || 0];
+    ul.push(_dot(ex, U), _dot(ey, U));
+  }
+  const eps = [0, 0, 0];
+  if (nN === 3) {
+    const B = cstElement(local, D, area.thickness).B;
+    for (let r = 0; r < 3; r++) { let s = 0; for (let c = 0; c < 6; c++) s += B[r][c] * ul[c]; eps[r] = s; }
+  } else {
+    const B = bMatrixQ4(local, 0, 0).B;
+    for (let r = 0; r < 3; r++) { let s = 0; for (let c = 0; c < 8; c++) s += B[r][c] * ul[c]; eps[r] = s; }
+  }
+  return eps;
+}
+
+// Curvaturas de FLEXIÓN (placa/shell) en el centro: [κx, κy, κxy] en el marco
+// local. Devuelve null si el área no tiene flexión (membrana pura).
+export function areaCurvature(area, model, nodeIndex, u) {
+  if (!hasPlate(area)) return null;
+  const S = _areaSetup(area, model, nodeIndex, [0, 0, 0]); if (!S) return null;
+  const { ex, ey, ez, gdof, nN, local } = S;
+  const dLocal = [];
+  for (let a = 0; a < nN; a++) {
+    const Ut = [u[gdof[a]] || 0, u[gdof[a] + 1] || 0, u[gdof[a] + 2] || 0];
+    const Ur = [u[gdof[a] + 3] || 0, u[gdof[a] + 4] || 0, u[gdof[a] + 5] || 0];
+    dLocal.push(_dot(ez, Ut), _dot(ex, Ur), _dot(ey, Ur));   // [w, θx, θy]
+  }
+  return plateCurvatures(local, dLocal);
 }
 
 // Tensión de FLEXIÓN en la fibra de superficie (placa/shell): σ = 6·M/t²

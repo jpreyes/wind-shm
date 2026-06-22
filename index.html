@@ -29,8 +29,8 @@
       window.dispatchEvent(new Event('pwa-installed'));
     });
   </script>
-  <link rel="stylesheet" href="style.css?v=117">
-  <link rel="stylesheet" href="ui-v2.css?v=117">
+  <link rel="stylesheet" href="style.css?v=118">
+  <link rel="stylesheet" href="ui-v2.css?v=118">
   <script type="importmap">
   {
     "imports": {
@@ -112,6 +112,7 @@
           <li data-action="res-T">Resultado: Torsión T <kbd>5</kbd></li>
           <li data-action="res-My">Resultado: Momento My <kbd>6</kbd></li>
           <li data-action="res-Mz">Resultado: Momento Mz <kbd>7</kbd></li>
+          <li data-action="res-vm">Resultado: Tensiones áreas (von Mises) <kbd>8</kbd></li>
         </ul>
       </div>
 
@@ -333,6 +334,7 @@
             <option value="T">Torsión T</option>
             <option value="My">Momento My</option>
             <option value="Mz">Momento Mz</option>
+            <option value="vm" hidden disabled>Tensiones áreas (von Mises)</option>
           </select>
         </div>
         <div class="vp-ctrl" title="Factor de escala relativo: 1 = ajuste automático normalizado. Doble clic en el número para volver a 1.">
@@ -942,7 +944,7 @@
 
 <!-- numeric.js para solver (Fase 2+) -->
 <script src="lib/numeric.js"></script>
-<script type="module" src="js/app.js?v=117"></script>
+<script type="module" src="js/app.js?v=118"></script>
 
 <!-- PWA: registrar el service worker (offline). Solo en contexto seguro
      (https o localhost); el navegador deja navigator.serviceWorker undefined
