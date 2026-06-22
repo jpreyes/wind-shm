@@ -1,27 +1,29 @@
 // ──────────────────────────────────────────────────────────────────────────────
 // App — main orchestrator
 // ──────────────────────────────────────────────────────────────────────────────
-import { Model }           from './model/model.js?v=121';
-import { Serializer }      from './model/serializer.js?v=121';
-import { Viewport }        from './ui/viewport.js?v=121';
-import { PropertiesPanel } from './ui/properties.js?v=121';
-import { MenuBar }         from './ui/menu.js?v=121';
-import { UndoStack }       from './utils/undo.js?v=121';
-import { StaticSolver, ensureDefaultLC }   from './solver/static_solver.js?v=121';
-import { Results }                         from './solver/postprocess.js?v=121';
-import { ModalSolver }                     from './solver/modal_solver.js?v=121';
-import { buildNodeIndex, assembleK, assembleF, getNodeDOFs } from './solver/assembler.js?v=121';
-import { assembleSparseGlobal, extractFreeCSR } from './solver/sparse.js?v=121';
-import { solveNonlinear, solveNonlinearDC } from './solver/nl_lite.js?v=121';
-import { assembleKg } from './solver/geometric.js?v=121';
-import { makeFactor } from './solver/linsolve.js?v=121';
-import { formFind } from './solver/formfind.js?v=121';
-import { ModalResults }                    from './solver/modal_results.js?v=121';
-import { SpectrumSolver }                  from './solver/spectrum_solver.js?v=121';
-import { autoDetectDiaphragms, computeFloorCR, applyDiaphragmConstraints } from './solver/diaphragm.js?v=121';
-import { splitElement, splitByLength, discretizeAll, joinElements, intersectarElementos } from './model/discretize.js?v=121';
-import { localAxes, stiffnessMatrix, massMatrix, transformMatrix, globalStiffness, applyReleases } from './solver/timoshenko.js?v=121';
-import { bilinearGrid, blockCells, cornerGridIndices } from './model/mesher.js?v=121';
+import { Model }           from './model/model.js?v=122';
+import { Serializer }      from './model/serializer.js?v=122';
+import { Viewport }        from './ui/viewport.js?v=122';
+import { PropertiesPanel } from './ui/properties.js?v=122';
+import { MenuBar }         from './ui/menu.js?v=122';
+import { UndoStack }       from './utils/undo.js?v=122';
+import { StaticSolver, ensureDefaultLC }   from './solver/static_solver.js?v=122';
+import { Results }                         from './solver/postprocess.js?v=122';
+import { ModalSolver }                     from './solver/modal_solver.js?v=122';
+import { buildNodeIndex, assembleK, assembleF, getNodeDOFs } from './solver/assembler.js?v=122';
+import { assembleSparseGlobal, extractFreeCSR } from './solver/sparse.js?v=122';
+import { solveNonlinear, solveNonlinearDC } from './solver/nl_lite.js?v=122';
+import { assembleKg } from './solver/geometric.js?v=122';
+import { makeFactor } from './solver/linsolve.js?v=122';
+import { formFind } from './solver/formfind.js?v=122';
+import { ModalResults }                    from './solver/modal_results.js?v=122';
+import { modalTimeHistory }                from './solver/timehistory.js?v=122';
+import { parseAccelerogram, accStats, scaleToPGA, DEMO_PRESETS, G as GACC } from './solver/accelerograms.js?v=122';
+import { SpectrumSolver }                  from './solver/spectrum_solver.js?v=122';
+import { autoDetectDiaphragms, computeFloorCR, applyDiaphragmConstraints } from './solver/diaphragm.js?v=122';
+import { splitElement, splitByLength, discretizeAll, joinElements, intersectarElementos } from './model/discretize.js?v=122';
+import { localAxes, stiffnessMatrix, massMatrix, transformMatrix, globalStiffness, applyReleases } from './solver/timoshenko.js?v=122';
+import { bilinearGrid, blockCells, cornerGridIndices } from './model/mesher.js?v=122';
 
 class App {
   constructor() {
@@ -1278,7 +1280,8 @@ class App {
   async _runByAction(act, opts = {}) {
     const fn = {
       'run': () => this.runAnalysis(), 'run-modal': () => this.runModal(opts),
-      'run-spectrum': () => this.runSpectrum(opts), 'run-nonlinear': () => this.runNonlinear(opts),
+      'run-spectrum': () => this.runSpectrum(opts), 'run-timehistory': () => this.runTimeHistory(opts),
+      'run-nonlinear': () => this.runNonlinear(opts),
       'run-pdelta': () => this.runPDelta(opts), 'run-buckling': () => this.runBuckling(opts),
       'run-formfind': () => this.runFormFinding(opts), 'run-plastic': () => this.runPlastic(opts),
       'run-pushover-dc': () => this.runPushoverDC(opts),
@@ -1616,7 +1619,7 @@ class App {
   _staticWorkerSolve(K, nDOF, freeDOF, Flist, dense = false) {
     return new Promise((resolve, reject) => {
       let worker;
-      try { worker = new Worker(new URL('./solver/static_worker.js?v=121', import.meta.url), { type: 'module' }); }
+      try { worker = new Worker(new URL('./solver/static_worker.js?v=122', import.meta.url), { type: 'module' }); }
       catch (e) { reject(e); return; }
       this._staticWorker = worker;
       const cancelar = () => { try { worker.terminate(); } catch (e) {} this._staticWorker = null; this._hideProgress(); reject(new Error('cancelado')); };
@@ -1645,7 +1648,7 @@ class App {
   _staticWorkerSolveSparse(csr, cf, nDOF, freeDOF, Flist) {
     return new Promise((resolve, reject) => {
       let worker;
-      try { worker = new Worker(new URL('./solver/static_worker.js?v=121', import.meta.url), { type: 'module' }); }
+      try { worker = new Worker(new URL('./solver/static_worker.js?v=122', import.meta.url), { type: 'module' }); }
       catch (e) { reject(e); return; }
       this._staticWorker = worker;
       const cancelar = () => { try { worker.terminate(); } catch (e) {} this._staticWorker = null; this._hideProgress(); reject(new Error('cancelado')); };
@@ -1824,8 +1827,11 @@ class App {
     this._dcResult = null;
     this._nlResult = null;
     this._pdResult = null;
+    this._thResult = null;
     this._plasticStopPlay?.();
+    this._thStopPlay?.();
     document.getElementById('pl-overlay')?.remove();
+    document.getElementById('th-overlay')?.remove();
     this.viewport.clearResults();
     // Apagar la visualización de reacciones
     this._showReactions = false;
@@ -1933,7 +1939,7 @@ class App {
       // ── Run Stodola in a Web Worker (non-blocking) ───────────────────────────
       const denseModal = !!this._config?.analisis?.matrizDensa;
       const modes = await new Promise((resolve, reject) => {
-        const worker = new Worker(new URL('./solver/modal_worker.js?v=121', import.meta.url), { type: 'module' });
+        const worker = new Worker(new URL('./solver/modal_worker.js?v=122', import.meta.url), { type: 'module' });
         worker.postMessage({ Kff_flat, Mff_flat, nF, nModes, dense: denseModal, method: modalMethod },
           [Kff_flat.buffer, Mff_flat.buffer]); // transfer — zero copy
         worker.onmessage = (ev) => {
@@ -2274,6 +2280,307 @@ class App {
     }, 20));
   }
 
+  // ── G12 · Análisis dinámico en el TIEMPO (time-history modal lineal) #48 ─────
+  // Modal (subespacio, en worker) → factor de participación Γ por modo para la
+  // dirección de excitación → integración de Duhamel (Nigam–Jennings) por modo en
+  // un worker → superposición u(t)=Σφᵢqᵢ(t). Excitación uniforme en la base.
+  async runTimeHistory(opts = {}) {
+    const model = this.model;
+    if (model.nodes.size === 0 || (model.elements.size === 0 && (model.areas?.size || 0) === 0)) {
+      this.toast('El modelo debe tener nodos y elementos', 'warn'); return;
+    }
+    const hasSupport = [...model.nodes.values()].some(n =>
+      Object.values(n.restraints).some(v => v) || (n.springs && Object.values(n.springs).some(k => k > 0)));
+    if (!hasSupport) { this.toast('El modelo no tiene apoyos', 'warn'); return; }
+
+    const thOpts = opts.silent ? this._thDefaults() : await this._timeHistoryDialog();
+    if (!thOpts) return;
+    const { dir, zeta, nModes, ag, dt, agName } = thOpts;
+    if (!ag || ag.length < 2) { this.toast('Acelerograma vacío o no reconocido.', 'warn'); return; }
+    this._lastTH = { dir, zeta, nModes };
+
+    if (this.viewport._inResultsMode) this.viewport.clearResults();
+    const btn = document.getElementById('btn-run'); if (btn) btn.classList.add('running');
+    document.getElementById('sb-mode').textContent = 'Time-history…';
+    this._showProgress('Time-history…', 'Modal + integración de Duhamel por modo (en segundo plano)');
+    await new Promise(r => setTimeout(r, 20));
+    try {
+      this._applyAutoDiscIfEnabled();
+      const nodeIndex = buildNodeIndex(model);
+      const { K, M, nDOF } = assembleK(model, nodeIndex);
+      const is2D = model.mode === '2D';
+      const freeDOF = [];
+      for (const node of model.nodes.values()) {
+        const d = getNodeDOFs(nodeIndex, node.id), r = node.restraints;
+        [r.ux, is2D ? 1 : r.uy, r.uz, is2D ? 1 : r.rx, r.ry, is2D ? 1 : r.rz].forEach((fx, li) => { if (!fx) freeDOF.push(d[li]); });
+      }
+      if (!freeDOF.length) throw new Error('No hay GDL libres.');
+      const nF = freeDOF.length;
+      const Kff = new Float64Array(nF * nF), Mff = new Float64Array(nF * nF);
+      for (let i = 0; i < nF; i++) { const ri = freeDOF[i] * nDOF; for (let j = 0; j < nF; j++) { Kff[i * nF + j] = K[ri + freeDOF[j]]; Mff[i * nF + j] = M[ri + freeDOF[j]]; } }
+
+      // Modal por iteración de subespacio en worker (no bloquea la UI).
+      const dense = !!this._config?.analisis?.matrizDensa;
+      const rawModes = await new Promise((resolve, reject) => {
+        const w = new Worker(new URL('./solver/modal_worker.js?v=122', import.meta.url), { type: 'module' });
+        w.postMessage({ Kff_flat: Kff, Mff_flat: Mff, nF, nModes, dense, method: 'subspace' }, [Kff.buffer, Mff.buffer]);
+        w.onmessage = ev => { w.terminate(); ev.data.error ? reject(new Error(ev.data.error)) : resolve(ev.data.modes); };
+        w.onerror = ev => { w.terminate(); reject(new Error(ev.message || 'Error en worker modal')); };
+      });
+      if (!rawModes.length) throw new Error('Sin modos (¿masa nula? asigne ρ al material o masa al diafragma).');
+
+      // Vector de influencia r (unidad en el GDL traslacional de la dirección) y M·r.
+      const dirComp = dir === 'X' ? 0 : dir === 'Y' ? 1 : 2;
+      const dirDofs = [];
+      for (const node of model.nodes.values()) dirDofs.push(getNodeDOFs(nodeIndex, node.id)[dirComp]);
+      const Mr = new Float64Array(nDOF);
+      for (let i = 0; i < nDOF; i++) { let s = 0; const ri = i * nDOF; for (const dd of dirDofs) s += M[ri + dd]; Mr[i] = s; }
+
+      // Por modo: φ (nDOF), masa generalizada, Γ = (φᵀMr)/(φᵀMφ), ω.
+      const modes = rawModes.map(m => {
+        const phi = new Float64Array(nDOF);
+        for (let i = 0; i < nF; i++) phi[freeDOF[i]] = m.vec[i];
+        // M·φ y genMass
+        let genM = 0, L = 0;
+        for (let i = 0; i < nDOF; i++) {
+          let mp = 0; const ri = i * nDOF; for (let j = 0; j < nF; j++) mp += M[ri + freeDOF[j]] * m.vec[j];
+          genM += phi[i] * mp; L += phi[i] * Mr[i];
+        }
+        const omega = Math.sqrt(Math.max(m.omega2 ?? (m.omega * m.omega), 0));
+        return { omega, gamma: genM > 1e-30 ? L / genM : 0, phi };
+      });
+
+      // Integración de Duhamel por modo en worker.
+      const { q, peakModal } = await this._thSolveInWorker(modes.map(m => ({ omega: m.omega, gamma: m.gamma })), ag, dt, zeta);
+
+      // Nodo/GDL monitor: el GDL traslacional (en la dirección) de mayor respuesta pico.
+      const nSteps = ag.length;
+      let monitorDOF = freeDOF[0], monitorNodeId = null, peakU = -1;
+      for (const node of model.nodes.values()) {
+        const d = getNodeDOFs(nodeIndex, node.id)[dirComp];
+        // sólo GDL libres
+        let isFree = false; for (let i = 0; i < nF; i++) if (freeDOF[i] === d) { isFree = true; break; }
+        if (!isFree) continue;
+        let pk = 0;
+        for (let k = 0; k < nSteps; k++) { let u = 0; for (let i = 0; i < modes.length; i++) u += modes[i].phi[d] * q[i][k]; const au = Math.abs(u); if (au > pk) pk = au; }
+        if (pk > peakU) { peakU = pk; monitorDOF = d; monitorNodeId = node.id; }
+      }
+
+      const stats = accStats(ag, dt);
+      this._thResult = { dt, q, peakModal, modes, nodeIndex, freeDOF, nF, dir, zeta, ag, agName, nSteps, monitorDOF, monitorNodeId, stats, peakU };
+      const f1 = (modes[0].omega / (2 * Math.PI)).toFixed(3), T1 = (2 * Math.PI / modes[0].omega).toFixed(3);
+      this.toast(`Time-history OK · ${modes.length} modos · ${dir} · PGA ${stats.pga.toFixed(2)} m/s² · u_máx ${peakU.toExponential(2)} m (nodo ${monitorNodeId}) · T₁=${T1}s`, 'ok');
+      this._thOpenOverlay();
+      this._updateResultsIndicator();
+    } catch (err) {
+      this.toast(`Time-history: ${err.message}`, 'error'); console.error(err);
+    } finally {
+      if (btn) btn.classList.remove('running');
+      this._hideProgress();
+      document.getElementById('sb-mode').textContent = 'Modo: Time-history';
+    }
+  }
+
+  _thDefaults() {
+    const d = this._lastTH || {};
+    const demo = DEMO_PRESETS.synthetic();
+    return { dir: d.dir || 'X', zeta: d.zeta ?? 0.05, nModes: d.nModes || 10, ag: demo.a, dt: demo.dt, agName: demo.name };
+  }
+
+  // Integra las coordenadas modales en un Web Worker (fallback al hilo principal).
+  _thSolveInWorker(modes, ag, dt, zeta) {
+    return new Promise((resolve, reject) => {
+      let w;
+      try { w = new Worker(new URL('./solver/timehistory_worker.js?v=122', import.meta.url), { type: 'module' }); }
+      catch (e) {
+        try { const r = modalTimeHistory({ modes: modes.map(m => ({ ...m, phi: new Float64Array(0) })), ag, dt, zeta }); resolve({ q: r.q, peakModal: r.peakModal }); }
+        catch (err) { reject(err); }
+        return;
+      }
+      w.onmessage = ev => { w.terminate(); ev.data.error ? reject(new Error(ev.data.error)) : resolve(ev.data); };
+      w.onerror = ev => { w.terminate(); reject(new Error(ev.message || 'Error en worker time-history')); };
+      w.postMessage({ modes, ag, dt, zeta });
+    });
+  }
+
+  // Historia de un GDL global (superposición modal).
+  _thNodalDOF(dof) {
+    const { q, modes, nSteps } = this._thResult;
+    const h = new Float64Array(nSteps);
+    for (let i = 0; i < modes.length; i++) { const c = modes[i].phi[dof], qi = q[i]; if (!c) continue; for (let k = 0; k < nSteps; k++) h[k] += c * qi[k]; }
+    return h;
+  }
+
+  // Vector de desplazamientos completo en el paso `step`.
+  _thUAt(step) {
+    const { q, modes, nodeIndex } = this._thResult;
+    const nDOF = nodeIndex.size * 6, u = new Float64Array(nDOF);
+    for (let i = 0; i < modes.length; i++) { const qi = q[i][step]; if (!qi) continue; const phi = modes[i].phi; for (let d = 0; d < nDOF; d++) u[d] += phi[d] * qi; }
+    return u;
+  }
+
+  /** Diálogo HTML — opciones del time-history (dirección, ζ, modos, acelerograma). */
+  _timeHistoryDialog() {
+    return new Promise(resolve => {
+      const overlay = document.getElementById('modal-overlay');
+      document.getElementById('modal-title').textContent = 'Time-history modal (acelerograma en la base)';
+      document.getElementById('modal-cancel').style.display = '';
+      const d = this._lastTH || {};
+      document.getElementById('modal-body').innerHTML = `
+        <div class="prop-row">
+          <div class="prop-field"><label>Dirección de excitación</label>
+            <select id="th-dir"><option value="X" ${d.dir==='X'?'selected':''}>X</option><option value="Y" ${d.dir==='Y'?'selected':''}>Y</option><option value="Z" ${d.dir==='Z'?'selected':''}>Z (vertical)</option></select></div>
+          <div class="prop-field"><label>N° de modos</label><input type="number" id="th-nmodes" value="${d.nModes||10}" min="1" max="40" step="1" style="width:80px"></div>
+          <div class="prop-field"><label>Amortiguamiento ζ (%)</label><input type="number" id="th-zeta" value="${((d.zeta??0.05)*100)}" min="0" max="20" step="0.5" style="width:80px"></div>
+        </div>
+        <div class="prop-row cols1" style="margin-top:8px">
+          <div class="prop-field"><label>Acelerograma</label>
+            <select id="th-source">
+              <option value="ricker">Demo — Pulso de Ricker (sintético)</option>
+              <option value="harmonic">Demo — Armónico (sintético)</option>
+              <option value="synthetic" selected>Demo — Sismo sintético (NO es real)</option>
+              <option value="paste">Pegar / cargar registro (t a) o (a)…</option>
+            </select></div>
+        </div>
+        <div id="th-paste-box" style="display:none;margin-top:6px">
+          <textarea id="th-text" rows="5" placeholder="Pegue el registro: dos columnas «t a» (s, m/s²) o una columna «a» con Δt.\nLíneas con # o texto se ignoran." style="width:100%;font-family:var(--font-mono);font-size:11px"></textarea>
+          <div class="prop-row" style="margin-top:4px">
+            <div class="prop-field"><label>Δt si es 1 columna (s)</label><input type="number" id="th-dt" value="0.01" min="0.0005" step="0.005" style="width:90px"></div>
+            <div class="prop-field"><label>Archivo</label><input type="file" id="th-file" accept=".txt,.csv,.acc,.dat,.at2"></div>
+          </div>
+        </div>
+        <div class="prop-row" style="margin-top:6px">
+          <div class="prop-field"><label>Escalar a PGA (m/s², 0 = no escalar)</label><input type="number" id="th-pga" value="0" min="0" step="0.5" style="width:100px"></div>
+          <div class="prop-field" style="justify-content:flex-end"><span style="color:var(--text-muted);font-size:11px">Excitación uniforme en la base.<br>Integración de Duhamel por modo.</span></div>
+        </div>
+        <div class="prop-row cols1" style="margin-top:6px"><span style="color:var(--text-muted);font-size:11px;line-height:1.5">
+          Los registros «demo» son <b>sintéticos</b> (no son sismos reales). Para usar Llolleo/Constitución 2010 u otro, péguelo o cárguelo como texto (t a).</span></div>`;
+      overlay.classList.remove('hidden');
+      const srcSel = document.getElementById('th-source');
+      const pasteBox = document.getElementById('th-paste-box');
+      srcSel.addEventListener('change', () => { pasteBox.style.display = srcSel.value === 'paste' ? '' : 'none'; });
+      document.getElementById('th-file').addEventListener('change', async (e) => {
+        const f = e.target.files?.[0]; if (!f) return;
+        document.getElementById('th-text').value = await f.text();
+      });
+      overlay._resolve = () => {
+        const dir = document.getElementById('th-dir').value;
+        const nModes = Math.max(1, Math.min(40, parseInt(document.getElementById('th-nmodes').value) || 10));
+        const zeta = Math.max(0, Math.min(0.2, (parseFloat(document.getElementById('th-zeta').value) || 5) / 100));
+        const pga = parseFloat(document.getElementById('th-pga').value) || 0;
+        const src = srcSel.value;
+        let ag, dt, agName;
+        if (src === 'paste') {
+          const dtF = parseFloat(document.getElementById('th-dt').value) || 0.01;
+          const parsed = parseAccelerogram(document.getElementById('th-text').value, dtF);
+          if (!parsed.ok) { this.toast('Registro: ' + parsed.note, 'warn'); return; }   // no resuelve → reintenta
+          ag = parsed.a; dt = parsed.dt; agName = `Registro cargado (${parsed.n} pts, Δt=${dt.toFixed(4)}s)`;
+        } else {
+          const demo = DEMO_PRESETS[src](); ag = demo.a; dt = demo.dt; agName = demo.name;
+        }
+        if (pga > 0) ag = scaleToPGA(ag, pga);
+        overlay.classList.add('hidden');
+        resolve({ dir, zeta, nModes, ag, dt, agName });
+      };
+      overlay._reject = () => resolve(null);
+    });
+  }
+
+  // Panel flotante: curva de respuesta del nodo monitor + animación en el tiempo.
+  _thOpenOverlay() {
+    const R = this._thResult;
+    R._hist = this._thNodalDOF(R.monitorDOF);
+    let pkStep = 0, pk = 0; for (let k = 0; k < R.nSteps; k++) { const a = Math.abs(R._hist[k]); if (a > pk) { pk = a; pkStep = k; } }
+    R._pkStep = pkStep;
+    // SVG de la historia u(t) del nodo monitor
+    const W = 280, H = 110, ml = 4, mr = 4, mt = 8, mb = 4, n = R.nSteps;
+    const hmax = pk || 1e-30, tmax = (n - 1) * R.dt || 1;
+    const sx = k => ml + (W - ml - mr) * (k * R.dt) / tmax;
+    const sy = u => mt + (H - mt - mb) * (1 - (u / hmax + 1) / 2);
+    let poly = ''; const stepDraw = Math.max(1, Math.floor(n / 700));
+    for (let k = 0; k < n; k += stepDraw) poly += `${sx(k).toFixed(1)},${sy(R._hist[k]).toFixed(1)} `;
+    const y0 = sy(0).toFixed(1);
+    R._svg = (k) => `<svg viewBox="0 0 ${W} ${H}" style="width:100%;height:${H}px;background:var(--bg3,#0b1220);border-radius:6px">
+      <line x1="${ml}" y1="${y0}" x2="${W - mr}" y2="${y0}" stroke="var(--border,#26324d)" stroke-width="1"/>
+      <polyline points="${poly}" fill="none" stroke="var(--accent,#38bdf8)" stroke-width="1.3"/>
+      <circle cx="${sx(k).toFixed(1)}" cy="${sy(R._hist[k]).toFixed(1)}" r="3.2" fill="#f59e0b"/>
+    </svg>`;
+
+    let el = document.getElementById('th-overlay');
+    if (!el) { el = document.createElement('div'); el.id = 'th-overlay'; document.body.appendChild(el); }
+    el.style.cssText = 'position:fixed;right:16px;bottom:84px;z-index:50;background:var(--bg4);border:1px solid var(--border);border-radius:8px;padding:10px 12px;width:300px;box-shadow:0 8px 24px rgba(0,0,0,.4);font-size:12px;color:var(--text)';
+    el.innerHTML = `
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
+        <b style="color:var(--accent,#38bdf8)">Respuesta en el tiempo</b>
+        <button id="th-close" title="Cerrar" style="background:none;border:none;color:var(--text-muted,#94a3b8);cursor:pointer;font-size:16px;line-height:1">✕</button>
+      </div>
+      <div style="color:var(--text-muted,#94a3b8);font-size:11px;margin-bottom:4px">u<sub>${R.dir}</sub>(t) · nodo ${R.monitorNodeId}</div>
+      <div id="th-plot"></div>
+      <div style="display:flex;align-items:center;gap:6px;margin:6px 0">
+        <button id="th-play" class="btn-secondary" style="font-size:14px;padding:2px 8px">▶</button>
+        <input type="range" id="th-step" min="0" max="${n - 1}" value="${pkStep}" style="flex:1">
+      </div>
+      <div id="th-readout" style="color:var(--text-muted,#94a3b8);font-size:11px;line-height:1.5;margin-bottom:6px"></div>
+      <div style="display:flex;align-items:center;gap:6px;justify-content:space-between">
+        <span style="display:flex;align-items:center;gap:6px"><label style="color:var(--text-muted)">Escala ×</label>
+          <input type="number" id="th-scale" value="1" min="0.05" step="0.5" style="width:60px"></span>
+        <span style="display:flex;gap:6px">
+          <button id="th-peak" class="btn-secondary" style="font-size:11px;padding:2px 6px" title="Ir al instante de máxima respuesta">Máx</button>
+          <button id="th-export" class="btn-secondary" style="font-size:11px;padding:2px 6px">⤓ CSV</button>
+        </span>
+      </div>`;
+    const stepInp = el.querySelector('#th-step'), scaleInp = el.querySelector('#th-scale'), playBtn = el.querySelector('#th-play');
+    const redraw = () => this._thShowStep(+stepInp.value);
+    stepInp.addEventListener('input', redraw);
+    scaleInp.addEventListener('input', redraw);
+    el.querySelector('#th-peak').addEventListener('click', () => { stepInp.value = R._pkStep; redraw(); });
+    el.querySelector('#th-export').addEventListener('click', () => this._thExportCSV());
+    el.querySelector('#th-close').addEventListener('click', () => { this._thStopPlay(); el.remove(); this.viewport.clearResults(); });
+    playBtn.addEventListener('click', () => {
+      if (this._thPlayTimer) { this._thStopPlay(); playBtn.textContent = '▶'; return; }
+      playBtn.textContent = '⏸';
+      const stride = Math.max(1, Math.floor(n / 240));
+      this._thPlayTimer = setInterval(() => { let v = +stepInp.value + stride; if (v > n - 1) v = 0; stepInp.value = v; redraw(); }, 60);
+    });
+    redraw();
+  }
+
+  _thStopPlay() { if (this._thPlayTimer) { clearInterval(this._thPlayTimer); this._thPlayTimer = null; } }
+
+  _thShowStep(step) {
+    const R = this._thResult; if (!R) return;
+    step = Math.max(0, Math.min(step, R.nSteps - 1));
+    const u = this._thUAt(step);
+    const uByNode = new Map();
+    for (const node of this.model.nodes.values()) {
+      const d = getNodeDOFs(R.nodeIndex, node.id);
+      uByNode.set(node.id, [u[d[0]], u[d[1]], u[d[2]]]);
+    }
+    const factor = parseFloat(document.getElementById('th-scale')?.value) || 1;
+    const t = step * R.dt, ag = R.ag[step];
+    let dmax = 0; for (const v of uByNode.values()) dmax = Math.max(dmax, Math.hypot(v[0], v[1], v[2]));
+    this.viewport.showNLDeformed(uByNode, new Map(), factor,
+      `Time-history · t=${t.toFixed(3)}s · a_g=${ag.toFixed(3)} m/s² · δmax=${dmax.toExponential(2)} m`);
+    const plot = document.getElementById('th-plot'); if (plot && R._svg) plot.innerHTML = R._svg(step);
+    const ro = document.getElementById('th-readout');
+    if (ro) ro.innerHTML = `t = <b>${t.toFixed(3)} s</b> / ${((R.nSteps - 1) * R.dt).toFixed(2)} s · a_g = ${ag.toFixed(3)} m/s²<br>`
+      + `u<sub>${R.dir}</sub>(nodo ${R.monitorNodeId}) = ${R._hist[step].toExponential(3)} m · |u|máx = <b>${R.peakU.toExponential(3)} m</b><br>`
+      + `${R.modes.length} modos · ζ=${(R.zeta * 100).toFixed(1)}% · PGA=${R.stats.pga.toFixed(2)} m/s² · ${R.agName}`;
+  }
+
+  _thExportCSV() {
+    const R = this._thResult; if (!R) return;
+    const h = R._hist || this._thNodalDOF(R.monitorDOF);
+    let csv = `# Time-history modal · dir ${R.dir} · ${R.modes.length} modos · zeta ${(R.zeta*100).toFixed(1)}% · ${R.agName}\n`;
+    csv += `t[s],a_g[m/s2],u_${R.dir}_nodo${R.monitorNodeId}[m]\n`;
+    for (let k = 0; k < R.nSteps; k++) csv += `${(k*R.dt).toFixed(5)},${R.ag[k].toFixed(6)},${h[k].toExponential(6)}\n`;
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' });
+    const a = document.createElement('a'); a.href = URL.createObjectURL(blob);
+    a.download = `timehistory_${R.dir}_nodo${R.monitorNodeId}.csv`; a.click();
+    URL.revokeObjectURL(a.href);
+    this.toast('Historia exportada (t, a_g, u del nodo monitor)', 'ok');
+  }
+
   // Ejecuta un solver de nl_lite (Newton corotacional denso) en un Web Worker
   // para no congelar la UI en modelos grandes (#44). kind: 'nl' = control de
   // carga (solveNonlinear), 'dc' = control de desplazamiento (solveNonlinearDC).
@@ -2283,7 +2590,7 @@ class App {
     return new Promise((resolve, reject) => {
       let worker;
       try {
-        worker = new Worker(new URL('./solver/nl_worker.js?v=121', import.meta.url), { type: 'module' });
+        worker = new Worker(new URL('./solver/nl_worker.js?v=122', import.meta.url), { type: 'module' });
       } catch (e) {
         try { resolve(kind === 'dc' ? solveNonlinearDC(opts) : solveNonlinear(opts)); }
         catch (err) { reject(err); }
@@ -2540,7 +2847,7 @@ class App {
 
       // Iteración de subespacio en el Worker (no bloquea la UI)
       const rawModes = await new Promise((resolve, reject) => {
-        const worker = new Worker(new URL('./solver/buckling_worker.js?v=121', import.meta.url), { type: 'module' });
+        const worker = new Worker(new URL('./solver/buckling_worker.js?v=122', import.meta.url), { type: 'module' });
         worker.postMessage({ Kff_flat, Kgff_flat, nF, nModes, dense },
           [Kff_flat.buffer, Kgff_flat.buffer]);   // transfer — zero copy
         worker.onmessage = (ev) => { worker.terminate(); ev.data.error ? reject(new Error(ev.data.error)) : resolve(ev.data.modes); };
@@ -4087,6 +4394,9 @@ class App {
       this._dcResult = null;
       this._nlResult = null;
       this._pdResult = null;
+      this._thResult = null;
+      this._thStopPlay?.();
+      document.getElementById('th-overlay')?.remove();
       if (!keepResults) { this._modalResults = null; this._spectrumResults.clear(); }
       this._results = null;
       this._resultsByCase = null;
@@ -4259,7 +4569,7 @@ class App {
               selectedNodes: sel.filter(s => s.type === 'node').map(s => s.id) };
     }
     this.snapshot();
-    const { aplicarOperaciones } = await import('./model/model_ops.js?v=121');
+    const { aplicarOperaciones } = await import('./model/model_ops.js?v=122');
     const res = aplicarOperaciones(this.model, ops, ctx);
     // los resultados previos dejan de ser válidos tras modificar la geometría/cargas
     this.viewport.clearResults?.();
@@ -4307,7 +4617,7 @@ class App {
     this._showProgress('Generando el modelo…', 'Aplicando reglas y cargas normativas');
     try {
       const libs = await this._cargarBibliotecasAsistente();
-      const { generarModelo } = await import('../asistente/generador.js?v=121');
+      const { generarModelo } = await import('../asistente/generador.js?v=122');
       const modelo = generarModelo(ficha, libs);
 
       if (modo === 'sobreponer') {
@@ -5367,7 +5677,7 @@ class App {
     const deflex = this._calcularDeflexionesVigas(diseno?.params);
     const drift  = this._calcularDrift();
     try {
-      const { Docx } = await import('./io/docx.js?v=121');
+      const { Docx } = await import('./io/docx.js?v=122');
       const blob = this._memoriaDocx(Docx, imgs, diseno, deflex, drift).blob();
       this._downloadBlob(blob, 'memoria_calculo.docx');
       this.toast('Memoria Word (.docx) descargada', 'ok');
@@ -5538,7 +5848,7 @@ class App {
   // Verificación de diseño (flexión/corte/axial) por elemento, usando los
   // resultados actuales y los parámetros editables de asistente/diseno_params.json.
   async _calcularDiseno() {
-    const ver = '?v=121';
+    const ver = '?v=122';
     let params = null;
     try { params = await fetch('asistente/diseno_params.json' + ver).then(r => r.json()); }
     catch (e) { console.error('No se pudo cargar diseno_params.json:', e); return null; }

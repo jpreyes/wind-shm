@@ -29,8 +29,8 @@
       window.dispatchEvent(new Event('pwa-installed'));
     });
   </script>
-  <link rel="stylesheet" href="style.css?v=121">
-  <link rel="stylesheet" href="ui-v2.css?v=121">
+  <link rel="stylesheet" href="style.css?v=122">
+  <link rel="stylesheet" href="ui-v2.css?v=122">
   <script type="importmap">
   {
     "imports": {
@@ -137,6 +137,7 @@
               <li data-action="run">▶ Estático — todos los casos y combos <kbd>F5</kbd></li>
               <li data-action="run-modal">▶ Modal… <kbd>F6</kbd></li>
               <li data-action="run-spectrum">▶ Espectro de Respuesta… <kbd>F7</kbd></li>
+              <li data-action="run-timehistory">▶ Time-history modal — acelerograma…</li>
             </ul>
           </li>
           <li class="menu-sub">
@@ -956,7 +957,7 @@
 
 <!-- numeric.js para solver (Fase 2+) -->
 <script src="lib/numeric.js"></script>
-<script type="module" src="js/app.js?v=121"></script>
+<script type="module" src="js/app.js?v=122"></script>
 
 <!-- PWA: registrar el service worker (offline). Solo en contexto seguro
      (https o localhost); el navegador deja navigator.serviceWorker undefined
