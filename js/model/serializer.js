@@ -23,6 +23,10 @@ export class Serializer {
       grids:        model.grids || { x: [], y: [], z: [] },
       _counters:   { ...model._cnt }
     };
+    // NOTA: `memoria` (#41) y `analysisParams` (#39) NO se incluyen aquí a propósito.
+    // Esta serialización alimenta `_modelSig` (caché de resultados) y debe depender
+    // sólo de la geometría/cargas. Esos datos por-proyecto los embebe `_fullSaveJSON`
+    // al guardar en disco y los lee `fromJSON` más abajo.
     return JSON.stringify(obj, null, 2);
   }
 
@@ -62,6 +66,9 @@ export class Serializer {
     }
     for (const d of (obj.combinations || [])) { m.combinations.set(d.id, d); }
     m.grids = obj.grids || { x: [], y: [], z: [] };
+    // Datos por proyecto (#41 / #39); ausentes en archivos viejos → null (defaults app).
+    m.memoria        = obj.memoria || null;
+    m.analysisParams = obj.analysisParams || null;
 
     if (obj._counters) {
       m._cnt = { ...m._cnt, ...obj._counters };

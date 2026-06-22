@@ -3903,6 +3903,9 @@ class App {
       this._resultsByCase = null;
       this._activeLcId = ensureDefaultLC(this.model);
       this._activeResultKey = this._activeLcId;
+      // Restaurar los parámetros de ejecución guardados en el archivo (#39). Se
+      // hace ANTES de adoptar resultados embebidos, que re-alinean el auto-disc.
+      this._applyAnalysisParams(this.model.analysisParams);
       // Resultados embebidos en el archivo → adoptarlos (queda "ya corrido").
       // Si no hay, descartar la caché salvo en recuperación de sesión / ejemplo,
       // donde la firma decidirá después si los resultados guardados sirven.
@@ -4224,6 +4227,52 @@ class App {
   }
   _saveConfig() { try { localStorage.setItem('portico_config', JSON.stringify(this._config)); } catch (e) {} }
 
+  // ── Memoria POR PROYECTO (#41) ──────────────────────────────────────────────
+  // Campos del encabezado/memoria que viajan con el modelo (en el .s3d). El logo
+  // de empresa NO: es branding del despacho, igual en todos los proyectos → global.
+  static get _MEMORIA_PROJ_KEYS() {
+    return ['titulo','kicker','institucion','subInstitucion','proyectista','revisor',
+            'descripcion','footer','limitaciones','mostrarIds','modosVisibles'];
+  }
+  // Memoria EFECTIVA: defaults globales (config) sobrescritos por los del modelo.
+  // Compatible con archivos viejos (model.memoria == null → sólo config).
+  _memoria() {
+    return { ...this._config.memoria, ...(this.model?.memoria || {}) };
+  }
+  // Subconjunto por-proyecto de la memoria efectiva (para guardar en el .s3d).
+  _projectMemoria() {
+    const eff = this._memoria(), out = {};
+    for (const k of App._MEMORIA_PROJ_KEYS) if (eff[k] !== undefined) out[k] = eff[k];
+    return out;
+  }
+
+  // ── Parámetros de ejecución (#39) ───────────────────────────────────────────
+  // Reúne los parámetros con que se corren los análisis para guardarlos en el .s3d.
+  _gatherAnalysisParams() {
+    return {
+      autoDisc:    !!document.getElementById('auto-disc')?.checked,
+      autoDiscN:   Math.max(2, Math.round(parseFloat(document.getElementById('auto-disc-n')?.value) || 5)),
+      modalModes:  this._lastNModes  || 10,
+      modalMethod: this._modalMethod || 'subspace',
+      buckModes:   this._lastBuckModes || 6,
+      plasticMp:   this._lastMp || 100,
+      nlSteps:     Math.max(1, Math.round(parseFloat(this._nlSteps) || 12)),
+    };
+  }
+  // Restaura en la UI/estado los parámetros guardados en un .s3d recién cargado.
+  _applyAnalysisParams(ap) {
+    if (!ap) return;
+    const cb = document.getElementById('auto-disc');
+    if (cb && ap.autoDisc != null) cb.checked = !!ap.autoDisc;
+    const nIn = document.getElementById('auto-disc-n');
+    if (nIn && ap.autoDiscN) nIn.value = ap.autoDiscN;
+    if (ap.modalModes)  this._lastNModes   = ap.modalModes;
+    if (ap.modalMethod) this._modalMethod  = ap.modalMethod;
+    if (ap.buckModes)   this._lastBuckModes = ap.buckModes;
+    if (ap.plasticMp)   this._lastMp        = ap.plasticMp;
+    if (ap.nlSteps)     this._nlSteps       = ap.nlSteps;
+  }
+
   // ── Modo profesional (token validado contra el secreto del Worker) ──────────
   async _verificarPro(token) {
     const base = localStorage.getItem('portico_n8n_endpoint') || '/api/asistente';
@@ -4263,7 +4312,9 @@ class App {
   }
 
   configDialog() {
-    const mm = this._config.memoria, sd = this._config.seccion_mod_default, an = this._config.analisis;
+    // mm: copia de trabajo de la memoria EFECTIVA (config + modelo). Lo editado se
+    // guarda como memoria POR PROYECTO en el modelo y como default global (#41).
+    const mm = { ...this._memoria() }, sd = this._config.seccion_mod_default, an = this._config.analisis;
     const pro = !!this._pro;
     const overlay = document.getElementById('modal-overlay');
     const ea = s => String(s ?? '').replace(/"/g, '&quot;');
@@ -4401,6 +4452,12 @@ class App {
         an.shellTipos = shellSel;
       }
       sd.A = +v('cfg-mA') || 1; sd.Iy = +v('cfg-mIy') || 1; sd.Iz = +v('cfg-mIz') || 1; sd.J = +v('cfg-mJ') || 1;
+      // Memoria POR PROYECTO (modelo, viaja en el .s3d) + default global (#41).
+      const proj = {};
+      for (const k of App._MEMORIA_PROJ_KEYS) proj[k] = mm[k];
+      this.model.memoria = { ...(this.model.memoria || {}), ...proj };
+      this._config.memoria = { ...this._config.memoria, ...mm };   // incl. logoEmpresa (global)
+      this.markDirty();
       this._saveConfig();
       document.getElementById('modal-box')?.classList.remove('modal-wide');
       this.toast('Configuración guardada', 'ok');
@@ -4752,6 +4809,11 @@ class App {
     const modelJSON = this._modelJSONForSave();
     let obj;
     try { obj = JSON.parse(modelJSON); } catch { return modelJSON; }
+    // Datos por proyecto: memoria de cálculo (#41) y parámetros de análisis (#39).
+    // Se guardan SIEMPRE para que viajen con el archivo (no en `_modelJSONForSave`,
+    // que alimenta `_modelSig` y no debe variar al editar la memoria).
+    obj.memoria        = this._projectMemoria();
+    obj.analysisParams = this._gatherAnalysisParams();
     // Grupos y elementos ocultos (estado de vista) — persisten en el .s3d.
     if (this._grupos && this._grupos.size)
       obj.grupos = [...this._grupos].map(([name, set]) => ({ name, elems: [...set] }));
@@ -4767,7 +4829,7 @@ class App {
         cases:        this._resultsCache.cases,
       };
     }
-    return (obj.grupos || obj.ocultos || obj.results) ? JSON.stringify(obj, null, 2) : modelJSON;
+    return JSON.stringify(obj, null, 2);   // siempre lleva memoria/analysisParams
   }
 
   _saveToastMsg() {
@@ -5049,7 +5111,7 @@ class App {
   // Construye el documento Word con las mismas secciones de la memoria.
   _memoriaDocx(Docx, imgs, diseno, deflex, drift) {
     const m = this.model;
-    const cm = this._config?.memoria || {};
+    const cm = this._memoria();   // memoria efectiva: por proyecto + defaults globales (#41)
     const fmt = (v, d = 3) => (v == null || !isFinite(v)) ? '—'
       : (Math.abs(v) >= 1e5 || (Math.abs(v) > 0 && Math.abs(v) < 1e-3) ? (+v).toExponential(2) : (+v).toFixed(d));
     const stripTags = s => String(s ?? '').replace(/<[^>]+>/g, '');
@@ -5388,7 +5450,7 @@ class App {
     const modalVisible   = !document.getElementById('modal-analysis-overlay')?.classList.contains('hidden');
     const resultsVisible = !document.getElementById('results-overlay')?.classList.contains('hidden');
     const frame = () => new Promise(r => requestAnimationFrame(() => r()));
-    const cm = this._config?.memoria || {};
+    const cm = this._memoria();   // memoria efectiva: por proyecto + defaults globales (#41)
     const b0  = this.model.getBounds();
     const span = Math.max(b0.max.x - b0.min.x, b0.max.y - b0.min.y, b0.max.z - b0.min.z, 1);
 
@@ -5450,7 +5512,7 @@ class App {
     const proyecto = (document.title || '').replace(/^●\s*/, '').replace(/\s*—\s*PÓRTICO.*$/i, '').trim() || 'Modelo sin título';
     const fecha = new Date().toLocaleDateString('es-CL', { year:'numeric', month:'long', day:'numeric' });
     const U = m.units || 'kN-m';
-    const cm = this._config?.memoria || {};
+    const cm = this._memoria();   // memoria efectiva: por proyecto + defaults globales (#41)
     const clasif = (n) => { n = String(n||'').toLowerCase();
       if (/(horm|concret|h\s*\d|fc)/.test(n)) return 'hormigon';
       if (/(mader|pino|wood|gl\b|lvl|conif)/.test(n)) return 'madera';

@@ -30,6 +30,13 @@ export class Model {
     // x: ejes A,B,C…  y: ejes 1,2,3…  z: niveles de piso.
     this.grids = { x: [], y: [], z: [] };
 
+    // Datos POR PROYECTO que viajan en el .s3d (no en la config global de la app):
+    //  memoria        → encabezado/proyectista/descripción de la memoria (#41)
+    //  analysisParams → parámetros de ejecución (nº modos, método, Mp, auto-disc…) (#39)
+    // null = usar los defaults de la app (compatibilidad con archivos viejos).
+    this.memoria        = null;
+    this.analysisParams = null;
+
     this._initDefaults();
   }
 
