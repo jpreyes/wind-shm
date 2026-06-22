@@ -98,7 +98,8 @@ Documentos en `docs/verificaciones/<slug>.{md,pdf}`, modelos en `examples/verif_
 | **2-013 / 2-014** Temperature (constante / gradiente en el espesor) | térmica en área | ✅ (gradiente en espesor = 🟡) |
 | **2-010** Cylinder internal pressure · **2-011** Cooling tower (viento) | membrana de revolución | ✅ membrana (geometría grande) |
 | **3-002** Plane — straight beam · **3-003** curved beam | continuo plano (≈ membrana) | 🟡 mapea a membrana CST/QUAD |
-| **2-001 / 3-001** Patch test (desplaz. prescrito) | consistencia del elemento | 🟡 requiere desplaz. prescrito |
+| **3-001** Patch test (desplaz. prescrito, malla transfinita) | consistencia del elemento en malla distorsionada | ✅ **HECHO** (mallador Coons #52, σ₁=E·εx exacto) |
+| **2-001** Patch test (placa) | consistencia del elemento placa | 🟡 análogo, pendiente |
 | **3-004** Thick-walled cylinder (deformación plana) | plane-strain | 🟡 la membrana de PÓRTICO es tensión plana |
 | 2-015 ortótropo · 2-016/2-017 pandeo de cáscara · 2-018/2-019 grandes desplaz. · 2-020 pretensado · 3-005 presión de poros | material/no-lineal no soportado en áreas | ⛔ |
 
