@@ -17,7 +17,10 @@ const ROOT = process.cwd();
 const LOGOS = 'icons/UACh-color-negro.svg,icons/Facultad-color-negro.svg,icons/IOC-color.svg';
 const pat = process.argv[2] || '';
 
-const pct = (v, ref) => { const d = (v - ref) / ref * 100; return Math.abs(d) < 0.005 ? '0 %' : `${d >= 0 ? '+' : ''}${d.toFixed(2)} %`; };
+const pct = (v, ref) => {
+  if (Math.abs(ref) < 1e-9) return Math.abs(v) < 0.5 ? '≈0' : `${v.toFixed(2)}`;   // referencia nula
+  const d = (v - ref) / ref * 100; return Math.abs(d) < 0.005 ? '0 %' : `${d >= 0 ? '+' : ''}${d.toFixed(2)} %`;
+};
 const esc = s => String(s);
 
 function mdTable(header, rows) {
@@ -46,7 +49,7 @@ function buildFigure(model, out, caseDef) {
     for (const id of nodes.keys()) {
       let d = [0, 0, 0];
       if (out.type === 'modal') { const s = out.res.getModeShape((caseDef.figure.mode || 1) - 1).get(id); if (s) d = [s[0], s[1], s[2]]; }
-      else if (out.type === 'static') { const s = out.res.getNodeDisp(id); if (s) d = [s[0], s[1], s[2]]; }
+      else if (out.res.getNodeDisp) { const s = out.res.getNodeDisp(id); if (s) d = [s[0], s[1], s[2]]; }   // static / nllite
       defo.set(id, d); maxT = Math.max(maxT, Math.hypot(d[0], d[1], d[2]));
     }
     if (maxT > 0) {
@@ -60,10 +63,11 @@ function buildFigure(model, out, caseDef) {
   return renderModelSVG({ nodes, elements, supports, deformed, width: 900 });
 }
 
-function buildComparison(cmp, out) {
+async function buildComparison(cmp, out) {
   // `out` se pasa también (2º arg) para casos multi-LC: cmp.portico(res, out) →
-  // los casos sencillos ignoran el 2º argumento (compatibilidad).
-  const pv = cmp.portico(out.res, out);
+  // los casos sencillos ignoran el 2º argumento (compatibilidad). portico puede
+  // ser async (p.ej. correr variantes adicionales del modelo).
+  const pv = await cmp.portico(out.res, out);
   const idxLabel = cmp.indexLabel || 'Modo';
   const header = [idxLabel, 'Descripción', `Independiente (${cmp.unit})`, `SAP2000 (${cmp.unit})`, 'dif. SAP', `**Pórtico (${cmp.unit})**`, '**dif. Pórtico**'];
   const rows = cmp.rows.map((r, i) => {
@@ -86,7 +90,7 @@ async function runCase(file) {
   fs.writeFileSync(path.join(ROOT, 'docs/verificaciones', imgRel), svg, 'utf8');
 
   // comparación + sustitución de placeholders {{Pi}}/{{Di}} en `extra`
-  const { table, pv } = buildComparison(mod.compare, out);
+  const { table, pv } = await buildComparison(mod.compare, out);
   let extra = mod.extra || '';
   extra = extra.replace(/\{\{P(\d+)\}\}/g, (_, i) => pv[+i].toFixed(mod.compare.decimals))
                .replace(/\{\{D(\d+)\}\}/g, (_, i) => pct(pv[+i], mod.compare.rows[+i].indep));
@@ -127,7 +131,7 @@ ${mod.conclusion}
   execFileSync('node', ['tools/md2pdf.mjs', path.relative(ROOT, mdPath), '--logos', LOGOS], { cwd: ROOT, stdio: 'ignore' });
 
   // resumen a consola
-  const maxDiff = Math.max(...mod.compare.rows.map((r, i) => Math.abs((pv[i] - r.indep) / r.indep * 100)));
+  const maxDiff = Math.max(...mod.compare.rows.map((r, i) => Math.abs(r.indep) < 1e-9 ? 0 : Math.abs((pv[i] - r.indep) / r.indep * 100)));
   console.log(`✓ ${mod.id}  ${mod.slug}  ·  máx |dif| = ${maxDiff.toFixed(3)} %  ·  ${mod.slug}.pdf`);
   return { id: mod.id, maxDiff };
 }
