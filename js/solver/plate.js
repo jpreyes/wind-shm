@@ -233,6 +233,40 @@ export function dktPlate(coords, E, nu, t) {
   return Ke;
 }
 
+// ── Carga térmica de FLEXIÓN (gradiente a través del espesor) ─────────────────
+// Un gradiente lineal de temperatura ΔT_grad = T_sup − T_inf a través del espesor
+// impone una curvatura térmica inicial κ₀ = α·ΔT_grad/t · [1,1,0]. El vector de
+// carga nodal equivalente es f = ∫ Bbᵀ·Db·κ₀ dA (mismo punto/quadratura que Ke);
+// al resolver K·d = f una placa libre adopta κ = κ₀ con momento nulo.
+// Devuelve el vector local (3·nN) en GDL [w,θx,θy] (NUESTRA convención).
+export function plateThermalLoad(coords, E, nu, t, kappa0) {
+  const { Db } = plateD(E, nu, t);
+  const Mt = [   // M_T = Db·κ₀
+    Db[0][0] * kappa0[0] + Db[0][1] * kappa0[1] + Db[0][2] * kappa0[2],
+    Db[1][0] * kappa0[0] + Db[1][1] * kappa0[1] + Db[1][2] * kappa0[2],
+    Db[2][0] * kappa0[0] + Db[2][1] * kappa0[1] + Db[2][2] * kappa0[2],
+  ];
+  const nN = coords.length;
+  const f = new Float64Array(3 * nN);
+  if (nN === 4) {
+    for (const [xi, eta] of GP4) {
+      const { Bb, detJ } = bBendingQ4(coords, xi, eta);
+      for (let i = 0; i < 12; i++) f[i] += detJ * (Bb[0][i] * Mt[0] + Bb[1][i] * Mt[1] + Bb[2][i] * Mt[2]);
+    }
+  } else {
+    const { bMat, Ar } = _dktBMat(coords);
+    const gp = [[0.5, 0], [0.5, 0.5], [0, 0.5]];   // mismos puntos que dktPlate
+    for (const [xi, eta] of gp) {
+      const B = bMat(xi, eta);
+      for (let i = 0; i < 9; i++) f[i] += (Ar / 3) * (B[0][i] * Mt[0] + B[1][i] * Mt[1] + B[2][i] * Mt[2]);
+    }
+    // Batoz → nuestra convención (flip de los GDL rotacionales), igual que dktPlate.
+    const sgn = [1, -1, -1, 1, -1, -1, 1, -1, -1];
+    for (let i = 0; i < 9; i++) f[i] *= sgn[i];
+  }
+  return f;
+}
+
 // ── Recuperación de momentos de placa ────────────────────────────────────────
 // Momentos por unidad de longitud [Mx, My, Mxy] en el centro del elemento, a
 // partir de los GDL locales dLocal = [w,θx,θy]×nN (NUESTRA convención).  Sirven

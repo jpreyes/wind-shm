@@ -2,8 +2,8 @@
 // StaticSolver — direct stiffness method for linear static analysis
 // Solver:  K_ff · u_f = F_f  (Gaussian elimination via numeric.js)
 // ──────────────────────────────────────────────────────────────────────────────
-import { buildNodeIndex, assembleK, assembleF, getNodeDOFs } from './assembler.js?v=123';
-import { Results } from './postprocess.js?v=123';
+import { buildNodeIndex, assembleK, assembleF, getNodeDOFs } from './assembler.js?v=124';
+import { Results } from './postprocess.js?v=124';
 
 export class StaticSolver {
   /**
@@ -26,9 +26,16 @@ export class StaticSolver {
     // los GDL del plano: ux, uz y el giro ry.
     const is2D = model.mode === '2D';
 
+    // Desplazamiento prescrito (#54): valor impuesto por GDL restringido.
+    // up[gi] = desplazamiento conocido del GDL soporte (0 = apoyo normal).
+    const up = new Float64Array(nDOF);
+    let hasPresc = false;
+    const dofNames = ['ux', 'uy', 'uz', 'rx', 'ry', 'rz'];
+
     for (const node of model.nodes.values()) {
       const d    = getNodeDOFs(nodeIndex, node.id);
       const r    = node.restraints;
+      const pd   = node.prescDisp;
       const rArr = [
         r.ux,
         is2D ? 1 : r.uy,
@@ -38,8 +45,13 @@ export class StaticSolver {
         is2D ? 1 : r.rz,
       ];
       d.forEach((gi, li) => {
-        if (rArr[li]) fixedDOF.push(gi);
-        else          freeDOF.push(gi);
+        const pv = pd ? (+pd[dofNames[li]] || 0) : 0;   // valor prescrito de este GDL
+        if (rArr[li] || pv !== 0) {
+          fixedDOF.push(gi);
+          if (pv !== 0) { up[gi] = pv; hasPresc = true; }
+        } else {
+          freeDOF.push(gi);
+        }
       });
     }
 
@@ -52,7 +64,12 @@ export class StaticSolver {
     const Kff = Array.from({ length: nF }, (_, i) =>
       Array.from({ length: nF }, (_, j) => K[freeDOF[i] * nDOF + freeDOF[j]])
     );
-    const Ff = freeDOF.map(d => F[d]);
+    // F_f efectivo = F_f − K_fp·u_p   (traslada el desplazamiento prescrito al RHS)
+    const Ff = freeDOF.map((di, i) => {
+      let f = F[di];
+      if (hasPresc) for (const dj of fixedDOF) { if (up[dj]) f -= K[di * nDOF + dj] * up[dj]; }
+      return f;
+    });
 
     // ── Solve ─────────────────────────────────────────────────────────────
     const num = window.numeric;
@@ -78,6 +95,7 @@ export class StaticSolver {
     // ── Assemble full displacement vector ──────────────────────────────────
     const u = new Float64Array(nDOF);
     freeDOF.forEach((d, i) => { u[d] = uf[i]; });
+    if (hasPresc) for (const d of fixedDOF) if (up[d]) u[d] = up[d];   // GDL prescritos (#54)
 
     // ── Compute reactions ──────────────────────────────────────────────────
     const reactions = new Float64Array(nDOF);

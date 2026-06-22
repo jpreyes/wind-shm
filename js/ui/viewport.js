@@ -2238,7 +2238,7 @@ export class Viewport {
       if (!n1 || !n2) continue;
       const st = elemState?.get(elem.id) || {};
       let color = 0x38bdf8, dashed = false;          // tracción (teal)
-      if (st.cable && st.taut === false) { color = 0x64748b; dashed = true; }   // cable flojo
+      if ((st.cable || st.compressionOnly) && st.taut === false) { color = 0x64748b; dashed = true; }   // cable flojo / puntal suelto
       else if (st.N < 0)                 { color = 0xf59e0b; }                   // compresión (naranja)
       const geo = new THREE.BufferGeometry().setFromPoints([defPos(n1), defPos(n2)]);
       const mat = dashed

@@ -1,8 +1,8 @@
 // ──────────────────────────────────────────────────────────────────────────────
 // PropertiesPanel — right-side panel: node/element properties + mat/sec tabs
 // ──────────────────────────────────────────────────────────────────────────────
-import { computeFloorCR, computeFloorCM, computeTributaryWeights } from '../solver/diaphragm.js?v=123';
-import { localAxes } from '../solver/timoshenko.js?v=123';
+import { computeFloorCR, computeFloorCM, computeTributaryWeights } from '../solver/diaphragm.js?v=124';
+import { localAxes } from '../solver/timoshenko.js?v=124';
 
 export class PropertiesPanel {
   constructor(panelEl, app) {
@@ -672,10 +672,44 @@ export class PropertiesPanel {
         </label>
       </div>
 
+      ${this._areaThermalHTML(area)}
+
       <div class="delete-btn-row">
         <button class="btn-danger" id="btn-del-area" style="width:100%;">Eliminar Área #${area.id}</button>
       </div>
     `;
+  }
+
+  // Carga térmica del área (#57): temperatura por cara (roja = +z, azul = −z) tipo
+  // Abaqus. La media → dilatación de membrana; el gradiente → momento de flexión.
+  _areaThermalHTML(area) {
+    const model = this.app.model;
+    const lcs = [...model.loadCases.values()].filter(lc => lc.type !== 'spectrum');
+    if (!lcs.length) return '';
+    const lcId = this.app._activeLcId && model.loadCases.get(this.app._activeLcId)?.type !== 'spectrum'
+      ? this.app._activeLcId : lcs[0].id;
+    const lcOpts = lcs.map(lc => `<option value="${lc.id}" ${lc.id === lcId ? 'selected' : ''}>${lc.name}</option>`).join('');
+    // Prefill con la carga térmica existente del área en ese caso
+    const cur = (model.loadCases.get(lcId)?.loads || []).find(l => l.type === 'temp' && l.areaId === area.id);
+    const top = cur?.dTtop ?? (cur?.dT ?? 0), bot = cur?.dTbot ?? (cur?.dT ?? 0);
+    return `
+      <div class="prop-section">
+        <div class="prop-title">Carga térmica (por cara, #57)</div>
+        <div class="prop-row cols1">
+          <div class="prop-field"><label>Caso de carga</label><select id="a-dt-lc">${lcOpts}</select></div>
+        </div>
+        <div class="prop-row">
+          <div class="prop-field"><label style="color:#e23">🟥 Cara +Z, ΔT (°C)</label>
+            <input type="number" id="a-dt-top" value="${top}" step="5" title="Temperatura de la cara superior (+z local, roja)."></div>
+          <div class="prop-field"><label style="color:#2563eb">🟦 Cara −Z, ΔT (°C)</label>
+            <input type="number" id="a-dt-bot" value="${bot}" step="5" title="Temperatura de la cara inferior (−z local, azul)."></div>
+        </div>
+        <div style="display:flex;gap:6px">
+          <button class="btn-secondary" id="a-dt-go" style="flex:1;font-size:11px" title="Asigna la temperatura por cara a esta área (reemplaza la previa en ese caso). Media → membrana; diferencia → momento térmico de flexión.">Aplicar ΔT</button>
+          <button class="btn-secondary" id="a-dt-clr" style="flex:1;font-size:11px" title="Quita la carga térmica de esta área en el caso elegido">Quitar ΔT</button>
+        </div>
+        <p class="rel-hint">Caras iguales → dilatación uniforme (membrana). Caras distintas → gradiente a través del espesor = momento de flexión (placa/shell).</p>
+      </div>`;
   }
 
   // Tensiones (von Mises e invariantes), momentos de placa y desplazamientos
@@ -746,6 +780,15 @@ export class PropertiesPanel {
       this.app.markDirty();
     };
     sel.querySelectorAll('#a-mat, #a-t, #a-beh, #a-pstrain').forEach(inp => inp.addEventListener('change', save));
+    // Carga térmica por cara (#57)
+    const $ = q => sel.querySelector(q);
+    $('#a-dt-go')?.addEventListener('click', () => {
+      this.app.setCargaTempArea(area.id, parseFloat($('#a-dt-top').value), parseFloat($('#a-dt-bot').value), $('#a-dt-lc').value);
+    });
+    $('#a-dt-clr')?.addEventListener('click', () => {
+      this.app.setCargaTempArea(area.id, 0, 0, $('#a-dt-lc').value);
+      $('#a-dt-top').value = 0; $('#a-dt-bot').value = 0;
+    });
     sel.querySelector('#btn-del-area')?.addEventListener('click', () => this.app.deleteArea(area.id));
   }
 
@@ -1029,6 +1072,8 @@ export class PropertiesPanel {
     const nm = node.nodeMass || { mx: 0, my: 0, mz: 0 };
     const sp = node.springs  || { kux: 0, kuy: 0, kuz: 0, krx: 0, kry: 0, krz: 0 };
     const hasSp = Object.values(sp).some(k => k > 0);
+    const pd = node.prescDisp || { ux: 0, uy: 0, uz: 0, rx: 0, ry: 0, rz: 0 };
+    const hasPD = Object.values(pd).some(v => v);
     const is2D = this.app.model.mode === '2D';
     const outOfPlane = new Set(['uy', 'rx', 'rz']);   // restringidos auto en 2D
     const dof = ['ux','uy','uz','rx','ry','rz'];
@@ -1101,6 +1146,39 @@ export class PropertiesPanel {
       </div>
 
       <div class="prop-section">
+        <div class="prop-title" style="${hasPD ? 'color:var(--teal)' : ''}">
+          Desplazamiento prescrito${hasPD ? ' ●' : ''}
+        </div>
+        <div class="prop-row cols3">
+          <div class="prop-field"><label>UX (m)</label>
+            <input type="number" id="np-ux" value="${pd.ux || 0}" step="0.001">
+          </div>
+          <div class="prop-field"><label>UY (m)</label>
+            <input type="number" id="np-uy" value="${pd.uy || 0}" step="0.001" ${is2D ? 'disabled' : ''}>
+          </div>
+          <div class="prop-field"><label>UZ (m)</label>
+            <input type="number" id="np-uz" value="${pd.uz || 0}" step="0.001">
+          </div>
+        </div>
+        <div class="prop-row cols3">
+          <div class="prop-field"><label>RX (rad)</label>
+            <input type="number" id="np-rx" value="${pd.rx || 0}" step="0.0005" ${is2D ? 'disabled' : ''}>
+          </div>
+          <div class="prop-field"><label>RY (rad)</label>
+            <input type="number" id="np-ry" value="${pd.ry || 0}" step="0.0005">
+          </div>
+          <div class="prop-field"><label>RZ (rad)</label>
+            <input type="number" id="np-rz" value="${pd.rz || 0}" step="0.0005" ${is2D ? 'disabled' : ''}>
+          </div>
+        </div>
+        <div style="font-size:10px;color:var(--text-muted);margin-top:4px">
+          Asentamiento / giro de apoyo impuesto (#54). El GDL con valor ≠ 0 se
+          impone como soporte con ese desplazamiento; la reacción aparece en
+          Reacciones. Valor 0 = sin prescribir.
+        </div>
+      </div>
+
+      <div class="prop-section">
         <div class="prop-title" style="${hasNM ? 'color:#ffd54f' : ''}">
           Masa Nodal Concentrada${hasNM ? ' ●' : ''}
         </div>
@@ -1152,7 +1230,11 @@ export class PropertiesPanel {
         kux: numVal('#ns-kux'), kuy: numVal('#ns-kuy'), kuz: numVal('#ns-kuz'),
         krx: numVal('#ns-krx'), kry: numVal('#ns-kry'), krz: numVal('#ns-krz'),
       };
-      this.app.model.updateNode(node.id, { x, y, z, restraints, nodeMass, springs });
+      const prescDisp = {
+        ux: numVal('#np-ux'), uy: numVal('#np-uy'), uz: numVal('#np-uz'),
+        rx: numVal('#np-rx'), ry: numVal('#np-ry'), rz: numVal('#np-rz'),
+      };
+      this.app.model.updateNode(node.id, { x, y, z, restraints, nodeMass, springs, prescDisp });
       this.app.viewport.refreshNode(this.app.model.nodes.get(node.id));
       this.app.markDirty();
     };
@@ -1294,6 +1376,9 @@ export class PropertiesPanel {
         <label style="display:flex;align-items:center;gap:6px;font-size:12px;cursor:pointer" title="El elemento se comporta como cable: solo resiste tracción (queda flojo en compresión, N=0). Para el análisis no lineal.">
           <input type="checkbox" id="e-cable" ${elem.cable ? 'checked' : ''}> Cable (solo tracción)
         </label>
+        <label style="display:flex;align-items:center;gap:6px;font-size:12px;cursor:pointer" title="El elemento solo resiste compresión (puntal/contacto): queda suelto en tracción (N=0). Excluyente con «Cable». Para el análisis no lineal.">
+          <input type="checkbox" id="e-componly" ${elem.compressionOnly ? 'checked' : ''}> Puntal (solo compresión)
+        </label>
         <div class="prop-row cols1">
           <div class="prop-field"><label title="Longitud natural (sin tensión) ÷ longitud geométrica. 1 = sin pretensar. Menor que 1 = pretensado (tracción en reposo).">L₀ / L (pretensado si &lt;1)</label>
             <input type="number" id="e-l0f" value="${(elem.L0factor ?? 1)}" min="0.5" max="1.5" step="0.005">
@@ -1355,8 +1440,9 @@ export class PropertiesPanel {
         releases[+cb.dataset.rel] = cb.checked ? 1 : 0;
       });
       const cable    = sel.querySelector('#e-cable')?.checked || false;
+      const compressionOnly = sel.querySelector('#e-componly')?.checked || false;
       const L0factor = parseFloat(sel.querySelector('#e-l0f')?.value) || 1;
-      this.app.model.updateElement(elem.id, { n1, n2, matId, secId, releases, cable, L0factor });
+      this.app.model.updateElement(elem.id, { n1, n2, matId, secId, releases, cable, compressionOnly, L0factor });
       this.app.viewport.refreshElem(this.app.model.elements.get(elem.id));
       this.app.markDirty();
     };
@@ -1367,7 +1453,10 @@ export class PropertiesPanel {
     sel.querySelectorAll('[data-rel]').forEach(cb =>
       cb.addEventListener('change', save)
     );
-    sel.querySelector('#e-cable')?.addEventListener('change', save);
+    const cb_cable = sel.querySelector('#e-cable');
+    const cb_comp  = sel.querySelector('#e-componly');
+    cb_cable?.addEventListener('change', () => { if (cb_cable.checked && cb_comp) cb_comp.checked = false; save(); });
+    cb_comp ?.addEventListener('change', () => { if (cb_comp.checked && cb_cable) cb_cable.checked = false; save(); });
 
     // Visor de matrices del elemento
     sel.querySelector('#btn-elem-matrices')?.addEventListener('click', () => {

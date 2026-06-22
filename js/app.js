@@ -1,29 +1,29 @@
 // ──────────────────────────────────────────────────────────────────────────────
 // App — main orchestrator
 // ──────────────────────────────────────────────────────────────────────────────
-import { Model }           from './model/model.js?v=123';
-import { Serializer }      from './model/serializer.js?v=123';
-import { Viewport }        from './ui/viewport.js?v=123';
-import { PropertiesPanel } from './ui/properties.js?v=123';
-import { MenuBar }         from './ui/menu.js?v=123';
-import { UndoStack }       from './utils/undo.js?v=123';
-import { StaticSolver, ensureDefaultLC }   from './solver/static_solver.js?v=123';
-import { Results }                         from './solver/postprocess.js?v=123';
-import { ModalSolver }                     from './solver/modal_solver.js?v=123';
-import { buildNodeIndex, assembleK, assembleF, getNodeDOFs } from './solver/assembler.js?v=123';
-import { assembleSparseGlobal, extractFreeCSR } from './solver/sparse.js?v=123';
-import { solveNonlinear, solveNonlinearDC } from './solver/nl_lite.js?v=123';
-import { assembleKg } from './solver/geometric.js?v=123';
-import { makeFactor } from './solver/linsolve.js?v=123';
-import { formFind } from './solver/formfind.js?v=123';
-import { ModalResults }                    from './solver/modal_results.js?v=123';
-import { modalTimeHistory }                from './solver/timehistory.js?v=123';
-import { parseAccelerogram, accStats, scaleToPGA, DEMO_PRESETS, G as GACC } from './solver/accelerograms.js?v=123';
-import { SpectrumSolver }                  from './solver/spectrum_solver.js?v=123';
-import { autoDetectDiaphragms, computeFloorCR, applyDiaphragmConstraints } from './solver/diaphragm.js?v=123';
-import { splitElement, splitByLength, discretizeAll, joinElements, intersectarElementos } from './model/discretize.js?v=123';
-import { localAxes, stiffnessMatrix, massMatrix, transformMatrix, globalStiffness, applyReleases } from './solver/timoshenko.js?v=123';
-import { bilinearGrid, blockCells, cornerGridIndices } from './model/mesher.js?v=123';
+import { Model }           from './model/model.js?v=124';
+import { Serializer }      from './model/serializer.js?v=124';
+import { Viewport }        from './ui/viewport.js?v=124';
+import { PropertiesPanel } from './ui/properties.js?v=124';
+import { MenuBar }         from './ui/menu.js?v=124';
+import { UndoStack }       from './utils/undo.js?v=124';
+import { StaticSolver, ensureDefaultLC }   from './solver/static_solver.js?v=124';
+import { Results }                         from './solver/postprocess.js?v=124';
+import { ModalSolver }                     from './solver/modal_solver.js?v=124';
+import { buildNodeIndex, assembleK, assembleF, getNodeDOFs } from './solver/assembler.js?v=124';
+import { assembleSparseGlobal, extractFreeCSR } from './solver/sparse.js?v=124';
+import { solveNonlinear, solveNonlinearDC } from './solver/nl_lite.js?v=124';
+import { assembleKg } from './solver/geometric.js?v=124';
+import { makeFactor } from './solver/linsolve.js?v=124';
+import { formFind } from './solver/formfind.js?v=124';
+import { ModalResults }                    from './solver/modal_results.js?v=124';
+import { modalTimeHistory }                from './solver/timehistory.js?v=124';
+import { parseAccelerogram, accStats, scaleToPGA, DEMO_PRESETS, G as GACC } from './solver/accelerograms.js?v=124';
+import { SpectrumSolver }                  from './solver/spectrum_solver.js?v=124';
+import { autoDetectDiaphragms, computeFloorCR, applyDiaphragmConstraints } from './solver/diaphragm.js?v=124';
+import { splitElement, splitByLength, discretizeAll, joinElements, intersectarElementos } from './model/discretize.js?v=124';
+import { localAxes, stiffnessMatrix, massMatrix, transformMatrix, globalStiffness, applyReleases } from './solver/timoshenko.js?v=124';
+import { bilinearGrid, blockCells, cornerGridIndices } from './model/mesher.js?v=124';
 
 class App {
   constructor() {
@@ -559,6 +559,7 @@ class App {
         const upd = {};
         if (e.releases && e.releases.some(x => x)) upd.releases = [...e.releases];
         if (e.cable) upd.cable = true;
+        if (e.compressionOnly) upd.compressionOnly = true;
         if (e.L0factor != null && e.L0factor !== 1) upd.L0factor = e.L0factor;
         if (Object.keys(upd).length) this.model.updateElement(ne.id, upd);
         // Cargas del elemento (todas las dist/temp de todos los casos) → copia.
@@ -665,6 +666,21 @@ class App {
     this.refreshLoads(); this.markDirty(); this._updateStats();
     this.toast(dT ? `ΔT = ${dT} °C en ${ids.length} elem. · ${lc.name}` : `Cargas de temperatura quitadas de ${ids.length} elem. · ${lc.name}`, 'ok');
     this._reselect(ids);
+  }
+
+  // Carga térmica de un ÁREA (#57): temperatura por cara — dTtop = cara +z (roja),
+  // dTbot = cara −z (azul), como Abaqus. Media → membrana, gradiente → flexión.
+  setCargaTempArea(areaId, dTtop, dTbot, lcId) {
+    const area = this.model.areas.get(+areaId); if (!area) { this.toast('Área no encontrada', 'warn'); return; }
+    const lc = this.model.loadCases.get(+lcId) || this.model.loadCases.get(this._activeLcId) || [...this.model.loadCases.values()][0];
+    if (!lc) { this.toast('No hay caso de carga', 'warn'); return; }
+    if (lc.type === 'spectrum') { this.toast('El caso espectral no admite cargas de temperatura', 'warn'); return; }
+    dTtop = +dTtop || 0; dTbot = +dTbot || 0;
+    this.snapshot();
+    lc.loads = (lc.loads || []).filter(l => !(l.type === 'temp' && l.areaId === +areaId));   // reemplaza la previa
+    if (dTtop || dTbot) lc.loads.push({ type: 'temp', areaId: +areaId, dTtop, dTbot });
+    this.refreshLoads(); this.markDirty(); this._updateStats();
+    this.toast((dTtop || dTbot) ? `ΔT cara roja ${dTtop}° / azul ${dTbot}° en área #${areaId} · ${lc.name}` : `ΔT quitada del área #${areaId} · ${lc.name}`, 'ok');
   }
 
   async discretizeAllDialog() {
@@ -1565,31 +1581,52 @@ class App {
     const nDOF = nodeIndex.size * 6;
 
     const is2D = model.mode === '2D';
+    const dofNames = ['ux', 'uy', 'uz', 'rx', 'ry', 'rz'];
     const freeDOF = [];
     const freeMap = new Int32Array(nDOF).fill(-1);
+    // Desplazamiento prescrito (#54): GDL soporte con valor conocido ≠ 0.
+    const up = new Float64Array(nDOF);
+    const prescDOF = [];
+    let hasPresc = false;
     for (const node of model.nodes.values()) {
       const d = getNodeDOFs(nodeIndex, node.id);
-      const r = node.restraints;
+      const r = node.restraints, pd = node.prescDisp;
       const rArr = [r.ux, is2D ? 1 : r.uy, r.uz, is2D ? 1 : r.rx, r.ry, is2D ? 1 : r.rz];
-      d.forEach((gi, li) => { if (!rArr[li]) { freeMap[gi] = freeDOF.length; freeDOF.push(gi); } });
+      d.forEach((gi, li) => {
+        const pv = pd ? (+pd[dofNames[li]] || 0) : 0;
+        if (rArr[li] || pv !== 0) {
+          if (pv !== 0) { up[gi] = pv; prescDOF.push(gi); hasPresc = true; }
+        } else { freeMap[gi] = freeDOF.length; freeDOF.push(gi); }
+      });
     }
     if (!freeDOF.length) throw new Error('El modelo no tiene grados de libertad libres (¿todos los nodos están empotrados?)');
 
     const Flist = staticLcs.map(lc => assembleF(model, nodeIndex, lc.id, !!lc.selfWeight));
     const map = new Map();
 
+    // #54: con GDL prescritos, traslada −K_fp·u_p al RHS de cada caso. El worker
+    // recibe el RHS efectivo (FlistEff); el F original se conserva para reportar
+    // reacciones reales. El u_p se superpone y las reacciones se recalculan abajo.
+    let Kdense = null;
+    const FlistSolve = hasPresc ? Flist.map(F => Float64Array.from(F)) : Flist;
+    if (hasPresc) {
+      Kdense = assembleK(model, nodeIndex).K;
+      for (const F of FlistSolve)
+        for (const di of freeDOF) { let c = 0; for (const dj of prescDOF) c += Kdense[di * nDOF + dj] * up[dj]; F[di] -= c; }
+    }
+
     // Por defecto: ensamblaje DISPERSO (CSR) → sin matriz densa nDOF². El modo
     // «matriz densa» (académico) usa el ensamblaje denso clásico.
     const dense = !!this._config?.analisis?.matrizDensa;
     let out = null;
     try {
-      if (dense) {
-        const { K } = assembleK(model, nodeIndex);
-        out = await this._staticWorkerSolve(K, nDOF, Int32Array.from(freeDOF), Flist, true);
+      if (dense || hasPresc) {
+        const K = Kdense || assembleK(model, nodeIndex).K;
+        out = await this._staticWorkerSolve(K.slice(), nDOF, Int32Array.from(freeDOF), FlistSolve, true);
       } else {
         const { S } = assembleSparseGlobal(model, nodeIndex, { withMass: false });
         const { csr, cf } = extractFreeCSR(S, freeMap, freeDOF.length);
-        out = await this._staticWorkerSolveSparse(csr, cf, nDOF, Int32Array.from(freeDOF), Flist);
+        out = await this._staticWorkerSolveSparse(csr, cf, nDOF, Int32Array.from(freeDOF), FlistSolve);
       }
     }
     catch (e) {
@@ -1601,6 +1638,12 @@ class App {
       const freeSet = new Set(freeDOF);
       staticLcs.forEach((lc, idx) => {
         const u = out.uList[idx], reactions = out.reactionsList[idx], F = Flist[idx];
+        // #54: superpone el desplazamiento prescrito y recalcula reacciones con K·u−F
+        // (el F original, sin la traslación al RHS) → reacciones del soporte correctas.
+        if (hasPresc) {
+          for (const dj of prescDOF) u[dj] = up[dj];
+          for (let i = 0; i < nDOF; i++) { let s = 0; const off = i * nDOF; for (let j = 0; j < nDOF; j++) s += Kdense[off + j] * u[j]; reactions[i] = s - F[i]; }
+        }
         for (const node of model.nodes.values()) {   // reacciones de apoyos elásticos
           const sp = node.springs; if (!sp) continue;
           const ks = [sp.kux, sp.kuy, sp.kuz, sp.krx, sp.kry, sp.krz];
@@ -1623,7 +1666,7 @@ class App {
   _staticWorkerSolve(K, nDOF, freeDOF, Flist, dense = false) {
     return new Promise((resolve, reject) => {
       let worker;
-      try { worker = new Worker(new URL('./solver/static_worker.js?v=123', import.meta.url), { type: 'module' }); }
+      try { worker = new Worker(new URL('./solver/static_worker.js?v=124', import.meta.url), { type: 'module' }); }
       catch (e) { reject(e); return; }
       this._staticWorker = worker;
       const cancelar = () => { try { worker.terminate(); } catch (e) {} this._staticWorker = null; this._hideProgress(); reject(new Error('cancelado')); };
@@ -1652,7 +1695,7 @@ class App {
   _staticWorkerSolveSparse(csr, cf, nDOF, freeDOF, Flist) {
     return new Promise((resolve, reject) => {
       let worker;
-      try { worker = new Worker(new URL('./solver/static_worker.js?v=123', import.meta.url), { type: 'module' }); }
+      try { worker = new Worker(new URL('./solver/static_worker.js?v=124', import.meta.url), { type: 'module' }); }
       catch (e) { reject(e); return; }
       this._staticWorker = worker;
       const cancelar = () => { try { worker.terminate(); } catch (e) {} this._staticWorker = null; this._hideProgress(); reject(new Error('cancelado')); };
@@ -1897,10 +1940,10 @@ class App {
 
     // HTML modal instead of native prompt(); en lote, valores por defecto (#38).
     const modalOpts = opts.silent
-      ? { nModes: this._lastNModes || 10, method: this._modalMethod || 'subspace' }
+      ? { nModes: this._lastNModes || 10, method: this._modalMethod || 'subspace', useKg: false }
       : await this._modalNModesDialog();
     if (!modalOpts) return;
-    const { nModes, method: modalMethod } = modalOpts;
+    const { nModes, method: modalMethod, useKg, pattern } = modalOpts;
     this._lastNModes = nModes;
 
     const btn = document.getElementById('btn-run');
@@ -1940,10 +1983,33 @@ class App {
         }
       }
 
+      // ── #55: rigidez geométrica desde un estado de referencia (P-Δ / pre-esfuerzo).
+      // Modal sobre (K + Kg) vs M: la tracción rigidiza y la compresión ablanda las
+      // frecuencias. Kg se evalúa con el u del estado de referencia (como SAP2000).
+      let kgInfo = '';
+      if (useKg) {
+        const { contribs, label } = this._resolvePattern(pattern);
+        const Fref = new Float64Array(nDOF);
+        for (const c of contribs) {
+          const Fi = assembleF(this.model, nodeIndex, c.lcId, !!c.selfWeight);
+          for (let i = 0; i < nDOF; i++) Fref[i] += c.factor * Fi[i];
+        }
+        const Ff = new Float64Array(nF);
+        for (let i = 0; i < nF; i++) Ff[i] = Fref[freeDOF[i]];
+        const fac = makeFactor(Kff_flat, nF, !!this._config?.analisis?.matrizDensa);
+        if (!fac.ok) throw new Error('El estado de referencia para Kg es singular/inestable. Revise apoyos.');
+        const uf = fac.solve(Ff);
+        const u = new Float64Array(nDOF); for (let i = 0; i < nF; i++) u[freeDOF[i]] = uf[i];
+        const { Kg, Nmax } = assembleKg(this.model, nodeIndex, u);
+        if (Nmax < 1e-9) throw new Error('El estado de referencia no genera fuerzas axiales (sin efecto P-Δ).');
+        for (let i = 0; i < nF; i++) { const ri = freeDOF[i] * nDOF; for (let j = 0; j < nF; j++) Kff_flat[i * nF + j] += Kg[ri + freeDOF[j]]; }
+        kgInfo = ` · con Kg(${label})`;
+      }
+
       // ── Run Stodola in a Web Worker (non-blocking) ───────────────────────────
       const denseModal = !!this._config?.analisis?.matrizDensa;
       const modes = await new Promise((resolve, reject) => {
-        const worker = new Worker(new URL('./solver/modal_worker.js?v=123', import.meta.url), { type: 'module' });
+        const worker = new Worker(new URL('./solver/modal_worker.js?v=124', import.meta.url), { type: 'module' });
         worker.postMessage({ Kff_flat, Mff_flat, nF, nModes, dense: denseModal, method: modalMethod },
           [Kff_flat.buffer, Mff_flat.buffer]); // transfer — zero copy
         worker.onmessage = (ev) => {
@@ -1964,7 +2030,7 @@ class App {
       const f1 = this._modalResults.freq[0].toFixed(3);
       const T1 = this._modalResults.period[0].toFixed(3);
       this.toast(
-        `Modal OK — ${this._modalResults.nModes} modos | f₁=${f1} Hz | T₁=${T1} s`, 'ok'
+        `Modal OK — ${this._modalResults.nModes} modos | f₁=${f1} Hz | T₁=${T1} s${kgInfo}`, 'ok'
       );
 
       this._setupModalOverlay();
@@ -2011,17 +2077,36 @@ class App {
               <option value="subspace" ${lastMethod === 'subspace' ? 'selected' : ''}>Iteración de subespacio (Bathe) — bloque, rápido con muchos modos</option>
             </select>
           </div>
+        </div>
+        <div class="prop-row cols1" style="margin-top:10px">
+          <label style="display:flex;align-items:center;gap:6px;font-size:12px;cursor:pointer" title="Modal sobre K+Kg(estado): la fuerza axial del estado de referencia rigidiza (tracción) o ablanda (compresión) las frecuencias. Como en SAP2000 (modal sobre un caso no lineal).">
+            <input type="checkbox" id="modal-usekg" ${this._modalUseKg ? 'checked' : ''}> Incluir rigidez geométrica P-Δ (pre-esfuerzo)
+          </label>
+        </div>
+        <div class="prop-row cols1" id="modal-kg-pat" style="margin-top:6px;${this._modalUseKg ? '' : 'display:none'}">
+          <div class="prop-field">
+            <label>Estado de referencia (carga que genera Kg)</label>
+            ${this._patternSelectHTML('modal-pattern')}
+          </div>
         </div>`;
       overlay.classList.remove('hidden');
       setTimeout(() => {
         const el = document.getElementById('modal-nmodes');
         el?.focus(); el?.select();
+        document.getElementById('modal-usekg')?.addEventListener('change', (e) => {
+          const pat = document.getElementById('modal-kg-pat');
+          if (pat) pat.style.display = e.target.checked ? '' : 'none';
+        });
       }, 50);
       overlay._resolve = () => {
         const v = parseInt(document.getElementById('modal-nmodes')?.value) || 10;
         const method = document.getElementById('modal-method')?.value || 'stodola';
+        const useKg = !!document.getElementById('modal-usekg')?.checked;
+        const pattern = document.getElementById('modal-pattern')?.value || 'all';
         this._modalMethod = method;
-        resolve({ nModes: Math.max(1, Math.min(50, v)), method });
+        this._modalUseKg = useKg;
+        if (useKg) this._lastPattern = pattern;
+        resolve({ nModes: Math.max(1, Math.min(50, v)), method, useKg, pattern });
       };
       overlay._reject = () => resolve(null);
     });
@@ -2326,7 +2411,7 @@ class App {
       // Modal por iteración de subespacio en worker (no bloquea la UI).
       const dense = !!this._config?.analisis?.matrizDensa;
       const rawModes = await new Promise((resolve, reject) => {
-        const w = new Worker(new URL('./solver/modal_worker.js?v=123', import.meta.url), { type: 'module' });
+        const w = new Worker(new URL('./solver/modal_worker.js?v=124', import.meta.url), { type: 'module' });
         w.postMessage({ Kff_flat: Kff, Mff_flat: Mff, nF, nModes, dense, method: 'subspace' }, [Kff.buffer, Mff.buffer]);
         w.onmessage = ev => { w.terminate(); ev.data.error ? reject(new Error(ev.data.error)) : resolve(ev.data.modes); };
         w.onerror = ev => { w.terminate(); reject(new Error(ev.message || 'Error en worker modal')); };
@@ -2395,7 +2480,7 @@ class App {
   _thSolveInWorker(modes, ag, dt, zeta) {
     return new Promise((resolve, reject) => {
       let w;
-      try { w = new Worker(new URL('./solver/timehistory_worker.js?v=123', import.meta.url), { type: 'module' }); }
+      try { w = new Worker(new URL('./solver/timehistory_worker.js?v=124', import.meta.url), { type: 'module' }); }
       catch (e) {
         try { const r = modalTimeHistory({ modes: modes.map(m => ({ ...m, phi: new Float64Array(0) })), ag, dt, zeta }); resolve({ q: r.q, peakModal: r.peakModal }); }
         catch (err) { reject(err); }
@@ -2690,7 +2775,7 @@ class App {
     return new Promise((resolve, reject) => {
       let worker;
       try {
-        worker = new Worker(new URL('./solver/nl_worker.js?v=123', import.meta.url), { type: 'module' });
+        worker = new Worker(new URL('./solver/nl_worker.js?v=124', import.meta.url), { type: 'module' });
       } catch (e) {
         try { resolve(kind === 'dc' ? solveNonlinearDC(opts) : solveNonlinear(opts)); }
         catch (err) { reject(err); }
@@ -2733,7 +2818,7 @@ class App {
       const L = Math.hypot(n2.x-n1.x, n2.y-n1.y, n2.z-n1.z);
       if (L < 1e-12) continue;
       const L0 = (el.L0factor || 1) * L;
-      elems.push({ n1: idxOf.get(el.n1), n2: idxOf.get(el.n2), EA: mat.E * sec.A, L0, cable: !!el.cable });
+      elems.push({ n1: idxOf.get(el.n1), n2: idxOf.get(el.n2), EA: mat.E * sec.A, L0, cable: !!el.cable, compressionOnly: !!el.compressionOnly });
       elemIds.push(el.id);
     }
     if (!elems.length) { this.toast('No hay elementos válidos para el análisis no lineal', 'warn'); return; }
@@ -2850,7 +2935,7 @@ class App {
     const uByNode = new Map();
     nodeIds.forEach((id) => { const i = idxOf.get(id); uByNode.set(id, [step.u[3*i], step.u[3*i+1], step.u[3*i+2]]); });
     const elemState = new Map();
-    elemIds.forEach((eid, k) => elemState.set(eid, { N: step.N[k], taut: step.taut[k], cable: this.model.elements.get(eid)?.cable }));
+    elemIds.forEach((eid, k) => elemState.set(eid, { N: step.N[k], taut: step.taut[k], cable: this.model.elements.get(eid)?.cable, compressionOnly: this.model.elements.get(eid)?.compressionOnly }));
     const factor = parseFloat(document.getElementById('nl-scale')?.value) || 1;
     let maxD = 0; for (const u of uByNode.values()) maxD = Math.max(maxD, Math.hypot(u[0], u[1], u[2]));
     this.viewport.showNLDeformed(uByNode, elemState, factor,
@@ -2947,7 +3032,7 @@ class App {
 
       // Iteración de subespacio en el Worker (no bloquea la UI)
       const rawModes = await new Promise((resolve, reject) => {
-        const worker = new Worker(new URL('./solver/buckling_worker.js?v=123', import.meta.url), { type: 'module' });
+        const worker = new Worker(new URL('./solver/buckling_worker.js?v=124', import.meta.url), { type: 'module' });
         worker.postMessage({ Kff_flat, Kgff_flat, nF, nModes, dense },
           [Kff_flat.buffer, Kgff_flat.buffer]);   // transfer — zero copy
         worker.onmessage = (ev) => { worker.terminate(); ev.data.error ? reject(new Error(ev.data.error)) : resolve(ev.data.modes); };
@@ -3623,7 +3708,7 @@ class App {
       const mat = model.materials.get(el.matId), sec = model.sections.get(el.secId);
       if (!n1 || !n2 || !mat || !sec) continue;
       const L = Math.hypot(n2.x - n1.x, n2.y - n1.y, n2.z - n1.z); if (L < 1e-12) continue;
-      elems.push({ n1: idxOf.get(el.n1), n2: idxOf.get(el.n2), EA: mat.E * sec.A, L0: (el.L0factor || 1) * L, cable: !!el.cable });
+      elems.push({ n1: idxOf.get(el.n1), n2: idxOf.get(el.n2), EA: mat.E * sec.A, L0: (el.L0factor || 1) * L, cable: !!el.cable, compressionOnly: !!el.compressionOnly });
       elemIds.push(el.id);
     }
     const is2D = model.mode === '2D';
@@ -3795,7 +3880,11 @@ class App {
     const p = res.path[Math.max(0, Math.min(k, res.path.length - 1))]; if (!p) return;
     const uByNode = new Map(), elemState = new Map();
     P.nodeIds.forEach((id, i) => uByNode.set(id, [p.u[3 * i], p.u[3 * i + 1], p.u[3 * i + 2]]));
-    P.elemIds.forEach((eid, j) => elemState.set(eid, { N: p.N[j], cable: this.model.elements.get(eid)?.cable, taut: !(this.model.elements.get(eid)?.cable) || p.N[j] >= 0 }));
+    P.elemIds.forEach((eid, j) => {
+      const me = this.model.elements.get(eid);
+      const taut = me?.cable ? p.N[j] >= 0 : (me?.compressionOnly ? p.N[j] <= 0 : true);
+      elemState.set(eid, { N: p.N[j], cable: me?.cable, compressionOnly: me?.compressionOnly, taut });
+    });
     this.viewport.showNLDeformed(uByNode, elemState, 1,
       `Pushover DC · λ=${p.lambda.toFixed(3)} · δ(${this._dcCtrlLabel})=${p.disp.toExponential(2)} m`);
     const plot = document.getElementById('dc-plot'); if (plot) plot.innerHTML = this._dcSVG(k);
@@ -4669,7 +4758,7 @@ class App {
               selectedNodes: sel.filter(s => s.type === 'node').map(s => s.id) };
     }
     this.snapshot();
-    const { aplicarOperaciones } = await import('./model/model_ops.js?v=123');
+    const { aplicarOperaciones } = await import('./model/model_ops.js?v=124');
     const res = aplicarOperaciones(this.model, ops, ctx);
     // los resultados previos dejan de ser válidos tras modificar la geometría/cargas
     this.viewport.clearResults?.();
@@ -4717,7 +4806,7 @@ class App {
     this._showProgress('Generando el modelo…', 'Aplicando reglas y cargas normativas');
     try {
       const libs = await this._cargarBibliotecasAsistente();
-      const { generarModelo } = await import('../asistente/generador.js?v=123');
+      const { generarModelo } = await import('../asistente/generador.js?v=124');
       const modelo = generarModelo(ficha, libs);
 
       if (modo === 'sobreponer') {
@@ -5777,7 +5866,7 @@ class App {
     const deflex = this._calcularDeflexionesVigas(diseno?.params);
     const drift  = this._calcularDrift();
     try {
-      const { Docx } = await import('./io/docx.js?v=123');
+      const { Docx } = await import('./io/docx.js?v=124');
       const blob = this._memoriaDocx(Docx, imgs, diseno, deflex, drift).blob();
       this._downloadBlob(blob, 'memoria_calculo.docx');
       this.toast('Memoria Word (.docx) descargada', 'ok');
@@ -5948,7 +6037,7 @@ class App {
   // Verificación de diseño (flexión/corte/axial) por elemento, usando los
   // resultados actuales y los parámetros editables de asistente/diseno_params.json.
   async _calcularDiseno() {
-    const ver = '?v=123';
+    const ver = '?v=124';
     let params = null;
     try { params = await fetch('asistente/diseno_params.json' + ver).then(r => r.json()); }
     catch (e) { console.error('No se pudo cargar diseno_params.json:', e); return null; }

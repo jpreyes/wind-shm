@@ -4,6 +4,7 @@
 // FASE 1:
 //   · Elemento BARRA/CABLE corotacional 3D (no linealidad geométrica exacta).
 //   · Cable «tension-only»: si entra en compresión queda flojo (N = 0).
+//   · Puntal «compression-only»: si entra en tracción queda suelto (N = 0).
 //   · Pretensado por LONGITUD NATURAL L0 (si L0 < longitud geométrica → tracción
 //     en reposo; el equilibrio inicial ya incluye la pretensión).
 //   · Solver INCREMENTAL-ITERATIVO (Newton-Raphson) con control de carga.
@@ -60,7 +61,8 @@ export function barState(X, u, el) {
   const L0 = el.L0;
   let N = el.EA * (l - L0) / L0;       // fuerza axial (engineering strain)
   let taut = true;
-  if (el.cable && N < 0) { N = 0; taut = false; }   // cable flojo → sin fuerza
+  if (el.cable && N < 0) { N = 0; taut = false; }            // cable flojo (sólo tracción)
+  else if (el.compressionOnly && N > 0) { N = 0; taut = false; }  // puntal suelto (sólo compresión)
   return { N, l, n, L0, taut };
 }
 

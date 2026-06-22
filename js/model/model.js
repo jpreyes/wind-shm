@@ -83,6 +83,14 @@ export class Model {
       if (!n.springs) n.springs = { kux: 0, kuy: 0, kuz: 0, krx: 0, kry: 0, krz: 0 };
       Object.assign(n.springs, props.springs);
     }
+    // Desplazamiento prescrito (asentamiento/giro de apoyo). Valores en m / rad.
+    // Un GDL con valor ≠ 0 se impone como soporte con ese desplazamiento (#54).
+    if (props.prescDisp) {
+      if (!n.prescDisp) n.prescDisp = { ux: 0, uy: 0, uz: 0, rx: 0, ry: 0, rz: 0 };
+      Object.assign(n.prescDisp, props.prescDisp);
+      // Si quedó todo en cero, elimina el objeto para no ensuciar el .s3d.
+      if (!Object.values(n.prescDisp).some(v => v)) delete n.prescDisp;
+    }
     return n;
   }
 
@@ -133,7 +141,14 @@ export class Model {
     if (props.releases) el.releases = [...props.releases];
     // NL-lite (Fase 1): cable «tension-only» + pretensado por longitud natural.
     // L0factor = longitud natural / longitud geométrica (1 = sin pretensar, <1 = pretensado).
-    if (props.cable    !== undefined) el.cable    = !!props.cable;
+    if (props.cable    !== undefined) {
+      el.cable = !!props.cable;
+      if (el.cable) el.compressionOnly = false;   // excluyentes
+    }
+    if (props.compressionOnly !== undefined) {
+      el.compressionOnly = !!props.compressionOnly;
+      if (el.compressionOnly) el.cable = false;    // excluyentes
+    }
     if (props.L0factor !== undefined) el.L0factor = +props.L0factor || 1;
     return el;
   }

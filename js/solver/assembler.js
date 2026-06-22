@@ -5,9 +5,9 @@ import {
   localAxes, stiffnessMatrix, massMatrix,
   transformMatrix, globalStiffness,
   applyReleases, fixedEndForces, condenseFEF
-} from './timoshenko.js?v=123';
-import { applyDiaphragmConstraints, applyDiaphragmMass } from './diaphragm.js?v=123';
-import { assembleAreasInto, assembleAreasMassInto, areaThermalContribs } from './membrane.js?v=123';
+} from './timoshenko.js?v=124';
+import { applyDiaphragmConstraints, applyDiaphragmMass } from './diaphragm.js?v=124';
+import { assembleAreasInto, assembleAreasMassInto, areaThermalContribs } from './membrane.js?v=124';
 
 // ── Node index (contiguous 0-based numbering) ─────────────────────────────
 export function buildNodeIndex(model) {
@@ -154,11 +154,17 @@ export function assembleF(model, nodeIndex, lcId, selfWeight = false) {
       // FEF térmica (igual convención que las distribuidas, F -= FEF):
       //   axial nodo1 = +EA·α·ΔT,  axial nodo2 = −EA·α·ΔT  (resto 0).
       // Barra libre → N=0 (dilata α·ΔT·L); empotrada → N=−EA·α·ΔT.
-      // Temperatura sobre un ÁREA (membrana): carga térmica de superficie.
+      // Temperatura sobre un ÁREA: carga térmica de superficie (membrana) + un
+      // GRADIENTE a través del espesor (momento térmico de flexión, #57).
+      // Caras: dTtop = cara +z (roja), dTbot = cara −z (azul). Media → membrana;
+      // (dTtop − dTbot) → gradiente. Compatible con el ΔT uniforme legado (dT).
       if (load.type === 'temp' && load.areaId != null) {
         const area = model.areas.get(load.areaId);
         if (!area) continue;
-        for (const { dof, val } of areaThermalContribs(area, model, nodeIndex, load.dT || 0)) F[dof] += val;
+        const hasFaces = load.dTtop != null || load.dTbot != null;
+        const dTmean = hasFaces ? ((+load.dTtop || 0) + (+load.dTbot || 0)) / 2 : (load.dT || 0);
+        const gradT  = hasFaces ? ((+load.dTtop || 0) - (+load.dTbot || 0)) : 0;
+        for (const { dof, val } of areaThermalContribs(area, model, nodeIndex, dTmean, gradT)) F[dof] += val;
         continue;
       }
 

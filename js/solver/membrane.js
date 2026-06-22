@@ -14,7 +14,7 @@
 // Convención de GDL local: [u1,v1, u2,v2, ...] (x,y en el plano del elemento).
 // ──────────────────────────────────────────────────────────────────────────────
 
-import { mitc4Plate, dktPlate, plateMoments, plateCurvatures } from './plate.js?v=123';
+import { mitc4Plate, dktPlate, plateMoments, plateCurvatures, plateThermalLoad, plateD } from './plate.js?v=124';
 
 // Matriz constitutiva D (3×3) plana. planeStrain=false → tensión plana.
 export function Dmatrix(E, nu, planeStrain = false) {
@@ -258,14 +258,33 @@ export function assembleAreasMassInto(writer, model, nodeIndex) {
 }
 
 // Aportes de carga térmica de un área a F (lista de {dof, val}).
-export function areaThermalContribs(area, model, nodeIndex, dT) {
+// dT = temperatura media (membrana). gradT = T_sup − T_inf (gradiente a través del
+// espesor → momento térmico de flexión en placa/shell, #57).
+export function areaThermalContribs(area, model, nodeIndex, dT, gradT = 0) {
   const mat = model.materials.get(area.matId); if (!mat) return [];
   const e0 = thermalStrain(mat.alpha ?? 0, dT || 0, mat.nu, area.planeStrain);
   const S = _areaSetup(area, model, nodeIndex, e0); if (!S) return [];
-  const { el, ex, ey, gdof, nN } = S;
-  const fT = el.fT, R = [ex, ey], out = [];
-  for (let a = 0; a < nN; a++)
-    for (let r = 0; r < 3; r++) out.push({ dof: gdof[a] + r, val: R[0][r] * fT[2 * a] + R[1][r] * fT[2 * a + 1] });
+  const { el, ex, ey, ez, gdof, nN, local, mat: m } = S;
+  const out = [];
+  // ── Membrana (en-plano): dilatación media ──────────────────────────────────
+  if (hasMembrane(area)) {
+    const fT = el.fT, R = [ex, ey];
+    for (let a = 0; a < nN; a++)
+      for (let r = 0; r < 3; r++) out.push({ dof: gdof[a] + r, val: R[0][r] * fT[2 * a] + R[1][r] * fT[2 * a + 1] });
+  }
+  // ── Placa (flexión): momento térmico por el gradiente ──────────────────────
+  if (gradT && hasPlate(area)) {
+    const t = area.thickness || 1;
+    const k0 = (m.alpha ?? 0) * gradT / t;            // curvatura térmica
+    const fL = plateThermalLoad(local, m.E, m.nu, t, [k0, k0, 0]);   // GDL locales [w,θx,θy]
+    const Tn = [[ez[0], 0, 0], [ez[1], 0, 0], [ez[2], 0, 0],
+                [0, ex[0], ey[0]], [0, ex[1], ey[1]], [0, ex[2], ey[2]]];
+    for (let a = 0; a < nN; a++)
+      for (let r = 0; r < 6; r++) {
+        const v = Tn[r][0] * fL[3 * a] + Tn[r][1] * fL[3 * a + 1] + Tn[r][2] * fL[3 * a + 2];
+        if (v) out.push({ dof: gdof[a] + r, val: v });
+      }
+  }
   return out;
 }
 
@@ -326,7 +345,7 @@ export function areaCurvature(area, model, nodeIndex, u) {
 // Tensión de FLEXIÓN en la fibra de superficie (placa/shell): σ = 6·M/t²
 // [σx,σy,τxy] en el marco local, a partir de los momentos de placa en el centro.
 // Devuelve null si el área no tiene flexión (membrana pura).
-export function areaBendingStress(area, model, nodeIndex, u) {
+export function areaBendingStress(area, model, nodeIndex, u, gradT = 0) {
   if (!hasPlate(area)) return null;
   const S = _areaSetup(area, model, nodeIndex, [0, 0, 0]); if (!S) return null;
   const { ex, ey, ez, gdof, nN, local, mat } = S;
@@ -338,6 +357,14 @@ export function areaBendingStress(area, model, nodeIndex, u) {
   }
   const t = area.thickness;
   const M = plateMoments(local, mat.E, mat.nu, t, dLocal);
+  // #57: descuenta el momento térmico M_T = Db·κ₀ (κ₀ = α·gradT/t) → momento mecánico.
+  if (gradT) {
+    const k0 = (mat.alpha ?? 0) * gradT / t;
+    const { Db } = plateD(mat.E, mat.nu, t);
+    M[0] -= Db[0][0] * k0 + Db[0][1] * k0;
+    M[1] -= Db[1][0] * k0 + Db[1][1] * k0;
+    M[2] -= Db[2][0] * k0 + Db[2][1] * k0;
+  }
   const c = 6 / (t * t);
   return [c * M[0], c * M[1], c * M[2]];   // tensión de superficie (fibra inferior)
 }
