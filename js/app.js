@@ -1284,18 +1284,9 @@ class App {
       'run-pushover-dc': () => this.runPushoverDC(opts),
     }[act];
     if (!fn) return;
-    // Caja de progreso para los NL-lite SÍNCRONOS y sin diálogo (nonlinear/pdelta):
-    // se muestra, se cede el hilo para que pinte, y se corre. Los demás gestionan su
-    // propia caja (estático/modal/espectro/pandeo) o su diálogo.
-    const heavy = {
-      'run-nonlinear': 'Resolviendo el sistema no lineal (Newton)…',
-      'run-pdelta': 'Resolviendo P-Delta (rigidez geométrica)…',
-    };
-    if (heavy[act] && this._config?.analisis?.nlLite) {
-      this._showProgress('Analizando…', heavy[act]);
-      await new Promise(r => setTimeout(r, 30));
-      try { await fn(); } finally { this._hideProgress(); }
-    } else { await fn(); }   // await: el modo LOTE espera a que termine cada análisis
+    // Cada runner gestiona su propia caja de progreso (modal/espectro/pandeo y, desde
+    // #44, también los NL-lite síncronos). await: el modo LOTE espera a que termine.
+    await fn();
   }
 
   // ── Analizar seleccionados (LOTE) ───────────────────────────────────────────
@@ -2288,7 +2279,7 @@ class App {
   // como «cable» resisten solo tracción. Pretensado por longitud natural L0.
   // Combina todos los casos estáticos a factor 1 (cargas nodales + peso propio +
   // distribuidas concentradas a los nodos extremos). Newton incremental.
-  runNonlinear(opts = {}) {
+  async runNonlinear(opts = {}) {
     if (!this._config?.analisis?.nlLite) {
       this.toast('Active «Análisis no lineal (NL-lite)» en ⚙ Configuración primero', 'warn');
       this.configDialog?.();
@@ -2364,16 +2355,20 @@ class App {
     }
 
     const nSteps = Math.max(1, Math.min(200, Math.round(parseFloat(this._nlSteps) || 12)));
+    this._showProgress('No lineal…', 'Resolviendo el sistema no lineal (Newton, control de carga)');
+    await new Promise(r => setTimeout(r, 20));
     let res;
     try {
       res = solveNonlinear({ X, elems, free, Fref, nSteps, maxIter: 60, tol: 1e-8, slack: 1e-6 });
     } catch (e) { this.toast(`Error no lineal: ${e.message}`, 'error'); console.error(e); return; }
+    finally { this._hideProgress(); }
 
     if (!res.steps.length || !res.steps[0]) { this.toast('El análisis no lineal no produjo pasos (¿mecanismo?)', 'error'); return; }
     this._nlResult = { res, X, nodeIds, idxOf, elemIds };
     if (!res.converged) this.toast(`No convergió en el paso ${res.steps.length}/${nSteps} (tangente singular o carga excesiva). Se muestran los pasos logrados.`, 'warn');
     else this.toast(`No lineal OK · ${res.steps.length} pasos · ${nCasos} caso(s) combinados`, 'ok');
     this._nlOpenOverlay();
+    this._updateResultsIndicator();
   }
 
   // Panel flotante con control paso a paso de la deformada no lineal.
@@ -2652,11 +2647,10 @@ class App {
   }
 
   // P-DELTA: resuelve (K + Kg(u))·u = F iterando (frames). Muestra la deformada
-  // amplificada y compara δmax lineal vs P-Delta.
-  runPDelta(opts = {}) {
+  // amplificada y compara δmax lineal vs P-Delta. Motor en BANDA (Cholesky, #44),
+  // no el denso numeric.solve O(n³), y caja de progreso como modal/pandeo.
+  async runPDelta(opts = {}) {
     if (!this._config?.analisis?.nlLite) { this.toast('Active «Análisis no lineal (NL-lite)» en ⚙ Configuración', 'warn'); this.configDialog?.(); return; }
-    const num = window.numeric;
-    if (!num) { this.toast('numeric.js no disponible', 'error'); return; }
     this._applyAutoDiscIfEnabled();   // misma malla que el estático (#36)
     const { nodeIndex, K, nDOF, freeDOF, F, nCasos } = this._buildGeomProblem();
     this._geomNI = nodeIndex;
@@ -2664,38 +2658,50 @@ class App {
     if (!nCasos) { this.toast('Defina al menos un caso de carga.', 'warn'); return; }
 
     const nF = freeDOF.length;
-    const Kff = freeDOF.map(a => freeDOF.map(b => K[a * nDOF + b]));
-    const Ff = freeDOF.map(a => F[a]);
-    let uf;
-    try { uf = num.solve(Kff, Ff); } catch (e) { this.toast('Estado lineal inestable (mecanismo).', 'error'); return; }
-    if (!uf || uf.some(v => !isFinite(v))) { this.toast('Estado lineal singular.', 'error'); return; }
-    let u = new Float64Array(nDOF); freeDOF.forEach((d, i) => u[d] = uf[i]);
-    const dLin = this._maxTransDisp(u);
+    // Kff y Ff en formato plano (Float64Array): entrada del factorizador en banda.
+    const Kff = new Float64Array(nF * nF);
+    const Ff = new Float64Array(nF);
+    for (let i = 0; i < nF; i++) { Ff[i] = F[freeDOF[i]]; const ri = freeDOF[i] * nDOF; for (let j = 0; j < nF; j++) Kff[i * nF + j] = K[ri + freeDOF[j]]; }
+    const dense = !!this._config?.analisis?.matrizDensa;
 
-    let conv = false, it = 0;
-    for (it = 0; it < 25; it++) {
-      const { Kg } = assembleKg(this.model, nodeIndex, u);
-      const KT = freeDOF.map(a => freeDOF.map(b => K[a * nDOF + b] + Kg[a * nDOF + b]));
-      let uf2;
-      try { uf2 = num.solve(KT, Ff); } catch (e) { this.toast('Tangente singular: la carga iguala o supera la de pandeo (λcr ≤ 1). Reduzca la carga o ejecute Pandeo.', 'error'); return; }
-      if (!uf2 || uf2.some(v => !isFinite(v))) { this.toast('Divergió: la carga alcanza la de pandeo.', 'error'); return; }
-      const uNew = new Float64Array(nDOF); freeDOF.forEach((d, i) => uNew[d] = uf2[i]);
-      let dn = 0, de = 0; for (let i = 0; i < nDOF; i++) { dn += (uNew[i] - u[i]) ** 2; de += uNew[i] ** 2; }
-      u = uNew;
-      if (de > 0 && Math.sqrt(dn / de) < 1e-6) { conv = true; it++; break; }
-    }
-    const dPD = this._maxTransDisp(u);
-    this._pdResult = { u };
-    const amp = dLin > 1e-12 ? dPD / dLin : 1;
-    this.toast(`P-Delta: δmax ${dLin.toExponential(2)} → ${dPD.toExponential(2)} m (amplificación ×${amp.toFixed(2)}) · ${conv ? it + ' iter' : 'no convergió'}`, conv ? 'ok' : 'warn');
+    this._showProgress('P-Delta…', 'Resolviendo (K + Kg(u))·u = F por iteración (motor en banda)');
+    await new Promise(r => setTimeout(r, 20));
+    try {
+      const fac0 = makeFactor(Kff, nF, dense);
+      if (!fac0.ok) { this.toast('Estado lineal inestable (mecanismo).', 'error'); return; }
+      const uf = fac0.solve(Ff);
+      if (!uf || uf.some(v => !isFinite(v))) { this.toast('Estado lineal singular.', 'error'); return; }
+      let u = new Float64Array(nDOF); for (let i = 0; i < nF; i++) u[freeDOF[i]] = uf[i];
+      const dLin = this._maxTransDisp(u);
 
-    const uByNode = new Map();
-    for (const node of this.model.nodes.values()) {
-      const d = getNodeDOFs(nodeIndex, node.id);
-      uByNode.set(node.id, [u[d[0]], u[d[1]], u[d[2]]]);
-    }
-    this.viewport.showNLDeformed(uByNode, new Map(), 1,
-      `P-Delta · δmax=${dPD.toExponential(2)} m · amplificación ×${amp.toFixed(2)} vs lineal · ${conv ? it + ' iter' : 'sin converger'}`);
+      let conv = false, it = 0;
+      for (it = 0; it < 25; it++) {
+        const { Kg } = assembleKg(this.model, nodeIndex, u);
+        const KT = new Float64Array(nF * nF);
+        for (let i = 0; i < nF; i++) { const ri = freeDOF[i] * nDOF; for (let j = 0; j < nF; j++) KT[i * nF + j] = Kff[i * nF + j] + Kg[ri + freeDOF[j]]; }
+        const fac = makeFactor(KT, nF, dense);
+        if (!fac.ok) { this.toast('Tangente singular: la carga iguala o supera la de pandeo (λcr ≤ 1). Reduzca la carga o ejecute Pandeo.', 'error'); return; }
+        const uf2 = fac.solve(Ff);
+        if (!uf2 || uf2.some(v => !isFinite(v))) { this.toast('Divergió: la carga alcanza la de pandeo.', 'error'); return; }
+        const uNew = new Float64Array(nDOF); for (let i = 0; i < nF; i++) uNew[freeDOF[i]] = uf2[i];
+        let dn = 0, de = 0; for (let i = 0; i < nDOF; i++) { dn += (uNew[i] - u[i]) ** 2; de += uNew[i] ** 2; }
+        u = uNew;
+        if (de > 0 && Math.sqrt(dn / de) < 1e-6) { conv = true; it++; break; }
+      }
+      const dPD = this._maxTransDisp(u);
+      this._pdResult = { u };
+      const amp = dLin > 1e-12 ? dPD / dLin : 1;
+      this.toast(`P-Delta: δmax ${dLin.toExponential(2)} → ${dPD.toExponential(2)} m (amplificación ×${amp.toFixed(2)}) · ${conv ? it + ' iter' : 'no convergió'}`, conv ? 'ok' : 'warn');
+
+      const uByNode = new Map();
+      for (const node of this.model.nodes.values()) {
+        const d = getNodeDOFs(nodeIndex, node.id);
+        uByNode.set(node.id, [u[d[0]], u[d[1]], u[d[2]]]);
+      }
+      this.viewport.showNLDeformed(uByNode, new Map(), 1,
+        `P-Delta · δmax=${dPD.toExponential(2)} m · amplificación ×${amp.toFixed(2)} vs lineal · ${conv ? it + ' iter' : 'sin converger'}`);
+      this._updateResultsIndicator();
+    } finally { this._hideProgress(); }
   }
 
   // ── NL-lite Fase 3: FORM-FINDING por densidades de fuerza (FDM) ───────────
@@ -2935,6 +2941,8 @@ class App {
     const events = []; let collapsed = false;
     const maxEvents = 6 * model.elements.size + 12;
 
+    this._showProgress('Rótulas plásticas…', 'Análisis incremental evento a evento (motor en banda)');
+    await new Promise(r => setTimeout(r, 20));
     for (let k = 0; k < maxEvents; k++) {
       const { K, elems } = this._plasticAssemble(nodeIndex, releasesByElem);
       const Kff = new Float64Array(nF * nF);
@@ -2990,6 +2998,7 @@ class App {
         events.push({ lambda, elemId: c.r.elemId, nodeId: c.r.end === 1 ? nd.n1 : nd.n2, axis: c.r.axis, dctrl });
       }
     }
+    this._hideProgress();
 
     if (!events.length) {
       this.toast(collapsed
@@ -3288,7 +3297,11 @@ class App {
     }
     const linCtrl = uLin[cDOF] || 1e-3;
     const target = linCtrl * 25;   // empuja bien más allá de puntos límite (traza el snap-through completo)
-    const res = solveNonlinearDC({ X: Ximp, elems: P.elems, free: P.free, Fref: P.Fref, controlDOF: cDOF, targetDisp: target, nSteps: 60 });
+    this._showProgress('Pushover…', 'Trazando la trayectoria de equilibrio (control de desplazamiento)');
+    await new Promise(r => setTimeout(r, 20));
+    let res;
+    try { res = solveNonlinearDC({ X: Ximp, elems: P.elems, free: P.free, Fref: P.Fref, controlDOF: cDOF, targetDisp: target, nSteps: 60 }); }
+    finally { this._hideProgress(); }
     if (!res.path || res.path.length < 2) { this.toast('Pushover DC: ' + (res.note || 'sin trayectoria'), 'error'); return; }
 
     this._dcResult = { res, P, cDOF, imp, Ximp };
@@ -3297,6 +3310,7 @@ class App {
     this._dcCtrlLabel = `nodo ${nodeId} · ${axis}`;
     this.toast(`${res.ok ? 'Pushover DC OK' : res.note} · pico λ=${peak.toFixed(3)} (carga límite) · control ${this._dcCtrlLabel}${imp ? ` · imperfección ${imp} m` : ''}`, res.ok ? 'ok' : 'warn');
     this._dcOpenOverlay();
+    this._updateResultsIndicator();
   }
 
   _dcOpenOverlay() {
