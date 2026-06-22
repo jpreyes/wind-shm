@@ -2204,7 +2204,9 @@ export class Viewport {
   // de dos fuerzas → rectos). Colorea: cable flojo = gris punteado, tracción =
   // teal, compresión = naranja. uByNode: Map(id → [ux,uy,uz]); elemState:
   // Map(elemId → {taut,N,cable}); factor relativo sobre la escala auto.
-  showNLDeformed(uByNode, elemState, factor, infoText) {
+  // hinges (opcional, #47): [{ nodeId, color }] → marca cada rótula plástica en la
+  // posición deformada de su nodo, con color por orden de formación (gradiente→rojo).
+  showNLDeformed(uByNode, elemState, factor, infoText, hinges = null) {
     this.clearLoads();
     this.clearResults();
     this._resultObjects = [];
@@ -2255,6 +2257,24 @@ export class Viewport {
       mesh.position.copy(defPos(node));
       this._scene.add(mesh);
       this._resultObjects.push(mesh);
+    }
+    // Rótulas plásticas: anillo de color en la posición deformada del nodo (#47).
+    if (hinges && hinges.length) {
+      const rNode = this.app.model.nodes;
+      let drawn = 0;
+      for (const h of hinges) {
+        const node = rNode.get(h.nodeId); if (!node) continue;
+        const mk = new THREE.Mesh(
+          new THREE.SphereGeometry(NODE_R * 1.6, 10, 10),
+          new THREE.MeshBasicMaterial({ color: h.color ?? 0xef4444, transparent: true, opacity: 0.9, depthTest: false })
+        );
+        mk.position.copy(defPos(node));
+        mk.renderOrder = 6;
+        this._scene.add(mk);
+        this._resultObjects.push(mk);
+        drawn++;
+      }
+      void drawn;
     }
     this._showResultsUI(infoText || `Deformada no lineal ×${_fmt(scale)} | δmax=${_fmt(maxD)}`);
   }

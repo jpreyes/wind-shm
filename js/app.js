@@ -1371,15 +1371,8 @@ class App {
 
   // Re-muestra el mecanismo de colapso plástico guardado + la pestaña Rótulas (#37).
   _plasticShow() {
-    const pr = this._plasticResult; if (!pr) return;
-    const ni = pr.nodeIndex || buildNodeIndex(this.model);
-    const uByNode = new Map();
-    for (const node of this.model.nodes.values()) {
-      const d = getNodeDOFs(ni, node.id);
-      uByNode.set(node.id, [pr.u[d[0]], pr.u[d[1]], pr.u[d[2]]]);
-    }
-    this.viewport.showNLDeformed(uByNode, new Map(), 1,
-      pr.collapsed ? `Colapso plástico · λc = ${pr.lambda.toFixed(3)} · ${pr.events.length} rótulas` : `Plástico · λ = ${pr.lambda.toFixed(3)} · ${pr.events.length} rótulas`);
+    if (!this._plasticResult) return;
+    this._plasticOpenOverlay();   // deformada + secuencia paso a paso (#47)
     this.panel._switchVTab('resultados');
     this.panel._switchRTab('plastico');
   }
@@ -1840,6 +1833,8 @@ class App {
     this._dcResult = null;
     this._nlResult = null;
     this._pdResult = null;
+    this._plasticStopPlay?.();
+    document.getElementById('pl-overlay')?.remove();
     this.viewport.clearResults();
     // Apagar la visualización de reacciones
     this._showReactions = false;
@@ -2891,7 +2886,7 @@ class App {
     // coinciden con los seleccionados y se perdería el Mp por elemento (#36).
     if (!selEls.length) this._applyAutoDiscIfEnabled();
     const popts = opts.silent
-      ? { mpDefault: this._lastMp || 100, mpSel: this._lastMp || 100, soloSel: false }
+      ? { mpDefault: this._lastMp || 100, mpSel: this._lastMp || 100, soloSel: false, pattern: this._lastPattern || 'all' }
       : await this._plasticDialog(selEls.length > 0);
     if (!popts) return;
     const { mpDefault, mpSel, soloSel } = popts;
@@ -2918,13 +2913,13 @@ class App {
     if (!freeDOF.length) { this.toast('Sin GDL libres', 'warn'); return; }
     const nF = freeDOF.length;
 
-    // Carga de referencia combinada (factor 1)
+    // Carga de referencia según el patrón elegido (#45): todos / un caso / un combo.
     const F = new Float64Array(nDOF);
+    const { contribs, label: patLabel } = this._resolvePattern(popts.pattern);
     let nCasos = 0;
-    for (const lc of model.loadCases.values()) {
-      if (lc.type === 'spectrum') continue;
-      const Fi = assembleF(model, nodeIndex, lc.id, !!lc.selfWeight);
-      for (let i = 0; i < nDOF; i++) F[i] += Fi[i];
+    for (const c of contribs) {
+      const Fi = assembleF(model, nodeIndex, c.lcId, c.selfWeight);
+      for (let i = 0; i < nDOF; i++) F[i] += c.factor * Fi[i];
       nCasos++;
     }
     if (!nCasos) { this.toast('Defina al menos un caso de carga (patrón de carga del pushover).', 'warn'); return; }
@@ -3002,17 +2997,120 @@ class App {
         : 'Ningún extremo alcanza Mp: suba el patrón de carga o baje Mp (con el Mp dado la carga de referencia no produce ese momento).', 'warn');
       return;
     }
-    this._plasticResult = { events, lambda, collapsed, u: Float64Array.from(u), nodeIndex, Mp, capByElem, nCasos };
+    this._plasticResult = { events, lambda, collapsed, u: Float64Array.from(u), nodeIndex, Mp, capByElem, nCasos, patLabel };
 
-    // Mostrar mecanismo de colapso (deformada) + secuencia de rótulas
-    const uByNode = new Map();
-    for (const node of model.nodes.values()) { const d = getNodeDOFs(nodeIndex, node.id); uByNode.set(node.id, [u[d[0]], u[d[1]], u[d[2]]]); }
-    this.viewport.showNLDeformed(uByNode, new Map(), 1,
-      collapsed ? `Colapso plástico · λc = ${lambda.toFixed(3)} · ${events.length} rótulas · mecanismo` : `Plástico · λ = ${lambda.toFixed(3)} · ${events.length} rótulas (sin mecanismo)`);
-    this.toast(collapsed ? `Colapso plástico: λc = ${lambda.toFixed(3)} × carga de referencia · ${events.length} rótulas` : `Plástico: ${events.length} rótulas, sin mecanismo (λ=${lambda.toFixed(3)})`, collapsed ? 'ok' : 'warn');
+    // Mostrar mecanismo de colapso (deformada) + secuencia de rótulas, con panel
+    // de animación paso a paso (#47).
+    this.toast((collapsed ? `Colapso plástico: λc = ${lambda.toFixed(3)} × carga de referencia · ${events.length} rótulas` : `Plástico: ${events.length} rótulas, sin mecanismo (λ=${lambda.toFixed(3)})`) + ` · patrón: ${patLabel}`, collapsed ? 'ok' : 'warn');
+    this._plasticOpenOverlay();
     // Resultados en la pestaña «Rótulas» (respeta el tema claro/oscuro) — #27a.
     this.panel._switchVTab('resultados');
     this.panel._switchRTab('plastico');
+  }
+
+  // Color de la rótula i (0-based) de n: gradiente amarillo→rojo por orden (#47).
+  _hingeColor(i, n) {
+    const t = n > 1 ? i / (n - 1) : 1;
+    const a = [0xfd, 0xe0, 0x47], b = [0xef, 0x44, 0x44];
+    const c = a.map((v, k) => Math.round(v + (b[k] - v) * t));
+    return (c[0] << 16) | (c[1] << 8) | c[2];
+  }
+
+  // Re-dibuja la deformada plástica mostrando las rótulas formadas hasta el paso k
+  // (1..N), coloreadas por orden de formación. k = N → mecanismo completo.
+  _plasticShowStep(k) {
+    const pr = this._plasticResult; if (!pr) return;
+    const ni = pr.nodeIndex || buildNodeIndex(this.model);
+    const uByNode = new Map();
+    for (const node of this.model.nodes.values()) {
+      const d = getNodeDOFs(ni, node.id);
+      uByNode.set(node.id, [pr.u[d[0]], pr.u[d[1]], pr.u[d[2]]]);
+    }
+    const n = pr.events.length;
+    const kk = Math.max(1, Math.min(k, n));
+    const hinges = pr.events.slice(0, kk).map((ev, i) => ({ nodeId: ev.nodeId, color: this._hingeColor(i, n) }));
+    const last = pr.events[kk - 1];
+    this.viewport.showNLDeformed(uByNode, new Map(), 1,
+      `${pr.collapsed ? 'Colapso plástico' : 'Plástico'} · rótula ${kk}/${n}` +
+      (last ? ` · elem #${last.elemId} ${last.axis} · λ=${last.lambda.toFixed(3)}` : ''), hinges);
+    const ro = document.getElementById('pl-readout');
+    if (ro && last) ro.innerHTML = `Rótula <b>${kk}/${n}</b> · elem #${last.elemId} (${last.axis}) · λ = <b>${last.lambda.toFixed(3)}</b>`;
+  }
+
+  // Panel flotante con control paso a paso de la secuencia de rótulas (#47).
+  _plasticOpenOverlay() {
+    const pr = this._plasticResult; if (!pr || !pr.events.length) return;
+    const N = pr.events.length;
+    let el = document.getElementById('pl-overlay');
+    if (!el) { el = document.createElement('div'); el.id = 'pl-overlay'; document.body.appendChild(el); }
+    el.style.cssText = 'position:fixed;right:16px;bottom:84px;z-index:50;background:var(--bg4);border:1px solid var(--border);border-radius:8px;padding:10px 12px;width:268px;box-shadow:0 8px 24px rgba(0,0,0,.4);font-size:12px;color:var(--text)';
+    el.innerHTML = `
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
+        <b style="color:var(--accent,#38bdf8)">Secuencia de rótulas</b>
+        <button id="pl-close" title="Cerrar" style="background:none;border:none;color:var(--text-muted,#94a3b8);cursor:pointer;font-size:16px;line-height:1">✕</button>
+      </div>
+      <div style="display:flex;align-items:center;gap:6px;margin-bottom:6px">
+        <button id="pl-play" class="btn-secondary" style="font-size:14px;padding:2px 8px">▶</button>
+        <input type="range" id="pl-step" min="1" max="${N}" value="${N}" style="flex:1">
+      </div>
+      <div id="pl-readout" style="color:var(--text-muted,#94a3b8);font-size:11px;line-height:1.5;margin-bottom:4px"></div>
+      <div style="color:var(--text-muted,#94a3b8);font-size:10.5px">Amarillo = primera · rojo = última. ${pr.collapsed ? `Mecanismo a la rótula ${N} (λc=${pr.lambda.toFixed(3)}).` : 'Sin mecanismo.'}</div>`;
+    const stepInp = el.querySelector('#pl-step');
+    const playBtn = el.querySelector('#pl-play');
+    const redraw = () => this._plasticShowStep(+stepInp.value);
+    stepInp.addEventListener('input', redraw);
+    el.querySelector('#pl-close').addEventListener('click', () => { this._plasticStopPlay(); el.remove(); this.viewport.clearResults(); });
+    playBtn.addEventListener('click', () => {
+      if (this._plasticPlayTimer) { this._plasticStopPlay(); playBtn.textContent = '▶'; return; }
+      playBtn.textContent = '⏸';
+      this._plasticPlayTimer = setInterval(() => {
+        let v = +stepInp.value + 1; if (v > N) v = 1;
+        stepInp.value = v; redraw();
+      }, 450);
+    });
+    redraw();
+  }
+
+  _plasticStopPlay() { if (this._plasticPlayTimer) { clearInterval(this._plasticPlayTimer); this._plasticPlayTimer = null; } }
+
+  // ── Patrón de carga para rótulas/pushover (#45) ─────────────────────────────
+  // Opciones para el selector: todos los casos, un caso concreto o una combinación.
+  _loadPatternOptions() {
+    const opts = [{ value: 'all', label: 'Todos los casos estáticos (combinados, factor 1)' }];
+    for (const lc of this.model.loadCases.values())
+      if (lc.type !== 'spectrum') opts.push({ value: 'lc:' + lc.id, label: 'Caso: ' + lc.name });
+    for (const cb of this.model.combinations.values())
+      opts.push({ value: 'combo:' + cb.id, label: 'Combo: ' + cb.name });
+    return opts;
+  }
+  // Resuelve un patrón a aportes {lcId, factor, selfWeight}. El peso propio de cada
+  // caso se respeta y se escala por su factor (en combos, p.ej. 1.2·D).
+  _resolvePattern(choice) {
+    const staticLcs = [...this.model.loadCases.values()].filter(lc => lc.type !== 'spectrum');
+    const allContribs = () => staticLcs.map(lc => ({ lcId: lc.id, factor: 1, selfWeight: !!lc.selfWeight }));
+    if (!choice || choice === 'all') return { contribs: allContribs(), label: 'todos los casos' };
+    if (choice.startsWith('lc:')) {
+      const id = +choice.slice(3), lc = this.model.loadCases.get(id);
+      if (lc && lc.type !== 'spectrum') return { contribs: [{ lcId: id, factor: 1, selfWeight: !!lc.selfWeight }], label: lc.name };
+    } else if (choice.startsWith('combo:')) {
+      const id = +choice.slice(6), cb = this.model.combinations.get(id);
+      if (cb) {
+        const contribs = [];
+        for (const f of (cb.factors || [])) {
+          const lc = this.model.loadCases.get(f.lcId);
+          if (lc && lc.type !== 'spectrum') contribs.push({ lcId: f.lcId, factor: f.factor, selfWeight: !!lc.selfWeight });
+        }
+        if (contribs.length) return { contribs, label: cb.name };
+      }
+    }
+    return { contribs: allContribs(), label: 'todos los casos' };
+  }
+  // <option>s para el <select> del patrón, marcando el último usado.
+  _patternSelectHTML(id) {
+    const last = this._lastPattern || 'all';
+    const opts = this._loadPatternOptions().map(o =>
+      `<option value="${o.value}"${o.value === last ? ' selected' : ''}>${String(o.label).replace(/[&<>]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c]))}</option>`).join('');
+    return `<select id="${id}" style="width:100%">${opts}</select>`;
   }
 
   /** Diálogo HTML — capacidad Mp (uniforme y/o por selección) para las rótulas. */
@@ -3042,6 +3140,12 @@ class App {
         </div>
         ${selBlock}
         <div class="prop-row cols1" style="margin-top:8px">
+          <div class="prop-field">
+            <label>Patrón de carga a evaluar (#45)</label>
+            ${this._patternSelectHTML('pl-pattern')}
+          </div>
+        </div>
+        <div class="prop-row cols1" style="margin-top:8px">
           <span style="color:var(--text-muted);font-size:11px;line-height:1.5">Análisis incremental evento-a-evento: cada extremo forma rótula al alcanzar su Mp; el colapso ocurre al formarse un mecanismo.${hasSel ? '' : ' Seleccione elementos antes para asignar capacidades por separado.'}</span>
         </div>`;
       overlay.classList.remove('hidden');
@@ -3055,14 +3159,17 @@ class App {
           if (!(mpSel > 0)) { this.toast('Mp de la selección debe ser > 0', 'warn'); resolve(null); return; }
           soloSel = !!document.getElementById('pl-solo-sel')?.checked;
         }
-        resolve({ mpDefault, mpSel, soloSel });
+        const pattern = document.getElementById('pl-pattern')?.value || 'all';
+        this._lastPattern = pattern;
+        resolve({ mpDefault, mpSel, soloSel, pattern });
       };
       overlay._reject = () => resolve(null);
     });
   }
 
   // ── NL-lite: arma el problema no lineal (barras/cables) desde el modelo ────
-  _buildNLProblem() {
+  // `pattern` (#45): patrón de carga de referencia (todos / un caso / un combo).
+  _buildNLProblem(pattern) {
     const model = this.model;
     const nodeIds = [...model.nodes.keys()];
     const idxOf = new Map(nodeIds.map((id, i) => [id, i]));
@@ -3084,27 +3191,62 @@ class App {
     const Fref = new Float64Array(3 * nNode); let nCasos = 0;
     const addN = (id, fx, fy, fz) => { const i = idxOf.get(id); if (i == null) return; Fref[3 * i] += fx; Fref[3 * i + 1] += fy; Fref[3 * i + 2] += fz; };
     const dirVec = d => d === 'globalX' ? [1, 0, 0] : d === 'globalY' ? [0, 1, 0] : d === 'globalZ' ? [0, 0, 1] : [0, 0, -1];
-    for (const lc of model.loadCases.values()) {
-      if (lc.type === 'spectrum') continue; nCasos++;
+    const { contribs, label: patLabel } = this._resolvePattern(pattern);
+    for (const c of contribs) {
+      const lc = model.loadCases.get(c.lcId); if (!lc) continue; nCasos++;
+      const fac = c.factor;
       for (const ld of (lc.loads || [])) {
-        if (ld.type === 'nodal') addN(ld.nodeId, ld.F[0] || 0, ld.F[1] || 0, ld.F[2] || 0);
+        if (ld.type === 'nodal') addN(ld.nodeId, fac * (ld.F[0] || 0), fac * (ld.F[1] || 0), fac * (ld.F[2] || 0));
         else if (ld.type === 'dist') {
           const el = model.elements.get(ld.elemId); if (!el) continue;
           const n1 = model.nodes.get(el.n1), n2 = model.nodes.get(el.n2); if (!n1 || !n2) continue;
           const L = Math.hypot(n2.x - n1.x, n2.y - n1.y, n2.z - n1.z);
-          const half = (ld.w || 0) * L / 2, g = dirVec(ld.dir || 'gravity');
+          const half = fac * (ld.w || 0) * L / 2, g = dirVec(ld.dir || 'gravity');
           addN(el.n1, half * g[0], half * g[1], half * g[2]); addN(el.n2, half * g[0], half * g[1], half * g[2]);
         }
       }
-      if (lc.selfWeight) for (const el of model.elements.values()) {
+      if (c.selfWeight) for (const el of model.elements.values()) {
         const mat = model.materials.get(el.matId), sec = model.sections.get(el.secId);
         const n1 = model.nodes.get(el.n1), n2 = model.nodes.get(el.n2);
         if (!mat || !sec || !n1 || !n2) continue;
-        const L = Math.hypot(n2.x - n1.x, n2.y - n1.y, n2.z - n1.z), w = mat.rho * sec.A * L / 2;
+        const L = Math.hypot(n2.x - n1.x, n2.y - n1.y, n2.z - n1.z), w = fac * mat.rho * sec.A * L / 2;
         addN(el.n1, 0, 0, -w); addN(el.n2, 0, 0, -w);
       }
     }
-    return { X, elems, elemIds, free, Fref, nodeIds, idxOf, nNode, nCasos };
+    return { X, elems, elemIds, free, Fref, nodeIds, idxOf, nNode, nCasos, patLabel };
+  }
+
+  /** Diálogo HTML — pushover: imperfección inicial + patrón de carga (#45). */
+  _pushoverDialog() {
+    return new Promise(resolve => {
+      const overlay = document.getElementById('modal-overlay');
+      document.getElementById('modal-title').textContent = 'Pushover — control de desplazamiento';
+      document.getElementById('modal-cancel').style.display = '';
+      document.getElementById('modal-body').innerHTML = `
+        <div class="prop-row cols1">
+          <div class="prop-field">
+            <label>Patrón de carga de referencia (#45)</label>
+            ${this._patternSelectHTML('po-pattern')}
+          </div>
+        </div>
+        <div class="prop-row cols1" style="margin-top:8px">
+          <div class="prop-field">
+            <label>Imperfección inicial (amplitud en m; 0 = perfecta)</label>
+            <input type="text" id="po-imp" value="0" style="width:100%;margin-top:4px">
+          </div>
+        </div>
+        <div class="prop-row cols1" style="margin-top:8px">
+          <span style="color:var(--text-muted);font-size:11px;line-height:1.5">Idealiza las barras como reticulado (axial/cables). La imperfección dispara inestabilidades (snap-through / puntos límite).</span>
+        </div>`;
+      overlay.classList.remove('hidden');
+      setTimeout(() => { const el = document.getElementById('po-imp'); el?.focus(); el?.select(); }, 50);
+      overlay._resolve = () => {
+        const pattern = document.getElementById('po-pattern')?.value || 'all';
+        const imp = document.getElementById('po-imp')?.value ?? '0';
+        resolve({ imp, pattern });
+      };
+      overlay._reject = () => resolve(null);
+    });
   }
 
   // ── NL-lite Fase 5: pushover por CONTROL DE DESPLAZAMIENTO + imperfecciones ─
@@ -3115,14 +3257,16 @@ class App {
     if (!this._config?.analisis?.nlLite) { this.toast('Active «Análisis no lineal (NL-lite)» en ⚙ Configuración', 'warn'); this.configDialog?.(); return; }
     const model = this.model;
     if (model.nodes.size === 0 || model.elements.size === 0) { this.toast('Modelo vacío', 'warn'); return; }
-    const P = this._buildNLProblem();
+
+    // Diálogo: imperfección + patrón de carga (#45). En lote, valores por defecto.
+    const pd = opts.silent ? { imp: 0, pattern: this._lastPattern || 'all' } : await this._pushoverDialog();
+    if (!pd) return;
+    const imp = parseFloat(pd.imp) || 0;
+    this._lastPattern = pd.pattern;
+
+    const P = this._buildNLProblem(pd.pattern);
     if (!P.free.length) { this.toast('Sin GDL libres', 'warn'); return; }
     if (!P.nCasos) { this.toast('Defina un caso de carga (patrón de referencia).', 'warn'); return; }
-
-    const impStr = opts.silent ? '0' : await this._promptModal('Pushover — control de desplazamiento',
-      'Imperfección inicial (amplitud en m; 0 = perfecta). Se aplica en la forma de la respuesta para disparar inestabilidades:', '0');
-    if (impStr == null) return;
-    const imp = parseFloat(impStr) || 0;
 
     // Respuesta lineal (1 paso, 1 iteración desde u=0) → GDL de control + forma de imperfección
     const lin = solveNonlinear({ X: P.X, elems: P.elems, free: P.free, Fref: P.Fref, nSteps: 1, maxIter: 1, tol: 1e-30 });
