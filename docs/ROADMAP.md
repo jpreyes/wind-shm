@@ -8,8 +8,8 @@ similaridad. `[#]` referencia el pedido original. Estado: ⬜ pendiente · 🟡 
 ## G1 · Panel de análisis y acceso a resultados ✅
 *El cuello de botella del flujo: lanzar análisis y reusar resultados.*
 - ✅ **Ventana flotante de análisis** (Centro de análisis): el botón "Análisis" de la barra lateral abre un panel con TODOS los análisis (Estático, Modal, Espectro + 6 avanzados NL-lite), cada uno con botón Ejecutar. `[#4]`
-- 🟡 **Acceso a resultados ya corridos**: badges ✓/sin-ejecutar por análisis y botón **Ver** que re-muestra sin recalcular (estático, modal, y cada caso espectral listado). Falta: indicador permanente fuera del hub. `[#1]`
-- ⬜ **Analizar seleccionados (batch)**: casillas por análisis en el Centro de análisis + botón **Analizar seleccionados** que corre la secuencia elegida en orden (p.ej. estático + modal + espectro) con una sola caja de progreso. `[#24]`
+- ✅ **Acceso a resultados ya corridos**: badges ✓/sin-ejecutar por análisis y botón **Ver** que re-muestra sin recalcular (estático, modal, y cada caso espectral listado). **Indicador permanente** en la barra de estado (`#sb-results`): resume qué análisis tienen resultados (✓ Estático · Modal · N esp · Pandeo), en verde, y abre el hub al clic; se actualiza tras correr/limpiar cualquier análisis. `[#1]`
+- ✅ **Analizar seleccionados (batch)**: casilla por análisis en el Centro de análisis + botón **Analizar seleccionados** (`_runBatch`) que corre la secuencia marcada en orden lógico (estático → modal → espectro → NL-lite); el espectro se antepone con modal si falta. `runAnalysis`/`runSpectrum` ahora devuelven promesa (se envuelve el `setTimeout`) para esperar fin antes del siguiente. `[#24]`
 - ✅ **Modal/progreso**: el modal **sale del modo resultados antes de correr**; la **estructura original** se dibuja como **fantasma tenue** (0.28); la **caja flotante de progreso** aparece en estático, **Modal**, **Espectro** y los NL-lite síncronos sin diálogo (No lineal / P-Delta / Pandeo, vía `_runByAction` con yield). Los NL-lite con diálogo (form-finding/plástico/pushover-DC) gestionan su propio flujo. `[#2]`
 
 ## G2 · Motor modal y rendimiento ✅
@@ -20,14 +20,14 @@ similaridad. `[#]` referencia el pedido original. Estado: ⬜ pendiente · 🟡 
 - ✅ **Grillas más tenues** (opacidad 0.7→0.38) → los elementos resaltan. `[#9]`
 - ✅ **Ocultar los ejes**: Vista → Ejes XYZ (`toggleAxes`). `[#10]`
 
-## G4 · Modelado e interacción de edición ✅
+## G4 · Modelado e interacción de edición ✅ *(completo)*
 - ✅ **Crear elementos sin nodos previos + imán a nodos cercanos (toggle).** En modo Elemento, clic en la grilla crea el nodo; con Imán (casilla en la barra superior, por defecto ON) el extremo se pega al nodo cercano (lo reutiliza); apagando el imán crea uno nuevo aunque haya otro al lado. `[#6]`
 - ✅ **Herramienta "Área" en la barra lateral** (Nodo/Elem/**Área**/Apoyo): clic en 3 (CST) o 4 (QUAD) nodos; el 4º crea el QUAD, Enter crea el CST, Esc reinicia. Usa las últimas opciones (espesor/comportamiento) y se ajustan luego en el panel del área. `[#nuevo]`
 - ✅ **Acciones + Mover/Copiar con un solo elemento** seleccionado (antes solo con multi-selección). `[#7]`
 - ✅ **Copiar elemento = copiar también sus cargas (dist/temp), cable/L0, y grupos.** `[#11]`
-- ⬜ **Nodo + elemento en un solo clic**: al crear un elemento sin nodos previos, el clic debe crear el nodo *y* continuar/cerrar el elemento sin exigir un segundo clic sobre el nodo recién creado. `[#26]`
-- ⬜ **Fuerza nodal a multi-selección**: aplicar una carga nodal a *todos* los nodos seleccionados de una vez (hoy solo de a uno). `[#32]`
-- ⬜ **Limpiar cargas huérfanas**: al borrar un nodo o elemento, sus cargas (flechas) deben desaparecer de la vista y del modelo; hoy la flecha de la carga nodal persiste tras borrar el nodo. `[#31]`
+- ✅ **Nodo + elemento en un solo clic**: el clic crea el nodo (si hace falta) y lo deja como extremo inicial sin un segundo clic; tras cerrar un tramo, el extremo recién creado inicia el siguiente → **cadena continua** (poligonal con un clic por tramo, Esc para terminar). `[#26]`
+- ✅ **Fuerza nodal a multi-selección**: formulario de carga nodal (Fx..Mz) en el panel de selección múltiple de nodos + `setCargaNodalSelected(F, lcId)` que la asigna idéntica a todos los nodos seleccionados (y "Limpiar todos"). `[#32]`
+- ✅ **Limpiar cargas huérfanas**: `model.removeNode`/`removeElement` purgan de todos los casos las cargas (nodales / dist / temp) que referencian lo borrado (`_purgeNodeLoads`/`_purgeElemLoads`); los `delete*` de la app llaman `refreshLoads()` → las flechas desaparecen de la vista y del modelo. `[#31]`
 
 ## G5 · Cargas, normativa y asistente de modificación ✅
 - ✅ **Casos de carga y combinaciones de la norma por defecto**: Análisis → "Crear casos y combos de norma (NCh3171)" → casos D (PP) y L, combos 1.4D y 1.2D+1.6L, y sísmicas ±1.4Ex/±1.4Ey si existen casos espectrales. Editables, idempotente (`crearCasosYCombosNorma`). `[#16]`
@@ -37,11 +37,11 @@ similaridad. `[#]` referencia el pedido original. Estado: ⬜ pendiente · 🟡 
 - ✅ **Creación automática de combos accesible en dos lugares**: menú Análisis **y** botón "⚙ Crear casos y combos de norma" en la pestaña Combos de la barra lateral (`#btn-combos-norma`). `[#25b]`
 - ✅ **Cargas trapeciales (trapezoidales)** en elementos: campo "w en j" en el panel del elemento (vacío = uniforme). FEF exacta (uniforme + triangular), diagramas V(x)/M(x) con q lineal y extremo por cuadrática, interpolación correcta al discretizar (auto-disc) y al unir/partir, round-trip JSON y CSV (w2 opcional). Verificado: viga SS con carga triangular → reacciones w₀L/6 y w₀L/3 exactas, M_max=w₀L²/(9√3)=10.264 en x=L/√3, idéntico con 1/4/10 sub-elementos. `[#35]`
 
-## G6 · Diseño, memoria y reportes *(parcial)*
+## G6 · Diseño, memoria y reportes ✅
 - ✅ **Tabla de diseño explorable**: wrapper con scroll (max-height 58vh) hasta el último elemento + columna **|δ| mm** (desplazamiento máx. de los nodos del elemento en el caso/combo mostrado). `[#12]`
-- ⬜ **Memoria de cálculo descargable en `.docx`**. `[#14]`
-- ⬜ **Quitar logos UACh de la memoria** cuando se cargue el logo profesional (condicionado a que exista la carga del logo). `[#18]`
-- ⬜ **Portada/landing flotante al entrar**: reemplazar la imagen flotante actual por una portada flotante con logo **PÓRTICO**, logos institucionales, autor y botones (**Entrar**, **Manuales**, **Instalar**). `[#22]`
+- ✅ **Memoria de cálculo descargable en `.docx`**: generador Word **autocontenido** (`js/io/docx.js`, sin dependencias ni build — ZIP STORED + CRC32 + WordprocessingML, con encabezados, tablas e imágenes PNG embebidas). `app.generarMemoriaDocx` arma la misma memoria (portada, bases, materiales/secciones, cargas/combos, modal, figuras, D/C, flechas, derivas, limitaciones) y la descarga. Menú Análisis → "📝 Memoria de Cálculo (Word .docx)". Verificado: ZIP/XML bien formados (`test_docx.mjs`) e imágenes embebidas en navegador. `[#14]`
+- ✅ **Quitar logos UACh de la memoria** cuando se cargue el logo profesional: con token PRO + logo de empresa cargado, ese logo **reemplaza** a los académicos (UACh/Facultad/IOC) y oculta el badge "Producto académico" en portada (HTML y `.docx`). Sin logo PRO se conservan los créditos. `[#18]`
+- ✅ **Portada/landing flotante al entrar** (`#landing`): logo **PÓRTICO**, logos institucionales (UACh/Facultad/IOC), autor (Dr. Juan Patricio Reyes C.) y botones **Entrar** / **Manual de uso** / **Instalar app** (+ asistente de generación). `[#22]`
 - ✅ **Quitar de la UI/ayuda referencias a editar archivos de config**: reformuladas las menciones a editar `asistente/diseno_params.json` → "valores normativos estándar". `[#13]`
 
 ## G7 · Gestión de proyecto multi-modelo

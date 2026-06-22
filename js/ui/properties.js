@@ -1,8 +1,8 @@
 // ──────────────────────────────────────────────────────────────────────────────
 // PropertiesPanel — right-side panel: node/element properties + mat/sec tabs
 // ──────────────────────────────────────────────────────────────────────────────
-import { computeFloorCR, computeFloorCM, computeTributaryWeights } from '../solver/diaphragm.js?v=110';
-import { localAxes } from '../solver/timoshenko.js?v=110';
+import { computeFloorCR, computeFloorCM, computeTributaryWeights } from '../solver/diaphragm.js?v=111';
+import { localAxes } from '../solver/timoshenko.js?v=111';
 
 export class PropertiesPanel {
   constructor(panelEl, app) {
@@ -391,10 +391,34 @@ export class PropertiesPanel {
           <button class="btn-secondary nod-sup" data-p="rodillo" style="flex:1;font-size:11px" title="Solo vertical (Uz)">Rodillo</button>
           <button class="btn-secondary nod-sup" data-p="libre" style="flex:1;font-size:11px" title="Sin apoyo">Libre</button>
         </div>
+      </div>
+      <div class="load-section prop-section" style="border:1px solid var(--node-col);border-radius:6px;padding:8px;margin-top:8px">
+        <div class="prop-title load-title-row" style="color:var(--node-col);margin-top:0">Carga Nodal · ${nodes.length} nodo(s) ${this._lcSelectHTML('loads-lc-multinode')}</div>
+        <div class="prop-row cols3">
+          <div class="prop-field"><label>Fx</label><input type="number" data-mlf="0" value="0" step="1"></div>
+          <div class="prop-field"><label>Fy</label><input type="number" data-mlf="1" value="0" step="1"></div>
+          <div class="prop-field"><label>Fz</label><input type="number" data-mlf="2" value="0" step="1"></div>
+        </div>
+        <div class="prop-row cols3">
+          <div class="prop-field"><label>Mx</label><input type="number" data-mlf="3" value="0" step="0.1"></div>
+          <div class="prop-field"><label>My</label><input type="number" data-mlf="4" value="0" step="0.1"></div>
+          <div class="prop-field"><label>Mz</label><input type="number" data-mlf="5" value="0" step="0.1"></div>
+        </div>
+        <div style="display:flex;gap:6px;margin-top:6px">
+          <button class="btn-primary" id="btn-apply-load-multi" style="flex:1;font-size:11px" title="Asigna la misma carga nodal a TODOS los nodos seleccionados">Aplicar a todos</button>
+          <button class="btn-secondary" id="btn-clear-load-multi" style="flex:1;font-size:11px" title="Quita la carga nodal de los nodos seleccionados">Limpiar todos</button>
+        </div>
       </div>`;
   }
   _bindAccionesNodos() {
-    this._tabContents.sel.querySelectorAll('.nod-sup').forEach(b => b.addEventListener('click', () => this.app.setSupportSelectedNodes(b.dataset.p)));
+    const sel = this._tabContents.sel;
+    sel.querySelectorAll('.nod-sup').forEach(b => b.addEventListener('click', () => this.app.setSupportSelectedNodes(b.dataset.p)));
+    const lcId = () => +(sel.querySelector('#loads-lc-multinode')?.value) || this.app._activeLcId;
+    sel.querySelector('#btn-apply-load-multi')?.addEventListener('click', () => {
+      const F = [0,1,2,3,4,5].map(i => parseFloat(sel.querySelector(`[data-mlf="${i}"]`)?.value) || 0);
+      this.app.setCargaNodalSelected(F, lcId());
+    });
+    sel.querySelector('#btn-clear-load-multi')?.addEventListener('click', () => this.app.setCargaNodalSelected(null, lcId()));
   }
 
   // Mover / Copiar (array lineal) — sirve para nodos y elementos.

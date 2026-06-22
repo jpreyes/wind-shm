@@ -81,12 +81,24 @@ export class Model {
 
   removeNode(id) {
     if (!this.nodes.has(id)) return false;
-    // Remove connected elements
+    // Remove connected elements (y sus cargas dist/temp huérfanas)
     for (const [eid, el] of this.elements) {
-      if (el.n1 === id || el.n2 === id) this.elements.delete(eid);
+      if (el.n1 === id || el.n2 === id) { this.elements.delete(eid); this._purgeElemLoads(eid); }
     }
+    this._purgeNodeLoads(id);   // cargas nodales que apuntaban al nodo borrado
     this.nodes.delete(id);
     return true;
+  }
+
+  // Quita de TODOS los casos de carga las cargas que referencian un nodo/elemento
+  // borrado, para que no queden flechas huérfanas en la vista ni en el solver.
+  _purgeNodeLoads(nodeId) {
+    for (const lc of this.loadCases.values())
+      if (lc.loads?.length) lc.loads = lc.loads.filter(l => !(l.type === 'nodal' && l.nodeId === nodeId));
+  }
+  _purgeElemLoads(elemId) {
+    for (const lc of this.loadCases.values())
+      if (lc.loads?.length) lc.loads = lc.loads.filter(l => !((l.type === 'dist' || l.type === 'temp') && l.elemId === elemId));
   }
 
   // ── Elements ───────────────────────────────────────────────────────────────
@@ -119,7 +131,11 @@ export class Model {
     return el;
   }
 
-  removeElement(id) { return this.elements.delete(id); }
+  removeElement(id) {
+    const ok = this.elements.delete(id);
+    if (ok) this._purgeElemLoads(id);   // dist/temp huérfanas
+    return ok;
+  }
 
   // ── Elementos de área (membrana 2D: CST 3 nodos / QUAD 4 nodos) ─────────────
   addArea(nodes, matId, opts = {}) {

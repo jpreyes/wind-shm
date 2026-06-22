@@ -1480,6 +1480,17 @@ export class Viewport {
     document.getElementById('sb-sel').textContent = n ? `${n} seleccionado(s)` : 'Sin selección';
   }
 
+  selectNodes(ids) {
+    this.clearSelection();
+    for (const id of ids) {
+      if (!this._nodeMeshes.has(id)) continue;
+      this._selected.add(`node:${id}`);
+      this._setColor('node', id, COL.NODE_SEL, null);
+    }
+    const n = this._selected.size;
+    document.getElementById('sb-sel').textContent = n ? `${n} seleccionado(s)` : 'Sin selección';
+  }
+
   // ── Add Node mode ──────────────────────────────────────────────────────────
   _previewAddNode(fp) {
     this._renderer.domElement.style.cursor = 'crosshair';
@@ -1597,16 +1608,22 @@ export class Viewport {
     const id = this._resolveElemEndpoint();
     if (id == null) { this.app.toast('Haga clic dentro del área de trabajo', 'warn'); return; }
     if (this._addElemFirst === null) {
+      // Primer clic: crea el nodo (si hace falta) y queda listo como extremo inicial,
+      // sin exigir un segundo clic sobre el nodo recién creado.
       this._addElemFirst = id;
       this._setColor('node', id, COL.NODE_SEL, null);
-      document.getElementById('sb-sel').textContent = `Nodo #${id} → clic en nodo destino (o en la grilla)`;
+      document.getElementById('sb-sel').textContent = `Nodo #${id} → clic para el destino (o grilla) · Esc para terminar`;
     } else {
       const n1 = this._addElemFirst, n2 = id;
-      this._refreshColor('node', n1);
-      this._addElemFirst = null;
-      this._previewLine.visible = false;
       if (n1 === n2) { this.app.toast('Los nodos deben ser distintos', 'warn'); return; }
       this.app.addElement(n1, n2);
+      // Cadena continua: el extremo recién creado inicia el siguiente elemento, de
+      // modo que se dibuja una poligonal con un clic por tramo. Esc para terminar.
+      this._refreshColor('node', n1);
+      this._addElemFirst = n2;
+      this._previewLine.visible = false;
+      this._setColor('node', n2, COL.NODE_SEL, null);
+      document.getElementById('sb-sel').textContent = `Nodo #${n2} → clic para encadenar otro tramo · Esc para terminar`;
     }
   }
 

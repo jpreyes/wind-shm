@@ -1,27 +1,27 @@
 // ──────────────────────────────────────────────────────────────────────────────
 // App — main orchestrator
 // ──────────────────────────────────────────────────────────────────────────────
-import { Model }           from './model/model.js?v=110';
-import { Serializer }      from './model/serializer.js?v=110';
-import { Viewport }        from './ui/viewport.js?v=110';
-import { PropertiesPanel } from './ui/properties.js?v=110';
-import { MenuBar }         from './ui/menu.js?v=110';
-import { UndoStack }       from './utils/undo.js?v=110';
-import { StaticSolver, ensureDefaultLC }   from './solver/static_solver.js?v=110';
-import { Results }                         from './solver/postprocess.js?v=110';
-import { ModalSolver }                     from './solver/modal_solver.js?v=110';
-import { buildNodeIndex, assembleK, assembleF, getNodeDOFs } from './solver/assembler.js?v=110';
-import { assembleSparseGlobal, extractFreeCSR } from './solver/sparse.js?v=110';
-import { solveNonlinear, solveNonlinearDC } from './solver/nl_lite.js?v=110';
-import { assembleKg } from './solver/geometric.js?v=110';
-import { makeFactor } from './solver/linsolve.js?v=110';
-import { formFind } from './solver/formfind.js?v=110';
-import { ModalResults }                    from './solver/modal_results.js?v=110';
-import { SpectrumSolver }                  from './solver/spectrum_solver.js?v=110';
-import { autoDetectDiaphragms, computeFloorCR } from './solver/diaphragm.js?v=110';
-import { splitElement, splitByLength, discretizeAll, joinElements, intersectarElementos } from './model/discretize.js?v=110';
-import { localAxes, stiffnessMatrix, massMatrix, transformMatrix, globalStiffness, applyReleases } from './solver/timoshenko.js?v=110';
-import { bilinearGrid, blockCells, cornerGridIndices } from './model/mesher.js?v=110';
+import { Model }           from './model/model.js?v=111';
+import { Serializer }      from './model/serializer.js?v=111';
+import { Viewport }        from './ui/viewport.js?v=111';
+import { PropertiesPanel } from './ui/properties.js?v=111';
+import { MenuBar }         from './ui/menu.js?v=111';
+import { UndoStack }       from './utils/undo.js?v=111';
+import { StaticSolver, ensureDefaultLC }   from './solver/static_solver.js?v=111';
+import { Results }                         from './solver/postprocess.js?v=111';
+import { ModalSolver }                     from './solver/modal_solver.js?v=111';
+import { buildNodeIndex, assembleK, assembleF, getNodeDOFs } from './solver/assembler.js?v=111';
+import { assembleSparseGlobal, extractFreeCSR } from './solver/sparse.js?v=111';
+import { solveNonlinear, solveNonlinearDC } from './solver/nl_lite.js?v=111';
+import { assembleKg } from './solver/geometric.js?v=111';
+import { makeFactor } from './solver/linsolve.js?v=111';
+import { formFind } from './solver/formfind.js?v=111';
+import { ModalResults }                    from './solver/modal_results.js?v=111';
+import { SpectrumSolver }                  from './solver/spectrum_solver.js?v=111';
+import { autoDetectDiaphragms, computeFloorCR } from './solver/diaphragm.js?v=111';
+import { splitElement, splitByLength, discretizeAll, joinElements, intersectarElementos } from './model/discretize.js?v=111';
+import { localAxes, stiffnessMatrix, massMatrix, transformMatrix, globalStiffness, applyReleases } from './solver/timoshenko.js?v=111';
+import { bilinearGrid, blockCells, cornerGridIndices } from './model/mesher.js?v=111';
 
 class App {
   constructor() {
@@ -73,6 +73,9 @@ class App {
     // Analysis button → abre el centro de análisis (ventana flotante)
     document.getElementById('btn-run')?.addEventListener('click', () => this.openAnalysisHub());
     document.getElementById('btn-clear-results')?.addEventListener('click', () => this.clearResults());
+    // Indicador permanente de resultados (barra de estado) → abre el hub
+    document.getElementById('sb-results')?.addEventListener('click', () => this.openAnalysisHub());
+    this._updateResultsIndicator();
 
     // Results type/scale changes.
     // El control de escala es un FACTOR RELATIVO (1 = ajuste automático
@@ -191,6 +194,7 @@ class App {
     for (const aid of this._areasDeNodo(id)) { this.viewport.removeAreaMesh(aid); this.model.removeArea(aid); }
     this.viewport.removeNodeMesh(id);
     this.model.removeNode(id);
+    this.refreshLoads();        // borra flechas de cargas huérfanas
     this.panel.showNothing();
     this.markDirty();
     this._updateStats();
@@ -201,6 +205,7 @@ class App {
     this.snapshot();
     this.viewport.removeElemLine(id);
     this.model.removeElement(id);
+    this.refreshLoads();        // borra flechas de cargas huérfanas
     this.panel.showNothing();
     this.markDirty();
     this._updateStats();
@@ -248,6 +253,7 @@ class App {
       this.viewport.removeNodeMesh(id);
       this.model.removeNode(id);
     }
+    this.refreshLoads();        // borra flechas de cargas huérfanas
     this.panel.showNothing();
     this.markDirty();
     this._updateStats();
@@ -590,6 +596,23 @@ class App {
     }
     this._afterCopia(nEl);
     this.toast(`Espejado en ${eje}=${coord}: +${nEl} elemento(s)`, 'ok');
+  }
+
+  // ── Carga NODAL masiva sobre los nodos seleccionados ────────────────────────
+  // F = [Fx,Fy,Fz,Mx,My,Mz] aplicado idéntico a todos; F=null limpia.
+  setCargaNodalSelected(F, lcId) {
+    const ids = this._selNodes(); if (!ids.length) { this.toast('Seleccione nodos', 'warn'); return; }
+    const lc = this.model.loadCases.get(+lcId) || this.model.loadCases.get(this._activeLcId) || [...this.model.loadCases.values()][0];
+    if (!lc) { this.toast('No hay caso de carga', 'warn'); return; }
+    if (lc.type === 'spectrum') { this.toast('El caso espectral no admite cargas nodales', 'warn'); return; }
+    this.snapshot();
+    const set = new Set(ids);
+    lc.loads = (lc.loads || []).filter(l => !(l.type === 'nodal' && set.has(l.nodeId)));   // reemplaza la existente
+    const hasF = F && F.some(v => v && Number.isFinite(v));
+    if (hasF) for (const id of ids) lc.loads.push({ type: 'nodal', nodeId: id, F: F.map(v => +v || 0) });
+    this.refreshLoads(); this.markDirty(); this._updateStats();
+    this.toast(hasF ? `Carga nodal en ${ids.length} nodo(s) · ${lc.name}` : `Cargas nodales quitadas de ${ids.length} nodo(s) · ${lc.name}`, 'ok');
+    this.viewport.selectNodes?.(ids); this.panel.showSelection(this.viewport.getSelected());
   }
 
   // ── Carga distribuida masiva sobre los elementos seleccionados ──────────────
@@ -1134,6 +1157,10 @@ class App {
       #analysis-hub .ah-badge{font-size:10px;font-weight:500;padding:1px 7px;border-radius:10px}
       #analysis-hub .ah-ok{background:rgba(52,199,89,.18);color:#34c759}
       #analysis-hub .ah-no{background:rgba(150,160,175,.15);color:var(--text-muted,#9aa)}
+      #analysis-hub .ah-chk{flex:0 0 auto;display:flex;align-items:center;margin-right:2px}
+      #analysis-hub .ah-chk input{width:15px;height:15px;cursor:pointer;accent-color:var(--accent,#388bfd)}
+      #analysis-hub .ah-batchbar{display:flex;justify-content:flex-end;padding:8px 12px 0}
+      #analysis-hub .ah-batch-run{font-size:12px;padding:6px 12px}
       #analysis-hub .ah-foot{padding:8px 14px;border-top:1px solid var(--border,#334);font-size:11px;color:var(--text-muted,#9aa)}`;
     document.head.appendChild(s);
   }
@@ -1150,6 +1177,7 @@ class App {
 
     const row = (titulo, desc, runAct, seeOk, extra = '') => `
       <div class="ah-row">
+        <label class="ah-chk" title="Incluir en «Analizar seleccionados»"><input type="checkbox" class="ah-batch" data-batch="${runAct}"></label>
         <div class="ah-info"><div class="ah-name">${titulo} ${badge(seeOk)}</div><div class="ah-desc">${desc}</div></div>
         <div class="ah-acts">
           <button class="ah-run" data-run="${runAct}">Ejecutar…</button>
@@ -1177,7 +1205,10 @@ class App {
           ${row('Rótulas plásticas', 'Colapso evento a evento', 'run-plastic', false)}
           ${row('Pushover (control δ)', 'Curva carga–desplazamiento', 'run-pushover-dc', false)}
         </div>
-        <div class="ah-foot">Tip: "Ver" muestra resultados ya calculados sin volver a correrlos.</div>
+        <div class="ah-batchbar">
+          <button class="ah-run ah-batch-run" id="ah-batch-run" title="Corre en orden los análisis marcados (una sola secuencia)">▶ Analizar seleccionados</button>
+        </div>
+        <div class="ah-foot">Marque las casillas y use «Analizar seleccionados» para correr varios en orden · "Ver" muestra resultados ya calculados sin recalcular.</div>
       </div>`;
     document.getElementById('viewport-wrap')?.appendChild(el) || document.body.appendChild(el);
 
@@ -1190,6 +1221,11 @@ class App {
     el.querySelectorAll('[data-see]').forEach(b => b.addEventListener('click', () => {
       close(); this._verResultados(b.dataset.see);
     }));
+    el.querySelector('#ah-batch-run')?.addEventListener('click', () => {
+      const acts = [...el.querySelectorAll('.ah-batch:checked')].map(c => c.dataset.batch);
+      if (!acts.length) { this.toast('Marque al menos un análisis', 'warn'); return; }
+      close(); this._runBatch(acts);
+    });
   }
 
   async _runByAction(act) {
@@ -1211,8 +1247,33 @@ class App {
     if (heavy[act] && this._config?.analisis?.nlLite) {
       this._showProgress('Analizando…', heavy[act]);
       await new Promise(r => setTimeout(r, 30));
-      try { fn(); } finally { this._hideProgress(); }
-    } else { fn(); }
+      try { await fn(); } finally { this._hideProgress(); }
+    } else { await fn(); }   // await: el modo LOTE espera a que termine cada análisis
+  }
+
+  // ── Analizar seleccionados (LOTE) ───────────────────────────────────────────
+  // Corre en orden lógico la secuencia de análisis marcada en el Centro de
+  // análisis. El espectro requiere modal: si se pide sin modal previo, se antepone.
+  async _runBatch(acts) {
+    const orden = ['run', 'run-modal', 'run-spectrum', 'run-nonlinear', 'run-pdelta',
+                   'run-buckling', 'run-formfind', 'run-plastic', 'run-pushover-dc'];
+    const nombre = {
+      'run': 'Estático', 'run-modal': 'Modal', 'run-spectrum': 'Espectro',
+      'run-nonlinear': 'No lineal', 'run-pdelta': 'P-Delta', 'run-buckling': 'Pandeo',
+      'run-formfind': 'Form-finding', 'run-plastic': 'Rótulas plásticas', 'run-pushover-dc': 'Pushover',
+    };
+    const set = new Set(acts);
+    if (set.has('run-spectrum') && !set.has('run-modal') && !this._modalResults) set.add('run-modal');
+    const lista = orden.filter(a => set.has(a));
+    if (!lista.length) { this.toast('Marque al menos un análisis', 'warn'); return; }
+    for (let i = 0; i < lista.length; i++) {
+      const act = lista[i];
+      this.toast(`Lote ${i + 1}/${lista.length}: ${nombre[act]}…`, '');
+      try { await this._runByAction(act); }
+      catch (e) { this.toast(`Lote detenido en «${nombre[act]}»: ${e.message}`, 'error'); return; }
+    }
+    this._updateResultsIndicator();
+    this.toast(`Lote completado: ${lista.map(a => nombre[a]).join(' · ')}`, 'ok');
   }
 
   // Re-muestra resultados YA calculados, sin recalcular.
@@ -1253,8 +1314,10 @@ class App {
     if (btn) btn.classList.add('running');
     document.getElementById('sb-mode').textContent = 'Analizando…';
 
-    // Slight delay so browser can repaint before heavy computation
-    setTimeout(async () => {
+    // Slight delay so browser can repaint before heavy computation.
+    // Se envuelve en una promesa para que el modo LOTE (Analizar seleccionados)
+    // pueda esperar a que termine antes de lanzar el siguiente análisis.
+    return new Promise(resolve => setTimeout(async () => {
       try {
         // ── Auto-discretización (×10) para el análisis ──
         // El modelo original se guarda y se restaura al limpiar resultados.
@@ -1340,6 +1403,7 @@ class App {
         this.panel._switchVTab('resultados');
         this.panel._switchRTab('estatico');
         this.panel.renderStaticResults();
+        this._updateResultsIndicator();
 
         // Kick off background diagram pre-computation (shows progress bar)
         this._precomputeDiagramsAsync(this._results);
@@ -1353,8 +1417,9 @@ class App {
       } finally {
         if (btn) btn.classList.remove('running');
         document.getElementById('sb-mode').textContent = 'Modo: Resultados';
+        resolve();
       }
-    }, 20);
+    }, 20));
   }
 
   // ── Diagnóstico de estabilidad ──────────────────────────────────────────────
@@ -1465,7 +1530,7 @@ class App {
   _staticWorkerSolve(K, nDOF, freeDOF, Flist, dense = false) {
     return new Promise((resolve, reject) => {
       let worker;
-      try { worker = new Worker(new URL('./solver/static_worker.js?v=110', import.meta.url), { type: 'module' }); }
+      try { worker = new Worker(new URL('./solver/static_worker.js?v=111', import.meta.url), { type: 'module' }); }
       catch (e) { reject(e); return; }
       this._staticWorker = worker;
       const cancelar = () => { try { worker.terminate(); } catch (e) {} this._staticWorker = null; this._hideProgress(); reject(new Error('cancelado')); };
@@ -1494,7 +1559,7 @@ class App {
   _staticWorkerSolveSparse(csr, cf, nDOF, freeDOF, Flist) {
     return new Promise((resolve, reject) => {
       let worker;
-      try { worker = new Worker(new URL('./solver/static_worker.js?v=110', import.meta.url), { type: 'module' }); }
+      try { worker = new Worker(new URL('./solver/static_worker.js?v=111', import.meta.url), { type: 'module' }); }
       catch (e) { reject(e); return; }
       this._staticWorker = worker;
       const cancelar = () => { try { worker.terminate(); } catch (e) {} this._staticWorker = null; this._hideProgress(); reject(new Error('cancelado')); };
@@ -1650,6 +1715,7 @@ class App {
     this._modalResults = null;
     this._modalPlaying = false;
     this._spectrumResults.clear();
+    this._buckResult = null;
     this.viewport.clearResults();
     // Apagar la visualización de reacciones
     this._showReactions = false;
@@ -1667,6 +1733,7 @@ class App {
     document.getElementById('sb-mode').textContent = 'Modo: Seleccionar';
     document.getElementById('modal-analysis-overlay')?.classList.add('hidden');
     this.panel.showNothing();
+    this._updateResultsIndicator();
   }
 
   refreshLoads() {
@@ -1747,7 +1814,7 @@ class App {
       // ── Run Stodola in a Web Worker (non-blocking) ───────────────────────────
       const denseModal = !!this._config?.analisis?.matrizDensa;
       const modes = await new Promise((resolve, reject) => {
-        const worker = new Worker(new URL('./solver/modal_worker.js?v=110', import.meta.url), { type: 'module' });
+        const worker = new Worker(new URL('./solver/modal_worker.js?v=111', import.meta.url), { type: 'module' });
         worker.postMessage({ Kff_flat, Mff_flat, nF, nModes, dense: denseModal, method: modalMethod },
           [Kff_flat.buffer, Mff_flat.buffer]); // transfer — zero copy
         worker.onmessage = (ev) => {
@@ -1776,6 +1843,7 @@ class App {
       this.panel._switchVTab('resultados');
       this.panel._switchRTab('modal');
       this.panel.renderModalResults();
+      this._updateResultsIndicator();
     } catch (err) {
       this.toast(`Error modal: ${err.message}`, 'error');
       console.error(err);
@@ -2021,13 +2089,14 @@ class App {
     document.getElementById('sb-mode').textContent = 'Espectro…';
     this._showProgress('Analizando…', 'Combinando respuestas modales (espectro de respuesta)');
 
-    setTimeout(() => {
+    return new Promise(resolve => setTimeout(() => {
       try {
         const solver  = new SpectrumSolver();
         this._results = solver.solve(this._modalResults, params);
 
         // Store by direction so combos can reference it (legado [ESP])
         this._spectrumResults.set('esp' + params.direction, { result: this._results, params });
+        this._updateResultsIndicator();
 
         // ── Asignar el resultado a su CASO DE CARGA espectral ──
         // Si no existe un caso espectral para esta dirección, se crea: así el
@@ -2072,8 +2141,9 @@ class App {
         if (btn) btn.classList.remove('running');
         this._hideProgress();
         document.getElementById('sb-mode').textContent = 'Modo: Espectro';
+        resolve();
       }
-    }, 20);
+    }, 20));
   }
 
   // ── Análisis NO LINEAL geométrico (NL-lite, Fase 1) ───────────────────────
@@ -2315,7 +2385,7 @@ class App {
 
       // Iteración de subespacio en el Worker (no bloquea la UI)
       const rawModes = await new Promise((resolve, reject) => {
-        const worker = new Worker(new URL('./solver/buckling_worker.js?v=110', import.meta.url), { type: 'module' });
+        const worker = new Worker(new URL('./solver/buckling_worker.js?v=111', import.meta.url), { type: 'module' });
         worker.postMessage({ Kff_flat, Kgff_flat, nF, nModes, dense },
           [Kff_flat.buffer, Kgff_flat.buffer]);   // transfer — zero copy
         worker.onmessage = (ev) => { worker.terminate(); ev.data.error ? reject(new Error(ev.data.error)) : resolve(ev.data.modes); };
@@ -2333,6 +2403,7 @@ class App {
       this._buckResult = { modes, nCasos, Nby };   // Nby = axial de referencia por elemento
       this.toast(`Pandeo: λcr = ${modes[0].lambda.toFixed(3)} · carga crítica = λcr × carga de referencia`, 'ok');
       this._buckOpenOverlay();
+      this._updateResultsIndicator();
     } catch (err) {
       this.toast(`Pandeo: ${err.message}`, 'error');
       console.error(err);
@@ -3826,7 +3897,7 @@ class App {
               selectedNodes: sel.filter(s => s.type === 'node').map(s => s.id) };
     }
     this.snapshot();
-    const { aplicarOperaciones } = await import('./model/model_ops.js?v=110');
+    const { aplicarOperaciones } = await import('./model/model_ops.js?v=111');
     const res = aplicarOperaciones(this.model, ops, ctx);
     // los resultados previos dejan de ser válidos tras modificar la geometría/cargas
     this.viewport.clearResults?.();
@@ -3874,7 +3945,7 @@ class App {
     this._showProgress('Generando el modelo…', 'Aplicando reglas y cargas normativas');
     try {
       const libs = await this._cargarBibliotecasAsistente();
-      const { generarModelo } = await import('../asistente/generador.js?v=110');
+      const { generarModelo } = await import('../asistente/generador.js?v=111');
       const modelo = generarModelo(ficha, libs);
 
       if (modo === 'sobreponer') {
@@ -4700,6 +4771,28 @@ class App {
       `Nodos: ${s.nodes} | Elem: ${s.elements} | Mat: ${s.materials} | Sec: ${s.sections}`;
   }
 
+  // ── Indicador PERMANENTE de resultados (barra de estado) ────────────────────
+  // Resume qué análisis tienen resultados disponibles, fuera del Centro de
+  // análisis. Clic → abre el hub. Se llama tras correr/limpiar cualquier análisis.
+  _updateResultsIndicator() {
+    const el = document.getElementById('sb-results');
+    if (!el) return;
+    const partes = [];
+    if (this._tieneEstaticos?.()) partes.push('Estático');
+    if (this._modalResults) partes.push('Modal');
+    if (this._spectrumResults?.size) partes.push(`${this._spectrumResults.size} esp`);
+    if (this._buckResult) partes.push('Pandeo');
+    if (partes.length) {
+      el.textContent = '✓ ' + partes.join(' · ');
+      el.style.color = 'var(--ok, #34c759)';
+      el.title = 'Resultados disponibles: ' + partes.join(', ') + ' — clic para abrir el Centro de análisis';
+    } else {
+      el.textContent = 'Sin resultados';
+      el.style.color = 'var(--text-muted, #9aa)';
+      el.title = 'Aún no hay análisis ejecutados — clic para abrir el Centro de análisis';
+    }
+  }
+
   _downloadText(content, filename, type) {
     const a = document.createElement('a');
     a.href = URL.createObjectURL(new Blob([content], { type }));
@@ -4747,10 +4840,193 @@ class App {
     this.toast('Memoria generada — use «Imprimir → Guardar como PDF»', 'ok');
   }
 
+  // ── Memoria de cálculo en Word (.docx) ──────────────────────────────────────
+  // Misma información que la memoria HTML/PDF, pero como documento Word editable.
+  // El .docx se arma con un generador autocontenido (js/io/docx.js): no requiere
+  // build ni dependencias.
+  async generarMemoriaDocx() {
+    if (this.model.nodes.size === 0) { this.toast('Modelo vacío — nada que documentar', 'warn'); return; }
+    this.toast('Generando memoria (Word)…');
+    let imgs = { base: null, deformada: null, modos: [] };
+    try { imgs = await this._capturarVistasMemoria(); }
+    catch (e) { console.error('Captura de vistas falló:', e); }
+
+    const diseno = await this._calcularDiseno();
+    const deflex = this._calcularDeflexionesVigas(diseno?.params);
+    const drift  = this._calcularDrift();
+    try {
+      const { Docx } = await import('./io/docx.js?v=111');
+      const blob = this._memoriaDocx(Docx, imgs, diseno, deflex, drift).blob();
+      this._downloadBlob(blob, 'memoria_calculo.docx');
+      this.toast('Memoria Word (.docx) descargada', 'ok');
+    } catch (e) {
+      console.error('Memoria .docx falló:', e);
+      this.toast('No se pudo generar el .docx: ' + e.message, 'error');
+    }
+  }
+
+  // Construye el documento Word con las mismas secciones de la memoria.
+  _memoriaDocx(Docx, imgs, diseno, deflex, drift) {
+    const m = this.model;
+    const cm = this._config?.memoria || {};
+    const fmt = (v, d = 3) => (v == null || !isFinite(v)) ? '—'
+      : (Math.abs(v) >= 1e5 || (Math.abs(v) > 0 && Math.abs(v) < 1e-3) ? (+v).toExponential(2) : (+v).toFixed(d));
+    const stripTags = s => String(s ?? '').replace(/<[^>]+>/g, '');
+    const proyecto = (document.title || '').replace(/^●\s*/, '').replace(/\s*—\s*PÓRTICO.*$/i, '').trim() || 'Modelo sin título';
+    const fecha = new Date().toLocaleDateString('es-CL', { year: 'numeric', month: 'long', day: 'numeric' });
+    const U = m.units || 'kN-m';
+    const tieneLogoPro = !!(this._pro && cm.logoEmpresa);
+    const d = new Docx();
+
+    // ── Portada ──
+    if (tieneLogoPro) d.image(cm.logoEmpresa, '', 2 * 914400);   // logo empresa (si es PNG/JPEG)
+    if (!tieneLogoPro)
+      d.paragraph([{ text: cm.institucion || 'UNIVERSIDAD AUSTRAL DE CHILE', bold: true, color: '0A3A57', size: 13 }], { align: 'center' })
+       .paragraph([{ text: cm.subInstitucion || 'Facultad de Ciencias de la Ingeniería · Instituto de Obras Civiles', color: '5C6A7D', size: 10 }], { align: 'center' });
+    d.spacer();
+    d.paragraph([{ text: cm.kicker || 'ANÁLISIS Y DISEÑO ESTRUCTURAL', color: '0D9488', bold: true, size: 11 }], { align: 'center' });
+    d.paragraph([{ text: cm.titulo || 'Memoria de Cálculo', bold: true, color: '0A3A57', size: 26 }], { align: 'center' });
+    d.paragraph([{ text: proyecto, size: 13 }], { align: 'center' });
+    d.spacer();
+    d.table(null, [
+      [{ text: 'Proyecto', bold: true }, proyecto],
+      [{ text: 'Fecha', bold: true }, fecha],
+      [{ text: 'Unidades', bold: true }, U.replace('-', ' · ')],
+      [{ text: 'Proyectista', bold: true }, cm.proyectista || ''],
+      [{ text: 'Revisó', bold: true }, cm.revisor || ''],
+    ]);
+    d.paragraph([{ text: 'Documento de carácter docente. Los resultados deben ser validados por un profesional competente antes de cualquier uso en obra.', italic: true, color: '5C6A7D', size: 9 }], { align: 'center' });
+    if (this._pro && cm.descripcion) d.paragraph(cm.descripcion);
+    d.pageBreak();
+
+    // ── 1. Bases de cálculo ──
+    d.heading('1. Bases de cálculo', 1);
+    const s = m.getStats();
+    d.heading('1.1 Modelo estructural', 2);
+    d.table(['Magnitud', 'Cantidad'], [
+      ['Nodos', String(s.nodes)], ['Elementos (barras)', String(s.elements)],
+      ['Áreas (membrana/placa/shell)', String(m.areas?.size || 0)],
+      ['Materiales', String(s.materials)], ['Secciones', String(s.sections)],
+      ['Diafragmas rígidos', String(m.diaphragms?.size || 0)],
+      ['Casos de carga', String(m.loadCases?.size || 0)], ['Combinaciones', String(m.combinations?.size || 0)],
+    ]);
+
+    d.heading('1.2 Materiales', 2);
+    d.table(['Material', 'E', 'G', 'ν', 'ρ'],
+      [...m.materials.values()].map(mt => [mt.name, fmt(mt.E, 0), fmt(mt.G, 0), fmt(mt.nu, 2), fmt(mt.rho, 3)]));
+
+    d.heading('1.3 Secciones', 2);
+    const secCount = new Map();
+    for (const el of m.elements.values()) secCount.set(el.secId, (secCount.get(el.secId) || 0) + 1);
+    d.table(['Sección', 'A', 'Iy', 'Iz', 'J', 'N° elem.'],
+      [...m.sections.values()].map(sec => [sec.name, fmt(sec.A, 5), fmt(sec.Iy, 6), fmt(sec.Iz, 6), fmt(sec.J, 6), String(secCount.get(sec.id) || 0)]));
+
+    // ── 2. Cargas y combinaciones ──
+    d.heading('2. Cargas y combinaciones', 1);
+    const dirLabel = { gravity: 'Gravedad (−Z)', globalX: 'Global +X', globalY: 'Global +Y', globalZ: 'Global +Z', localY: 'Local y', localZ: 'Local z' };
+    for (const lc of [...m.loadCases.values()].filter(l => l.type !== 'spectrum')) {
+      d.heading(`${lc.name}${lc.selfWeight ? '  (+ peso propio)' : ''}`, 3);
+      const rows = (lc.loads || []).map(ld => {
+        if (ld.type === 'nodal') { const F = ld.F || []; return ['Puntual', `Nodo ${ld.nodeId}`, `F=(${fmt(F[0], 1)}, ${fmt(F[1], 1)}, ${fmt(F[2], 1)}) kN`]; }
+        if (ld.type === 'temp') return ['Temperatura', `Elem ${ld.elemId}`, `ΔT = ${fmt(ld.dT, 1)} °C`];
+        return ['Distribuida', `Elem ${ld.elemId}`, `w = ${fmt(ld.w, 2)} kN/m · ${dirLabel[ld.dir] || ld.dir || 'gravedad'}`];
+      });
+      if (rows.length) d.table(['Tipo', 'Aplicada en', 'Valor'], rows);
+      else d.paragraph([{ text: lc.selfWeight ? 'Solo peso propio.' : 'Sin cargas asignadas.', italic: true, color: '5C6A7D' }]);
+    }
+    const lcName = id => m.loadCases.get(id)?.name || m.combinations?.get(id)?.name || `LC${id}`;
+    if (m.combinations?.size) {
+      d.heading('2.1 Combinaciones', 2);
+      d.table(['Combinación', 'Definición'],
+        [...m.combinations.values()].map(c => [c.name, (c.factors || []).map(f => `${fmt(f.factor, 2)}·${lcName(f.lcId)}`).join('  +  ') || '—']));
+    }
+
+    // ── 3. Figuras ──
+    d.heading('3. Modelo y deformada', 1);
+    if (imgs.base) d.image(imgs.base, 'Modelo estructural (geometría base)');
+    if (imgs.deformada) d.image(imgs.deformada, 'Deformada (resultado estático)');
+
+    // ── 4. Análisis modal ──
+    if (this._modalResults) {
+      d.heading('4. Análisis modal', 1);
+      const { rows } = this._modalResults.getParticipation();
+      d.paragraph(`Modos extraídos: ${this._modalResults.nModes}.`);
+      d.table(['Modo', 'f (Hz)', 'T (s)', 'Mx %', 'My %', 'Mrz %', 'ΣMx', 'ΣMy', 'ΣMrz'],
+        rows.slice(0, 12).map(r => [String(r.mode), fmt(r.freq, 3), fmt(r.period, 3),
+          fmt(r.pct[0], 1), fmt(r.pct[1], 1), fmt(r.pct[2], 1), fmt(r.cumPct[0], 1), fmt(r.cumPct[1], 1), fmt(r.cumPct[2], 1)]));
+      for (const md of imgs.modos) d.image(md.img, `Modo ${md.n} — f = ${fmt(md.freq, 3)} Hz · T = ${fmt(md.period, 3)} s`);
+    }
+
+    // ── 5. Verificación de resistencia (D/C) ──
+    d.heading('5. Verificación de resistencia (D/C)', 1);
+    if (diseno?.filas?.length) {
+      const f = diseno.filas;
+      const colorR = r => r > 1 ? 'DC2626' : r > 0.9 ? 'B45309' : '15803D';
+      const estado = r => r > 1 ? 'NO CUMPLE' : r > 0.9 ? 'ajustado' : 'cumple';
+      d.paragraph(`Verificación por ${diseno.envolvente ? 'envolvente de las combinaciones' : `el estado «${diseno.caso || 'activo'}»`}. La razón D/C = demanda/capacidad debe ser ≤ 1.0.`);
+      d.table(['Elem', 'Sección', 'Material', 'N (kN)', 'M (kN·m)', 'V (kN)', 'D/C máx', 'Gobierna', 'Estado'],
+        f.slice(0, 60).map(x => [
+          `#${x.id}`, x.sec, x.mat, fmt(x.fuerzas.N, 1),
+          fmt(Math.max(x.fuerzas.My, x.fuerzas.Mz), 1), fmt(Math.max(x.fuerzas.Vy, x.fuerzas.Vz), 1),
+          { text: fmt(x.ratioMax, 2), bold: true, color: colorR(x.ratioMax) },
+          String(x.gobierna ?? '—'),
+          { text: estado(x.ratioMax), color: colorR(x.ratioMax) },
+        ]));
+      const nNo = f.filter(x => x.ratioMax > 1).length, nAj = f.filter(x => x.ratioMax > 0.9 && x.ratioMax <= 1).length;
+      d.paragraph(`${f.length > 60 ? `Se muestran los 60 elementos más solicitados de ${f.length}. ` : ''}Resumen: ${f.length - nNo - nAj} cumplen · ${nAj} ajustados · ${nNo} no cumplen.`);
+    } else {
+      d.paragraph([{ text: 'No hay resultados de análisis para verificar. Ejecute el análisis estático (F5) con sus combinaciones de carga antes de generar la memoria.', italic: true, color: '5C6A7D' }]);
+    }
+
+    // ── 6. Servicio: flechas de vigas ──
+    d.heading('6. Deformaciones de vigas (servicio)', 1);
+    if (deflex?.rows?.length) {
+      const colorR = r => r > 1 ? 'DC2626' : r > 0.9 ? 'B45309' : '15803D';
+      d.paragraph(`Flecha de vigas bajo «${deflex.caso}» sin mayorar, respecto a la cuerda del vano. Límite de servicio L/${deflex.limSobre}.`);
+      d.table(['Viga', 'Sección', 'L (m)', 'δ (mm)', 'δ adm (mm)', 'δ/δadm', 'Estado'],
+        deflex.rows.slice(0, 60).map(x => [
+          `#${x.id}`, x.sec, fmt(x.L, 2), fmt(x.delta * 1000, 2), fmt(x.lim * 1000, 2),
+          { text: fmt(x.ratio, 2), bold: true, color: colorR(x.ratio) },
+          { text: x.ratio > 1 ? 'NO CUMPLE' : x.ratio > 0.9 ? 'ajustado' : 'cumple', color: colorR(x.ratio) },
+        ]));
+    } else d.paragraph([{ text: stripTags(deflex?.note || 'Sin datos de deformaciones de vigas.'), italic: true, color: '5C6A7D' }]);
+
+    // ── 7. Derivas sísmicas ──
+    d.heading('7. Derivas sísmicas de entrepiso (NCh433)', 1);
+    if (drift?.dirs?.length) {
+      for (const D of drift.dirs) {
+        d.heading(`Dirección sísmica ${D.dir}`, 3);
+        d.table(['Piso', 'Z (m)', 'h (m)', 'δ/h (CM)', '·/0.002', 'δ/h (ext.)', '·/0.002'],
+          D.stories.map(st => [String(st.piso), fmt(st.z, 2), fmt(st.h, 2),
+            st.driftCM == null ? '—' : fmt(st.driftCM, 5), st.ratioCM == null ? '—' : fmt(st.ratioCM, 2),
+            fmt(st.driftExt, 5), fmt(st.ratioExt, 2)]));
+      }
+      d.paragraph([{ text: 'Límite NCh433: 0.002 (2/1000·h). Calculada con los desplazamientos del espectro de respuesta.', color: '5C6A7D', size: 9 }]);
+    } else d.paragraph([{ text: stripTags(drift?.note || 'Sin datos de derivas sísmicas.'), italic: true, color: '5C6A7D' }]);
+
+    // ── 8. Limitaciones ──
+    d.heading('8. Alcances y limitaciones', 1);
+    const limits = (this._pro && cm.limitaciones)
+      ? cm.limitaciones.split('\n').map(x => x.trim()).filter(Boolean)
+      : this._ACAD_LIMITS;
+    for (const li of limits) d.paragraph([{ text: '• ' + stripTags(li), size: 9, color: '5C6A7D' }]);
+    d.spacer();
+    d.paragraph([{ text: (this._pro && cm.footer) ? cm.footer : this._ACAD_FOOTER, italic: true, color: '5C6A7D', size: 9 }], { align: 'center' });
+    return d;
+  }
+
+  _downloadBlob(blob, filename) {
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = filename;
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+  }
+
   // Verificación de diseño (flexión/corte/axial) por elemento, usando los
   // resultados actuales y los parámetros editables de asistente/diseno_params.json.
   async _calcularDiseno() {
-    const ver = '?v=110';
+    const ver = '?v=111';
     let params = null;
     try { params = await fetch('asistente/diseno_params.json' + ver).then(r => r.json()); }
     catch (e) { console.error('No se pudo cargar diseno_params.json:', e); return null; }
@@ -5228,11 +5504,13 @@ class App {
     }
 
     // ── Portada (estilo institucional, configurable) ────────────────────────
-    // Logos: versión académica = UACh + Facultad + IOC; versión profesional puede
-    // anteponer el logo de la empresa.
-    const logosAcad = `<div class="cover-logos">
+    // Logos: versión académica = UACh + Facultad + IOC. En versión profesional con
+    // logo de empresa cargado, ese logo REEMPLAZA a los académicos (#18); sin logo
+    // de empresa se conservan los créditos UACh.
+    const tieneLogoPro = !!(this._pro && cm.logoEmpresa);
+    const logosAcad = tieneLogoPro ? '' : `<div class="cover-logos">
         <img src="icons/UACh-color-negro.svg" alt="UACh"><img src="icons/Facultad-color-negro.svg" alt="Facultad"><img src="icons/IOC-color.svg" alt="IOC"></div>`;
-    const logoEmp = (this._pro && cm.logoEmpresa) ? `<div class="cover-logo-emp"><img src="${cm.logoEmpresa}" alt="Empresa"></div>` : '';
+    const logoEmp = tieneLogoPro ? `<div class="cover-logo-emp"><img src="${cm.logoEmpresa}" alt="Empresa"></div>` : '';
     const portada = `<section class="cover">
       ${logoEmp}${logosAcad}
       <div class="cover-inst">${esc(cm.institucion || 'UNIVERSIDAD AUSTRAL DE CHILE')}<br><span>${esc(cm.subInstitucion || 'Facultad de Ciencias de la Ingeniería · Instituto de Obras Civiles')}</span></div>
@@ -5245,7 +5523,7 @@ class App {
       <div class="cover-kicker">${esc(cm.kicker || 'ANÁLISIS Y DISEÑO ESTRUCTURAL')}</div>
       <h1 class="cover-title">${esc(cm.titulo || 'Memoria de Cálculo')}</h1>
       <div class="cover-proj">${esc(proyecto)}</div>
-      <div class="cover-badge">Producto académico — generado con PÓRTICO, laboratorio virtual de análisis estructural 3D (IOC · UACh)</div>
+      ${tieneLogoPro ? '' : '<div class="cover-badge">Producto académico — generado con PÓRTICO, laboratorio virtual de análisis estructural 3D (IOC · UACh)</div>'}
       <table class="cover-meta"><tbody>
         <tr><th>Proyecto</th><td>${esc(proyecto)}</td></tr>
         <tr><th>Fecha</th><td>${esc(fecha)}</td></tr>
