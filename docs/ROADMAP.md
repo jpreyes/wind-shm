@@ -61,7 +61,7 @@ similaridad. `[#]` referencia el pedido original. Estado: ⬜ pendiente · 🟡 
 - ✅ **Torsión de St. Venant**: el `J` ya se auto-calcula de la geometría en todas las secciones paramétricas (rect, circular, huecas; IPE/HEB tabuladas). Mejorado: fórmula rectangular a la serie precisa de Roark `J=a·t³·[1/3−0.21(t/a)(1−(t/a)⁴/12)]`; corregido el `J` de la sección por defecto 30×30 (era 1.13e-4, 10× bajo → 1.14e-3).
 - ✅ **Masa de área para el modal**: las áreas aportan `ρ·t·A` (lumped, repartida a los GDL de traslación) a la matriz de masas, en el ensamblaje denso y disperso (`assembleAreasMassInto`). Verificado: masa total por dirección = ρ·t·A.
 
-## G11 · Análisis avanzados: corrección, rendimiento y UX *(nuevo — uso profesional)*
+## G11 · Análisis avanzados: corrección, rendimiento y UX ✅ *(uso profesional)*
 *Cluster de incidencias detectadas usando los análisis no lineales en producción.*
 - ✅ **Rótulas plásticas — panel en la barra derecha**: los resultados pasan de la ventana flotante (que usaba `var(--panel,#0f1830)` inexistente → fondo oscuro fijo + texto de tema = ilegible en claro) a una **pestaña «Rótulas» en Resultados** (`rtab-plastico`, `renderPlasticResults`), que respeta el tema por construcción. De paso se corrigió el mismo bug de tema en los overlays de pandeo, P-Delta y pushover-DC (→ `var(--bg4)`/`--border`/`--text`). `[#27a]`
 - ✅ **Rótulas plásticas — selección por elemento**: el diálogo (`_plasticDialog`) permite un Mp por defecto y un **Mp distinto para los elementos seleccionados**, con opción **«sólo la selección rotula»** (el resto permanece elástico → capacidad ∞). El bucle usa la capacidad por elemento (`capByElem`) y la tabla muestra el Mp de cada rótula. `[#27b]`
@@ -69,7 +69,7 @@ similaridad. `[#]` referencia el pedido original. Estado: ⬜ pendiente · 🟡 
 - ✅ **Pandeo lineal — UI análoga a la modal**: `runBuckling` ahora **asíncrono**, con diálogo de N° de modos (`_buckNModesDialog`), **caja de progreso** y el eigensolver en **Web Worker** (no bloquea la UI). Resultados en el overlay: selector de **modo de pandeo + λcr** y escala. `[#33b]` *(pendiente opcional: carga de pandeo por elemento)*
 - ✅ **Form-finding — bug de geometría**: `runFormFinding` ahora **acota la red a los elementos seleccionados** (los demás quedan fijos; los nodos frontera con estructura no participante actúan de ancla) y permite elegir **ejes a ajustar** (sólo Z por defecto, o 3D). Así formar sólo la viga **no destruye los pilares**. `formFind` acepta `axes` para no redistribuir las luces en planta. Verificado: `test_formfind.mjs` (pilares intactos, viga funicular simétrica, planta preservada; el caso "todo el modelo 3D" reproduce el colapso original → por eso se acota). `[#29]`
 - ✅ **Form-finding — metodología documentada**: `docs/form-finding.md` — rol de la densidad de fuerza **Q**, anclas/objetivo y acotamiento, ejes, y el ejemplo viga cargada → funicular (y arco al invertir la carga). `[#30]`
-- ⬜ **Pushover — documentar ejecución**: no queda claro cómo se corre; documentar paso a paso + ejemplo. `[#34]`
+- ✅ **Pushover — documentar ejecución**: `docs/pushover.md` — los dos pushover (control de desplazamiento geométrico y rótulas plásticas), paso a paso, qué decide el programa (GDL de control, objetivo, pasos), lectura de la curva λ–δ / secuencia de rótulas, y ejemplos (snap-through de cercha von Mises; colapso plástico de pórtico). `[#34]`
 
 ---
 
