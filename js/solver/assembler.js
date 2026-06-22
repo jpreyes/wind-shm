@@ -5,9 +5,9 @@ import {
   localAxes, stiffnessMatrix, massMatrix,
   transformMatrix, globalStiffness,
   applyReleases, fixedEndForces, condenseFEF
-} from './timoshenko.js?v=124';
-import { applyDiaphragmConstraints, applyDiaphragmMass } from './diaphragm.js?v=124';
-import { assembleAreasInto, assembleAreasMassInto, areaThermalContribs } from './membrane.js?v=124';
+} from './timoshenko.js?v=125';
+import { applyDiaphragmConstraints, applyDiaphragmMass } from './diaphragm.js?v=125';
+import { assembleAreasInto, assembleAreasMassInto, areaThermalContribs } from './membrane.js?v=125';
 
 // ── Node index (contiguous 0-based numbering) ─────────────────────────────
 export function buildNodeIndex(model) {
@@ -157,13 +157,15 @@ export function assembleF(model, nodeIndex, lcId, selfWeight = false) {
       // Temperatura sobre un ÁREA: carga térmica de superficie (membrana) + un
       // GRADIENTE a través del espesor (momento térmico de flexión, #57).
       // Caras: dTtop = cara +z (roja), dTbot = cara −z (azul). Media → membrana;
-      // (dTtop − dTbot) → gradiente. Compatible con el ΔT uniforme legado (dT).
+      // gradiente (dTbot − dTtop) → momento. Compatible con el ΔT uniforme legado (dT).
       if (load.type === 'temp' && load.areaId != null) {
         const area = model.areas.get(load.areaId);
         if (!area) continue;
         const hasFaces = load.dTtop != null || load.dTbot != null;
         const dTmean = hasFaces ? ((+load.dTtop || 0) + (+load.dTbot || 0)) / 2 : (load.dT || 0);
-        const gradT  = hasFaces ? ((+load.dTtop || 0) - (+load.dTbot || 0)) : 0;
+        // gradiente = cara caliente abajo (−z) → la placa curva hacia +z (la cara
+        // más caliente se alarga y queda convexa). gradT = T(−z) − T(+z).
+        const gradT  = hasFaces ? ((+load.dTbot || 0) - (+load.dTtop || 0)) : 0;
         for (const { dof, val } of areaThermalContribs(area, model, nodeIndex, dTmean, gradT)) F[dof] += val;
         continue;
       }

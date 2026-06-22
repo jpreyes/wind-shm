@@ -2,8 +2,8 @@
 // StaticSolver — direct stiffness method for linear static analysis
 // Solver:  K_ff · u_f = F_f  (Gaussian elimination via numeric.js)
 // ──────────────────────────────────────────────────────────────────────────────
-import { buildNodeIndex, assembleK, assembleF, getNodeDOFs } from './assembler.js?v=124';
-import { Results } from './postprocess.js?v=124';
+import { buildNodeIndex, assembleK, assembleF, getNodeDOFs } from './assembler.js?v=125';
+import { Results } from './postprocess.js?v=125';
 
 export class StaticSolver {
   /**
