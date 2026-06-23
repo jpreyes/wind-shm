@@ -7,7 +7,7 @@
 //   Main → Worker: { Kff_flat, Kgff_flat, nF, nModes, dense }
 //   Worker → Main: { modes: [{lambda, vec}] }  |  { error }
 // ──────────────────────────────────────────────────────────────────────────────
-import { solveBuckling } from './buckling.js?v=169';
+import { solveBuckling } from './buckling.js?v=170';
 
 self.onmessage = (e) => {
   const { Kff_flat, Kgff_flat, nF, nModes, dense } = e.data;

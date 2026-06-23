@@ -29,8 +29,8 @@
       window.dispatchEvent(new Event('pwa-installed'));
     });
   </script>
-  <link rel="stylesheet" href="style.css?v=169">
-  <link rel="stylesheet" href="ui-v2.css?v=169">
+  <link rel="stylesheet" href="style.css?v=170">
+  <link rel="stylesheet" href="ui-v2.css?v=170">
   <script type="importmap">
   {
     "imports": {
@@ -540,6 +540,7 @@
             <button class="rtab" data-rtab="estatico">Estático</button>
             <button class="rtab" data-rtab="combos">Combos</button>
             <button class="rtab" data-rtab="plastico">Rótulas</button>
+            <button class="rtab" data-rtab="th">Dinámico</button>
           </div>
           <div id="res-content">
             <div id="rtab-modal" class="rtab-content active">
@@ -558,6 +559,10 @@
             <div id="rtab-plastico" class="rtab-content">
               <p class="panel-hint" id="res-plastic-hint">Ejecute <b>Rótulas plásticas</b> (Análisis → NL-lite) para ver la secuencia de formación de rótulas y el factor de colapso.</p>
               <div id="res-plastic-body"></div>
+            </div>
+            <div id="rtab-th" class="rtab-content">
+              <p class="panel-hint" id="res-th-hint">Ejecute <b>Dinámico (time-history)</b> (Análisis → NL-lite → Dinámico lineal) para ver la respuesta en el tiempo.</p>
+              <div id="th-panel"></div>
             </div>
           </div>
         </div>
@@ -1023,7 +1028,7 @@
 
 <!-- numeric.js para solver (Fase 2+) -->
 <script src="lib/numeric.js"></script>
-<script type="module" src="js/app.js?v=169"></script>
+<script type="module" src="js/app.js?v=170"></script>
 
 <!-- PWA: registrar el service worker (offline). Solo en contexto seguro
      (https o localhost); el navegador deja navigator.serviceWorker undefined

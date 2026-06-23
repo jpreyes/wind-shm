@@ -426,11 +426,13 @@ html, body { height: 100%; overflow: hidden; background: var(--bg); color: var(-
 /* Resultados sub-tabs */
 #res-tabs {
   display: flex;
+  flex-wrap: wrap;
   border-bottom: 1px solid var(--border);
   flex-shrink: 0;
 }
 .rtab {
-  flex: 1;
+  flex: 1 1 auto;
+  min-width: 60px;
   padding: 7px 4px;
   background: transparent;
   border: none;
