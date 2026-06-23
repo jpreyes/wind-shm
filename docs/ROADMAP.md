@@ -292,10 +292,12 @@ y los 3 motores+UI de **puentes**. Lo que queda abierto, ordenado por esfuerzo c
 - ⬜ **Resultados como PESTAÑAS (sin ventanas flotantes)** `[#90]` (G21) — Estático/Modal/Espectro/Rótulas/Dinámico/Pushover/Pandeo/P-Delta como pestañas del super-tab Resultados; los NL-lite dejan de ser overlays flotantes y pasan a su panel.
 - ⬜ *(opcional)* **Selección por cuadro con modo dedicado** `[#89]` (G20) — el rubber-band YA funciona (Alt+arrastrar); mejora de descubribilidad: botón/modo «Selección por cuadro» sin modificador.
 
-**✅ Correcciones / mejoras recientes ya resueltas (v160–v162)**
+**✅ Correcciones / mejoras recientes ya resueltas (v160–v165)**
 - ✅ **Diafragmas: borrables con Suprimir + centro (CM/CR) en el centroide** `[#91]` — `deleteSelected` elimina diafragmas seleccionados (Suprimir/Backspace); `addDiaphragm` calcula el CM por defecto = centroide de sus nodos y el dibujo ubica CM/CR en el centro (antes en una esquina/origen).
 - ✅ **N° de modos por defecto = máx(12, 3·nº de diafragmas)** `[#92]` — `app._defaultNModes()` (3 modos por diafragma rígido, piso 12) usado en el diálogo modal, el lote y el time-history.
 - ✅ **Gestión de casos de espectro guardados** `[#93]` — el diálogo de espectro lista los casos guardados (selector), carga TODOS sus parámetros al elegirlos para editarlos, y `runSpectrum` edita el caso seleccionado (sin duplicar) o crea uno nuevo con nombre único.
+- ✅ **Botón «Vista modelo» ↔ «Ver resultados» + «Limpiar Resultados» con confirmación** `[#88]` — toggle no destructivo en la barra (conserva lo calculado) y acción destructiva (✕ roja) con confirmación en el menú.
+- ✅ **Ejemplos guiados ejecutables con Tab/Enter** `[#96]` — las tarjetas de ejemplo (Ayuda → Ejemplos Guiados) son **enfocables** (`tabindex`, role button), se abren con **Enter/Espacio** y la **primera queda auto-enfocada**, para probarlas de inmediato sin el mouse. (También clic en toda la tarjeta.)
 
 **🟠 Mayores (motor/feature nuevos)**
 16. **IA: torre de transmisión (celosías 3D)** `[#53]` (G13) — vocabulario de ficha + generador paramétrico en el asistente.

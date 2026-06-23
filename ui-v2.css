@@ -837,6 +837,13 @@ table.dcl-eq th { background: var(--bg3); color: var(--text-muted); text-align: 
   border-radius: 10px;
   padding: 12px 15px;
   margin-bottom: 10px;
+  cursor: pointer;
+  outline: none;
+}
+/* Tarjeta de ejemplo enfocada por teclado (Tab) o hover — clara para «Enter para abrir» (#96). */
+.help-excard:focus, .help-excard:hover {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px rgba(56,189,248,.35);
 }
 .help-extitle { font-size: 13px; font-weight: 700; color: var(--text); }
 .help-exdesc  { font-size: 12px; color: var(--text-muted); margin-top: 3px; line-height: 1.5; }
