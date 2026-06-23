@@ -22,22 +22,22 @@
 // Unidades del modelo: kN, m (las resistencias de diseño se dan en MPa).
 // ──────────────────────────────────────────────────────────────────────────────
 
-import { Model } from '../model/model.js?v=155';
-import { Serializer } from '../model/serializer.js?v=155';
-import { StaticSolver } from '../solver/static_solver.js?v=155';
-import { ModalSolver } from '../solver/modal_solver.js?v=155';
-import { ModalResults } from '../solver/modal_results.js?v=155';
-import { buildNodeIndex, assembleK, assembleF, getNodeDOFs } from '../solver/assembler.js?v=155';
-import { assembleKg } from '../solver/geometric.js?v=155';
-import { makeFactor } from '../solver/linsolve.js?v=155';
-import { solveBuckling } from '../solver/buckling.js?v=155';
-import { StagedSolver } from '../solver/staged.js?v=155';
-import { verificarElemento, listDesignCodes, getDesignCode, registerDesignCode } from '../design/diseno.js?v=155';
-import { checkDeflection, checkDrift } from '../design/serviceability.js?v=155';
-import { polygonProps, compositeProps } from '../design/polygon_props.js?v=155';
-import { jointSCWB, strongColumnWeakBeam } from '../design/seismic.js?v=155';
-import { resolveMaterial } from '../design/material_props.js?v=155';
-import { resolveSectionProps } from '../design/section_props.js?v=155';
+import { Model } from '../model/model.js?v=156';
+import { Serializer } from '../model/serializer.js?v=156';
+import { StaticSolver } from '../solver/static_solver.js?v=156';
+import { ModalSolver } from '../solver/modal_solver.js?v=156';
+import { ModalResults } from '../solver/modal_results.js?v=156';
+import { buildNodeIndex, assembleK, assembleF, getNodeDOFs } from '../solver/assembler.js?v=156';
+import { assembleKg } from '../solver/geometric.js?v=156';
+import { makeFactor } from '../solver/linsolve.js?v=156';
+import { solveBuckling } from '../solver/buckling.js?v=156';
+import { StagedSolver } from '../solver/staged.js?v=156';
+import { verificarElemento, listDesignCodes, getDesignCode, registerDesignCode } from '../design/diseno.js?v=156';
+import { checkDeflection, checkDrift } from '../design/serviceability.js?v=156';
+import { polygonProps, compositeProps } from '../design/polygon_props.js?v=156';
+import { jointSCWB, strongColumnWeakBeam } from '../design/seismic.js?v=156';
+import { resolveMaterial } from '../design/material_props.js?v=156';
+import { resolveSectionProps } from '../design/section_props.js?v=156';
 
 // ── numeric.js disponible como global (navegador) o cargado bajo demanda (Node) ──
 let _numReady = false;
