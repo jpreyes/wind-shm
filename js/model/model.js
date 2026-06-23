@@ -285,6 +285,15 @@ export class Model {
       eccentricity: { ex: 0, ey: 0 },
       ...props
     };
+    // Centro geométrico de los nodos como CM por defecto: evita dibujar el CM en
+    // una esquina (origen) cuando no se especifica (p.ej. desde el asistente). El
+    // CR/maestro se deja SIN fijar → el dibujo lo ubica en el centroide y la física
+    // usa nodes[0] como maestro del cuerpo rígido (indistinto para el resultado).
+    const ns = (d.nodes || []).map(nid => this.nodes.get(nid)).filter(Boolean);
+    if (ns.length && (!props.cm || (props.cm.x === 0 && props.cm.y === 0))) {
+      d.cm = { x: ns.reduce((s, n) => s + n.x, 0) / ns.length,
+               y: ns.reduce((s, n) => s + n.y, 0) / ns.length };
+    }
     this.diaphragms.set(id, d);
     return d;
   }

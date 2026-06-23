@@ -2306,12 +2306,19 @@ export class Viewport {
     ));
 
     // ── CM and CR markers ──────────────────────────────────────────────────
+    // Centroide REAL de los nodos del diafragma (no el del hull padded) — sirve de
+    // respaldo para CM/CR cuando no están definidos, para no dibujarlos en una esquina.
+    const ncx = nodes.reduce((s, n) => s + n.x, 0) / nodes.length;
+    const ncy = nodes.reduce((s, n) => s + n.y, 0) / nodes.length;
     const masterId = d.masterId || d.nodes[0];
     const master   = this.app.model.nodes.get(masterId);
     if (master) {
-      const crx = master.x, cry = master.y;
-      const cmx = (d.cm?.x ?? hcx) + (d.eccentricity?.ex ?? 0);
-      const cmy = (d.cm?.y ?? hcy) + (d.eccentricity?.ey ?? 0);
+      // CR: master si está definido; si no, el centroide. CM: el de la masa si está,
+      // si es (0,0)/ausente cae al centroide. Ambos evitan la esquina.
+      const crx = d.masterId ? master.x : ncx, cry = d.masterId ? master.y : ncy;
+      const cmSet = d.cm && (d.cm.x !== 0 || d.cm.y !== 0);
+      const cmx = (cmSet ? d.cm.x : ncx) + (d.eccentricity?.ex ?? 0);
+      const cmy = (cmSet ? d.cm.y : ncy) + (d.eccentricity?.ey ?? 0);
 
       // Line CR → CM
       grp.add(new THREE.Line(
