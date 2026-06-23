@@ -22,8 +22,8 @@
 // Limitación deliberada: sólo elementos de barra (frame). Áreas/diafragmas se
 // ignoran en el ensamble por etapas (los puentes staged son reticulados/vigas).
 // ──────────────────────────────────────────────────────────────────────────────
-import { buildNodeIndex, assembleK, assembleF, getNodeDOFs } from './assembler.js?v=152';
-import { Results } from './postprocess.js?v=152';
+import { buildNodeIndex, assembleK, assembleF, getNodeDOFs } from './assembler.js?v=153';
+import { Results } from './postprocess.js?v=153';
 
 // Campos numéricos de los esfuerzos de extremo que se ACUMULAN entre etapas.
 const EF_KEYS = ['N','Vy1','Vz1','T','My1','Mz1','Vy2','Vz2','My2','Mz2',

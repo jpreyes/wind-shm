@@ -22,21 +22,22 @@
 // Unidades del modelo: kN, m (las resistencias de diseño se dan en MPa).
 // ──────────────────────────────────────────────────────────────────────────────
 
-import { Model } from '../model/model.js?v=152';
-import { Serializer } from '../model/serializer.js?v=152';
-import { StaticSolver } from '../solver/static_solver.js?v=152';
-import { ModalSolver } from '../solver/modal_solver.js?v=152';
-import { ModalResults } from '../solver/modal_results.js?v=152';
-import { buildNodeIndex, assembleK, assembleF, getNodeDOFs } from '../solver/assembler.js?v=152';
-import { assembleKg } from '../solver/geometric.js?v=152';
-import { makeFactor } from '../solver/linsolve.js?v=152';
-import { solveBuckling } from '../solver/buckling.js?v=152';
-import { StagedSolver } from '../solver/staged.js?v=152';
-import { verificarElemento, listDesignCodes, getDesignCode, registerDesignCode } from '../design/diseno.js?v=152';
-import { checkDeflection, checkDrift } from '../design/serviceability.js?v=152';
-import { polygonProps, compositeProps } from '../design/polygon_props.js?v=152';
-import { resolveMaterial } from '../design/material_props.js?v=152';
-import { resolveSectionProps } from '../design/section_props.js?v=152';
+import { Model } from '../model/model.js?v=153';
+import { Serializer } from '../model/serializer.js?v=153';
+import { StaticSolver } from '../solver/static_solver.js?v=153';
+import { ModalSolver } from '../solver/modal_solver.js?v=153';
+import { ModalResults } from '../solver/modal_results.js?v=153';
+import { buildNodeIndex, assembleK, assembleF, getNodeDOFs } from '../solver/assembler.js?v=153';
+import { assembleKg } from '../solver/geometric.js?v=153';
+import { makeFactor } from '../solver/linsolve.js?v=153';
+import { solveBuckling } from '../solver/buckling.js?v=153';
+import { StagedSolver } from '../solver/staged.js?v=153';
+import { verificarElemento, listDesignCodes, getDesignCode, registerDesignCode } from '../design/diseno.js?v=153';
+import { checkDeflection, checkDrift } from '../design/serviceability.js?v=153';
+import { polygonProps, compositeProps } from '../design/polygon_props.js?v=153';
+import { jointSCWB, strongColumnWeakBeam } from '../design/seismic.js?v=153';
+import { resolveMaterial } from '../design/material_props.js?v=153';
+import { resolveSectionProps } from '../design/section_props.js?v=153';
 
 // ── numeric.js disponible como global (navegador) o cargado bajo demanda (Node) ──
 let _numReady = false;
@@ -215,6 +216,20 @@ export class Portico {
   // ── Sección poligonal / compuesta (#70) ─────────────────────────────────────
   static polygonProps(o) { return polygonProps(o); }
   static compositeProps(o) { return compositeProps(o); }
+
+  // ── Detallado sísmico columna fuerte-viga débil (#68) ────────────────────────
+  // MnOf opcional: capacidad nominal de flexión por barra (kN·m). Por defecto
+  // Mn ≈ Fy·Zz (acero) desde el material y la forma de la sección.
+  seismicSCWB(MnOf, opts = {}) {
+    const fn = MnOf || ((eid) => {
+      const el = this.model.elements.get(eid); if (!el) return 0;
+      const M = resolveMaterial(this.model.materials.get(el.matId) || {});
+      const S = resolveSectionProps(this.model.sections.get(el.secId) || {});
+      return (M.Fy || M.fc || 0) * (S.Zz || S.Sz || 0);
+    });
+    return jointSCWB(this.model, fn, opts);
+  }
+  static strongColumnWeakBeam(o) { return strongColumnWeakBeam(o); }
 
   // ── Catálogo de códigos de diseño ───────────────────────────────────────────
   static listDesignCodes(family) { return listDesignCodes(family).map(c => ({ id: c.id, family: c.family, label: c.label })); }
