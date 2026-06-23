@@ -1,8 +1,8 @@
 // ──────────────────────────────────────────────────────────────────────────────
 // PropertiesPanel — right-side panel: node/element properties + mat/sec tabs
 // ──────────────────────────────────────────────────────────────────────────────
-import { computeFloorCR, computeFloorCM, computeTributaryWeights } from '../solver/diaphragm.js?v=136';
-import { localAxes } from '../solver/timoshenko.js?v=136';
+import { computeFloorCR, computeFloorCM, computeTributaryWeights } from '../solver/diaphragm.js?v=137';
+import { localAxes } from '../solver/timoshenko.js?v=137';
 
 export class PropertiesPanel {
   constructor(panelEl, app) {
@@ -97,6 +97,7 @@ export class PropertiesPanel {
       return;
     }
     body.innerHTML = '<p class="panel-hint">Calculando…</p>';
+    const codeSelHTML = await this._designCodeSelectorHTML();
     const dis = await this.app._calcularDiseno();
     if (!dis || !dis.filas || !dis.filas.length) {
       body.innerHTML = '<p class="panel-hint">No hay resultados para verificar.</p>';
@@ -127,6 +128,7 @@ export class PropertiesPanel {
       <td style="text-align:right;font-family:var(--font-mono);font-size:10px">${fmtmm(dispOf(x.id))}</td>
       <td class="${malo(x) ? 'dc-bad' : aj(x) ? 'dc-warn' : 'dc-ok'}">${malo(x) ? '✗' : aj(x) ? '!' : '✓'}</td></tr>`).join('');
     body.innerHTML = `
+      ${codeSelHTML}
       <div class="dis-summary">Estados: <b>${esc(dis.caso || 'activo')}</b><br>
         <span class="dc-ok">${nOk} cumplen</span> · <span class="dc-warn">${nAj} ajustados</span> · <span class="dc-bad">${nNo} no cumplen</span></div>
       <div style="max-height:58vh;overflow:auto;border:1px solid var(--border,#334);border-radius:5px">
@@ -136,6 +138,43 @@ export class PropertiesPanel {
     body.querySelectorAll('.dis-row').forEach(tr => tr.addEventListener('click', () => {
       const id = +tr.dataset.elem;
       if (this.app.viewport.selectElements) this.app.viewport.selectElements([id]);
+    }));
+    this._bindDesignCodeSelector(body);
+  }
+
+  // Selector de CÓDIGO de diseño por familia presente en el modelo (acero/hormigón/
+  // madera). Cambiarlo fija model.designSettings.codeByFamily y re-verifica.
+  async _designCodeSelectorHTML() {
+    try {
+      const mod = this._designMod || (this._designMod = await import('../design/diseno.js?v=137'));
+      const fams = new Set();
+      for (const m of this.app.model.materials.values()) {
+        const fam = (m.design?.family) || mod.clasificarMaterial(m.name);
+        if (['steel', 'concrete', 'timber', 'aluminum'].includes(fam)) fams.add(fam === 'aluminum' ? 'steel' : fam);
+      }
+      if (!fams.size) return '';
+      const lab = { steel: 'Acero', concrete: 'Hormigón', timber: 'Madera' };
+      const sett = this.app.model.designSettings?.codeByFamily || {};
+      const rows = [...fams].map(fam => {
+        const codes = mod.listDesignCodes(fam);
+        if (!codes.length) return '';
+        const cur = sett[fam] || '';
+        const opts = `<option value="">(por defecto)</option>` + codes.map(c => `<option value="${c.id}" ${cur === c.id ? 'selected' : ''}>${c.label}</option>`).join('');
+        return `<div class="prop-field" style="margin-bottom:4px"><label style="font-size:11px">Código ${lab[fam]}</label><select class="dz-code" data-fam="${fam}">${opts}</select></div>`;
+      }).join('');
+      return `<div class="prop-section" style="margin-bottom:6px"><div class="prop-title" title="Norma de diseño por familia (como SAP2000). Ver docs/diseno.md.">Código de diseño</div>${rows}</div>`;
+    } catch { return ''; }
+  }
+
+  _bindDesignCodeSelector(body) {
+    body.querySelectorAll('.dz-code').forEach(sel => sel.addEventListener('change', () => {
+      const fam = sel.dataset.fam, id = sel.value;
+      const ds = this.app.model.designSettings || { codeByFamily: {} };
+      ds.codeByFamily = ds.codeByFamily || {};
+      if (id) ds.codeByFamily[fam] = id; else delete ds.codeByFamily[fam];
+      this.app.model.designSettings = ds;
+      this.app.markDirty();
+      this.renderDiseno();
     }));
   }
 
@@ -1749,6 +1788,7 @@ export class PropertiesPanel {
           <div class="prop-field"><label>ν</label><input type="number" data-f="nu" value="${mat.nu}" step="0.01" min="0" max="0.5"></div>
           <div class="prop-field"><label>α (1/°C)</label><input type="number" data-f="alpha" value="${mat.alpha ?? 1e-5}" step="1e-6" title="Coef. de dilatación térmica (hormigón ~1e-5, acero ~1.2e-5). Para cargas de temperatura ΔT."></div>
         </div>
+        ${this._matDesignHTML(mat)}
         <div class="card-actions">
           <button class="btn-danger btn-del-mat" style="flex:1;">Eliminar</button>
         </div>
@@ -1776,7 +1816,58 @@ export class PropertiesPanel {
       this.app.markDirty();
       this.renderMaterials();
     });
+    this._bindMatDesign(card, mat);
     return card;
+  }
+
+  // Campos de resistencia por familia (MPa) para la tarjeta de material.
+  _matStrengthHTML(family, d = {}) {
+    const f = (k, lbl, def) => `<div class="prop-field"><label>${lbl} (MPa)</label><input type="number" data-d="${k}" value="${d[k] ?? def}" step="1"></div>`;
+    if (family === 'steel' || family === 'aluminum')
+      return `<div class="prop-row">${f('Fy', 'Fy fluencia', 250)}${f('Fu', 'Fu rotura', 400)}</div>`;
+    if (family === 'concrete')
+      return `<div class="prop-row">${f('fc', "f'c", 25)}${f('fyRebar', 'fy refuerzo', 420)}</div>`;
+    if (family === 'timber')
+      return `<div class="prop-row">${f('Fb', 'Fb flexión', 10)}${f('Fv', 'Fv corte', 1.2)}</div>
+              <div class="prop-row">${f('Fc', 'Fc compr.', 8)}${f('Ft', 'Ft tracción', 7)}</div>`;
+    return `<p class="panel-hint">Familia «auto»: se clasifica por el nombre y se usan las resistencias del respaldo (diseno_params.json).</p>`;
+  }
+
+  _matDesignHTML(mat) {
+    const fam = mat.design?.family || '';
+    const opt = (v, l) => `<option value="${v}" ${fam === v ? 'selected' : ''}>${l}</option>`;
+    return `
+      <div class="prop-section" style="margin-top:6px">
+        <div class="prop-title" title="Familia y resistencias para la verificación de diseño (AISC 360, Eurocódigo 3, ACI 318, NCh1198). Ver docs/diseno.md.">Diseño</div>
+        <div class="prop-row cols1">
+          <div class="prop-field"><label>Familia</label>
+            <select class="md-family">
+              ${opt('', 'auto (por nombre)')}${opt('steel', 'Acero')}${opt('concrete', 'Hormigón')}${opt('timber', 'Madera')}${opt('aluminum', 'Aluminio')}
+            </select></div>
+        </div>
+        <div class="md-strengths">${this._matStrengthHTML(fam, mat.design || {})}</div>
+      </div>`;
+  }
+
+  _bindMatDesign(card, mat) {
+    const famSel = card.querySelector('.md-family');
+    const strBox = card.querySelector('.md-strengths');
+    if (!famSel) return;
+    const saveDesign = () => {
+      const family = famSel.value;
+      const design = { ...(mat.design || {}) };
+      if (family) design.family = family; else delete design.family;
+      strBox.querySelectorAll('[data-d]').forEach(i => { const v = parseFloat(i.value); if (i.value !== '' && !isNaN(v)) design[i.dataset.d] = v; });
+      this.app.snapshot();
+      this.app.model.updateMaterial(mat.id, { design });
+      this.app.markDirty();
+    };
+    famSel.addEventListener('change', () => {
+      strBox.innerHTML = this._matStrengthHTML(famSel.value, mat.design || {});
+      strBox.querySelectorAll('[data-d]').forEach(i => i.addEventListener('change', saveDesign));
+      saveDesign();
+    });
+    strBox.querySelectorAll('[data-d]').forEach(i => i.addEventListener('change', saveDesign));
   }
 
   _addMaterial() {
@@ -1977,6 +2068,7 @@ export class PropertiesPanel {
           <div class="prop-field"><label>×Iz</label><input type="number" data-m="Iz" value="${sec.mod?.Iz ?? 1}" step="0.05" min="0.01"></div>
           <div class="prop-field"><label>×Iy</label><input type="number" data-m="Iy" value="${sec.mod?.Iy ?? 1}" step="0.05" min="0.01"></div>
         </div>
+        ${this._secDesignHTML(sec)}
         <div class="card-actions">
           <button class="btn-danger btn-del-sec" style="flex:1;">Eliminar</button>
         </div>
@@ -2014,7 +2106,81 @@ export class PropertiesPanel {
       this.app.markDirty();
       this.renderSections();
     });
+    this._bindSecDesign(card, sec);
     return card;
+  }
+
+  // Dimensiones por forma (m) para la tarjeta de sección.
+  _secDimHTML(shape, d = {}) {
+    const f = (k, lbl) => `<div class="prop-field"><label>${lbl} (m)</label><input type="number" data-sd="${k}" value="${d[k] ?? ''}" step="0.001"></div>`;
+    if (shape === 'I')      return `<div class="prop-row">${f('d', 'd canto')}${f('bf', 'bf ala')}</div><div class="prop-row">${f('tf', 'tf ala')}${f('tw', 'tw alma')}</div>`;
+    if (shape === 'rect')   return `<div class="prop-row">${f('b', 'b ancho')}${f('h', 'h canto')}</div>`;
+    if (shape === 'circle') return `<div class="prop-row">${f('D', 'D diámetro')}</div>`;
+    if (shape === 'pipe')   return `<div class="prop-row">${f('D', 'D exterior')}${f('t', 't espesor')}</div>`;
+    if (shape === 'box')    return `<div class="prop-row">${f('b', 'b ancho')}${f('h', 'h canto')}</div><div class="prop-row">${f('t', 't espesor')}</div>`;
+    return `<p class="panel-hint">Genérica: el diseño usa un rectángulo equivalente a partir de A, I.</p>`;
+  }
+
+  _secDesignHTML(sec) {
+    const sh = sec.design?.shape || 'generic';
+    const opt = (v, l) => `<option value="${v}" ${sh === v ? 'selected' : ''}>${l}</option>`;
+    const reb = sec.design?.rebar || {};
+    return `
+      <div class="prop-section" style="margin-top:6px">
+        <div class="prop-title" title="Forma del perfil para el diseño: deriva módulos plásticos, esbelteces, etc. Ver docs/diseno.md.">Forma (diseño)</div>
+        <div class="prop-row cols1">
+          <div class="prop-field"><label>Forma</label>
+            <select class="sd-shape">
+              ${opt('generic', 'Genérica (A, I)')}${opt('I', 'Doble T (I)')}${opt('rect', 'Rectángulo macizo')}${opt('circle', 'Círculo macizo')}${opt('pipe', 'Tubo circular')}${opt('box', 'Tubo rectangular')}
+            </select></div>
+        </div>
+        <div class="sd-dims">${this._secDimHTML(sh, sec.design || {})}</div>
+        <div class="prop-row">
+          <div class="prop-field"><label>ρ armadura (H.A.)</label><input type="number" data-rb="rho" value="${reb.rho ?? ''}" step="0.002" title="Cuantía longitudinal para diseño de hormigón armado"></div>
+          <div class="prop-field"><label>recubr. (mm)</label><input type="number" data-rb="cover_mm" value="${reb.cover_mm ?? ''}" step="5"></div>
+        </div>
+        <button class="btn-secondary sd-calc" style="width:100%;font-size:11px;margin-top:4px" title="Calcula A, Iz, Iy, J, Av desde las dimensiones y los escribe en la sección (para el análisis y el diseño).">↻ Calcular A, I, J desde la forma</button>
+      </div>`;
+  }
+
+  _bindSecDesign(card, sec) {
+    const shapeSel = card.querySelector('.sd-shape');
+    const dimsBox = card.querySelector('.sd-dims');
+    if (!shapeSel) return;
+    const saveDesign = () => {
+      const shape = shapeSel.value;
+      const design = { ...(sec.design || {}) };
+      design.shape = shape;
+      dimsBox.querySelectorAll('[data-sd]').forEach(i => { const v = parseFloat(i.value); if (i.value !== '' && !isNaN(v)) design[i.dataset.sd] = v; });
+      const reb = { ...(design.rebar || {}) };
+      card.querySelectorAll('[data-rb]').forEach(i => { const v = parseFloat(i.value); if (i.value !== '' && !isNaN(v)) reb[i.dataset.rb] = v; });
+      if (Object.keys(reb).length) design.rebar = reb;
+      this.app.snapshot();
+      this.app.model.updateSection(sec.id, { design });
+      this.app.markDirty();
+    };
+    shapeSel.addEventListener('change', () => {
+      dimsBox.innerHTML = this._secDimHTML(shapeSel.value, sec.design || {});
+      dimsBox.querySelectorAll('[data-sd]').forEach(i => i.addEventListener('change', saveDesign));
+      saveDesign();
+    });
+    dimsBox.querySelectorAll('[data-sd]').forEach(i => i.addEventListener('change', saveDesign));
+    card.querySelectorAll('[data-rb]').forEach(i => i.addEventListener('change', saveDesign));
+    card.querySelector('.sd-calc')?.addEventListener('click', async () => {
+      saveDesign();
+      const s = this.app.model.sections.get(sec.id);
+      if (!s.design?.shape || s.design.shape === 'generic') { this.app.toast('Elija una forma con dimensiones primero', 'warn'); return; }
+      try {
+        const { fromShape } = await import('../design/section_props.js?v=137');
+        const g = fromShape(s.design.shape, s.design);
+        if (!g) { this.app.toast('Faltan dimensiones de la forma', 'warn'); return; }
+        this.app.snapshot();
+        this.app.model.updateSection(sec.id, { A: g.A, Iz: g.Iz, Iy: g.Iy, J: g.J, Avy: g.Avz_web, Avz: g.Avy_flange });
+        this.app.markDirty();
+        this.renderSections();
+        this.app.toast(`A, I, J calculados desde la forma ${s.design.shape}. Recalcule el análisis (F5).`, 'ok');
+      } catch (e) { this.app.toast('No se pudo calcular: ' + e.message, 'warn'); }
+    });
   }
 
   // ── P3-9: Section calculator dialog ───────────────────────────────────────

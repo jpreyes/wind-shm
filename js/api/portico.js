@@ -22,19 +22,19 @@
 // Unidades del modelo: kN, m (las resistencias de diseño se dan en MPa).
 // ──────────────────────────────────────────────────────────────────────────────
 
-import { Model } from '../model/model.js?v=136';
-import { Serializer } from '../model/serializer.js?v=136';
-import { StaticSolver } from '../solver/static_solver.js?v=136';
-import { ModalSolver } from '../solver/modal_solver.js?v=136';
-import { ModalResults } from '../solver/modal_results.js?v=136';
-import { buildNodeIndex, assembleK, assembleF, getNodeDOFs } from '../solver/assembler.js?v=136';
-import { assembleKg } from '../solver/geometric.js?v=136';
-import { makeFactor } from '../solver/linsolve.js?v=136';
-import { solveBuckling } from '../solver/buckling.js?v=136';
-import { StagedSolver } from '../solver/staged.js?v=136';
-import { verificarElemento, listDesignCodes, getDesignCode, registerDesignCode } from '../design/diseno.js?v=136';
-import { resolveMaterial } from '../design/material_props.js?v=136';
-import { resolveSectionProps } from '../design/section_props.js?v=136';
+import { Model } from '../model/model.js?v=137';
+import { Serializer } from '../model/serializer.js?v=137';
+import { StaticSolver } from '../solver/static_solver.js?v=137';
+import { ModalSolver } from '../solver/modal_solver.js?v=137';
+import { ModalResults } from '../solver/modal_results.js?v=137';
+import { buildNodeIndex, assembleK, assembleF, getNodeDOFs } from '../solver/assembler.js?v=137';
+import { assembleKg } from '../solver/geometric.js?v=137';
+import { makeFactor } from '../solver/linsolve.js?v=137';
+import { solveBuckling } from '../solver/buckling.js?v=137';
+import { StagedSolver } from '../solver/staged.js?v=137';
+import { verificarElemento, listDesignCodes, getDesignCode, registerDesignCode } from '../design/diseno.js?v=137';
+import { resolveMaterial } from '../design/material_props.js?v=137';
+import { resolveSectionProps } from '../design/section_props.js?v=137';
 
 // ── numeric.js disponible como global (navegador) o cargado bajo demanda (Node) ──
 let _numReady = false;
