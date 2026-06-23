@@ -1,8 +1,8 @@
 // ──────────────────────────────────────────────────────────────────────────────
 // PropertiesPanel — right-side panel: node/element properties + mat/sec tabs
 // ──────────────────────────────────────────────────────────────────────────────
-import { computeFloorCR, computeFloorCM, computeTributaryWeights } from '../solver/diaphragm.js?v=133';
-import { localAxes } from '../solver/timoshenko.js?v=133';
+import { computeFloorCR, computeFloorCM, computeTributaryWeights } from '../solver/diaphragm.js?v=134';
+import { localAxes } from '../solver/timoshenko.js?v=134';
 
 export class PropertiesPanel {
   constructor(panelEl, app) {
