@@ -72,7 +72,9 @@ function goldenGate() {
   const B = baseModel(), m = B.m;
   const Lc = 1280, Ls = 343, Ht = 152, sag = 143, step = 80;
   const xL = Ls, xR = Ls + Lc;               // torres
-  const zCable = (x) => { const xm = (xL + xR) / 2, a = sag / ((Lc / 2) ** 2); return Ht - a * (x - xm) ** 2; };
+  // Cable COLGANTE: alto (Ht) en las torres, mínimo (Ht−sag) en el centro → parábola
+  // cóncava hacia arriba (cuelga). z(x) = Ht − sag·(1 − ((x−xm)/(Lc/2))²).
+  const zCable = (x) => { const xm = (xL + xR) / 2; return Ht - sag * (1 - ((x - xm) / (Lc / 2)) ** 2); };
   // Torres (de tablero z=0 hacia arriba; base bajo el tablero empotrada)
   const tLb = m.addNode(xL, 0, -20, PINF), tLt = m.addNode(xL, 0, Ht);
   const tRb = m.addNode(xR, 0, -20, PINF), tRt = m.addNode(xR, 0, Ht);
@@ -154,39 +156,44 @@ function severin() {
 }
 
 // ════════════════════════════════════════════════════════════════════════════
-// 4) CAU CAU / Treng Treng – Kay Kay (Valdivia) — puente BASCULANTE (cerrado)
-//    Vanos 32 / 15.5 / 70 / 15.5 / 32 m; tramo central basculante de doble hoja.
+// 4) TRENG TRENG – KAY KAY (Temuco, río Cautín) — ATIRANTADO asimétrico, mástil único
+//    240 m en 5 vanos 23/27/140/27/23; vano atirantado central 140 m; mástil 70 m.
 // ════════════════════════════════════════════════════════════════════════════
-function cauCau() {
+function trengTreng() {
   const B = baseModel(), m = B.m;
-  const spans = [32, 15.5, 70, 15.5, 32];
-  const xs = [0]; for (const s of spans) xs.push(xs[xs.length - 1] + s);   // 0,32,47.5,117.5,133,165
-  const xMid = (xs[2] + xs[3]) / 2;   // 82.5 — encuentro de las dos hojas
-  // nodos de tablero (con un nodo extra en el centro de las hojas y en cuartos para la deformada)
-  const xnodes = [];
-  for (let i = 0; i < xs.length; i++) {
-    xnodes.push(xs[i]);
-    if (i < xs.length - 1) { const a = xs[i], b = xs[i + 1]; xnodes.push((a + b) / 2); }   // punto medio de cada vano
-  }
-  xnodes.push(xMid); xnodes.sort((a, b) => a - b);
-  const uniq = [...new Set(xnodes.map(v => +v.toFixed(3)))];
+  const spans = [23, 27, 140, 27, 23];
+  const xs = [0]; for (const s of spans) xs.push(xs[xs.length - 1] + s);   // 0,23,50,190,217,240
+  const xMast = xs[2];   // 50 — el mástil arranca al inicio del vano atirantado de 140 m
+  const Hp = 70;
+  // nodos de tablero: pilas + nodos intermedios (anclaje de tirantes en el vano de 140 m)
+  const set = new Set(xs);
+  for (let x = xs[2] + 14; x < xs[3]; x += 14) set.add(+x.toFixed(2));   // anclajes ~cada 14 m en el vano principal
+  for (const x of [11.5, 36.5, 203.5, 228.5]) set.add(x);                 // un nodo medio en los vanos de aproximación
+  const uniq = [...set].sort((a, b) => a - b);
   const node = new Map();
   for (const x of uniq) {
     const isPier = xs.some(p => Math.abs(p - x) < 1e-6);
-    const r = isPier ? (Math.abs(x) < 1e-6 ? PIN : ROLL) : {};   // pilas: apoyos verticales (1 fijo en X)
+    const r = isPier ? (Math.abs(x) < 1e-6 ? PIN : ROLL) : {};   // pilas: apoyos verticales
     node.set(x, m.addNode(x, 0, 0, r).id);
   }
   const ids = uniq.map(x => node.get(x));
-  const deckElems = chain(m, ids, B.steel, B.sDeck);
-  // RÓTULA del encuentro de las dos hojas en el centro (transmite cortante, no momento)
-  const iMid = uniq.indexOf(+xMid.toFixed(3));
-  if (iMid > 0) hinge(m, deckElems[iMid - 1], true);   // libera momento en el extremo j del elemento que llega al centro
-  return { ...B, model: m, slug: 'puente_cau_cau', title: 'Puente Cau Cau / Treng Treng – Kay Kay (Valdivia) — basculante',
-    deckChain: ids, udlElems: 'deck', supportsHint: [node.get(0), node.get(xs[xs.length - 1])],
-    intro: 'El **Puente Cau Cau** (Valdivia, también llamado **Treng Treng / Kay Kay**) es un **puente basculante** de doble hoja sobre el río Cau Cau. La estructura principal son **5 vanos** (32 / 15.5 / 70 / 15.5 / 32 m): el vano central de 70 m es el canal navegable que cruzan las **dos hojas basculantes** (con contrapesos en los vanos de 15.5 m), articuladas para abrirse. El tablero central es una **losa ortótropa de acero** sobre dos vigas longitudinales de canto variable. Se modela en **posición cerrada**, con una **rótula** en el encuentro de las hojas.',
-    props: [['Vanos', '32 / 15.5 / 70 / 15.5 / 32 m'], ['Vano navegable', '70 m (dos hojas basculantes)'], ['Contrapesos', 'vanos de 15.5 m'], ['Tablero', 'losa ortótropa de acero, vigas de canto variable'], ['Longitud', '165 m (principal)'], ['Ubicación', 'Valdivia, Chile']],
-    notes: ['Se modela el puente **cerrado**: cada **hoja** es un voladizo equilibrado que pivota sobre su pila; en el centro las hojas se encuentran con una **rótula** (transmite cortante, no momento).', 'Las **pilas** son apoyos verticales (una fija en X para la estabilidad longitudinal).', 'El mecanismo de **apertura** (giro de las hojas con sistemas hidráulicos) no se modela aquí — sólo el estado de servicio cerrado.'],
-    conclusion: 'El modelo del Cau Cau reproduce el esquema basculante cerrado: hojas que se encuentran en el centro con una rótula y se apoyan en las pilas. Ejemplo de **puente basculante** (un ícono de Valdivia) en Pórtico.' };
+  chain(m, ids, B.conc, B.sDeck);
+  // mástil único en x=50 (base empotrada bajo el tablero → cabeza a 70 m)
+  const mBase = m.addNode(xMast, 0, -12, PINF);
+  const mTop = m.addNode(xMast, 0, Hp);
+  chain(m, [mBase.id, node.get(xMast), mTop.id], B.conc, B.sArch);
+  // tirantes en abanico: al vano principal (x>50) y retenidas al vano de aproximación (x<50)
+  for (const x of uniq) {
+    if (x <= xMast + 7) continue;                     // saltar el propio mástil y el vecino
+    if (x > xMast && x <= xs[3]) m.addElement(mTop.id, node.get(x), B.steel, B.sCable);   // abanico del vano principal
+  }
+  for (const x of [0, 23, 36.5]) if (node.has(x)) m.addElement(mTop.id, node.get(x), B.steel, B.sCable);   // retenidas (back-stays)
+  return { ...B, model: m, slug: 'puente_treng_treng', title: 'Puente Treng Treng – Kay Kay (Temuco) — atirantado asimétrico de mástil único',
+    deckChain: ids, udlElems: 'deck', supportsHint: [node.get(0), mBase.id, node.get(240)],
+    intro: 'El **Puente Treng Treng – Kay Kay** (Temuco, sobre el **río Cautín**) es un **puente atirantado asimétrico** con un **único mástil de 70 m** que sostiene el vano atirantado central de **140 m**. Tiene **240 m** en 5 vanos (23 / 27 / **140** / 27 / 23 m) y tablero de hormigón pretensado de 27 m de ancho. La forma quebrada del mástil evoca la leyenda mapuche de las serpientes **Treng Treng** y **Kay Kay**. Los tirantes parten de la cabeza del mástil en **abanico** sobre el vano principal, con **retenidas** (back-stays) hacia los vanos de aproximación que equilibran.',
+    props: [['Longitud total', '240 m (5 vanos)'], ['Vanos', '23 / 27 / 140 / 27 / 23 m'], ['Vano atirantado', '140 m'], ['Mástil', '70 m (único, asimétrico)'], ['Tablero', 'hormigón pretensado, 27 m de ancho'], ['Ubicación', 'Temuco, río Cautín, Chile (2023)']],
+    notes: ['Atirantado **asimétrico**: los tirantes del vano principal se equilibran con **retenidas** ancladas en los vanos de aproximación (sobre las pilas).', 'El **mástil único** (en 2D un mástil; en realidad dos columnas quebradas unidas en la cabeza) ancla todos los tirantes en su coronación.', 'Las pilas de aproximación son **apoyos verticales**; el mástil se empotra en su base.', 'Los **tirantes** trabajan a tracción y cuelgan el tablero del vano de 140 m.'],
+    conclusion: 'El modelo reproduce el esquema atirantado asimétrico del Treng Treng – Kay Kay de Temuco: mástil único, abanico de tirantes sobre el vano de 140 m y retenidas de equilibrio. Ejemplo de **atirantado asimétrico** (ícono de La Araucanía) en Pórtico.' };
 }
 
 // ── Driver ──────────────────────────────────────────────────────────────────────
@@ -261,7 +268,7 @@ ${def.conclusion}
   console.log(`✓ ${def.slug}  ·  ${m.nodes.size} nodos, ${m.elements.size} elem  ·  ΣRz=${Rz.toFixed(0)} kN  ·  umax=${(sum.maxU * 1000).toFixed(1)} mm  ·  Nmax=${sum.maxN.toFixed(0)} kN`);
 }
 
-const builders = { salginatobel, goldenGate, severin, cauCau };
+const builders = { salginatobel, goldenGate, severin, trengTreng };
 for (const [name, fn] of Object.entries(builders)) {
   if (pat && !name.toLowerCase().includes(pat.toLowerCase())) continue;
   try { await emit(fn()); } catch (e) { console.error(`✗ ${name}: ${e.message}`); }

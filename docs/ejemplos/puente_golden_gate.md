@@ -31,10 +31,10 @@ El **Golden Gate** (San Francisco, 1937) es un **puente colgante** de **1280 m d
 | Magnitud | Valor |
 | --- | --- |
 | Nodos · elementos · áreas | 40 · 55 · 0 |
-| ΣReacciones verticales | 52879 kN |
-| Desplazamiento máx. |u| | 6378.3 mm |
-| Axial máx. |N| | 34346 kN |
-| Momento máx. |M| | 4457004 kN·m |
+| ΣReacciones verticales | 52208 kN |
+| Desplazamiento máx. |u| | 2344.9 mm |
+| Axial máx. |N| | 45041 kN |
+| Momento máx. |M| | 1050868 kN·m |
 
 ## Conclusión
 
