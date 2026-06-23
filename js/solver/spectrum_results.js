@@ -3,7 +3,7 @@
 // Exposes the same API as static Results so the viewport can reuse
 // showDeformed / showForceDiagram without modification.
 // ──────────────────────────────────────────────────────────────────────────────
-import { getNodeDOFs } from './assembler.js?v=139';
+import { getNodeDOFs } from './assembler.js?v=140';
 
 export class SpectrumResults {
   /**

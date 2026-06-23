@@ -1,35 +1,36 @@
 // ──────────────────────────────────────────────────────────────────────────────
 // App — main orchestrator
 // ──────────────────────────────────────────────────────────────────────────────
-import { Model }           from './model/model.js?v=139';
-import { Serializer }      from './model/serializer.js?v=139';
-import { Viewport }        from './ui/viewport.js?v=139';
-import { PropertiesPanel } from './ui/properties.js?v=139';
-import { MenuBar }         from './ui/menu.js?v=139';
-import { UndoStack }       from './utils/undo.js?v=139';
-import { StaticSolver, ensureDefaultLC }   from './solver/static_solver.js?v=139';
-import { Results }                         from './solver/postprocess.js?v=139';
-import { ModalSolver }                     from './solver/modal_solver.js?v=139';
-import { buildNodeIndex, assembleK, assembleF, getNodeDOFs } from './solver/assembler.js?v=139';
-import { assembleSparseGlobal, extractFreeCSR } from './solver/sparse.js?v=139';
-import { solveNonlinear, solveNonlinearDC } from './solver/nl_lite.js?v=139';
-import { assembleKg } from './solver/geometric.js?v=139';
-import { makeFactor } from './solver/linsolve.js?v=139';
-import { formFind } from './solver/formfind.js?v=139';
-import { ModalResults }                    from './solver/modal_results.js?v=139';
-import { modalTimeHistory }                from './solver/timehistory.js?v=139';
-import { parseAccelerogram, accStats, scaleToPGA, DEMO_PRESETS, G as GACC } from './solver/accelerograms.js?v=139';
-import { SpectrumSolver }                  from './solver/spectrum_solver.js?v=139';
-import { StagedSolver }                    from './solver/staged.js?v=139';
-import { tendonEquivalentLoads, applyTendon, tendonEcc } from './solver/tendon.js?v=139';
-import { buildLane, influenceLine, movingLoadEnvelope, responseReaction, responseSection } from './solver/moving_load.js?v=139';
-import { autoDetectDiaphragms, computeFloorCR, applyDiaphragmConstraints } from './solver/diaphragm.js?v=139';
-import { splitElement, splitByLength, discretizeAll, joinElements, intersectarElementos } from './model/discretize.js?v=139';
-import { localAxes, stiffnessMatrix, massMatrix, transformMatrix, globalStiffness, applyReleases } from './solver/timoshenko.js?v=139';
-import { blockCells, cornerGridIndices } from './model/mesher.js?v=139';
-import { coonsGridFromCorners } from './model/mesh_map.js?v=139';
-import { meshPolygonIntoModel } from './model/mesh_free.js?v=139';
-import { smoothAreasInModel } from './model/mesh_quality.js?v=139';
+import { Model }           from './model/model.js?v=140';
+import { Serializer }      from './model/serializer.js?v=140';
+import { Viewport }        from './ui/viewport.js?v=140';
+import { PropertiesPanel } from './ui/properties.js?v=140';
+import { MenuBar }         from './ui/menu.js?v=140';
+import { UndoStack }       from './utils/undo.js?v=140';
+import { StaticSolver, ensureDefaultLC }   from './solver/static_solver.js?v=140';
+import { Results }                         from './solver/postprocess.js?v=140';
+import { ModalSolver }                     from './solver/modal_solver.js?v=140';
+import { buildNodeIndex, assembleK, assembleF, getNodeDOFs } from './solver/assembler.js?v=140';
+import { assembleSparseGlobal, extractFreeCSR } from './solver/sparse.js?v=140';
+import { solveNonlinear, solveNonlinearDC } from './solver/nl_lite.js?v=140';
+import { assembleKg } from './solver/geometric.js?v=140';
+import { makeFactor } from './solver/linsolve.js?v=140';
+import { formFind } from './solver/formfind.js?v=140';
+import { ModalResults }                    from './solver/modal_results.js?v=140';
+import { modalTimeHistory }                from './solver/timehistory.js?v=140';
+import { parseAccelerogram, accStats, scaleToPGA, DEMO_PRESETS, G as GACC } from './solver/accelerograms.js?v=140';
+import { SpectrumSolver }                  from './solver/spectrum_solver.js?v=140';
+import { StagedSolver }                    from './solver/staged.js?v=140';
+import { tendonEquivalentLoads, applyTendon, tendonEcc } from './solver/tendon.js?v=140';
+import { buildLane, influenceLine, movingLoadEnvelope, responseReaction, responseSection } from './solver/moving_load.js?v=140';
+import { newmarkNonlinear, shearBuilding, rayleighDamping } from './solver/nl_timehistory.js?v=140';
+import { autoDetectDiaphragms, computeFloorCR, applyDiaphragmConstraints } from './solver/diaphragm.js?v=140';
+import { splitElement, splitByLength, discretizeAll, joinElements, intersectarElementos } from './model/discretize.js?v=140';
+import { localAxes, stiffnessMatrix, massMatrix, transformMatrix, globalStiffness, applyReleases } from './solver/timoshenko.js?v=140';
+import { blockCells, cornerGridIndices } from './model/mesher.js?v=140';
+import { coonsGridFromCorners } from './model/mesh_map.js?v=140';
+import { meshPolygonIntoModel } from './model/mesh_free.js?v=140';
+import { smoothAreasInModel } from './model/mesh_quality.js?v=140';
 
 class App {
   constructor() {
@@ -1309,6 +1310,7 @@ class App {
       'run-formfind':    false,
       'run-plastic':     !!this._plasticResult,
       'run-pushover-dc': !!this._dcResult,
+      'run-nlth':        !!this._nlthResult,
       'run-staged':      !!this._stagedResult,
       'run-moving':      !!this._movingResult,
     };
@@ -1337,6 +1339,7 @@ class App {
             ${row('Form-finding', 'Densidades de fuerza (FDM) · reposiciona nodos', 'run-formfind', false)}
             ${row('Rótulas plásticas', 'Colapso evento a evento', 'run-plastic', nlOk['run-plastic'])}
             ${row('Pushover (control δ)', 'Curva carga–desplazamiento', 'run-pushover-dc', nlOk['run-pushover-dc'])}
+            ${row('Time-history NO LINEAL', 'Edificio de corte · rótulas · Newmark', 'run-nlth', nlOk['run-nlth'])}
             <div class="ah-sec">Puentes</div>
             ${row('Etapas constructivas', 'Staged · activación incremental', 'run-staged', nlOk['run-staged'])}
             ${row('Pretensado por tendón', 'Cargas equivalentes (load balancing)', 'run-tendon', false)}
@@ -1381,7 +1384,7 @@ class App {
       'run-formfind': () => this.runFormFinding(opts), 'run-plastic': () => this.runPlastic(opts),
       'run-pushover-dc': () => this.runPushoverDC(opts),
       'run-staged': () => this.runStaged(opts), 'run-tendon': () => this.runTendon(opts),
-      'run-moving': () => this.runMovingLoad(opts),
+      'run-moving': () => this.runMovingLoad(opts), 'run-nlth': () => this.runNLTimeHistory(opts),
     }[act];
     if (!fn) return;
     // Cada runner gestiona su propia caja de progreso (modal/espectro/pandeo y, desde
@@ -1455,6 +1458,9 @@ class App {
     } else if (key === 'run-moving') {
       if (!this._movingResult) { this.toast('No hay resultados de cargas móviles', 'warn'); return; }
       this._movingPlotOverlay(this._movingResult);
+    } else if (key === 'run-nlth') {
+      if (!this._nlthResult) { this.toast('No hay resultados de time-history no lineal', 'warn'); return; }
+      this._nlthOpenOverlay();
     }
   }
 
@@ -1752,7 +1758,7 @@ class App {
   _staticWorkerSolve(K, nDOF, freeDOF, Flist, dense = false) {
     return new Promise((resolve, reject) => {
       let worker;
-      try { worker = new Worker(new URL('./solver/static_worker.js?v=139', import.meta.url), { type: 'module' }); }
+      try { worker = new Worker(new URL('./solver/static_worker.js?v=140', import.meta.url), { type: 'module' }); }
       catch (e) { reject(e); return; }
       this._staticWorker = worker;
       const cancelar = () => { try { worker.terminate(); } catch (e) {} this._staticWorker = null; this._hideProgress(); reject(new Error('cancelado')); };
@@ -1781,7 +1787,7 @@ class App {
   _staticWorkerSolveSparse(csr, cf, nDOF, freeDOF, Flist) {
     return new Promise((resolve, reject) => {
       let worker;
-      try { worker = new Worker(new URL('./solver/static_worker.js?v=139', import.meta.url), { type: 'module' }); }
+      try { worker = new Worker(new URL('./solver/static_worker.js?v=140', import.meta.url), { type: 'module' }); }
       catch (e) { reject(e); return; }
       this._staticWorker = worker;
       const cancelar = () => { try { worker.terminate(); } catch (e) {} this._staticWorker = null; this._hideProgress(); reject(new Error('cancelado')); };
@@ -1963,6 +1969,9 @@ class App {
     this._thResult = null;
     this._stagedResult = null;
     this._movingResult = null;
+    this._nlthResult = null;
+    this._nlthStopPlay?.();
+    document.getElementById('nlth-overlay')?.remove();
     this._plasticStopPlay?.();
     this._thStopPlay?.();
     document.getElementById('pl-overlay')?.remove();
@@ -2098,7 +2107,7 @@ class App {
       // ── Run Stodola in a Web Worker (non-blocking) ───────────────────────────
       const denseModal = !!this._config?.analisis?.matrizDensa;
       const modes = await new Promise((resolve, reject) => {
-        const worker = new Worker(new URL('./solver/modal_worker.js?v=139', import.meta.url), { type: 'module' });
+        const worker = new Worker(new URL('./solver/modal_worker.js?v=140', import.meta.url), { type: 'module' });
         worker.postMessage({ Kff_flat, Mff_flat, nF, nModes, dense: denseModal, method: modalMethod },
           [Kff_flat.buffer, Mff_flat.buffer]); // transfer — zero copy
         worker.onmessage = (ev) => {
@@ -2500,7 +2509,7 @@ class App {
       // Modal por iteración de subespacio en worker (no bloquea la UI).
       const dense = !!this._config?.analisis?.matrizDensa;
       const rawModes = await new Promise((resolve, reject) => {
-        const w = new Worker(new URL('./solver/modal_worker.js?v=139', import.meta.url), { type: 'module' });
+        const w = new Worker(new URL('./solver/modal_worker.js?v=140', import.meta.url), { type: 'module' });
         w.postMessage({ Kff_flat: Kff, Mff_flat: Mff, nF, nModes, dense, method: 'subspace' }, [Kff.buffer, Mff.buffer]);
         w.onmessage = ev => { w.terminate(); ev.data.error ? reject(new Error(ev.data.error)) : resolve(ev.data.modes); };
         w.onerror = ev => { w.terminate(); reject(new Error(ev.message || 'Error en worker modal')); };
@@ -2569,7 +2578,7 @@ class App {
   _thSolveInWorker(modes, ag, dt, zeta) {
     return new Promise((resolve, reject) => {
       let w;
-      try { w = new Worker(new URL('./solver/timehistory_worker.js?v=139', import.meta.url), { type: 'module' }); }
+      try { w = new Worker(new URL('./solver/timehistory_worker.js?v=140', import.meta.url), { type: 'module' }); }
       catch (e) {
         try { const r = modalTimeHistory({ modes: modes.map(m => ({ ...m, phi: new Float64Array(0) })), ag, dt, zeta }); resolve({ q: r.q, peakModal: r.peakModal }); }
         catch (err) { reject(err); }
@@ -3241,6 +3250,356 @@ class App {
     this.toast('Resultado exportado', 'ok');
   }
 
+  // ════════════════════════════════════════════════════════════════════════════
+  // TIME-HISTORY NO LINEAL (rótulas plásticas) · #48b — UI
+  // El motor (nl_timehistory.js) integra por Newmark-β + Newton un EDIFICIO DE
+  // CORTE elastoplástico (interstory springs).  La UI reduce el modelo a ese
+  // edificio: pisos = diafragmas (ordenados por z), masa = masa del diafragma,
+  // rigidez de entrepiso por un análisis estático lateral proporcional a la masa
+  // (idealización de corte) y corte de fluencia Vy semilla = Cy·peso acumulado.
+  // La tabla de pisos es EDITABLE (el usuario corrige la idealización).
+  // ════════════════════════════════════════════════════════════════════════════
+  async runNLTimeHistory(opts = {}) {
+    const model = this.model;
+    if (model.diaphragms.size < 1) {
+      this.toast('El time-history no lineal (edificio de corte) requiere diafragmas rígidos por piso. Use «auto-detectar diafragmas» o defínalos.', 'warn');
+      return;
+    }
+    const dir0 = this._lastNLTH?.dir || 'X';
+    let stories;
+    try { stories = this._nlthBuildStories(dir0); }
+    catch (e) { this.toast(`No se pudo armar el edificio de corte: ${e.message}`, 'error'); return; }
+    if (!stories.length) { this.toast('No se identificaron pisos (diafragmas).', 'warn'); return; }
+
+    const cfg = opts.silent ? this._nlthDefaults(stories, dir0) : await this._nlthDialog(stories, dir0);
+    if (!cfg) return;
+    const { dir, zeta, alpha, ag, dt, agName, stories: st } = cfg;
+    if (!ag || ag.length < 2) { this.toast('Acelerograma vacío o no reconocido.', 'warn'); return; }
+    this._lastNLTH = { dir, zeta, alpha };
+
+    const m = st.map(s => s.m), k = st.map(s => s.k), Vy = st.map(s => s.Vy);
+    if (m.some(v => !(v > 0)) || k.some(v => !(v > 0))) { this.toast('Cada piso necesita masa y rigidez > 0 (edite la tabla).', 'warn'); return; }
+    const n = st.length;
+
+    const btn = document.getElementById('btn-run'); if (btn) btn.classList.add('running');
+    this._showProgress('Time-history no lineal…', 'Integración directa Newmark-β + Newton (rótulas elastoplásticas)');
+    await new Promise(r => setTimeout(r, 20));
+    try {
+      const ws = this._shearFreqs(m, k);                 // frecuencias del edificio de corte
+      const w1 = ws[0], wN = ws[n - 1] || ws[0];
+      const sb = shearBuilding({ m, k, Fy: Vy, alpha: m.map(() => alpha) });
+      const { C } = rayleighDamping(sb.M, sb.resist.K0(), n, zeta, w1, wN);
+      const res = newmarkNonlinear({ M: sb.M, resist: sb.resist, C, ag, dt, store: 'full', monitorDof: n - 1 });
+
+      // Derivados por piso: deriva de fluencia dy=Vy/k, pico de deriva, cedió.
+      const dy = st.map((s, i) => s.Vy / s.k);
+      const driftPeak = new Array(n).fill(0);
+      for (const u of res.U) for (let i = 0; i < n; i++) { const d = Math.abs(u[i] - (i > 0 ? u[i - 1] : 0)); if (d > driftPeak[i]) driftPeak[i] = d; }
+      const yielded = st.map((s, i) => driftPeak[i] > dy[i] * 1.0001);
+      const stats = accStats(ag, dt);
+      const T1 = 2 * Math.PI / w1;
+
+      this._nlthResult = { stories: st, dir, zeta, alpha, ag, dt, agName, nSteps: res.U.length, U: res.U,
+        monDof: n - 1, peak: res.peak, peakStep: res.peakStep, dy, driftPeak, yielded, stats, T1, w1, springs: sb.springs };
+      const nY = yielded.filter(Boolean).length;
+      this.toast(`Time-history NL OK · ${n} pisos · ${dir} · T₁=${T1.toFixed(3)}s · u_techo máx ${res.peak.toExponential(2)} m · ${nY} piso(s) en fluencia`, 'ok');
+      this._nlthOpenOverlay();
+      this._updateResultsIndicator?.();
+    } catch (err) {
+      this.toast(`Time-history no lineal: ${err.message}`, 'error'); console.error(err);
+    } finally {
+      if (btn) btn.classList.remove('running');
+      this._hideProgress();
+    }
+  }
+
+  // Frecuencias naturales del edificio de corte (K tridiagonal, M diagonal) vía
+  // el eigenproblema simétrico A = D^{-1/2}·K·D^{-1/2}. Devuelve ω ascendentes.
+  _shearFreqs(m, k) {
+    const n = m.length;
+    const num = window.numeric;
+    const K = Array.from({ length: n }, () => new Array(n).fill(0));
+    for (let i = 0; i < n; i++) { K[i][i] += k[i]; if (i > 0) { K[i - 1][i - 1] += k[i]; K[i][i - 1] -= k[i]; K[i - 1][i] -= k[i]; } }
+    const A = Array.from({ length: n }, (_, i) => Array.from({ length: n }, (_, j) => K[i][j] / Math.sqrt(m[i] * m[j])));
+    let ev;
+    try { ev = num.eig(A).lambda.x.slice(); } catch (e) { ev = [Math.min(...k) / Math.max(...m)]; }
+    return ev.map(l => Math.sqrt(Math.max(l, 1e-12))).sort((a, b) => a - b);
+  }
+
+  // Reduce el modelo a un edificio de corte: pisos = diafragmas por z, masa del
+  // diafragma, rigidez de entrepiso por análisis estático lateral ∝ masa.
+  _nlthBuildStories(dir) {
+    const model = this.model;
+    const dias = [...model.diaphragms.values()].filter(d => (d.nodes || []).length).sort((a, b) => a.z - b.z);
+    if (!dias.length) return [];
+    const ci = dir === 'Y' ? 1 : 0;
+    const g = GACC || 9.80665;
+    // Masa por piso (del diafragma).
+    const masses = dias.map(d => +d.mass?.m || 0);
+    // Carga lateral ∝ masa, repartida en los nodos del diafragma.
+    const lc = { id: -9, name: '_nlth', selfWeight: false, type: 'static', specDir: null, loads: [] };
+    dias.forEach((d, i) => {
+      const p = masses[i] || 1; const per = p / d.nodes.length;
+      for (const nid of d.nodes) { const F = [0, 0, 0, 0, 0, 0]; F[ci] = per; lc.loads.push({ type: 'nodal', nodeId: nid, F }); }
+    });
+    const view = { nodes: model.nodes, elements: model.elements, areas: model.areas, diaphragms: model.diaphragms,
+      materials: model.materials, sections: model.sections, links: model.links,
+      loadCases: new Map([[-9, lc]]), combinations: new Map(), mode: model.mode, units: model.units };
+    let R; try { R = new StaticSolver().solve(view, -9, false); } catch (e) { R = null; }
+    // Desplazamiento lateral de cada piso = promedio de sus nodos en la dirección.
+    const uFloor = dias.map(d => {
+      if (!R) return 0; let s = 0, c = 0;
+      for (const nid of d.nodes) { const u = R.getNodeDisp(nid); if (u) { s += u[ci]; c++; } }
+      return c ? s / c : 0;
+    });
+    // Corte de piso (acumulado desde arriba) y rigidez de entrepiso k=V/Δ.
+    const stories = [];
+    for (let i = 0; i < dias.length; i++) {
+      let V = 0; for (let j = i; j < dias.length; j++) V += (masses[j] || 1);   // ∝ masa
+      const uPrev = i > 0 ? uFloor[i - 1] : 0;
+      const drift = uFloor[i] - uPrev;
+      const k = (drift > 1e-12) ? V / drift : 0;
+      const massAbove = masses.slice(i).reduce((a, b) => a + b, 0);
+      const Vy = 0.15 * g * massAbove;                  // semilla: Cy=0.15 · peso acumulado
+      stories.push({ z: dias[i].z, m: masses[i], k, Vy, label: `Piso ${i + 1} (z=${dias[i].z.toFixed(2)})`, nodes: dias[i].nodes });
+    }
+    return stories;
+  }
+
+  _nlthDefaults(stories, dir) {
+    const d = this._lastNLTH || {};
+    const demo = DEMO_PRESETS.synthetic();
+    return { dir: d.dir || dir, zeta: d.zeta ?? 0.05, alpha: d.alpha ?? 0.03, ag: demo.a, dt: demo.dt, agName: demo.name, stories };
+  }
+
+  async _nlthDialog(stories, dir) {
+    const overlay = document.getElementById('modal-overlay');
+    document.getElementById('modal-title').textContent = 'Time-history NO LINEAL — edificio de corte (rótulas)';
+    const d = this._lastNLTH || {};
+    const ws = this._shearFreqs(stories.map(s => s.m || 1), stories.map(s => s.k || 1));
+    const T1 = stories.every(s => s.k > 0 && s.m > 0) ? (2 * Math.PI / ws[0]).toFixed(3) : '—';
+    const rowsHTML = (sts) => sts.map((s, i) => `
+      <tr>
+        <td style="white-space:nowrap">${s.label}</td>
+        <td><input type="number" data-st="${i}" data-f="m"  value="${(+s.m).toPrecision(5)}"  step="0.1"  style="width:90px"></td>
+        <td><input type="number" data-st="${i}" data-f="k"  value="${(+s.k).toPrecision(5)}"  step="100"  style="width:100px"></td>
+        <td><input type="number" data-st="${i}" data-f="Vy" value="${(+s.Vy).toPrecision(5)}" step="10"   style="width:100px"></td>
+      </tr>`).join('');
+    document.getElementById('modal-body').innerHTML = `
+      <p style="color:var(--text-muted);font-size:11px;margin:0 0 8px">
+        Integración directa <b>Newmark-β + Newton</b> de un <b>edificio de corte</b> elastoplástico (idealización
+        de los diafragmas como masas de piso unidas por resortes de entrepiso histeréticos). La tabla se sembró del
+        modelo (masa del diafragma; rigidez por análisis lateral ∝ masa); <b>edítela</b> para afinar la idealización.</p>
+      <div class="prop-row">
+        <div class="prop-field"><label>Dirección</label><select id="nlth-dir"><option value="X" ${(d.dir||dir)==='X'?'selected':''}>X</option><option value="Y" ${(d.dir||dir)==='Y'?'selected':''}>Y</option></select></div>
+        <div class="prop-field"><label>ζ (%)</label><input type="number" id="nlth-zeta" value="${((d.zeta??0.05)*100)}" min="0" max="20" step="0.5" style="width:70px"></div>
+        <div class="prop-field"><label>Endurec. α</label><input type="number" id="nlth-alpha" value="${d.alpha??0.03}" min="0" max="0.5" step="0.01" style="width:70px"></div>
+        <div class="prop-field" style="justify-content:flex-end"><span style="font-size:11px;color:var(--text-muted)">T₁ ≈ <b id="nlth-t1">${T1}</b> s</span></div>
+      </div>
+      <div style="max-height:170px;overflow:auto;border:1px solid var(--border);border-radius:6px;margin:6px 0">
+        <table class="nlth-tbl" style="width:100%;border-collapse:collapse;font-size:11px">
+          <thead><tr style="position:sticky;top:0;background:var(--bg4)"><th style="text-align:left;padding:3px 6px">Piso</th><th>masa m</th><th>rigidez k</th><th>Vy (corte fluencia)</th></tr></thead>
+          <tbody id="nlth-rows">${rowsHTML(stories)}</tbody>
+        </table>
+      </div>
+      <div class="prop-row" style="font-size:11px;color:var(--text-muted)"><span>Botón de re-semilla de Vy a un coef. de corte basal Cy·peso:</span>
+        <input type="number" id="nlth-cy" value="0.15" min="0.02" max="1" step="0.01" style="width:70px">
+        <button id="nlth-reseed" style="font-size:11px">↻ Vy = Cy·peso acumulado</button></div>
+      <div class="prop-row cols1" style="margin-top:6px">
+        <div class="prop-field"><label>Acelerograma</label>
+          <select id="nlth-source">
+            <option value="ricker">Demo — Pulso de Ricker (sintético)</option>
+            <option value="harmonic">Demo — Armónico (sintético)</option>
+            <option value="synthetic" selected>Demo — Sismo sintético (NO es real)</option>
+            <option value="paste">Pegar / cargar registro (t a) o (a)…</option>
+          </select></div>
+      </div>
+      <div id="nlth-paste-box" style="display:none;margin-top:6px">
+        <textarea id="nlth-text" rows="4" placeholder="Registro: «t a» (s, m/s²) o una columna «a» con Δt." style="width:100%;font-family:var(--font-mono);font-size:11px"></textarea>
+        <div class="prop-row" style="margin-top:4px">
+          <div class="prop-field"><label>Δt si 1 columna (s)</label><input type="number" id="nlth-dt" value="0.01" min="0.0005" step="0.005" style="width:90px"></div>
+          <div class="prop-field"><label>Archivo</label><input type="file" id="nlth-file" accept=".txt,.csv,.acc,.dat,.at2"></div>
+        </div>
+      </div>
+      <div class="prop-row" style="margin-top:6px">
+        <div class="prop-field"><label>Escalar a PGA (m/s², 0 = no)</label><input type="number" id="nlth-pga" value="0" min="0" step="0.5" style="width:90px"></div>
+      </div>`;
+    document.getElementById('modal-cancel').style.display = '';
+    overlay.classList.remove('hidden');
+    const srcSel = document.getElementById('nlth-source');
+    srcSel.addEventListener('change', () => { document.getElementById('nlth-paste-box').style.display = srcSel.value === 'paste' ? '' : 'none'; });
+    document.getElementById('nlth-file').addEventListener('change', async (e) => { const f = e.target.files?.[0]; if (f) document.getElementById('nlth-text').value = await f.text(); });
+    const readTable = () => stories.map((s, i) => ({ ...s,
+      m: +document.querySelector(`[data-st="${i}"][data-f="m"]`).value || 0,
+      k: +document.querySelector(`[data-st="${i}"][data-f="k"]`).value || 0,
+      Vy: +document.querySelector(`[data-st="${i}"][data-f="Vy"]`).value || 0 }));
+    const refreshT1 = () => {
+      const st = readTable();
+      if (st.every(s => s.k > 0 && s.m > 0)) document.getElementById('nlth-t1').textContent = (2 * Math.PI / this._shearFreqs(st.map(s => s.m), st.map(s => s.k))[0]).toFixed(3);
+    };
+    document.getElementById('nlth-rows').addEventListener('change', refreshT1);
+    document.getElementById('nlth-reseed').addEventListener('click', () => {
+      const Cy = +document.getElementById('nlth-cy').value || 0.15, g = GACC || 9.80665;
+      const st = readTable();
+      for (let i = 0; i < st.length; i++) { const massAbove = st.slice(i).reduce((a, b) => a + (b.m || 0), 0); document.querySelector(`[data-st="${i}"][data-f="Vy"]`).value = (Cy * g * massAbove).toPrecision(5); }
+    });
+
+    const ok = await new Promise(res => { overlay._resolve = res; overlay._reject = () => res(false); });
+    if (!ok) return null;
+    const st = readTable();
+    const dirV = document.getElementById('nlth-dir').value;
+    const zeta = Math.max(0, Math.min(0.2, (+document.getElementById('nlth-zeta').value || 5) / 100));
+    const alpha = Math.max(0, Math.min(0.5, +document.getElementById('nlth-alpha').value || 0.03));
+    const pga = +document.getElementById('nlth-pga').value || 0;
+    let ag, dt, agName;
+    if (srcSel.value === 'paste') {
+      const parsed = parseAccelerogram(document.getElementById('nlth-text').value, +document.getElementById('nlth-dt').value || 0.01);
+      if (!parsed.ok) { this.toast('Registro: ' + parsed.note, 'warn'); return null; }
+      ag = parsed.a; dt = parsed.dt; agName = `Registro cargado (${parsed.n} pts, Δt=${dt.toFixed(4)}s)`;
+    } else { const demo = DEMO_PRESETS[srcSel.value](); ag = demo.a; dt = demo.dt; agName = demo.name; }
+    if (pga > 0) ag = scaleToPGA(ag, pga);
+    return { dir: dirV, zeta, alpha, ag, dt, agName, stories: st };
+  }
+
+  // Overlay: historia del piso monitor + diagrama «stick» animado del edificio.
+  _nlthOpenOverlay() {
+    const R = this._nlthResult; if (!R) return;
+    this._nlthStopPlay?.();
+    document.getElementById('nlth-overlay')?.remove();
+    const n = R.stories.length;
+    const stOpts = R.stories.map((s, i) => `<option value="${i}" ${i === R.monDof ? 'selected' : ''}>${s.label}${R.yielded[i] ? ' ⚠' : ''}</option>`).join('');
+    const el = document.createElement('div');
+    el.id = 'nlth-overlay';
+    el.innerHTML = `
+      <div class="nlth-card">
+        <div class="nlth-head"><b>Time-history no lineal — edificio de corte</b><button class="nlth-x" title="Cerrar">✕</button></div>
+        <div class="nlth-body">
+          <div style="display:flex;gap:10px">
+            <div style="flex:0 0 130px"><div id="nlth-stick"></div></div>
+            <div style="flex:1;min-width:0">
+              <div class="prop-row" style="margin:0 0 6px">
+                <div class="prop-field"><label style="font-size:10px">Monitor</label><select id="nlth-mon">${stOpts}</select></div>
+                <div class="prop-field"><label style="font-size:10px">Escala</label><input type="number" id="nlth-scale" value="1" min="0.1" step="0.5" style="width:64px"></div>
+              </div>
+              <div id="nlth-plot"></div>
+              <div id="nlth-readout" style="font-size:11px;margin-top:6px;line-height:1.6"></div>
+            </div>
+          </div>
+          <div class="prop-row" style="align-items:center;gap:8px;margin-top:8px">
+            <button id="nlth-play">▶</button>
+            <input type="range" id="nlth-step" min="0" max="${R.nSteps - 1}" value="${R.peakStep}" style="flex:1">
+            <button id="nlth-max" title="Ir al pico">Máx</button>
+            <button id="nlth-csv">⬇ CSV</button>
+          </div>
+        </div>
+      </div>`;
+    document.getElementById('viewport-wrap')?.appendChild(el) || document.body.appendChild(el);
+    el.querySelector('.nlth-x').addEventListener('click', () => { this._nlthStopPlay?.(); el.remove(); });
+    document.getElementById('nlth-mon').addEventListener('change', e => { R.monDof = +e.target.value; this._nlthBuildPlot(); this._nlthShowStep(+document.getElementById('nlth-step').value); });
+    document.getElementById('nlth-scale').addEventListener('change', () => this._nlthShowStep(+document.getElementById('nlth-step').value));
+    document.getElementById('nlth-step').addEventListener('input', e => { this._nlthStopPlay?.(); this._nlthShowStep(+e.target.value); });
+    document.getElementById('nlth-max').addEventListener('click', () => { document.getElementById('nlth-step').value = R.peakStep; this._nlthShowStep(R.peakStep); });
+    document.getElementById('nlth-csv').addEventListener('click', () => this._nlthExportCSV());
+    document.getElementById('nlth-play').addEventListener('click', () => this._nlthTogglePlay());
+    if (!document.getElementById('nlth-overlay-css')) {
+      const s = document.createElement('style'); s.id = 'nlth-overlay-css';
+      s.textContent = `
+        #nlth-overlay{position:absolute;right:16px;bottom:16px;z-index:55}
+        #nlth-overlay .nlth-card{width:min(560px,52vw);background:var(--bg-elev,#141b27);border:1px solid var(--border,#334);border-radius:10px;box-shadow:0 12px 40px rgba(0,0,0,.5);color:var(--text,#e6edf3)}
+        #nlth-overlay .nlth-head{display:flex;align-items:center;justify-content:space-between;padding:8px 12px;border-bottom:1px solid var(--border,#334);font-size:13px}
+        #nlth-overlay .nlth-x{background:none;border:none;color:var(--text-muted,#9aa);cursor:pointer;font-size:14px}
+        #nlth-overlay .nlth-body{padding:10px 12px}
+        #nlth-overlay button{font-size:11px;padding:4px 9px;border-radius:5px;cursor:pointer;border:1px solid var(--border,#334);background:var(--bg4,#1e2735);color:var(--text,#e6edf3)}`;
+      document.head.appendChild(s);
+    }
+    this._nlthBuildPlot();
+    this._nlthShowStep(R.peakStep);
+  }
+
+  _nlthBuildPlot() {
+    const R = this._nlthResult; const n = R.nSteps;
+    const h = new Float64Array(n); for (let k = 0; k < n; k++) h[k] = R.U[k][R.monDof];
+    R._hist = h;
+    let pk = 0, pkStep = 0; for (let k = 0; k < n; k++) { const a = Math.abs(h[k]); if (a > pk) { pk = a; pkStep = k; } }
+    R._histPeak = pk; R._histPeakStep = pkStep;
+    const W = 320, H = 110, ml = 4, mr = 4, mt = 8, mb = 4;
+    const hmax = pk || 1e-30, tmax = (n - 1) * R.dt || 1;
+    const sx = k => ml + (W - ml - mr) * (k * R.dt) / tmax;
+    const sy = u => mt + (H - mt - mb) * (1 - (u / hmax + 1) / 2);
+    let poly = ''; const sd = Math.max(1, Math.floor(n / 700));
+    for (let k = 0; k < n; k += sd) poly += `${sx(k).toFixed(1)},${sy(h[k]).toFixed(1)} `;
+    const y0 = sy(0).toFixed(1);
+    R._svg = (k) => `<svg viewBox="0 0 ${W} ${H}" style="width:100%;height:${H}px;background:var(--bg3,#0b1220);border-radius:6px">
+      <line x1="${ml}" y1="${y0}" x2="${W - mr}" y2="${y0}" stroke="var(--border,#26324d)" stroke-width="1"/>
+      <polyline points="${poly}" fill="none" stroke="var(--accent,#38bdf8)" stroke-width="1.3"/>
+      <circle cx="${sx(k).toFixed(1)}" cy="${sy(h[k]).toFixed(1)}" r="3.2" fill="#f59e0b"/></svg>`;
+  }
+
+  // Diagrama «stick» del edificio deformado en el paso k.
+  _nlthStickSVG(step) {
+    const R = this._nlthResult, n = R.stories.length;
+    const u = R.U[step];
+    const scale = +document.getElementById('nlth-scale')?.value || 1;
+    const W = 120, H = 230, mx = 56, mb = 14, mt = 12;
+    const zmax = Math.max(...R.stories.map(s => s.z)) || 1;
+    let umax = 0; for (const uu of R.U) for (let i = 0; i < n; i++) umax = Math.max(umax, Math.abs(uu[i]));
+    umax = umax || 1e-9;
+    const sy = z => H - mb - (H - mb - mt) * z / zmax;
+    const sx = ux => mx + (W - mx - 8) * scale * ux / umax;
+    let pts = `${mx},${H - mb} `; for (let i = 0; i < n; i++) pts += `${sx(u[i]).toFixed(1)},${sy(R.stories[i].z).toFixed(1)} `;
+    let dots = '';
+    for (let i = 0; i < n; i++) dots += `<circle cx="${sx(u[i]).toFixed(1)}" cy="${sy(R.stories[i].z).toFixed(1)}" r="4" fill="${R.yielded[i] ? '#ef4444' : '#38bdf8'}"/>`;
+    return `<svg viewBox="0 0 ${W} ${H}" style="width:100%;height:${H}px;background:var(--bg3,#0b1220);border-radius:6px">
+      <line x1="${mx}" y1="${mt}" x2="${mx}" y2="${H - mb}" stroke="var(--border,#26324d)" stroke-width="1" stroke-dasharray="3 3"/>
+      <polyline points="${pts}" fill="none" stroke="var(--accent,#38bdf8)" stroke-width="1.6"/>${dots}
+      <text x="4" y="${H - 2}" fill="var(--text-muted,#9aa)" font-size="9">rojo = piso en fluencia</text></svg>`;
+  }
+
+  _nlthShowStep(step) {
+    const R = this._nlthResult; if (!R) return;
+    step = Math.max(0, Math.min(R.nSteps - 1, step | 0));
+    const stick = document.getElementById('nlth-stick'); if (stick) stick.innerHTML = this._nlthStickSVG(step);
+    const plot = document.getElementById('nlth-plot'); if (plot && R._svg) plot.innerHTML = R._svg(step);
+    const t = step * R.dt, ag = R.ag[step];
+    const ro = document.getElementById('nlth-readout');
+    const nY = R.yielded.filter(Boolean).length;
+    const uResid = Math.abs(R.U[R.nSteps - 1][R.monDof]);
+    if (ro) ro.innerHTML = `t = <b>${t.toFixed(3)} s</b> / ${((R.nSteps - 1) * R.dt).toFixed(2)} s · a_g = ${ag.toFixed(3)} m/s²<br>`
+      + `u(${R.stories[R.monDof].label}) = ${R._hist[step].toExponential(3)} m · máx = <b>${(R._histPeak ?? 0).toExponential(3)} m</b><br>`
+      + `${R.stories.length} pisos · T₁=${R.T1.toFixed(3)} s · ζ=${(R.zeta * 100).toFixed(1)}% · α=${R.alpha} · dir ${R.dir} · PGA=${R.stats.pga.toFixed(2)} m/s²<br>`
+      + `pisos en fluencia: <b>${nY}/${R.stories.length}</b> · deriva residual monitor ${uResid.toExponential(2)} m · ${R.agName}`;
+  }
+
+  _nlthTogglePlay() {
+    if (this._nlthTimer) { this._nlthStopPlay(); return; }
+    const R = this._nlthResult; if (!R) return;
+    const btn = document.getElementById('nlth-play'); if (btn) btn.textContent = '⏸';
+    const stepInp = document.getElementById('nlth-step');
+    const skip = Math.max(1, Math.floor(R.nSteps / 240));
+    this._nlthTimer = setInterval(() => {
+      let s = (+stepInp.value || 0) + skip; if (s >= R.nSteps) s = 0;
+      stepInp.value = s; this._nlthShowStep(s);
+    }, 40);
+  }
+
+  _nlthStopPlay() {
+    if (this._nlthTimer) { clearInterval(this._nlthTimer); this._nlthTimer = null; }
+    const btn = document.getElementById('nlth-play'); if (btn) btn.textContent = '▶';
+  }
+
+  _nlthExportCSV() {
+    const R = this._nlthResult; if (!R) return;
+    const n = R.stories.length;
+    let csv = `# Time-history NO LINEAL (edificio de corte) · dir ${R.dir} · ${n} pisos · zeta ${(R.zeta*100).toFixed(1)}% · alpha ${R.alpha} · ${R.agName}\n`;
+    csv += `# T1=${R.T1.toFixed(4)}s · pisos en fluencia: ${R.yielded.map((y,i)=>y?i+1:null).filter(x=>x).join('/')||'ninguno'}\n`;
+    csv += 't[s],a_g[m/s2],' + R.stories.map((s, i) => `u_piso${i + 1}[m]`).join(',') + '\n';
+    for (let k = 0; k < R.nSteps; k++) csv += `${(k*R.dt).toFixed(5)},${R.ag[k].toFixed(6)},` + R.U[k].slice(0, n).join(',') + '\n';
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' });
+    const a = document.createElement('a'); a.href = URL.createObjectURL(blob);
+    a.download = `timehistory_NL_${R.dir}.csv`; a.click(); URL.revokeObjectURL(a.href);
+    this.toast('Historia exportada', 'ok');
+  }
+
   // Ejecuta un solver de nl_lite (Newton corotacional denso) en un Web Worker
   // para no congelar la UI en modelos grandes (#44). kind: 'nl' = control de
   // carga (solveNonlinear), 'dc' = control de desplazamiento (solveNonlinearDC).
@@ -3250,7 +3609,7 @@ class App {
     return new Promise((resolve, reject) => {
       let worker;
       try {
-        worker = new Worker(new URL('./solver/nl_worker.js?v=139', import.meta.url), { type: 'module' });
+        worker = new Worker(new URL('./solver/nl_worker.js?v=140', import.meta.url), { type: 'module' });
       } catch (e) {
         try { resolve(kind === 'dc' ? solveNonlinearDC(opts) : solveNonlinear(opts)); }
         catch (err) { reject(err); }
@@ -3507,7 +3866,7 @@ class App {
 
       // Iteración de subespacio en el Worker (no bloquea la UI)
       const rawModes = await new Promise((resolve, reject) => {
-        const worker = new Worker(new URL('./solver/buckling_worker.js?v=139', import.meta.url), { type: 'module' });
+        const worker = new Worker(new URL('./solver/buckling_worker.js?v=140', import.meta.url), { type: 'module' });
         worker.postMessage({ Kff_flat, Kgff_flat, nF, nModes, dense },
           [Kff_flat.buffer, Kgff_flat.buffer]);   // transfer — zero copy
         worker.onmessage = (ev) => { worker.terminate(); ev.data.error ? reject(new Error(ev.data.error)) : resolve(ev.data.modes); };
@@ -5245,9 +5604,12 @@ class App {
       this._thResult = null;
       this._stagedResult = null;
       this._movingResult = null;
+      this._nlthResult = null;
       this._thStopPlay?.();
+      this._nlthStopPlay?.();
       document.getElementById('th-overlay')?.remove();
       document.getElementById('ml-overlay')?.remove();
+      document.getElementById('nlth-overlay')?.remove();
       if (!keepResults) { this._modalResults = null; this._spectrumResults.clear(); }
       this._results = null;
       this._resultsByCase = null;
@@ -5420,7 +5782,7 @@ class App {
               selectedNodes: sel.filter(s => s.type === 'node').map(s => s.id) };
     }
     this.snapshot();
-    const { aplicarOperaciones } = await import('./model/model_ops.js?v=139');
+    const { aplicarOperaciones } = await import('./model/model_ops.js?v=140');
     const res = aplicarOperaciones(this.model, ops, ctx);
     // los resultados previos dejan de ser válidos tras modificar la geometría/cargas
     this.viewport.clearResults?.();
@@ -5468,7 +5830,7 @@ class App {
     this._showProgress('Generando el modelo…', 'Aplicando reglas y cargas normativas');
     try {
       const libs = await this._cargarBibliotecasAsistente();
-      const { generarModelo } = await import('../asistente/generador.js?v=139');
+      const { generarModelo } = await import('../asistente/generador.js?v=140');
       const modelo = generarModelo(ficha, libs);
 
       if (modo === 'sobreponer') {
@@ -6529,7 +6891,7 @@ class App {
     const deflex = this._calcularDeflexionesVigas(diseno?.params);
     const drift  = this._calcularDrift();
     try {
-      const { Docx } = await import('./io/docx.js?v=139');
+      const { Docx } = await import('./io/docx.js?v=140');
       const blob = this._memoriaDocx(Docx, imgs, diseno, deflex, drift).blob();
       this._downloadBlob(blob, 'memoria_calculo.docx');
       this.toast('Memoria Word (.docx) descargada', 'ok');
@@ -6700,7 +7062,7 @@ class App {
   // Verificación de diseño (flexión/corte/axial) por elemento, usando los
   // resultados actuales y los parámetros editables de asistente/diseno_params.json.
   async _calcularDiseno() {
-    const ver = '?v=139';
+    const ver = '?v=140';
     let params = null;
     try { params = await fetch('asistente/diseno_params.json' + ver).then(r => r.json()); }
     catch (e) { console.error('No se pudo cargar diseno_params.json:', e); return null; }
