@@ -1,42 +1,42 @@
 // ──────────────────────────────────────────────────────────────────────────────
 // App — main orchestrator
 // ──────────────────────────────────────────────────────────────────────────────
-import { Model }           from './model/model.js?v=157';
-import { Serializer }      from './model/serializer.js?v=157';
-import { Viewport }        from './ui/viewport.js?v=157';
-import { PropertiesPanel } from './ui/properties.js?v=157';
-import { MenuBar }         from './ui/menu.js?v=157';
-import { UndoStack }       from './utils/undo.js?v=157';
-import { StaticSolver, ensureDefaultLC }   from './solver/static_solver.js?v=157';
-import { Results }                         from './solver/postprocess.js?v=157';
-import { areaStress, areaBendingStress, vonMises } from './solver/membrane.js?v=157';
-import { ModalSolver }                     from './solver/modal_solver.js?v=157';
-import { buildNodeIndex, assembleK, assembleF, getNodeDOFs } from './solver/assembler.js?v=157';
-import { assembleSparseGlobal, extractFreeCSR } from './solver/sparse.js?v=157';
-import { solveNonlinear, solveNonlinearDC } from './solver/nl_lite.js?v=157';
-import { assembleKg } from './solver/geometric.js?v=157';
-import { makeFactor } from './solver/linsolve.js?v=157';
-import { formFind } from './solver/formfind.js?v=157';
-import { ModalResults }                    from './solver/modal_results.js?v=157';
-import { modalTimeHistory }                from './solver/timehistory.js?v=157';
-import { parseAccelerogram, accStats, scaleToPGA, DEMO_PRESETS, G as GACC } from './solver/accelerograms.js?v=157';
-import { SpectrumSolver }                  from './solver/spectrum_solver.js?v=157';
-import { StagedSolver }                    from './solver/staged.js?v=157';
-import { tendonEquivalentLoads, applyTendon, tendonEcc } from './solver/tendon.js?v=157';
-import { buildLane, influenceLine, movingLoadEnvelope, responseReaction, responseSection } from './solver/moving_load.js?v=157';
-import { newmarkNonlinear, shearBuilding, rayleighDamping } from './solver/nl_timehistory.js?v=157';
-import { checkDrift } from './design/serviceability.js?v=157';
-import { seleccionarPerfil, steelCandidates, predimensionar, candidatesForFamily } from './design/autodesign.js?v=157';
-import { jointSCWB } from './design/seismic.js?v=157';
-import { resolveMaterial } from './design/material_props.js?v=157';
-import { resolveSectionProps } from './design/section_props.js?v=157';
-import { autoDetectDiaphragms, computeFloorCR, applyDiaphragmConstraints } from './solver/diaphragm.js?v=157';
-import { splitElement, splitByLength, discretizeAll, joinElements, intersectarElementos } from './model/discretize.js?v=157';
-import { localAxes, stiffnessMatrix, massMatrix, transformMatrix, globalStiffness, applyReleases } from './solver/timoshenko.js?v=157';
-import { blockCells, cornerGridIndices } from './model/mesher.js?v=157';
-import { coonsGridFromCorners } from './model/mesh_map.js?v=157';
-import { meshPolygonIntoModel } from './model/mesh_free.js?v=157';
-import { smoothAreasInModel } from './model/mesh_quality.js?v=157';
+import { Model }           from './model/model.js?v=158';
+import { Serializer }      from './model/serializer.js?v=158';
+import { Viewport }        from './ui/viewport.js?v=158';
+import { PropertiesPanel } from './ui/properties.js?v=158';
+import { MenuBar }         from './ui/menu.js?v=158';
+import { UndoStack }       from './utils/undo.js?v=158';
+import { StaticSolver, ensureDefaultLC }   from './solver/static_solver.js?v=158';
+import { Results }                         from './solver/postprocess.js?v=158';
+import { areaStress, areaBendingStress, vonMises } from './solver/membrane.js?v=158';
+import { ModalSolver }                     from './solver/modal_solver.js?v=158';
+import { buildNodeIndex, assembleK, assembleF, getNodeDOFs } from './solver/assembler.js?v=158';
+import { assembleSparseGlobal, extractFreeCSR } from './solver/sparse.js?v=158';
+import { solveNonlinear, solveNonlinearDC } from './solver/nl_lite.js?v=158';
+import { assembleKg } from './solver/geometric.js?v=158';
+import { makeFactor } from './solver/linsolve.js?v=158';
+import { formFind } from './solver/formfind.js?v=158';
+import { ModalResults }                    from './solver/modal_results.js?v=158';
+import { modalTimeHistory }                from './solver/timehistory.js?v=158';
+import { parseAccelerogram, accStats, scaleToPGA, DEMO_PRESETS, G as GACC } from './solver/accelerograms.js?v=158';
+import { SpectrumSolver }                  from './solver/spectrum_solver.js?v=158';
+import { StagedSolver }                    from './solver/staged.js?v=158';
+import { tendonEquivalentLoads, applyTendon, tendonEcc } from './solver/tendon.js?v=158';
+import { buildLane, influenceLine, movingLoadEnvelope, responseReaction, responseSection } from './solver/moving_load.js?v=158';
+import { newmarkNonlinear, shearBuilding, rayleighDamping } from './solver/nl_timehistory.js?v=158';
+import { checkDrift } from './design/serviceability.js?v=158';
+import { seleccionarPerfil, steelCandidates, predimensionar, candidatesForFamily } from './design/autodesign.js?v=158';
+import { jointSCWB } from './design/seismic.js?v=158';
+import { resolveMaterial } from './design/material_props.js?v=158';
+import { resolveSectionProps } from './design/section_props.js?v=158';
+import { autoDetectDiaphragms, computeFloorCR, applyDiaphragmConstraints } from './solver/diaphragm.js?v=158';
+import { splitElement, splitByLength, discretizeAll, joinElements, intersectarElementos } from './model/discretize.js?v=158';
+import { localAxes, stiffnessMatrix, massMatrix, transformMatrix, globalStiffness, applyReleases } from './solver/timoshenko.js?v=158';
+import { blockCells, cornerGridIndices } from './model/mesher.js?v=158';
+import { coonsGridFromCorners } from './model/mesh_map.js?v=158';
+import { meshPolygonIntoModel } from './model/mesh_free.js?v=158';
+import { smoothAreasInModel } from './model/mesh_quality.js?v=158';
 
 class App {
   constructor() {
@@ -1764,7 +1764,7 @@ class App {
   _staticWorkerSolve(K, nDOF, freeDOF, Flist, dense = false) {
     return new Promise((resolve, reject) => {
       let worker;
-      try { worker = new Worker(new URL('./solver/static_worker.js?v=157', import.meta.url), { type: 'module' }); }
+      try { worker = new Worker(new URL('./solver/static_worker.js?v=158', import.meta.url), { type: 'module' }); }
       catch (e) { reject(e); return; }
       this._staticWorker = worker;
       const cancelar = () => { try { worker.terminate(); } catch (e) {} this._staticWorker = null; this._hideProgress(); reject(new Error('cancelado')); };
@@ -1793,7 +1793,7 @@ class App {
   _staticWorkerSolveSparse(csr, cf, nDOF, freeDOF, Flist) {
     return new Promise((resolve, reject) => {
       let worker;
-      try { worker = new Worker(new URL('./solver/static_worker.js?v=157', import.meta.url), { type: 'module' }); }
+      try { worker = new Worker(new URL('./solver/static_worker.js?v=158', import.meta.url), { type: 'module' }); }
       catch (e) { reject(e); return; }
       this._staticWorker = worker;
       const cancelar = () => { try { worker.terminate(); } catch (e) {} this._staticWorker = null; this._hideProgress(); reject(new Error('cancelado')); };
@@ -2113,7 +2113,7 @@ class App {
       // ── Run Stodola in a Web Worker (non-blocking) ───────────────────────────
       const denseModal = !!this._config?.analisis?.matrizDensa;
       const modes = await new Promise((resolve, reject) => {
-        const worker = new Worker(new URL('./solver/modal_worker.js?v=157', import.meta.url), { type: 'module' });
+        const worker = new Worker(new URL('./solver/modal_worker.js?v=158', import.meta.url), { type: 'module' });
         worker.postMessage({ Kff_flat, Mff_flat, nF, nModes, dense: denseModal, method: modalMethod },
           [Kff_flat.buffer, Mff_flat.buffer]); // transfer — zero copy
         worker.onmessage = (ev) => {
@@ -2515,7 +2515,7 @@ class App {
       // Modal por iteración de subespacio en worker (no bloquea la UI).
       const dense = !!this._config?.analisis?.matrizDensa;
       const rawModes = await new Promise((resolve, reject) => {
-        const w = new Worker(new URL('./solver/modal_worker.js?v=157', import.meta.url), { type: 'module' });
+        const w = new Worker(new URL('./solver/modal_worker.js?v=158', import.meta.url), { type: 'module' });
         w.postMessage({ Kff_flat: Kff, Mff_flat: Mff, nF, nModes, dense, method: 'subspace' }, [Kff.buffer, Mff.buffer]);
         w.onmessage = ev => { w.terminate(); ev.data.error ? reject(new Error(ev.data.error)) : resolve(ev.data.modes); };
         w.onerror = ev => { w.terminate(); reject(new Error(ev.message || 'Error en worker modal')); };
@@ -2584,7 +2584,7 @@ class App {
   _thSolveInWorker(modes, ag, dt, zeta) {
     return new Promise((resolve, reject) => {
       let w;
-      try { w = new Worker(new URL('./solver/timehistory_worker.js?v=157', import.meta.url), { type: 'module' }); }
+      try { w = new Worker(new URL('./solver/timehistory_worker.js?v=158', import.meta.url), { type: 'module' }); }
       catch (e) {
         try { const r = modalTimeHistory({ modes: modes.map(m => ({ ...m, phi: new Float64Array(0) })), ag, dt, zeta }); resolve({ q: r.q, peakModal: r.peakModal }); }
         catch (err) { reject(err); }
@@ -3709,18 +3709,22 @@ class App {
     });
     this._adScope = scope;
     this._adLimits = {};
+    this._adPrefs = this._adPrefs || { dcTarget: 0.85, steelFamilies: ['IPE', 'HEA', 'HEB'] };   // preferencias (#73)
     this._adCompute();
   }
 
-  // Recalcula las propuestas del auto-diseño con los límites de dimensión actuales
-  // (#84) y reabre el overlay de vista previa. Reusa el contexto guardado por grupo.
+  // Recalcula las propuestas del auto-diseño con los límites de dimensión (#84) y
+  // las preferencias (#73: D/C objetivo + familias de acero permitidas) actuales,
+  // y reabre el overlay. Reusa el contexto guardado por grupo.
   _adCompute() {
     const { maxWidth, maxHeight } = this._adLimits || {};
+    const P = this._adPrefs || { dcTarget: 0.85, steelFamilies: ['IPE', 'HEA', 'HEB'] };
     const rows = (this._adGroups || []).map(g => {
-      const candidates = candidatesForFamily(g.fam);
+      // Familias de acero permitidas (#73): restringe el catálogo de acero/aluminio.
+      const candidates = candidatesForFamily(g.fam, { steelFamilies: P.steelFamilies?.length ? P.steelFamilies : ['IPE', 'HEA', 'HEB'] });
       const sel2 = seleccionarPerfil({ demands: g.dem, candidates, mat: g.mat, code: g.code,
         member: { L: g.dem.L, Lb: g.Lb || g.dem.L },
-        prefs: { prefer: g.prefer, dcTarget: 0.85, maxWidth, maxHeight } });
+        prefs: { prefer: g.prefer, dcTarget: P.dcTarget ?? 0.85, maxWidth, maxHeight } });
       return { secId: g.secId, secName: g.secName, nEls: g.nEls, fam: g.fam, actual: g.actual,
         best: sel2.best, note: sel2.note, sharedOut: g.sharedOut, dem: g.dem };
     });
@@ -3756,6 +3760,11 @@ class App {
             <label>ancho máx <input class="ad-maxw" type="number" min="0" step="1" value="${limits?.maxWidth != null ? +(limits.maxWidth * 100).toFixed(1) : ''}" style="width:54px"> cm</label>
             <label>alto máx <input class="ad-maxh" type="number" min="0" step="1" value="${limits?.maxHeight != null ? +(limits.maxHeight * 100).toFixed(1) : ''}" style="width:54px"> cm</label>
           </div>
+          <div style="display:flex;gap:12px;align-items:center;margin:0 0 8px;font-size:11px;flex-wrap:wrap">
+            <label title="D/C objetivo: la selección prefiere candidatos con D/C cerca de este valor (sin pasar de 1).">D/C objetivo <input class="ad-dctgt" type="number" min="0.3" max="1" step="0.05" value="${(this._adPrefs?.dcTarget ?? 0.85)}" style="width:54px"></label>
+            <span style="color:var(--text-muted)" title="Familias de acero permitidas como candidatas (sólo aplica a secciones de acero/aluminio).">Acero:</span>
+            ${['IPE', 'HEA', 'HEB'].map(fa => `<label style="display:inline-flex;gap:3px;align-items:center"><input type="checkbox" class="ad-fam" value="${fa}" ${(this._adPrefs?.steelFamilies || ['IPE','HEA','HEB']).includes(fa) ? 'checked' : ''}>${fa}</label>`).join('')}
+          </div>
           <div style="max-height:46vh;overflow:auto;border:1px solid var(--border);border-radius:6px">
             <table class="ad-tbl" style="width:100%;border-collapse:collapse;font-size:11.5px">
               <thead><tr style="position:sticky;top:0;background:var(--bg4)"><th></th><th style="text-align:left">Sección</th><th>Actual</th><th>Propuesta</th><th>D/C</th><th>kg/m</th><th>Gob.</th></tr></thead>
@@ -3781,6 +3790,15 @@ class App {
     };
     el.querySelector('.ad-maxw').addEventListener('change', onLim);
     el.querySelector('.ad-maxh').addEventListener('change', onLim);
+    // Preferencias (#73): D/C objetivo + familias de acero permitidas → recalcula.
+    const onPrefs = () => {
+      const dt = parseFloat(el.querySelector('.ad-dctgt').value);
+      const fams = [...el.querySelectorAll('.ad-fam:checked')].map(c => c.value);
+      this._adPrefs = { dcTarget: (dt > 0 && dt <= 1) ? dt : 0.85, steelFamilies: fams };
+      this._adCompute();
+    };
+    el.querySelector('.ad-dctgt').addEventListener('change', onPrefs);
+    el.querySelectorAll('.ad-fam').forEach(c => c.addEventListener('change', onPrefs));
     if (!document.getElementById('ad-overlay-css')) {
       const s = document.createElement('style'); s.id = 'ad-overlay-css';
       s.textContent = `
@@ -3817,6 +3835,40 @@ class App {
     document.getElementById('ad-overlay')?.remove();
     this.toast(`Diseño aplicado a ${n} sección(es). Recalcule el análisis (F5) y vuelva a verificar. Ctrl+Z deshace.`, 'ok');
     this.panel.renderDiseno?.();
+  }
+
+  // ── Reporte de diseño descargable (CSV, #73) ────────────────────────────────
+  // Por elemento: sección, combo/caso, esfuerzos de diseño, D/C por chequeo
+  // (flexión/corte/axial/interacción), el que gobierna y |δ| nodal máx.
+  exportDesignReportCSV(dis) {
+    dis = dis || this._lastDiseno;
+    const f = dis?.filas;
+    if (!f || !f.length) { this.toast('Ejecute el análisis (F5) y verifique el diseño antes de exportar el reporte.', 'warn'); return; }
+    const num = v => (v == null || !isFinite(v)) ? '' : (+v).toFixed(4);
+    const dispOf = (id) => {
+      try { const el = this.model.elements.get(id), r = this._results; if (!el || !r) return null;
+        let mx = 0; for (const nid of [el.n1, el.n2]) { const d = r.getNodeDisp(nid); mx = Math.max(mx, Math.hypot(d[0], d[1], d[2])); } return mx; }
+      catch { return null; }
+    };
+    const code = this.model.designSettings?.codeByFamily ? JSON.stringify(this.model.designSettings.codeByFamily) : 'default';
+    let csv = `# Reporte de diseño PORTICO · ${new Date().toLocaleString('es-CL')}\n`;
+    csv += `# Caso/combo: ${dis.caso || 'activo'} · codigo por familia: ${code}\n`;
+    csv += `# D/C = demanda/capacidad <= 1 (cumple). |delta| = desplazamiento nodal max del elemento.\n`;
+    csv += `elem,seccion,gobierna,N[kN],Vy[kN],Vz[kN],My[kNm],Mz[kNm],DC_flexion,DC_corte,DC_axial,DC_interaccion,DC_max,cumple,delta_mm\n`;
+    for (const x of f) {
+      const fz = x.fuerzas || {};
+      const dmm = dispOf(x.id); const dmmS = dmm == null ? '' : (dmm * 1000).toFixed(3);
+      csv += [x.id, `"${(x.sec || '').replace(/"/g, "'")}"`, `"${x.gobierna || ''}"`,
+        num(fz.N), num(fz.Vy), num(fz.Vz), num(fz.My), num(fz.Mz),
+        num(x.flexion?.ratio), num(x.corte?.ratio), num(x.axial?.ratio), num(x.interaccion?.ratio),
+        num(x.ratioMax), (x.ratioMax <= 1 ? 'si' : 'NO'), dmmS].join(',') + '\n';
+    }
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' });
+    const a = document.createElement('a'); a.href = URL.createObjectURL(blob);
+    a.download = `reporte_diseno_${(this._modelName || 'modelo').replace(/\W+/g, '_')}.csv`; a.click();
+    URL.revokeObjectURL(a.href);
+    const nNo = f.filter(x => x.ratioMax > 1).length;
+    this.toast(`Reporte de diseño exportado · ${f.length} elementos · ${nNo} no cumplen`, 'ok');
   }
 
   // ── Nudos «columna fuerte – viga débil» (SCWB, #68) ─────────────────────────
@@ -3921,12 +3973,12 @@ class App {
     if (!ok) return;
     const p = this._predim; if (!p) return;
     if (document.getElementById('pd-assign').checked) {
-      const { profileToSection } = await import('./design/profiles.js?v=157');
+      const { profileToSection } = await import('./design/profiles.js?v=158');
       this.snapshot();
       // Perfil del catálogo → props directas; forma libre (H.A./madera) → calcular A,I,J.
       let secProps = p.profile ? profileToSection(p.profile) : { design: { shape: p.shape, dims: p.dims } };
       if (!p.profile) {
-        const { fromShape } = await import('./design/section_props.js?v=157');
+        const { fromShape } = await import('./design/section_props.js?v=158');
         const g = fromShape(p.shape, p.dims);
         if (g) secProps = { A: g.A, Iz: g.Iz, Iy: g.Iy, J: g.J, Avy: g.Avz_web, Avz: g.Avy_flange, design: { shape: p.shape, dims: p.dims } };
       }
@@ -3950,7 +4002,7 @@ class App {
     return new Promise((resolve, reject) => {
       let worker;
       try {
-        worker = new Worker(new URL('./solver/nl_worker.js?v=157', import.meta.url), { type: 'module' });
+        worker = new Worker(new URL('./solver/nl_worker.js?v=158', import.meta.url), { type: 'module' });
       } catch (e) {
         try { resolve(kind === 'dc' ? solveNonlinearDC(opts) : solveNonlinear(opts)); }
         catch (err) { reject(err); }
@@ -4207,7 +4259,7 @@ class App {
 
       // Iteración de subespacio en el Worker (no bloquea la UI)
       const rawModes = await new Promise((resolve, reject) => {
-        const worker = new Worker(new URL('./solver/buckling_worker.js?v=157', import.meta.url), { type: 'module' });
+        const worker = new Worker(new URL('./solver/buckling_worker.js?v=158', import.meta.url), { type: 'module' });
         worker.postMessage({ Kff_flat, Kgff_flat, nF, nModes, dense },
           [Kff_flat.buffer, Kgff_flat.buffer]);   // transfer — zero copy
         worker.onmessage = (ev) => { worker.terminate(); ev.data.error ? reject(new Error(ev.data.error)) : resolve(ev.data.modes); };
@@ -6123,7 +6175,7 @@ class App {
               selectedNodes: sel.filter(s => s.type === 'node').map(s => s.id) };
     }
     this.snapshot();
-    const { aplicarOperaciones } = await import('./model/model_ops.js?v=157');
+    const { aplicarOperaciones } = await import('./model/model_ops.js?v=158');
     const res = aplicarOperaciones(this.model, ops, ctx);
     // los resultados previos dejan de ser válidos tras modificar la geometría/cargas
     this.viewport.clearResults?.();
@@ -6171,7 +6223,7 @@ class App {
     this._showProgress('Generando el modelo…', 'Aplicando reglas y cargas normativas');
     try {
       const libs = await this._cargarBibliotecasAsistente();
-      const { generarModelo } = await import('../asistente/generador.js?v=157');
+      const { generarModelo } = await import('../asistente/generador.js?v=158');
       const modelo = generarModelo(ficha, libs);
 
       if (modo === 'sobreponer') {
@@ -7310,7 +7362,7 @@ class App {
     const deflex = this._calcularDeflexionesVigas(diseno?.params);
     const drift  = this._calcularDrift();
     try {
-      const { Docx } = await import('./io/docx.js?v=157');
+      const { Docx } = await import('./io/docx.js?v=158');
       const blob = this._memoriaDocx(Docx, imgs, diseno, deflex, drift).blob();
       this._downloadBlob(blob, 'memoria_calculo.docx');
       this.toast('Memoria Word (.docx) descargada', 'ok');
@@ -7481,7 +7533,7 @@ class App {
   // Verificación de diseño (flexión/corte/axial) por elemento, usando los
   // resultados actuales y los parámetros editables de asistente/diseno_params.json.
   async _calcularDiseno() {
-    const ver = '?v=157';
+    const ver = '?v=158';
     let params = null;
     try { params = await fetch('asistente/diseno_params.json' + ver).then(r => r.json()); }
     catch (e) { console.error('No se pudo cargar diseno_params.json:', e); return null; }

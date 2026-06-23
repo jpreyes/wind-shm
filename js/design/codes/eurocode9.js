@@ -21,7 +21,7 @@
 // Unidades: kN, m, kN/m².
 // ──────────────────────────────────────────────────────────────────────────────
 
-import { finalize } from './aisc360.js?v=157';
+import { finalize } from './aisc360.js?v=158';
 
 const CURVES = { A: { alpha: 0.20, l0: 0.10 }, B: { alpha: 0.32, l0: 0.0 } };
 const ratObj = (D, C, extra = {}) => ({

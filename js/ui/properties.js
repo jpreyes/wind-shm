@@ -1,8 +1,8 @@
 // ──────────────────────────────────────────────────────────────────────────────
 // PropertiesPanel — right-side panel: node/element properties + mat/sec tabs
 // ──────────────────────────────────────────────────────────────────────────────
-import { computeFloorCR, computeFloorCM, computeTributaryWeights } from '../solver/diaphragm.js?v=157';
-import { localAxes } from '../solver/timoshenko.js?v=157';
+import { computeFloorCR, computeFloorCM, computeTributaryWeights } from '../solver/diaphragm.js?v=158';
+import { localAxes } from '../solver/timoshenko.js?v=158';
 
 export class PropertiesPanel {
   constructor(panelEl, app) {
@@ -134,7 +134,8 @@ export class PropertiesPanel {
         <button id="btn-autodiseno" class="btn-secondary" style="flex:1;font-size:11px" title="Diseñar (después del análisis): elige del catálogo el perfil de acero más liviano que cumple D/C≤1.">🧮 Diseñar (auto)</button>
       </div>
       <div class="dis-actions" style="display:flex;gap:6px;margin:0 0 8px">
-        <button id="btn-scwb" class="btn-secondary" style="flex:1;font-size:11px" title="Nudos columna fuerte–viga débil (ACI 18.7.3 / AISC 341): resalta en el modelo los nudos donde ΣMnc < γ·ΣMnb (no cumplen).">🏛️ Nudos columna fuerte–viga débil</button>
+        <button id="btn-scwb" class="btn-secondary" style="flex:1;font-size:11px" title="Nudos columna fuerte–viga débil (ACI 18.7.3 / AISC 341): resalta en el modelo los nudos donde ΣMnc < γ·ΣMnb (no cumplen).">🏛️ Nudos SCWB</button>
+        <button id="btn-design-report" class="btn-secondary" style="flex:1;font-size:11px" title="Exporta un reporte de diseño (CSV): por elemento, sección, esfuerzos, D/C por chequeo (flexión/corte/axial/interacción) y el que gobierna.">📄 Reporte (CSV)</button>
       </div>
       <div class="dis-summary">Estados: <b>${esc(dis.caso || 'activo')}</b><br>
         <span class="dc-ok">${nOk} cumplen</span> · <span class="dc-warn">${nAj} ajustados</span> · <span class="dc-bad">${nNo} no cumplen</span></div>
@@ -149,6 +150,7 @@ export class PropertiesPanel {
     body.querySelector('#btn-predim')?.addEventListener('click', () => this.app.predimensionarDialog());
     body.querySelector('#btn-autodiseno')?.addEventListener('click', () => this.app.autoDesignDialog(dis));
     body.querySelector('#btn-scwb')?.addEventListener('click', () => this.app.runSCWB());
+    body.querySelector('#btn-design-report')?.addEventListener('click', () => this.app.exportDesignReportCSV(dis));
     this._bindDesignCodeSelector(body);
   }
 
@@ -156,7 +158,7 @@ export class PropertiesPanel {
   // madera). Cambiarlo fija model.designSettings.codeByFamily y re-verifica.
   async _designCodeSelectorHTML() {
     try {
-      const mod = this._designMod || (this._designMod = await import('../design/diseno.js?v=157'));
+      const mod = this._designMod || (this._designMod = await import('../design/diseno.js?v=158'));
       const fams = new Set();
       for (const m of this.app.model.materials.values()) {
         const fam = (m.design?.family) || mod.clasificarMaterial(m.name);
@@ -1777,7 +1779,7 @@ export class PropertiesPanel {
       <select id="mat-catalog"><option value="">— catálogo —</option></select></div>
       <button id="mat-catalog-add" class="btn-secondary" style="white-space:nowrap;font-size:11px">＋ Insertar</button>`;
     container.appendChild(pick);
-    import('../design/materials_catalog.js?v=157').then(({ MATERIAL_FAMILIES, getMaterialDef }) => {
+    import('../design/materials_catalog.js?v=158').then(({ MATERIAL_FAMILIES, getMaterialDef }) => {
       const sel = pick.querySelector('#mat-catalog');
       sel.innerHTML = '<option value="">— catálogo —</option>' +
         Object.entries(MATERIAL_FAMILIES).map(([fam, names]) => `<optgroup label="${fam}">` + names.map(n => `<option value="${n}">${n}</option>`).join('') + '</optgroup>').join('');
@@ -2157,6 +2159,10 @@ export class PropertiesPanel {
       const holes = (d.holes || []).map(h => pts(h)).join('\n\n');
       return `<div class="prop-row cols1"><div class="prop-field"><label>Vértices del contorno «x, y» por línea (m)</label>
           <textarea data-sd-poly="outline" rows="5" style="width:100%;font-family:var(--font-mono);font-size:11px" placeholder="0, 0\n0.3, 0\n0.3, 0.5\n0, 0.5">${pts(d.outline)}</textarea></div></div>
+        <div class="prop-row cols1"><div class="prop-field">
+          <label style="display:flex;justify-content:space-between;align-items:center">Editor gráfico del contorno
+            <span style="font-size:9px;color:var(--text-muted)">clic = agregar · arrastrar = mover · doble clic = borrar</span></label>
+          <div data-sd-poly-editor style="border:1px solid var(--border,#334);border-radius:6px;background:var(--bg3,#0b1220);touch-action:none"></div></div></div>
         <div class="prop-row cols1"><div class="prop-field"><label>Huecos (lazos separados por línea en blanco, opcional)</label>
           <textarea data-sd-poly="holes" rows="3" style="width:100%;font-family:var(--font-mono);font-size:11px">${holes}</textarea></div></div>
         <p class="panel-hint" style="font-size:10px">Calcula A, Iz, Iy, Iyz, ejes principales, S y Z plástico. Pulse «Calcular A, I, J».</p>`;
@@ -2205,7 +2211,7 @@ export class PropertiesPanel {
     if (!shapeSel) return;
     // Catálogo de perfiles tabulados (#66): poblar y aplicar al elegir.
     const catSel = card.querySelector('.sd-catalog');
-    if (catSel) import('../design/profiles.js?v=157').then(({ catalogFamilies, catalogNames, profileToSection }) => {
+    if (catSel) import('../design/profiles.js?v=158').then(({ catalogFamilies, catalogNames, profileToSection }) => {
       let html = '<option value="">— elegir perfil comercial —</option>';
       for (const fam of catalogFamilies()) html += `<optgroup label="${fam}">` + catalogNames(fam).map(n => `<option value="${n}" ${sec.design?.profile === n ? 'selected' : ''}>${n}</option>`).join('') + '</optgroup>';
       catSel.innerHTML = html;
@@ -2244,17 +2250,19 @@ export class PropertiesPanel {
       dimsBox.innerHTML = this._secDimHTML(shapeSel.value, sec.design || {});
       dimsBox.querySelectorAll('[data-sd]').forEach(i => i.addEventListener('change', saveDesign));
       dimsBox.querySelectorAll('[data-sd-poly]').forEach(i => i.addEventListener('change', saveDesign));
+      this._bindPolyEditor(dimsBox, saveDesign);
       saveDesign();
     });
     dimsBox.querySelectorAll('[data-sd]').forEach(i => i.addEventListener('change', saveDesign));
     dimsBox.querySelectorAll('[data-sd-poly]').forEach(i => i.addEventListener('change', saveDesign));
+    this._bindPolyEditor(dimsBox, saveDesign);
     card.querySelectorAll('[data-rb]').forEach(i => i.addEventListener('change', saveDesign));
     card.querySelector('.sd-calc')?.addEventListener('click', async () => {
       saveDesign();
       const s = this.app.model.sections.get(sec.id);
       if (!s.design?.shape || s.design.shape === 'generic') { this.app.toast('Elija una forma con dimensiones primero', 'warn'); return; }
       try {
-        const { fromShape } = await import('../design/section_props.js?v=157');
+        const { fromShape } = await import('../design/section_props.js?v=158');
         const g = fromShape(s.design.shape, s.design);
         if (!g) { this.app.toast('Faltan dimensiones de la forma', 'warn'); return; }
         this.app.snapshot();
@@ -2264,6 +2272,97 @@ export class PropertiesPanel {
         this.app.toast(`A, I, J calculados desde la forma ${s.design.shape}. Recalcule el análisis (F5).`, 'ok');
       } catch (e) { this.app.toast('No se pudo calcular: ' + e.message, 'warn'); }
     });
+  }
+
+  // ── Editor gráfico de vértices del polígono (#70) ───────────────────────────
+  // SVG interactivo sincronizado con el textarea «outline»: clic = agregar vértice
+  // (en el lado más cercano), arrastrar un vértice = moverlo, doble clic = borrarlo.
+  // Cada edición reescribe el textarea y llama saveDesign() (que parsea y guarda).
+  _bindPolyEditor(dimsBox, saveDesign) {
+    const host = dimsBox.querySelector('[data-sd-poly-editor]');
+    const ta = dimsBox.querySelector('[data-sd-poly="outline"]');
+    if (!host || !ta) return;
+    const W = 248, H = 180, m = 18, r4 = v => Math.round(v * 1e4) / 1e4;
+    const parse = () => ta.value.split(/\n/).map(l => l.trim()).filter(Boolean)
+      .map(l => l.split(/[,\s]+/).map(Number)).filter(p => p.length >= 2 && isFinite(p[0]) && isFinite(p[1])).map(p => [p[0], p[1]]);
+    let pts = parse();
+    const writeBack = () => { ta.value = pts.map(p => `${r4(p[0])}, ${r4(p[1])}`).join('\n'); saveDesign(); };
+    // Transform model↔px (fijo durante un arrastre; se recalcula al re-render).
+    let tf = null;
+    const calcTf = () => {
+      if (!pts.length) { tf = { ox: 0, oy: 0, s: 1 }; return; }
+      let x0 = Infinity, x1 = -Infinity, y0 = Infinity, y1 = -Infinity;
+      for (const [x, y] of pts) { x0 = Math.min(x0, x); x1 = Math.max(x1, x); y0 = Math.min(y0, y); y1 = Math.max(y1, y); }
+      const dx = x1 - x0 || 1, dy = y1 - y0 || 1;
+      const s = Math.min((W - 2 * m) / dx, (H - 2 * m) / dy);
+      tf = { x0, y0, s, cx: (W - dx * s) / 2, cy: (H - dy * s) / 2 };
+    };
+    const toPx = ([x, y]) => [tf.cx + (x - tf.x0) * tf.s, H - tf.cy - (y - tf.y0) * tf.s];
+    const toMd = (px, py) => [tf.x0 + (px - tf.cx) / tf.s, tf.y0 + (H - tf.cy - py) / tf.s];
+    const svgPt = (e) => { const rc = host.firstChild.getBoundingClientRect(); if (!(rc.width > 0 && rc.height > 0)) return null; return [(e.clientX - rc.left) * W / rc.width, (e.clientY - rc.top) * H / rc.height]; };
+    const render = () => {
+      calcTf();
+      const pp = pts.map(toPx);
+      const poly = pp.map(p => `${p[0].toFixed(1)},${p[1].toFixed(1)}`).join(' ');
+      const dots = pp.map((p, i) => `<circle data-i="${i}" cx="${p[0].toFixed(1)}" cy="${p[1].toFixed(1)}" r="5" fill="var(--accent,#38bdf8)" stroke="#fff" stroke-width="1" style="cursor:grab"/>`).join('');
+      host.innerHTML = `<svg width="100%" viewBox="0 0 ${W} ${H}" style="display:block">
+        ${pts.length >= 2 ? `<polygon points="${poly}" fill="rgba(56,189,248,.14)" stroke="var(--accent,#38bdf8)" stroke-width="1.3"/>` : ''}
+        ${dots}
+        ${pts.length === 0 ? `<text x="${W/2}" y="${H/2}" fill="var(--text-muted,#94a3b8)" font-size="11" text-anchor="middle">clic para agregar vértices</text>` : ''}
+      </svg>`;
+    };
+    let drag = null, moved = false;
+    host.addEventListener('pointerdown', (e) => {
+      const t = e.target;
+      if (t.tagName === 'circle') {                 // arrastrar vértice
+        drag = +t.dataset.i; moved = false; t.setPointerCapture?.(e.pointerId); t.style.cursor = 'grabbing'; e.preventDefault();
+      }
+    });
+    host.addEventListener('pointermove', (e) => {
+      if (drag == null) return;
+      const sp = svgPt(e); if (!sp) return;
+      moved = true;
+      pts[drag] = toMd(sp[0], sp[1]).map(r4);
+      const c = host.querySelector(`circle[data-i="${drag}"]`);
+      const [cx, cy] = toPx(pts[drag]); if (c) { c.setAttribute('cx', cx.toFixed(1)); c.setAttribute('cy', cy.toFixed(1)); }
+      const polel = host.querySelector('polygon'); if (polel) polel.setAttribute('points', pts.map(p => { const q = toPx(p); return `${q[0].toFixed(1)},${q[1].toFixed(1)}`; }).join(' '));
+    });
+    host.addEventListener('pointerup', () => { if (drag != null) { writeBack(); render(); drag = null; } });
+    host.addEventListener('click', (e) => {
+      if (drag != null || moved) { moved = false; return; }
+      if (e.target.tagName === 'circle') return;     // (el borrado va por dblclick)
+      const sp = svgPt(e); if (!sp) return;
+      const [px, py] = sp; const np = toMd(px, py).map(r4);
+      if (!isFinite(np[0]) || !isFinite(np[1])) return;
+      // insertar en el lado más cercano (o al final si hay <2 puntos)
+      if (pts.length < 2) { pts.push(np); }
+      else {
+        let bi = pts.length, bd = Infinity;
+        for (let i = 0; i < pts.length; i++) {
+          const a = toPx(pts[i]), b = toPx(pts[(i + 1) % pts.length]);
+          const d = this._distSeg([px, py], a, b);
+          if (d < bd) { bd = d; bi = i + 1; }
+        }
+        pts.splice(bi, 0, np);
+      }
+      writeBack(); render();
+    });
+    host.addEventListener('dblclick', (e) => {
+      if (e.target.tagName !== 'circle') return;
+      if (pts.length <= 3) { this.app.toast('El polígono necesita al menos 3 vértices', 'warn'); return; }
+      pts.splice(+e.target.dataset.i, 1); writeBack(); render();
+    });
+    // Mantener el editor en sync si el usuario edita el textarea a mano.
+    ta.addEventListener('input', () => { pts = parse(); render(); });
+    render();
+  }
+
+  // Distancia de un punto P al segmento AB (en px), para insertar un vértice en el lado correcto.
+  _distSeg(p, a, b) {
+    const vx = b[0] - a[0], vy = b[1] - a[1], wx = p[0] - a[0], wy = p[1] - a[1];
+    const c1 = vx * wx + vy * wy, c2 = vx * vx + vy * vy;
+    const t = c2 > 1e-9 ? Math.max(0, Math.min(1, c1 / c2)) : 0;
+    return Math.hypot(p[0] - (a[0] + t * vx), p[1] - (a[1] + t * vy));
   }
 
   // ── P3-9: Section calculator dialog ───────────────────────────────────────
