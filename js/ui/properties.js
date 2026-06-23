@@ -1,8 +1,8 @@
 // ──────────────────────────────────────────────────────────────────────────────
 // PropertiesPanel — right-side panel: node/element properties + mat/sec tabs
 // ──────────────────────────────────────────────────────────────────────────────
-import { computeFloorCR, computeFloorCM, computeTributaryWeights } from '../solver/diaphragm.js?v=142';
-import { localAxes } from '../solver/timoshenko.js?v=142';
+import { computeFloorCR, computeFloorCM, computeTributaryWeights } from '../solver/diaphragm.js?v=143';
+import { localAxes } from '../solver/timoshenko.js?v=143';
 
 export class PropertiesPanel {
   constructor(panelEl, app) {
@@ -146,7 +146,7 @@ export class PropertiesPanel {
   // madera). Cambiarlo fija model.designSettings.codeByFamily y re-verifica.
   async _designCodeSelectorHTML() {
     try {
-      const mod = this._designMod || (this._designMod = await import('../design/diseno.js?v=142'));
+      const mod = this._designMod || (this._designMod = await import('../design/diseno.js?v=143'));
       const fams = new Set();
       for (const m of this.app.model.materials.values()) {
         const fam = (m.design?.family) || mod.clasificarMaterial(m.name);
@@ -2132,6 +2132,10 @@ export class PropertiesPanel {
       <div class="prop-section" style="margin-top:6px">
         <div class="prop-title" title="Forma del perfil para el diseño: deriva módulos plásticos, esbelteces, etc. Ver docs/diseno.md.">Forma (diseño)</div>
         <div class="prop-row cols1">
+          <div class="prop-field"><label>Perfil tabulado (catálogo)</label>
+            <select class="sd-catalog"><option value="">— elegir perfil comercial —</option></select></div>
+        </div>
+        <div class="prop-row cols1">
           <div class="prop-field"><label>Forma</label>
             <select class="sd-shape">
               ${opt('generic', 'Genérica (A, I)')}${opt('I', 'Doble T (I)')}${opt('rect', 'Rectángulo macizo')}${opt('circle', 'Círculo macizo')}${opt('pipe', 'Tubo circular')}${opt('box', 'Tubo rectangular')}${opt('channel', 'Canal (C/U)')}${opt('angle', 'Angular (L)')}${opt('tee', 'Tee (T)')}
@@ -2150,6 +2154,22 @@ export class PropertiesPanel {
     const shapeSel = card.querySelector('.sd-shape');
     const dimsBox = card.querySelector('.sd-dims');
     if (!shapeSel) return;
+    // Catálogo de perfiles tabulados (#66): poblar y aplicar al elegir.
+    const catSel = card.querySelector('.sd-catalog');
+    if (catSel) import('../design/profiles.js?v=143').then(({ catalogFamilies, catalogNames, profileToSection }) => {
+      let html = '<option value="">— elegir perfil comercial —</option>';
+      for (const fam of catalogFamilies()) html += `<optgroup label="${fam}">` + catalogNames(fam).map(n => `<option value="${n}" ${sec.design?.profile === n ? 'selected' : ''}>${n}</option>`).join('') + '</optgroup>';
+      catSel.innerHTML = html;
+      catSel.addEventListener('change', () => {
+        const name = catSel.value; if (!name) return;
+        const props = profileToSection(name); if (!props) { this.app.toast('Perfil no encontrado', 'warn'); return; }
+        this.app.snapshot();
+        this.app.model.updateSection(sec.id, props);
+        this.app.markDirty();
+        this.renderSections();
+        this.app.toast(`Perfil ${name} aplicado (A, I, J y forma). Recalcule el análisis (F5).`, 'ok');
+      });
+    }).catch(() => {});
     const saveDesign = () => {
       const shape = shapeSel.value;
       const design = { ...(sec.design || {}) };
@@ -2174,7 +2194,7 @@ export class PropertiesPanel {
       const s = this.app.model.sections.get(sec.id);
       if (!s.design?.shape || s.design.shape === 'generic') { this.app.toast('Elija una forma con dimensiones primero', 'warn'); return; }
       try {
-        const { fromShape } = await import('../design/section_props.js?v=142');
+        const { fromShape } = await import('../design/section_props.js?v=143');
         const g = fromShape(s.design.shape, s.design);
         if (!g) { this.app.toast('Faltan dimensiones de la forma', 'warn'); return; }
         this.app.snapshot();

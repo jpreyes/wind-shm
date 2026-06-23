@@ -15,8 +15,8 @@
 // Soporta AGUJEROS (opts.holes): cada hueco se fusiona al contorno con un puente de
 // ancho cero (bridging estilo earcut) → polígono simple que ear-clipping triangula.
 // ──────────────────────────────────────────────────────────────────────────────
-import { quadMinScaledJacobian, weldPoints } from './mesh_map.js?v=142';
-import { triQuality, boundaryNodes, laplacianSmooth } from './mesh_quality.js?v=142';
+import { quadMinScaledJacobian, weldPoints } from './mesh_map.js?v=143';
+import { triQuality, boundaryNodes, laplacianSmooth } from './mesh_quality.js?v=143';
 
 const EPS = 1e-9;
 const signedArea2 = (pts) => { let s = 0; for (let i = 0; i < pts.length; i++) { const a = pts[i], b = pts[(i + 1) % pts.length]; s += a[0] * b[1] - b[0] * a[1]; } return s / 2; };
