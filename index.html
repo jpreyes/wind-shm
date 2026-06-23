@@ -29,8 +29,8 @@
       window.dispatchEvent(new Event('pwa-installed'));
     });
   </script>
-  <link rel="stylesheet" href="style.css?v=137">
-  <link rel="stylesheet" href="ui-v2.css?v=137">
+  <link rel="stylesheet" href="style.css?v=138">
+  <link rel="stylesheet" href="ui-v2.css?v=138">
   <script type="importmap">
   {
     "imports": {
@@ -152,6 +152,14 @@
               <li data-action="run-formfind">▶ Form-finding — densidades de fuerza…</li>
               <li data-action="run-plastic">▶ Rótulas Plásticas — colapso…</li>
               <li data-action="run-pushover-dc">▶ Pushover — control de desplazamiento…</li>
+            </ul>
+          </li>
+          <li class="menu-sub">
+            <span>Puentes</span><span class="sub-arrow">▸</span>
+            <ul class="menu-flyout">
+              <li data-action="run-staged">▶ Etapas constructivas — staged…</li>
+              <li data-action="run-tendon">▶ Pretensado por tendón — cargas equivalentes…</li>
+              <li data-action="run-moving">▶ Cargas móviles / líneas de influencia…</li>
             </ul>
           </li>
           <li class="sep"></li>
@@ -960,7 +968,7 @@
 
 <!-- numeric.js para solver (Fase 2+) -->
 <script src="lib/numeric.js"></script>
-<script type="module" src="js/app.js?v=137"></script>
+<script type="module" src="js/app.js?v=138"></script>
 
 <!-- PWA: registrar el service worker (offline). Solo en contexto seguro
      (https o localhost); el navegador deja navigator.serviceWorker undefined

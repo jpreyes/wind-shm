@@ -13,7 +13,7 @@
 // modos cubiertos. Para mayor fidelidad de interacción úsense kyy/kzz (Anexo B).
 // ──────────────────────────────────────────────────────────────────────────────
 
-import { finalize } from './aisc360.js?v=137';
+import { finalize } from './aisc360.js?v=138';
 
 const ALPHA = { a0: 0.13, a: 0.21, b: 0.34, c: 0.49, d: 0.76 };   // factores de imperfección
 const ratObj = (D, C, extra = {}) => ({

@@ -103,6 +103,9 @@ export class MenuBar {
       case 'run-formfind':   a.runFormFinding();             break;
       case 'run-plastic':    a.runPlastic();                 break;
       case 'run-pushover-dc': a.runPushoverDC();             break;
+      case 'run-staged':     a.runStaged();                  break;
+      case 'run-tendon':     a.runTendon();                  break;
+      case 'run-moving':     a.runMovingLoad();              break;
       case 'combos':         a.openCombosTab();              break;
       case 'combos-norma':   a.crearCasosYCombosNorma();     break;
       case 'diag-estabilidad': a.runStabilityDiagnosis();    break;

@@ -1,32 +1,35 @@
 // ──────────────────────────────────────────────────────────────────────────────
 // App — main orchestrator
 // ──────────────────────────────────────────────────────────────────────────────
-import { Model }           from './model/model.js?v=137';
-import { Serializer }      from './model/serializer.js?v=137';
-import { Viewport }        from './ui/viewport.js?v=137';
-import { PropertiesPanel } from './ui/properties.js?v=137';
-import { MenuBar }         from './ui/menu.js?v=137';
-import { UndoStack }       from './utils/undo.js?v=137';
-import { StaticSolver, ensureDefaultLC }   from './solver/static_solver.js?v=137';
-import { Results }                         from './solver/postprocess.js?v=137';
-import { ModalSolver }                     from './solver/modal_solver.js?v=137';
-import { buildNodeIndex, assembleK, assembleF, getNodeDOFs } from './solver/assembler.js?v=137';
-import { assembleSparseGlobal, extractFreeCSR } from './solver/sparse.js?v=137';
-import { solveNonlinear, solveNonlinearDC } from './solver/nl_lite.js?v=137';
-import { assembleKg } from './solver/geometric.js?v=137';
-import { makeFactor } from './solver/linsolve.js?v=137';
-import { formFind } from './solver/formfind.js?v=137';
-import { ModalResults }                    from './solver/modal_results.js?v=137';
-import { modalTimeHistory }                from './solver/timehistory.js?v=137';
-import { parseAccelerogram, accStats, scaleToPGA, DEMO_PRESETS, G as GACC } from './solver/accelerograms.js?v=137';
-import { SpectrumSolver }                  from './solver/spectrum_solver.js?v=137';
-import { autoDetectDiaphragms, computeFloorCR, applyDiaphragmConstraints } from './solver/diaphragm.js?v=137';
-import { splitElement, splitByLength, discretizeAll, joinElements, intersectarElementos } from './model/discretize.js?v=137';
-import { localAxes, stiffnessMatrix, massMatrix, transformMatrix, globalStiffness, applyReleases } from './solver/timoshenko.js?v=137';
-import { blockCells, cornerGridIndices } from './model/mesher.js?v=137';
-import { coonsGridFromCorners } from './model/mesh_map.js?v=137';
-import { meshPolygonIntoModel } from './model/mesh_free.js?v=137';
-import { smoothAreasInModel } from './model/mesh_quality.js?v=137';
+import { Model }           from './model/model.js?v=138';
+import { Serializer }      from './model/serializer.js?v=138';
+import { Viewport }        from './ui/viewport.js?v=138';
+import { PropertiesPanel } from './ui/properties.js?v=138';
+import { MenuBar }         from './ui/menu.js?v=138';
+import { UndoStack }       from './utils/undo.js?v=138';
+import { StaticSolver, ensureDefaultLC }   from './solver/static_solver.js?v=138';
+import { Results }                         from './solver/postprocess.js?v=138';
+import { ModalSolver }                     from './solver/modal_solver.js?v=138';
+import { buildNodeIndex, assembleK, assembleF, getNodeDOFs } from './solver/assembler.js?v=138';
+import { assembleSparseGlobal, extractFreeCSR } from './solver/sparse.js?v=138';
+import { solveNonlinear, solveNonlinearDC } from './solver/nl_lite.js?v=138';
+import { assembleKg } from './solver/geometric.js?v=138';
+import { makeFactor } from './solver/linsolve.js?v=138';
+import { formFind } from './solver/formfind.js?v=138';
+import { ModalResults }                    from './solver/modal_results.js?v=138';
+import { modalTimeHistory }                from './solver/timehistory.js?v=138';
+import { parseAccelerogram, accStats, scaleToPGA, DEMO_PRESETS, G as GACC } from './solver/accelerograms.js?v=138';
+import { SpectrumSolver }                  from './solver/spectrum_solver.js?v=138';
+import { StagedSolver }                    from './solver/staged.js?v=138';
+import { tendonEquivalentLoads, applyTendon, tendonEcc } from './solver/tendon.js?v=138';
+import { buildLane, influenceLine, movingLoadEnvelope, responseReaction, responseSection } from './solver/moving_load.js?v=138';
+import { autoDetectDiaphragms, computeFloorCR, applyDiaphragmConstraints } from './solver/diaphragm.js?v=138';
+import { splitElement, splitByLength, discretizeAll, joinElements, intersectarElementos } from './model/discretize.js?v=138';
+import { localAxes, stiffnessMatrix, massMatrix, transformMatrix, globalStiffness, applyReleases } from './solver/timoshenko.js?v=138';
+import { blockCells, cornerGridIndices } from './model/mesher.js?v=138';
+import { coonsGridFromCorners } from './model/mesh_map.js?v=138';
+import { meshPolygonIntoModel } from './model/mesh_free.js?v=138';
+import { smoothAreasInModel } from './model/mesh_quality.js?v=138';
 
 class App {
   constructor() {
@@ -1306,6 +1309,8 @@ class App {
       'run-formfind':    false,
       'run-plastic':     !!this._plasticResult,
       'run-pushover-dc': !!this._dcResult,
+      'run-staged':      !!this._stagedResult,
+      'run-moving':      !!this._movingResult,
     };
 
     const el = document.createElement('div');
@@ -1332,6 +1337,10 @@ class App {
             ${row('Form-finding', 'Densidades de fuerza (FDM) · reposiciona nodos', 'run-formfind', false)}
             ${row('Rótulas plásticas', 'Colapso evento a evento', 'run-plastic', nlOk['run-plastic'])}
             ${row('Pushover (control δ)', 'Curva carga–desplazamiento', 'run-pushover-dc', nlOk['run-pushover-dc'])}
+            <div class="ah-sec">Puentes</div>
+            ${row('Etapas constructivas', 'Staged · activación incremental', 'run-staged', nlOk['run-staged'])}
+            ${row('Pretensado por tendón', 'Cargas equivalentes (load balancing)', 'run-tendon', false)}
+            ${row('Cargas móviles / líneas de influencia', 'Barrido de tren · IL · envolventes', 'run-moving', nlOk['run-moving'])}
           </div>
         </div>
         <div class="ah-batchbar">
@@ -1371,6 +1380,8 @@ class App {
       'run-pdelta': () => this.runPDelta(opts), 'run-buckling': () => this.runBuckling(opts),
       'run-formfind': () => this.runFormFinding(opts), 'run-plastic': () => this.runPlastic(opts),
       'run-pushover-dc': () => this.runPushoverDC(opts),
+      'run-staged': () => this.runStaged(opts), 'run-tendon': () => this.runTendon(opts),
+      'run-moving': () => this.runMovingLoad(opts),
     }[act];
     if (!fn) return;
     // Cada runner gestiona su propia caja de progreso (modal/espectro/pandeo y, desde
@@ -1438,6 +1449,12 @@ class App {
     } else if (key === 'run-timehistory') {
       if (!this._thResult) { this.toast('No hay resultados de time-history', 'warn'); return; }
       this._thOpenOverlay();
+    } else if (key === 'run-staged') {
+      if (!this._stagedResult) { this.toast('No hay resultados de etapas constructivas', 'warn'); return; }
+      this._stagedShow();
+    } else if (key === 'run-moving') {
+      if (!this._movingResult) { this.toast('No hay resultados de cargas móviles', 'warn'); return; }
+      this._movingPlotOverlay(this._movingResult);
     }
   }
 
@@ -1735,7 +1752,7 @@ class App {
   _staticWorkerSolve(K, nDOF, freeDOF, Flist, dense = false) {
     return new Promise((resolve, reject) => {
       let worker;
-      try { worker = new Worker(new URL('./solver/static_worker.js?v=137', import.meta.url), { type: 'module' }); }
+      try { worker = new Worker(new URL('./solver/static_worker.js?v=138', import.meta.url), { type: 'module' }); }
       catch (e) { reject(e); return; }
       this._staticWorker = worker;
       const cancelar = () => { try { worker.terminate(); } catch (e) {} this._staticWorker = null; this._hideProgress(); reject(new Error('cancelado')); };
@@ -1764,7 +1781,7 @@ class App {
   _staticWorkerSolveSparse(csr, cf, nDOF, freeDOF, Flist) {
     return new Promise((resolve, reject) => {
       let worker;
-      try { worker = new Worker(new URL('./solver/static_worker.js?v=137', import.meta.url), { type: 'module' }); }
+      try { worker = new Worker(new URL('./solver/static_worker.js?v=138', import.meta.url), { type: 'module' }); }
       catch (e) { reject(e); return; }
       this._staticWorker = worker;
       const cancelar = () => { try { worker.terminate(); } catch (e) {} this._staticWorker = null; this._hideProgress(); reject(new Error('cancelado')); };
@@ -1944,10 +1961,13 @@ class App {
     this._nlResult = null;
     this._pdResult = null;
     this._thResult = null;
+    this._stagedResult = null;
+    this._movingResult = null;
     this._plasticStopPlay?.();
     this._thStopPlay?.();
     document.getElementById('pl-overlay')?.remove();
     document.getElementById('th-overlay')?.remove();
+    document.getElementById('ml-overlay')?.remove();
     this.viewport.clearResults();
     // Apagar la visualización de reacciones
     this._showReactions = false;
@@ -2078,7 +2098,7 @@ class App {
       // ── Run Stodola in a Web Worker (non-blocking) ───────────────────────────
       const denseModal = !!this._config?.analisis?.matrizDensa;
       const modes = await new Promise((resolve, reject) => {
-        const worker = new Worker(new URL('./solver/modal_worker.js?v=137', import.meta.url), { type: 'module' });
+        const worker = new Worker(new URL('./solver/modal_worker.js?v=138', import.meta.url), { type: 'module' });
         worker.postMessage({ Kff_flat, Mff_flat, nF, nModes, dense: denseModal, method: modalMethod },
           [Kff_flat.buffer, Mff_flat.buffer]); // transfer — zero copy
         worker.onmessage = (ev) => {
@@ -2480,7 +2500,7 @@ class App {
       // Modal por iteración de subespacio en worker (no bloquea la UI).
       const dense = !!this._config?.analisis?.matrizDensa;
       const rawModes = await new Promise((resolve, reject) => {
-        const w = new Worker(new URL('./solver/modal_worker.js?v=137', import.meta.url), { type: 'module' });
+        const w = new Worker(new URL('./solver/modal_worker.js?v=138', import.meta.url), { type: 'module' });
         w.postMessage({ Kff_flat: Kff, Mff_flat: Mff, nF, nModes, dense, method: 'subspace' }, [Kff.buffer, Mff.buffer]);
         w.onmessage = ev => { w.terminate(); ev.data.error ? reject(new Error(ev.data.error)) : resolve(ev.data.modes); };
         w.onerror = ev => { w.terminate(); reject(new Error(ev.message || 'Error en worker modal')); };
@@ -2549,7 +2569,7 @@ class App {
   _thSolveInWorker(modes, ag, dt, zeta) {
     return new Promise((resolve, reject) => {
       let w;
-      try { w = new Worker(new URL('./solver/timehistory_worker.js?v=137', import.meta.url), { type: 'module' }); }
+      try { w = new Worker(new URL('./solver/timehistory_worker.js?v=138', import.meta.url), { type: 'module' }); }
       catch (e) {
         try { const r = modalTimeHistory({ modes: modes.map(m => ({ ...m, phi: new Float64Array(0) })), ag, dt, zeta }); resolve({ q: r.q, peakModal: r.peakModal }); }
         catch (err) { reject(err); }
@@ -2835,6 +2855,392 @@ class App {
     this.toast(`Historia exportada (${info.txt})`, 'ok');
   }
 
+  // ════════════════════════════════════════════════════════════════════════════
+  // PUENTES — UI de los tres motores verificados (G14): etapas constructivas,
+  // pretensado por tendón y cargas móviles / líneas de influencia.  Los MOTORES
+  // (staged.js / tendon.js / moving_load.js) ya están validados headless contra
+  // solución analítica / manual CSI (verif 1-031 / 1-009 / 1-030); aquí sólo se
+  // cablea la UI siguiendo el patrón del resto de análisis (diálogo modal + barra
+  // de progreso + resultado reutilizable con badge «Ver» en el Centro de análisis).
+  // ════════════════════════════════════════════════════════════════════════════
+
+  // ── Etapas constructivas (staged) ────────────────────────────────────────────
+  async runStaged(opts = {}) {
+    const model = this.model;
+    if (model.elements.size === 0) { this.toast('Las etapas constructivas requieren elementos de barra', 'warn'); return; }
+    const stages = opts.silent ? this._stagedDefaultStages() : await this._stagedDialog();
+    if (!stages || !stages.length) return;
+    if (this.viewport._inResultsMode) this.viewport.clearResults();
+    const btn = document.getElementById('btn-run'); if (btn) btn.classList.add('running');
+    this._showProgress('Etapas constructivas…', 'Análisis lineal incremental por fases (acumulando estado)');
+    await new Promise(r => setTimeout(r, 20));
+    try {
+      const res = new StagedSolver().solve(model, stages);
+      this._stagedResult = { res, stages, info: stages.map((s, i) => `${i + 1}. ${s.name}`).join(' · ') };
+      const last = res.stages[res.stages.length - 1];
+      this.toast(`Etapas OK · ${res.stages.length} fases · δmax acumulado ${res.getMaxDisp().toExponential(2)} m · activos finales ${last ? last.active.size : 0}`, 'ok');
+      this._stagedShow();
+      this._updateResultsIndicator?.();
+    } catch (err) {
+      this.toast(`Etapas: ${err.message}`, 'error'); console.error(err);
+    } finally {
+      if (btn) btn.classList.remove('running');
+      this._hideProgress();
+    }
+  }
+
+  // Secuencia por defecto (modo lote / silent): una etapa por grupo en orden, o una
+  // sola etapa con todos los elementos si no hay grupos.
+  _stagedDefaultStages() {
+    const grupos = this.grupos();
+    if (grupos.size) return [...grupos.entries()].map(([name, set]) => ({ name, activate: [...set], selfWeightNew: true }));
+    return [{ name: 'Estructura completa', activate: [...this.model.elements.keys()], selfWeightNew: true }];
+  }
+
+  // Editor de secuencia de etapas. Cada etapa activa un GRUPO de elementos (o todos);
+  // opcionalmente una última etapa de SERVICIO aplica las cargas de un caso.
+  async _stagedDialog() {
+    const overlay = document.getElementById('modal-overlay');
+    document.getElementById('modal-title').textContent = 'Etapas constructivas (staged)';
+    const grupos = this.grupos();
+    const draft = this._stagedDraft && this._stagedDraft.length ? this._stagedDraft : this._stagedDefaultStages().map(s => ({ name: s.name, ids: s.activate, sw: true }));
+    const srcOpts = `<option value="__all__">Todos los elementos (${this.model.elements.size})</option>`
+      + [...grupos.entries()].map(([n, s]) => `<option value="${n}">Grupo «${n}» (${s.size})</option>`).join('');
+    const lcOpts = `<option value="">— ninguna —</option>`
+      + [...this.model.loadCases.values()].map(lc => `<option value="${lc.id}">${lc.name}</option>`).join('');
+    document.getElementById('modal-body').innerHTML = `
+      <p style="color:var(--text-muted);font-size:11px;margin:0 0 8px">
+        Cada etapa <b>activa</b> un conjunto de elementos; el estado (desplazamientos y esfuerzos) se
+        <b>acumula</b> y cada elemento «nace» libre de tensión al activarse (como CSiBridge). Su peso propio
+        se aplica al colarse. Define la secuencia agrupando los elementos en <b>grupos</b> previamente.</p>
+      <div class="prop-row" style="align-items:flex-end;gap:8px">
+        <div class="prop-field" style="flex:1"><label>Añadir etapa con</label><select id="staged-src">${srcOpts}</select></div>
+        <label style="font-size:11px;display:flex;align-items:center;gap:4px"><input type="checkbox" id="staged-sw" checked> peso propio nuevo</label>
+        <button id="staged-add" class="btn" style="white-space:nowrap">➕ Añadir</button>
+      </div>
+      <div id="staged-list" style="margin-top:8px"></div>
+      <div class="prop-row cols1" style="margin-top:8px">
+        <div class="prop-field"><label>Caso de SERVICIO en la última etapa (estructura terminada)</label><select id="staged-service">${lcOpts}</select></div>
+      </div>`;
+    document.getElementById('modal-cancel').style.display = '';
+    overlay.classList.remove('hidden');
+
+    const list = document.getElementById('staged-list');
+    const elemName = (set) => set === '__all__' ? `todos (${this.model.elements.size})` : `«${set}»`;
+    const render = () => {
+      list.innerHTML = draft.length
+        ? draft.map((s, i) => `
+          <div class="prop-row" style="align-items:center;gap:6px;border:1px solid var(--border);border-radius:6px;padding:5px 7px;margin-bottom:5px">
+            <span style="font-weight:700;color:var(--accent)">${i + 1}</span>
+            <input type="text" data-name="${i}" value="${s.name.replace(/"/g, '&quot;')}" style="flex:1;font-size:12px">
+            <span style="font-size:11px;color:var(--text-muted)">${s.ids.length} elem${s.sw ? ' · pp' : ''}</span>
+            <button data-up="${i}" title="Subir" ${i === 0 ? 'disabled' : ''}>▲</button>
+            <button data-dn="${i}" title="Bajar" ${i === draft.length - 1 ? 'disabled' : ''}>▼</button>
+            <button data-rm="${i}" title="Quitar">🗑</button>
+          </div>`).join('')
+        : `<p style="color:var(--text-muted);font-size:11px">Sin etapas. Añade al menos una.</p>`;
+      list.querySelectorAll('[data-name]').forEach(inp => inp.addEventListener('change', e => { draft[+e.target.dataset.name].name = e.target.value; }));
+      list.querySelectorAll('[data-up]').forEach(b => b.addEventListener('click', () => { const i = +b.dataset.up; [draft[i - 1], draft[i]] = [draft[i], draft[i - 1]]; render(); }));
+      list.querySelectorAll('[data-dn]').forEach(b => b.addEventListener('click', () => { const i = +b.dataset.dn; [draft[i + 1], draft[i]] = [draft[i], draft[i + 1]]; render(); }));
+      list.querySelectorAll('[data-rm]').forEach(b => b.addEventListener('click', () => { draft.splice(+b.dataset.rm, 1); render(); }));
+    };
+    render();
+    document.getElementById('staged-add').addEventListener('click', () => {
+      const src = document.getElementById('staged-src').value;
+      const sw = document.getElementById('staged-sw').checked;
+      const ids = src === '__all__' ? [...this.model.elements.keys()] : [...(grupos.get(src) || [])];
+      if (!ids.length) { this.toast('El grupo no tiene elementos', 'warn'); return; }
+      draft.push({ name: `Etapa ${draft.length + 1} — ${elemName(src)}`, ids, sw });
+      render();
+    });
+
+    const ok = await new Promise(res => { overlay._resolve = res; overlay._reject = () => res(false); });
+    if (!ok) return null;
+    this._stagedDraft = draft;
+    const stages = draft.map(s => ({ name: s.name, activate: s.ids, selfWeightNew: s.sw }));
+    const svcId = parseInt(document.getElementById('staged-service').value);
+    if (Number.isFinite(svcId)) {
+      const lc = this.model.loadCases.get(svcId);
+      if (lc) stages.push({ name: `Servicio — ${lc.name}`, activate: [], selfWeightNew: false, loads: (lc.loads || []).slice() });
+    }
+    return stages;
+  }
+
+  // Dibuja la deformada acumulada de las etapas (reusa showNLDeformed).
+  _stagedShow() {
+    const R = this._stagedResult; if (!R) return;
+    const res = R.res;
+    const uByNode = new Map();
+    for (const node of this.model.nodes.values()) { const d = res.getNodeDisp(node.id); uByNode.set(node.id, [d[0], d[1], d[2]]); }
+    this.viewport.showNLDeformed(uByNode, new Map(), 1,
+      `Etapas constructivas · ${res.stages.length} fases · δmax acumulado ${res.getMaxDisp().toExponential(2)} m`);
+  }
+
+  // ── Pretensado por tendón (cargas equivalentes) ──────────────────────────────
+  async runTendon(opts = {}) {
+    const model = this.model;
+    const sel = this._selElems();
+    if (!sel.length) { this.toast('Selecciona los elementos del tendón (en orden, del ancla activa a la pasiva)', 'warn'); return; }
+    const cfg = await this._tendonDialog(sel);
+    if (!cfg) return;
+    try {
+      const tendon = cfg.tendon;
+      const eq = tendonEquivalentLoads(model, tendon);
+      const lc = model.loadCases.get(cfg.lcId);
+      if (!lc) { this.toast('Caso de carga inexistente', 'warn'); return; }
+      this.snapshot();
+      for (const ld of eq.loads) lc.loads.push(ld);
+      this.refreshLoads?.();
+      this.markDirty();
+      this.toast(`Tendón aplicado a «${lc.name}» · P=${eq.P.toFixed(0)} kN · w_eq=${Math.abs(eq.weq).toFixed(2)} kN/m · L=${eq.L.toFixed(2)} m`, 'ok');
+      if (cfg.solve) this.runAnalysis();
+    } catch (err) {
+      this.toast(`Tendón: ${err.message}`, 'error'); console.error(err);
+    }
+  }
+
+  async _tendonDialog(sel) {
+    const overlay = document.getElementById('modal-overlay');
+    document.getElementById('modal-title').textContent = 'Pretensado por tendón — cargas equivalentes';
+    const lcOpts = [...this.model.loadCases.values()].map(lc => `<option value="${lc.id}">${lc.name}</option>`).join('')
+      || `<option value="">(crea un caso de carga primero)</option>`;
+    document.getElementById('modal-body').innerHTML = `
+      <p style="color:var(--text-muted);font-size:11px;margin:0 0 8px">
+        Método de las cargas equivalentes (load balancing, T.Y. Lin). El tendón se traduce a una carga de
+        balanceo + axial + momentos de ancla sobre <b>${sel.length}</b> elemento(s) seleccionado(s) (en orden).
+        Excentricidad <b>e ↓ positiva</b> (m).</p>
+      <div class="prop-row">
+        <div class="prop-field"><label>Trazado</label><select id="td-profile"><option value="parabola">Parábola</option><option value="polygon">Poligonal</option></select></div>
+        <div class="prop-field"><label>Caso de carga destino</label><select id="td-lc">${lcOpts}</select></div>
+      </div>
+      <div class="prop-row" id="td-parab">
+        <div class="prop-field"><label>e inicial (m)</label><input type="number" id="td-e1" value="0" step="0.05" style="width:80px"></div>
+        <div class="prop-field"><label>e centro (m)</label><input type="number" id="td-em" value="0.3" step="0.05" style="width:80px"></div>
+        <div class="prop-field"><label>e final (m)</label><input type="number" id="td-e2" value="0" step="0.05" style="width:80px"></div>
+      </div>
+      <div class="prop-row cols1" id="td-poly" style="display:none">
+        <div class="prop-field"><label>Quiebres «s,e» por línea (s∈[0,1], e ↓+ en m)</label>
+          <textarea id="td-points" rows="4" style="width:100%;font-family:var(--font-mono);font-size:11px">0,0
+0.5,0.3
+1,0</textarea></div>
+      </div>
+      <div class="prop-row">
+        <div class="prop-field"><label>Fuerza</label><select id="td-fmode"><option value="P">Efectiva P directa</option><option value="jack">Tesado + pérdidas</option></select></div>
+        <div class="prop-field" id="td-P"><label>P (kN)</label><input type="number" id="td-Pval" value="1000" step="50" style="width:100px"></div>
+      </div>
+      <div class="prop-row" id="td-jack" style="display:none">
+        <div class="prop-field"><label>P₀ gato (kN)</label><input type="number" id="td-jackval" value="1200" step="50" style="width:90px"></div>
+        <div class="prop-field"><label>μ (1/rad)</label><input type="number" id="td-mu" value="0.2" step="0.01" style="width:70px"></div>
+        <div class="prop-field"><label>k (1/m)</label><input type="number" id="td-k" value="0.001" step="0.0005" style="width:80px"></div>
+        <div class="prop-field"><label>Pérdida tanto alzado</label><input type="number" id="td-lump" value="0.1" min="0" max="0.5" step="0.01" style="width:70px"></div>
+      </div>
+      <label style="font-size:12px;display:flex;align-items:center;gap:6px;margin-top:6px"><input type="checkbox" id="td-solve" checked> Resolver estático tras aplicar</label>`;
+    document.getElementById('modal-cancel').style.display = '';
+    overlay.classList.remove('hidden');
+    const sync = () => {
+      const poly = document.getElementById('td-profile').value === 'polygon';
+      document.getElementById('td-parab').style.display = poly ? 'none' : '';
+      document.getElementById('td-poly').style.display = poly ? '' : 'none';
+      const jack = document.getElementById('td-fmode').value === 'jack';
+      document.getElementById('td-P').style.display = jack ? 'none' : '';
+      document.getElementById('td-jack').style.display = jack ? '' : 'none';
+    };
+    document.getElementById('td-profile').addEventListener('change', sync);
+    document.getElementById('td-fmode').addEventListener('change', sync);
+    sync();
+    const ok = await new Promise(res => { overlay._resolve = res; overlay._reject = () => res(false); });
+    if (!ok) return null;
+    const profile = document.getElementById('td-profile').value;
+    const lcId = parseInt(document.getElementById('td-lc').value);
+    if (!Number.isFinite(lcId)) { this.toast('Selecciona un caso de carga', 'warn'); return null; }
+    const tendon = { elems: sel, profile };
+    if (profile === 'parabola') {
+      tendon.e = { start: +document.getElementById('td-e1').value || 0, mid: +document.getElementById('td-em').value || 0, end: +document.getElementById('td-e2').value || 0 };
+    } else {
+      tendon.points = document.getElementById('td-points').value.split(/\n/).map(l => l.trim()).filter(Boolean)
+        .map(l => { const [s, e] = l.split(/[,\s]+/).map(Number); return { s, e }; }).filter(p => Number.isFinite(p.s) && Number.isFinite(p.e));
+    }
+    if (document.getElementById('td-fmode').value === 'jack') {
+      tendon.jack = +document.getElementById('td-jackval').value || 0;
+      tendon.friction = { mu: +document.getElementById('td-mu').value || 0, k: +document.getElementById('td-k').value || 0 };
+      tendon.lumpSum = +document.getElementById('td-lump').value || 0;
+    } else {
+      tendon.P = +document.getElementById('td-Pval').value || 0;
+    }
+    return { tendon, lcId, solve: document.getElementById('td-solve').checked };
+  }
+
+  // ── Cargas móviles / líneas de influencia ────────────────────────────────────
+  async runMovingLoad(opts = {}) {
+    const model = this.model;
+    const sel = this._selElems();
+    if (!sel.length) { this.toast('Selecciona los elementos de la PISTA (en orden a lo largo del recorrido)', 'warn'); return; }
+    const cfg = await this._movingDialog(sel);
+    if (!cfg) return;
+    const btn = document.getElementById('btn-run'); if (btn) btn.classList.add('running');
+    this._showProgress('Cargas móviles…', cfg.mode === 'il' ? 'Barrido de carga unitaria (línea de influencia)' : 'Barrido del tren (envolvente)');
+    await new Promise(r => setTimeout(r, 20));
+    try {
+      const lane = buildLane(model, cfg.laneIds);
+      const resp = cfg.respType === 'reaction' ? responseReaction(cfg.nodeId, cfg.comp) : responseSection(cfg.elemId, cfg.xi, cfg.key);
+      let result;
+      if (cfg.mode === 'il') {
+        const il = influenceLine(model, lane, resp, { nPos: cfg.nPos, P: 1 });
+        result = { mode: 'il', lane, label: cfg.label, unit: cfg.unit, xs: il.s, ys: il.value, max: il.max, min: il.min, sMax: il.sMax, sMin: il.sMin };
+      } else {
+        const env = movingLoadEnvelope(model, lane, cfg.train, { [cfg.label]: resp }, { nPos: cfg.nPos });
+        const e = env.env[cfg.label];
+        result = { mode: 'env', lane, label: cfg.label, unit: cfg.unit, xs: env.positions, ys: env.series[cfg.label], max: e.max, min: e.min, sMax: e.atMax, sMin: e.atMin, trainLen: env.trainLen };
+      }
+      this._movingResult = result;
+      this.toast(`Cargas móviles OK · ${cfg.label} · máx ${result.max.toExponential(3)} ${cfg.unit} · mín ${result.min.toExponential(3)} ${cfg.unit}`, 'ok');
+      this._movingPlotOverlay(result);
+      this._updateResultsIndicator?.();
+    } catch (err) {
+      this.toast(`Cargas móviles: ${err.message}`, 'error'); console.error(err);
+    } finally {
+      if (btn) btn.classList.remove('running');
+      this._hideProgress();
+    }
+  }
+
+  async _movingDialog(sel) {
+    const overlay = document.getElementById('modal-overlay');
+    document.getElementById('modal-title').textContent = 'Cargas móviles / líneas de influencia';
+    const nodeOpts = [...this.model.nodes.keys()].map(id => `<option value="${id}">Nodo ${id}</option>`).join('');
+    const elemOpts = sel.map(id => `<option value="${id}">Elem ${id}</option>`).join('');
+    document.getElementById('modal-body').innerHTML = `
+      <p style="color:var(--text-muted);font-size:11px;margin:0 0 8px">
+        Pista = <b>${sel.length}</b> elemento(s) seleccionado(s), en orden. La <b>línea de influencia</b> barre una
+        carga unitaria ↓; la <b>envolvente</b> barre un tren multi-eje. Respuesta = reacción de un apoyo o esfuerzo
+        en una sección.</p>
+      <div class="prop-row">
+        <div class="prop-field"><label>Modo</label><select id="ml-mode"><option value="il">Línea de influencia (carga unitaria)</option><option value="env">Envolvente (tren de cargas)</option></select></div>
+        <div class="prop-field"><label>Posiciones de barrido</label><input type="number" id="ml-npos" value="41" min="9" max="201" step="2" style="width:80px"></div>
+      </div>
+      <div class="prop-row">
+        <div class="prop-field"><label>Respuesta</label><select id="ml-resp"><option value="reaction">Reacción de apoyo</option><option value="section">Esfuerzo en sección</option></select></div>
+      </div>
+      <div class="prop-row" id="ml-reaction">
+        <div class="prop-field"><label>Nodo</label><select id="ml-node">${nodeOpts}</select></div>
+        <div class="prop-field"><label>Componente</label><select id="ml-comp"><option value="Fz">Fz (vertical)</option><option value="Fx">Fx</option><option value="Fy">Fy</option><option value="My">My</option><option value="Mz">Mz</option></select></div>
+      </div>
+      <div class="prop-row" id="ml-section" style="display:none">
+        <div class="prop-field"><label>Elemento</label><select id="ml-elem">${elemOpts}</select></div>
+        <div class="prop-field"><label>Posición ξ (0–1)</label><input type="number" id="ml-xi" value="0.5" min="0" max="1" step="0.05" style="width:70px"></div>
+        <div class="prop-field"><label>Esfuerzo</label><select id="ml-key"><option value="Mz">Mz</option><option value="My">My</option><option value="Vy">Vy</option><option value="Vz">Vz</option><option value="N">N</option></select></div>
+      </div>
+      <div class="prop-row cols1" id="ml-train" style="display:none">
+        <div class="prop-field"><label>Tren «offset,P» por línea (offset m respecto al eje de referencia, P en kN ↓)</label>
+          <textarea id="ml-trainpts" rows="3" style="width:100%;font-family:var(--font-mono);font-size:11px">0,100
+4,100</textarea></div>
+      </div>`;
+    document.getElementById('modal-cancel').style.display = '';
+    overlay.classList.remove('hidden');
+    const sync = () => {
+      const isReac = document.getElementById('ml-resp').value === 'reaction';
+      document.getElementById('ml-reaction').style.display = isReac ? '' : 'none';
+      document.getElementById('ml-section').style.display = isReac ? 'none' : '';
+      document.getElementById('ml-train').style.display = document.getElementById('ml-mode').value === 'env' ? '' : 'none';
+    };
+    document.getElementById('ml-resp').addEventListener('change', sync);
+    document.getElementById('ml-mode').addEventListener('change', sync);
+    sync();
+    const ok = await new Promise(res => { overlay._resolve = res; overlay._reject = () => res(false); });
+    if (!ok) return null;
+    const mode = document.getElementById('ml-mode').value;
+    const nPos = Math.max(9, Math.min(201, parseInt(document.getElementById('ml-npos').value) || 41));
+    const respType = document.getElementById('ml-resp').value;
+    const cfg = { mode, nPos, respType, laneIds: sel };
+    const isMoment = (k) => /^M/.test(k);
+    if (respType === 'reaction') {
+      cfg.nodeId = parseInt(document.getElementById('ml-node').value);
+      cfg.comp = document.getElementById('ml-comp').value;
+      cfg.unit = isMoment(cfg.comp) ? 'kN·m' : 'kN';
+      cfg.label = `R${cfg.comp} · nodo ${cfg.nodeId}`;
+    } else {
+      cfg.elemId = parseInt(document.getElementById('ml-elem').value);
+      cfg.xi = Math.max(0, Math.min(1, +document.getElementById('ml-xi').value || 0.5));
+      cfg.key = document.getElementById('ml-key').value;
+      cfg.unit = isMoment(cfg.key) ? 'kN·m' : 'kN';
+      cfg.label = `${cfg.key} · elem ${cfg.elemId} @ξ=${cfg.xi.toFixed(2)}`;
+    }
+    if (mode === 'env') {
+      cfg.train = document.getElementById('ml-trainpts').value.split(/\n/).map(l => l.trim()).filter(Boolean)
+        .map(l => { const [offset, P] = l.split(/[,\s]+/).map(Number); return { offset, P }; }).filter(a => Number.isFinite(a.offset) && Number.isFinite(a.P));
+      if (!cfg.train.length) { this.toast('Define al menos un eje del tren', 'warn'); return null; }
+    }
+    return cfg;
+  }
+
+  // Panel flotante: gráfico SVG de la línea de influencia / envolvente + CSV.
+  _movingPlotOverlay(R) {
+    document.getElementById('ml-overlay')?.remove();
+    const W = 460, H = 200, ml = 44, mr = 14, mt = 14, mb = 28;
+    const n = R.xs.length;
+    const xmin = R.xs[0], xmax = R.xs[n - 1] || 1;
+    let ymax = R.max, ymin = R.min;
+    if (ymax === ymin) { ymax += 1; ymin -= 1; }
+    const pad = (ymax - ymin) * 0.08; ymax += pad; ymin -= pad;
+    const sx = x => ml + (W - ml - mr) * (x - xmin) / (xmax - xmin || 1);
+    const sy = y => mt + (H - mt - mb) * (1 - (y - ymin) / (ymax - ymin || 1));
+    let poly = ''; for (let i = 0; i < n; i++) poly += `${sx(R.xs[i]).toFixed(1)},${sy(R.ys[i]).toFixed(1)} `;
+    const y0 = sy(0).toFixed(1);
+    const mk = (x, y, col) => `<circle cx="${sx(x).toFixed(1)}" cy="${sy(y).toFixed(1)}" r="3.5" fill="${col}"/>`;
+    const title = R.mode === 'il' ? 'Línea de influencia (carga unitaria ↓)' : `Envolvente del tren (largo ${R.trainLen?.toFixed(1)} m)`;
+    const el = document.createElement('div');
+    el.id = 'ml-overlay';
+    el.innerHTML = `
+      <div class="ml-card">
+        <div class="ml-head"><b>Cargas móviles — ${title}</b><button class="ml-x" title="Cerrar">✕</button></div>
+        <div class="ml-body">
+          <div style="font-size:12px;margin-bottom:6px">${R.label} <span style="color:var(--text-muted)">(${R.unit})</span></div>
+          <svg viewBox="0 0 ${W} ${H}" style="width:100%;background:var(--bg3,#0b1220);border-radius:6px">
+            <line x1="${ml}" y1="${y0}" x2="${W - mr}" y2="${y0}" stroke="var(--border,#26324d)" stroke-width="1"/>
+            <line x1="${ml}" y1="${mt}" x2="${ml}" y2="${H - mb}" stroke="var(--border,#26324d)" stroke-width="1"/>
+            <polyline points="${poly}" fill="none" stroke="var(--accent,#38bdf8)" stroke-width="1.6"/>
+            ${mk(R.sMax, R.max, '#ef4444')}${mk(R.sMin, R.min, '#22c55e')}
+            <text x="${ml}" y="${H - 8}" fill="var(--text-muted,#9aa)" font-size="10">pos. ${xmin.toFixed(1)} m</text>
+            <text x="${W - mr}" y="${H - 8}" fill="var(--text-muted,#9aa)" font-size="10" text-anchor="end">${xmax.toFixed(1)} m</text>
+          </svg>
+          <div style="font-size:11.5px;margin-top:8px;line-height:1.7">
+            <span style="color:#ef4444">●</span> máx = <b>${R.max.toExponential(3)} ${R.unit}</b> en pos. ${R.sMax.toFixed(2)} m<br>
+            <span style="color:#22c55e">●</span> mín = <b>${R.min.toExponential(3)} ${R.unit}</b> en pos. ${R.sMin.toFixed(2)} m<br>
+            <span style="color:var(--text-muted)">Pista L = ${R.lane.L.toFixed(2)} m · ${n} posiciones</span>
+          </div>
+        </div>
+        <div class="ml-foot"><button class="ml-csv">⬇ CSV</button></div>
+      </div>`;
+    document.getElementById('viewport-wrap')?.appendChild(el) || document.body.appendChild(el);
+    el.querySelector('.ml-x').addEventListener('click', () => el.remove());
+    el.querySelector('.ml-csv').addEventListener('click', () => this._movingExportCSV(R));
+    if (!document.getElementById('ml-overlay-css')) {
+      const s = document.createElement('style'); s.id = 'ml-overlay-css';
+      s.textContent = `
+        #ml-overlay{position:absolute;right:16px;bottom:16px;z-index:55}
+        #ml-overlay .ml-card{width:min(500px,46vw);background:var(--bg-elev,#141b27);border:1px solid var(--border,#334);
+          border-radius:10px;box-shadow:0 12px 40px rgba(0,0,0,.5);color:var(--text,#e6edf3)}
+        #ml-overlay .ml-head{display:flex;align-items:center;justify-content:space-between;padding:8px 12px;
+          border-bottom:1px solid var(--border,#334);font-size:13px}
+        #ml-overlay .ml-x{background:none;border:none;color:var(--text-muted,#9aa);cursor:pointer;font-size:14px}
+        #ml-overlay .ml-body{padding:10px 12px}
+        #ml-overlay .ml-foot{padding:6px 12px 10px;display:flex;justify-content:flex-end}
+        #ml-overlay .ml-csv{font-size:11px;padding:5px 11px;border-radius:5px;cursor:pointer;border:1px solid var(--border,#334);
+          background:var(--bg4,#1e2735);color:var(--text,#e6edf3)}`;
+      document.head.appendChild(s);
+    }
+  }
+
+  _movingExportCSV(R) {
+    let csv = `# Cargas móviles · ${R.mode === 'il' ? 'línea de influencia (carga unitaria)' : 'envolvente del tren'} · ${R.label}\n`;
+    csv += `posicion[m],${R.label.replace(/[,\s]+/g, '_')}[${R.unit}]\n`;
+    for (let i = 0; i < R.xs.length; i++) csv += `${R.xs[i].toFixed(4)},${R.ys[i].toExponential(6)}\n`;
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' });
+    const a = document.createElement('a'); a.href = URL.createObjectURL(blob);
+    a.download = `cargas_moviles_${R.mode}.csv`; a.click(); URL.revokeObjectURL(a.href);
+    this.toast('Resultado exportado', 'ok');
+  }
+
   // Ejecuta un solver de nl_lite (Newton corotacional denso) en un Web Worker
   // para no congelar la UI en modelos grandes (#44). kind: 'nl' = control de
   // carga (solveNonlinear), 'dc' = control de desplazamiento (solveNonlinearDC).
@@ -2844,7 +3250,7 @@ class App {
     return new Promise((resolve, reject) => {
       let worker;
       try {
-        worker = new Worker(new URL('./solver/nl_worker.js?v=137', import.meta.url), { type: 'module' });
+        worker = new Worker(new URL('./solver/nl_worker.js?v=138', import.meta.url), { type: 'module' });
       } catch (e) {
         try { resolve(kind === 'dc' ? solveNonlinearDC(opts) : solveNonlinear(opts)); }
         catch (err) { reject(err); }
@@ -3101,7 +3507,7 @@ class App {
 
       // Iteración de subespacio en el Worker (no bloquea la UI)
       const rawModes = await new Promise((resolve, reject) => {
-        const worker = new Worker(new URL('./solver/buckling_worker.js?v=137', import.meta.url), { type: 'module' });
+        const worker = new Worker(new URL('./solver/buckling_worker.js?v=138', import.meta.url), { type: 'module' });
         worker.postMessage({ Kff_flat, Kgff_flat, nF, nModes, dense },
           [Kff_flat.buffer, Kgff_flat.buffer]);   // transfer — zero copy
         worker.onmessage = (ev) => { worker.terminate(); ev.data.error ? reject(new Error(ev.data.error)) : resolve(ev.data.modes); };
@@ -4837,8 +5243,11 @@ class App {
       this._nlResult = null;
       this._pdResult = null;
       this._thResult = null;
+      this._stagedResult = null;
+      this._movingResult = null;
       this._thStopPlay?.();
       document.getElementById('th-overlay')?.remove();
+      document.getElementById('ml-overlay')?.remove();
       if (!keepResults) { this._modalResults = null; this._spectrumResults.clear(); }
       this._results = null;
       this._resultsByCase = null;
@@ -5011,7 +5420,7 @@ class App {
               selectedNodes: sel.filter(s => s.type === 'node').map(s => s.id) };
     }
     this.snapshot();
-    const { aplicarOperaciones } = await import('./model/model_ops.js?v=137');
+    const { aplicarOperaciones } = await import('./model/model_ops.js?v=138');
     const res = aplicarOperaciones(this.model, ops, ctx);
     // los resultados previos dejan de ser válidos tras modificar la geometría/cargas
     this.viewport.clearResults?.();
@@ -5059,7 +5468,7 @@ class App {
     this._showProgress('Generando el modelo…', 'Aplicando reglas y cargas normativas');
     try {
       const libs = await this._cargarBibliotecasAsistente();
-      const { generarModelo } = await import('../asistente/generador.js?v=137');
+      const { generarModelo } = await import('../asistente/generador.js?v=138');
       const modelo = generarModelo(ficha, libs);
 
       if (modo === 'sobreponer') {
@@ -6120,7 +6529,7 @@ class App {
     const deflex = this._calcularDeflexionesVigas(diseno?.params);
     const drift  = this._calcularDrift();
     try {
-      const { Docx } = await import('./io/docx.js?v=137');
+      const { Docx } = await import('./io/docx.js?v=138');
       const blob = this._memoriaDocx(Docx, imgs, diseno, deflex, drift).blob();
       this._downloadBlob(blob, 'memoria_calculo.docx');
       this.toast('Memoria Word (.docx) descargada', 'ok');
@@ -6291,7 +6700,7 @@ class App {
   // Verificación de diseño (flexión/corte/axial) por elemento, usando los
   // resultados actuales y los parámetros editables de asistente/diseno_params.json.
   async _calcularDiseno() {
-    const ver = '?v=137';
+    const ver = '?v=138';
     let params = null;
     try { params = await fetch('asistente/diseno_params.json' + ver).then(r => r.json()); }
     catch (e) { console.error('No se pudo cargar diseno_params.json:', e); return null; }
