@@ -10,7 +10,7 @@
 // Estrategia: extrae K_ff, factoriza UNA vez (Cholesky en banda con RCM) y
 // resuelve cada lado derecho. Reacciones = K·u − F (en el worker, no bloquea).
 // ──────────────────────────────────────────────────────────────────────────────
-import { makeFactor, makeFactorCSR } from './linsolve.js?v=168';
+import { makeFactor, makeFactorCSR } from './linsolve.js?v=169';
 
 self.onmessage = (e) => {
   // Camino DISPERSO: llega K_ff en CSR + acoplamiento fijo–libre (cf). No se
