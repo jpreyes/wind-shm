@@ -1,8 +1,8 @@
 // ──────────────────────────────────────────────────────────────────────────────
 // PropertiesPanel — right-side panel: node/element properties + mat/sec tabs
 // ──────────────────────────────────────────────────────────────────────────────
-import { computeFloorCR, computeFloorCM, computeTributaryWeights } from '../solver/diaphragm.js?v=171';
-import { localAxes } from '../solver/timoshenko.js?v=171';
+import { computeFloorCR, computeFloorCM, computeTributaryWeights } from '../solver/diaphragm.js?v=172';
+import { localAxes } from '../solver/timoshenko.js?v=172';
 
 export class PropertiesPanel {
   constructor(panelEl, app) {
@@ -28,6 +28,7 @@ export class PropertiesPanel {
       mat:   document.getElementById('ptab-mat'),
       sec:   document.getElementById('ptab-sec'),
       dia:   document.getElementById('ptab-dia'),
+      cargas: document.getElementById('ptab-cargas'),
     };
     this._currentTab = 'sel';
 
@@ -36,7 +37,6 @@ export class PropertiesPanel {
     this._rtabContents = {
       modal:    document.getElementById('rtab-modal'),
       estatico: document.getElementById('rtab-estatico'),
-      combos:   document.getElementById('rtab-combos'),
       plastico: document.getElementById('rtab-plastico'),
       th:       document.getElementById('rtab-th'),
       dc:       document.getElementById('rtab-dc'),
@@ -67,6 +67,7 @@ export class PropertiesPanel {
     document.getElementById('btn-add-dia')?.addEventListener('click',    () => this.app.addDiaphragmManual());
     document.getElementById('btn-detect-dia')?.addEventListener('click', () => this.app.autoDetectDiaphragms());
     document.getElementById('btn-add-combo')?.addEventListener('click',  () => this._addCombination());
+    document.getElementById('btn-add-lc-panel')?.addEventListener('click', () => this.app.newCaseDialog());
     document.getElementById('btn-combos-norma')?.addEventListener('click', () => this.app.crearCasosYCombosNorma());
     document.getElementById('btn-add-node-row')?.addEventListener('click', () => this._addNodeRow());
     document.getElementById('btn-verificar-diseno')?.addEventListener('click', () => this.renderDiseno());
@@ -166,7 +167,7 @@ export class PropertiesPanel {
   // madera). Cambiarlo fija model.designSettings.codeByFamily y re-verifica.
   async _designCodeSelectorHTML() {
     try {
-      const mod = this._designMod || (this._designMod = await import('../design/diseno.js?v=171'));
+      const mod = this._designMod || (this._designMod = await import('../design/diseno.js?v=172'));
       const fams = new Set();
       for (const m of this.app.model.materials.values()) {
         const fam = (m.design?.family) || mod.clasificarMaterial(m.name);
@@ -209,6 +210,7 @@ export class PropertiesPanel {
     if (tab === 'dia')   this.renderDiaphragms();
     if (tab === 'nodos') this.renderNodesGrid();
     if (tab === 'elems') this.renderElemsGrid();
+    if (tab === 'cargas') { this.renderLoadCases(); this.renderCombinations(); }
   }
 
   _switchRTab(rtab) {
@@ -219,7 +221,6 @@ export class PropertiesPanel {
     );
     if (rtab === 'modal')    this.renderModalResults();
     if (rtab === 'estatico') this.renderStaticResults();
-    if (rtab === 'combos')   this.renderCombinations();
     if (rtab === 'plastico') this.renderPlasticResults();
     if (rtab === 'th')       this.app._thRenderPanel?.();
     if (rtab === 'dc')       this.app._dcRenderPanel?.();
@@ -1805,7 +1806,7 @@ export class PropertiesPanel {
       <select id="mat-catalog"><option value="">— catálogo —</option></select></div>
       <button id="mat-catalog-add" class="btn-secondary" style="white-space:nowrap;font-size:11px">＋ Insertar</button>`;
     container.appendChild(pick);
-    import('../design/materials_catalog.js?v=171').then(({ MATERIAL_FAMILIES, getMaterialDef }) => {
+    import('../design/materials_catalog.js?v=172').then(({ MATERIAL_FAMILIES, getMaterialDef }) => {
       const sel = pick.querySelector('#mat-catalog');
       sel.innerHTML = '<option value="">— catálogo —</option>' +
         Object.entries(MATERIAL_FAMILIES).map(([fam, names]) => `<optgroup label="${fam}">` + names.map(n => `<option value="${n}">${n}</option>`).join('') + '</optgroup>').join('');
@@ -1934,6 +1935,30 @@ export class PropertiesPanel {
     this.app.model.addMaterial({ name: 'Nuevo Material' });
     this.app.markDirty();
     this.renderMaterials();
+  }
+
+  // ── Casos de carga (LC) — lista en la pestaña «Casos y combos» ──────────────
+  // Cada caso con botón ✎ que reusa el diálogo editCaseDialog (nombre/PP/eliminar).
+  renderLoadCases() {
+    const box = document.getElementById('lc-list');
+    if (!box) return;
+    box.innerHTML = '';
+    for (const lc of this.app.model.loadCases.values()) {
+      const isSpec = lc.type === 'spectrum';
+      const row = document.createElement('div');
+      row.style.cssText = 'display:flex;align-items:center;gap:6px;padding:5px 8px;border:1px solid var(--border);border-radius:6px;margin-bottom:4px;font-size:12px;color:var(--text)';
+      const tag = isSpec ? ` <span style="color:var(--teal)">[esp ${lc.specDir}]</span>`
+                         : (lc.selfWeight ? ' <span style="color:var(--text-muted)">⊕PP</span>' : '');
+      row.innerHTML = `
+        <span style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${isSpec ? '〜 ' : ''}${(lc.name || '').replace(/[<>&]/g, '')}${tag}</span>
+        <button title="Editar caso (nombre, peso propio, eliminar)" style="background:none;border:none;color:var(--text-muted);cursor:pointer;font-size:14px;line-height:1">✎</button>`;
+      row.querySelector('button').addEventListener('click', () => {
+        this.app._activeLcId = lc.id;
+        this.app._renderLcSelector();   // refleja el caso activo en el toolbar
+        this.app.editCaseDialog();
+      });
+      box.appendChild(row);
+    }
   }
 
   // ── Combinations tab ───────────────────────────────────────────────────────
@@ -2245,7 +2270,7 @@ export class PropertiesPanel {
     if (!shapeSel) return;
     // Catálogo de perfiles tabulados (#66): poblar y aplicar al elegir.
     const catSel = card.querySelector('.sd-catalog');
-    if (catSel) import('../design/profiles.js?v=171').then(({ catalogFamilies, catalogNames, profileToSection }) => {
+    if (catSel) import('../design/profiles.js?v=172').then(({ catalogFamilies, catalogNames, profileToSection }) => {
       let html = '<option value="">— elegir perfil comercial —</option>';
       for (const fam of catalogFamilies()) html += `<optgroup label="${fam}">` + catalogNames(fam).map(n => `<option value="${n}" ${sec.design?.profile === n ? 'selected' : ''}>${n}</option>`).join('') + '</optgroup>';
       catSel.innerHTML = html;
@@ -2296,7 +2321,7 @@ export class PropertiesPanel {
       const s = this.app.model.sections.get(sec.id);
       if (!s.design?.shape || s.design.shape === 'generic') { this.app.toast('Elija una forma con dimensiones primero', 'warn'); return; }
       try {
-        const { fromShape } = await import('../design/section_props.js?v=171');
+        const { fromShape } = await import('../design/section_props.js?v=172');
         const g = fromShape(s.design.shape, s.design);
         if (!g) { this.app.toast('Faltan dimensiones de la forma', 'warn'); return; }
         this.app.snapshot();

@@ -14,7 +14,7 @@
 // Convención de GDL local: [u1,v1, u2,v2, ...] (x,y en el plano del elemento).
 // ──────────────────────────────────────────────────────────────────────────────
 
-import { mitc4Plate, dktPlate, plateMoments, plateCurvatures, plateThermalLoad, plateD } from './plate.js?v=171';
+import { mitc4Plate, dktPlate, plateMoments, plateCurvatures, plateThermalLoad, plateD } from './plate.js?v=172';
 
 // Matriz constitutiva D (3×3) plana. planeStrain=false → tensión plana.
 export function Dmatrix(E, nu, planeStrain = false) {

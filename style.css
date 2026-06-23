@@ -422,6 +422,7 @@ html, body { height: 100%; overflow: hidden; background: var(--bg); color: var(-
 #panel-body { flex: 1; overflow-y: auto; overflow-x: hidden; }
 .ptab-content { display: none; padding: 10px; }
 .ptab-content.active { display: block; }
+.cargas-sec-title { font-size: 11px; font-weight: 600; color: var(--text-muted); margin-bottom: 5px; text-transform: uppercase; letter-spacing: 0.03em; }
 
 /* Resultados sub-tabs */
 #res-tabs {
