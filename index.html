@@ -29,8 +29,8 @@
       window.dispatchEvent(new Event('pwa-installed'));
     });
   </script>
-  <link rel="stylesheet" href="style.css?v=165">
-  <link rel="stylesheet" href="ui-v2.css?v=165">
+  <link rel="stylesheet" href="style.css?v=166">
+  <link rel="stylesheet" href="ui-v2.css?v=166">
   <script type="importmap">
   {
     "imports": {
@@ -574,6 +574,7 @@
             <div class="prop-field">
               <label>Descripción del modelo</label>
               <textarea id="asis-nl-side" rows="5" class="sp-textarea" placeholder="Ej.: edificio de 4 niveles de 3 m, 3 vanos de 6 m en X y 2 de 5 m en Y, hormigón H30, vigas 25x50, pilares 35x35, salas de clases, en Valdivia, con sismo zona 2 suelo D"></textarea>
+              <small style="color:var(--text-muted);display:block;margin-top:3px">💡 Vacío: <b>Tab</b> rellena el ejemplo · <b>Enter</b> lo genera (para probar de inmediato).</small>
             </div>
             <button class="btn-add" id="btn-asis-side-gen" style="margin-top:8px;background:rgba(14,127,192,0.12);color:var(--accent);border-color:var(--accent)">✦ Generar modelo con el asistente</button>
             <button class="btn-add" id="btn-asis-side-ficha" style="margin-top:6px">Editar ficha avanzada (JSON)…</button>
@@ -1018,7 +1019,7 @@
 
 <!-- numeric.js para solver (Fase 2+) -->
 <script src="lib/numeric.js"></script>
-<script type="module" src="js/app.js?v=165"></script>
+<script type="module" src="js/app.js?v=166"></script>
 
 <!-- PWA: registrar el service worker (offline). Solo en contexto seguro
      (https o localhost); el navegador deja navigator.serviceWorker undefined
