@@ -1,37 +1,38 @@
 // ──────────────────────────────────────────────────────────────────────────────
 // App — main orchestrator
 // ──────────────────────────────────────────────────────────────────────────────
-import { Model }           from './model/model.js?v=144';
-import { Serializer }      from './model/serializer.js?v=144';
-import { Viewport }        from './ui/viewport.js?v=144';
-import { PropertiesPanel } from './ui/properties.js?v=144';
-import { MenuBar }         from './ui/menu.js?v=144';
-import { UndoStack }       from './utils/undo.js?v=144';
-import { StaticSolver, ensureDefaultLC }   from './solver/static_solver.js?v=144';
-import { Results }                         from './solver/postprocess.js?v=144';
-import { ModalSolver }                     from './solver/modal_solver.js?v=144';
-import { buildNodeIndex, assembleK, assembleF, getNodeDOFs } from './solver/assembler.js?v=144';
-import { assembleSparseGlobal, extractFreeCSR } from './solver/sparse.js?v=144';
-import { solveNonlinear, solveNonlinearDC } from './solver/nl_lite.js?v=144';
-import { assembleKg } from './solver/geometric.js?v=144';
-import { makeFactor } from './solver/linsolve.js?v=144';
-import { formFind } from './solver/formfind.js?v=144';
-import { ModalResults }                    from './solver/modal_results.js?v=144';
-import { modalTimeHistory }                from './solver/timehistory.js?v=144';
-import { parseAccelerogram, accStats, scaleToPGA, DEMO_PRESETS, G as GACC } from './solver/accelerograms.js?v=144';
-import { SpectrumSolver }                  from './solver/spectrum_solver.js?v=144';
-import { StagedSolver }                    from './solver/staged.js?v=144';
-import { tendonEquivalentLoads, applyTendon, tendonEcc } from './solver/tendon.js?v=144';
-import { buildLane, influenceLine, movingLoadEnvelope, responseReaction, responseSection } from './solver/moving_load.js?v=144';
-import { newmarkNonlinear, shearBuilding, rayleighDamping } from './solver/nl_timehistory.js?v=144';
-import { checkDrift } from './design/serviceability.js?v=144';
-import { autoDetectDiaphragms, computeFloorCR, applyDiaphragmConstraints } from './solver/diaphragm.js?v=144';
-import { splitElement, splitByLength, discretizeAll, joinElements, intersectarElementos } from './model/discretize.js?v=144';
-import { localAxes, stiffnessMatrix, massMatrix, transformMatrix, globalStiffness, applyReleases } from './solver/timoshenko.js?v=144';
-import { blockCells, cornerGridIndices } from './model/mesher.js?v=144';
-import { coonsGridFromCorners } from './model/mesh_map.js?v=144';
-import { meshPolygonIntoModel } from './model/mesh_free.js?v=144';
-import { smoothAreasInModel } from './model/mesh_quality.js?v=144';
+import { Model }           from './model/model.js?v=145';
+import { Serializer }      from './model/serializer.js?v=145';
+import { Viewport }        from './ui/viewport.js?v=145';
+import { PropertiesPanel } from './ui/properties.js?v=145';
+import { MenuBar }         from './ui/menu.js?v=145';
+import { UndoStack }       from './utils/undo.js?v=145';
+import { StaticSolver, ensureDefaultLC }   from './solver/static_solver.js?v=145';
+import { Results }                         from './solver/postprocess.js?v=145';
+import { ModalSolver }                     from './solver/modal_solver.js?v=145';
+import { buildNodeIndex, assembleK, assembleF, getNodeDOFs } from './solver/assembler.js?v=145';
+import { assembleSparseGlobal, extractFreeCSR } from './solver/sparse.js?v=145';
+import { solveNonlinear, solveNonlinearDC } from './solver/nl_lite.js?v=145';
+import { assembleKg } from './solver/geometric.js?v=145';
+import { makeFactor } from './solver/linsolve.js?v=145';
+import { formFind } from './solver/formfind.js?v=145';
+import { ModalResults }                    from './solver/modal_results.js?v=145';
+import { modalTimeHistory }                from './solver/timehistory.js?v=145';
+import { parseAccelerogram, accStats, scaleToPGA, DEMO_PRESETS, G as GACC } from './solver/accelerograms.js?v=145';
+import { SpectrumSolver }                  from './solver/spectrum_solver.js?v=145';
+import { StagedSolver }                    from './solver/staged.js?v=145';
+import { tendonEquivalentLoads, applyTendon, tendonEcc } from './solver/tendon.js?v=145';
+import { buildLane, influenceLine, movingLoadEnvelope, responseReaction, responseSection } from './solver/moving_load.js?v=145';
+import { newmarkNonlinear, shearBuilding, rayleighDamping } from './solver/nl_timehistory.js?v=145';
+import { checkDrift } from './design/serviceability.js?v=145';
+import { seleccionarPerfil, steelCandidates, predimensionar } from './design/autodesign.js?v=145';
+import { autoDetectDiaphragms, computeFloorCR, applyDiaphragmConstraints } from './solver/diaphragm.js?v=145';
+import { splitElement, splitByLength, discretizeAll, joinElements, intersectarElementos } from './model/discretize.js?v=145';
+import { localAxes, stiffnessMatrix, massMatrix, transformMatrix, globalStiffness, applyReleases } from './solver/timoshenko.js?v=145';
+import { blockCells, cornerGridIndices } from './model/mesher.js?v=145';
+import { coonsGridFromCorners } from './model/mesh_map.js?v=145';
+import { meshPolygonIntoModel } from './model/mesh_free.js?v=145';
+import { smoothAreasInModel } from './model/mesh_quality.js?v=145';
 
 class App {
   constructor() {
@@ -1759,7 +1760,7 @@ class App {
   _staticWorkerSolve(K, nDOF, freeDOF, Flist, dense = false) {
     return new Promise((resolve, reject) => {
       let worker;
-      try { worker = new Worker(new URL('./solver/static_worker.js?v=144', import.meta.url), { type: 'module' }); }
+      try { worker = new Worker(new URL('./solver/static_worker.js?v=145', import.meta.url), { type: 'module' }); }
       catch (e) { reject(e); return; }
       this._staticWorker = worker;
       const cancelar = () => { try { worker.terminate(); } catch (e) {} this._staticWorker = null; this._hideProgress(); reject(new Error('cancelado')); };
@@ -1788,7 +1789,7 @@ class App {
   _staticWorkerSolveSparse(csr, cf, nDOF, freeDOF, Flist) {
     return new Promise((resolve, reject) => {
       let worker;
-      try { worker = new Worker(new URL('./solver/static_worker.js?v=144', import.meta.url), { type: 'module' }); }
+      try { worker = new Worker(new URL('./solver/static_worker.js?v=145', import.meta.url), { type: 'module' }); }
       catch (e) { reject(e); return; }
       this._staticWorker = worker;
       const cancelar = () => { try { worker.terminate(); } catch (e) {} this._staticWorker = null; this._hideProgress(); reject(new Error('cancelado')); };
@@ -2108,7 +2109,7 @@ class App {
       // ── Run Stodola in a Web Worker (non-blocking) ───────────────────────────
       const denseModal = !!this._config?.analisis?.matrizDensa;
       const modes = await new Promise((resolve, reject) => {
-        const worker = new Worker(new URL('./solver/modal_worker.js?v=144', import.meta.url), { type: 'module' });
+        const worker = new Worker(new URL('./solver/modal_worker.js?v=145', import.meta.url), { type: 'module' });
         worker.postMessage({ Kff_flat, Mff_flat, nF, nModes, dense: denseModal, method: modalMethod },
           [Kff_flat.buffer, Mff_flat.buffer]); // transfer — zero copy
         worker.onmessage = (ev) => {
@@ -2510,7 +2511,7 @@ class App {
       // Modal por iteración de subespacio en worker (no bloquea la UI).
       const dense = !!this._config?.analisis?.matrizDensa;
       const rawModes = await new Promise((resolve, reject) => {
-        const w = new Worker(new URL('./solver/modal_worker.js?v=144', import.meta.url), { type: 'module' });
+        const w = new Worker(new URL('./solver/modal_worker.js?v=145', import.meta.url), { type: 'module' });
         w.postMessage({ Kff_flat: Kff, Mff_flat: Mff, nF, nModes, dense, method: 'subspace' }, [Kff.buffer, Mff.buffer]);
         w.onmessage = ev => { w.terminate(); ev.data.error ? reject(new Error(ev.data.error)) : resolve(ev.data.modes); };
         w.onerror = ev => { w.terminate(); reject(new Error(ev.message || 'Error en worker modal')); };
@@ -2579,7 +2580,7 @@ class App {
   _thSolveInWorker(modes, ag, dt, zeta) {
     return new Promise((resolve, reject) => {
       let w;
-      try { w = new Worker(new URL('./solver/timehistory_worker.js?v=144', import.meta.url), { type: 'module' }); }
+      try { w = new Worker(new URL('./solver/timehistory_worker.js?v=145', import.meta.url), { type: 'module' }); }
       catch (e) {
         try { const r = modalTimeHistory({ modes: modes.map(m => ({ ...m, phi: new Float64Array(0) })), ag, dt, zeta }); resolve({ q: r.q, peakModal: r.peakModal }); }
         catch (err) { reject(err); }
@@ -3611,6 +3612,190 @@ class App {
     this.toast('Historia exportada', 'ok');
   }
 
+  // ════════════════════════════════════════════════════════════════════════════
+  // DISEÑO AUTOMÁTICO (G17 #71/#72/#73) — UI con vista previa NO destructiva.
+  // El motor (autodesign.js) NUNCA inventa: sólo elige del catálogo. Aquí se arma
+  // la propuesta por sección (continuidad), se muestra una PREVIA (sección actual
+  // → propuesta · D/C · peso) y sólo al confirmar se aplica al modelo (con undo).
+  // ════════════════════════════════════════════════════════════════════════════
+  async autoDesignDialog(dis) {
+    dis = dis || await this._calcularDiseno();
+    if (!dis || !dis.filas?.length) { this.toast('Ejecute el análisis estático (F5) antes de diseñar.', 'warn'); return; }
+    const sel = new Set(this._selElems());
+    const scope = sel.size ? `selección (${sel.size})` : 'todo el modelo';
+    // Demanda por elemento (envolvente) desde la tabla de diseño.
+    const demByEl = new Map(dis.filas.map(f => [f.id, f]));
+    // Agrupar por SECCIÓN (continuidad: una propuesta por sección), sólo acero.
+    const groups = new Map();   // secId → { secId, els:[], dem:{}, mat, code }
+    for (const el of this.model.elements.values()) {
+      if (sel.size && !sel.has(el.id)) continue;
+      const mat = this.model.materials.get(el.matId);
+      const fam = mat?.design?.family;
+      if (!(fam === 'steel' || fam === 'aluminum' || /acero|steel/i.test(mat?.name || ''))) continue;
+      const f = demByEl.get(el.id); if (!f) continue;
+      let g = groups.get(el.secId);
+      if (!g) { g = { secId: el.secId, els: [], dem: { N: 0, Vy: 0, Vz: 0, My: 0, Mz: 0, L: 0 }, mat, Lb: 0 }; groups.set(el.secId, g); }
+      g.els.push(el.id);
+      // envolvente de la demanda del grupo (máx |·| por componente; N conserva signo del peor)
+      for (const k of ['Vy', 'Vz', 'My', 'Mz']) g.dem[k] = Math.max(g.dem[k], Math.abs(f.fuerzas[k] || 0));
+      if (Math.abs(f.fuerzas.N || 0) > Math.abs(g.dem.N)) g.dem.N = f.fuerzas.N;
+      g.dem.L = Math.max(g.dem.L, f.fuerzas.L || 0);
+      g.Lb = Math.max(g.Lb, el.design?.Lb || f.fuerzas.L || 0);
+    }
+    if (!groups.size) { this.toast('No hay elementos de acero en el alcance. La auto-selección por catálogo es de acero (H.A./madera próximamente).', 'warn'); return; }
+
+    const candidates = steelCandidates(['IPE', 'HEA', 'HEB']);
+    const codeByFam = this.model.designSettings?.codeByFamily || {};
+    const rows = [];
+    for (const g of groups.values()) {
+      const secNow = this.model.sections.get(g.secId);
+      const code = codeByFam[g.mat?.design?.family === 'aluminum' ? 'steel' : 'steel'];   // acero
+      const sharedOut = [...this.model.elements.values()].some(e => e.secId === g.secId && !g.els.includes(e.id));
+      const sel2 = seleccionarPerfil({ demands: g.dem, candidates, mat: g.mat, code,
+        member: { L: g.dem.L, Lb: g.Lb || g.dem.L }, prefs: { prefer: secNow?.design?.profile, dcTarget: 0.85 } });
+      rows.push({ secId: g.secId, secName: secNow?.name || `sec ${g.secId}`, nEls: g.els.length,
+        actual: secNow?.design?.profile || `A=${(secNow?.A * 1e4 || 0).toFixed(1)} cm²`,
+        best: sel2.best, note: sel2.note, sharedOut, dem: g.dem });
+    }
+    this._autoDesignRows = rows;
+    this._autoDesignOverlay(rows, scope);
+  }
+
+  _autoDesignOverlay(rows, scope) {
+    document.getElementById('ad-overlay')?.remove();
+    const fmt = v => (v == null || !isFinite(v)) ? '—' : (+v).toFixed(2);
+    const body = rows.map((r, i) => {
+      const b = r.best;
+      const dcCol = b ? (b.dc > 1 ? '#ef4444' : b.dc > 0.9 ? '#f59e0b' : '#22c55e') : '#ef4444';
+      return `<tr>
+        <td><input type="checkbox" class="ad-chk" data-i="${i}" ${b ? 'checked' : ''} ${b ? '' : 'disabled'}></td>
+        <td>${r.secName}<br><span style="color:var(--text-muted);font-size:10px">${r.nEls} elem${r.sharedOut ? ' ⚠ compartida' : ''}</span></td>
+        <td style="font-size:10px">${r.actual}</td>
+        <td><b>${b ? b.name : '—'}</b></td>
+        <td style="color:${dcCol}"><b>${b ? fmt(b.dc) : '—'}</b></td>
+        <td style="text-align:right;font-size:10px">${b ? (b.weight).toFixed(1) : '—'}</td>
+        <td style="font-size:10px;color:var(--text-muted)">${b ? (b.gobierna || '') : (r.note || 'sin solución')}</td>
+      </tr>`;
+    }).join('');
+    const anyBest = rows.some(r => r.best);
+    const el = document.createElement('div'); el.id = 'ad-overlay';
+    el.innerHTML = `
+      <div class="ad-card" role="dialog" aria-label="Diseñar (auto-selección)">
+        <div class="ad-head"><b>🧮 Diseñar (auto-selección desde catálogo) · ${scope}</b><button class="ad-x">✕</button></div>
+        <div class="ad-body">
+          <p style="font-size:11px;color:var(--text-muted);margin:0 0 8px">Acero — el perfil más liviano del catálogo (IPE/HEA/HEB) que cumple <b>D/C≤1</b> (objetivo 0.75–0.90), por sección (continuidad). Vista previa NO destructiva; nada cambia hasta «Aplicar».</p>
+          <div style="max-height:46vh;overflow:auto;border:1px solid var(--border);border-radius:6px">
+            <table class="ad-tbl" style="width:100%;border-collapse:collapse;font-size:11.5px">
+              <thead><tr style="position:sticky;top:0;background:var(--bg4)"><th></th><th style="text-align:left">Sección</th><th>Actual</th><th>Propuesta</th><th>D/C</th><th>kg/m</th><th>Gob.</th></tr></thead>
+              <tbody>${body}</tbody>
+            </table>
+          </div>
+        </div>
+        <div class="ad-foot">
+          <span style="font-size:11px;color:var(--text-muted)">⚠ compartida = la sección la usan también elementos fuera del alcance.</span>
+          <button class="ad-apply" ${anyBest ? '' : 'disabled'}>✓ Aplicar al modelo</button>
+        </div>
+      </div>`;
+    document.getElementById('viewport-wrap')?.appendChild(el) || document.body.appendChild(el);
+    el.querySelector('.ad-x').addEventListener('click', () => el.remove());
+    el.querySelector('.ad-apply').addEventListener('click', () => this._autoDesignApply());
+    if (!document.getElementById('ad-overlay-css')) {
+      const s = document.createElement('style'); s.id = 'ad-overlay-css';
+      s.textContent = `
+        #ad-overlay{position:absolute;inset:0;z-index:60;display:flex;align-items:flex-start;justify-content:center;background:rgba(0,0,0,.28);padding-top:54px}
+        #ad-overlay .ad-card{width:min(560px,94%);max-height:84%;display:flex;flex-direction:column;background:var(--bg-elev,#141b27);border:1px solid var(--border,#334);border-radius:10px;box-shadow:0 12px 40px rgba(0,0,0,.5);color:var(--text,#e6edf3)}
+        #ad-overlay .ad-head{display:flex;justify-content:space-between;align-items:center;padding:9px 13px;border-bottom:1px solid var(--border,#334);font-size:13px}
+        #ad-overlay .ad-x{background:none;border:none;color:var(--text-muted,#9aa);cursor:pointer;font-size:14px}
+        #ad-overlay .ad-body{padding:10px 13px;overflow:auto}
+        #ad-overlay .ad-tbl th,#ad-overlay .ad-tbl td{padding:4px 6px;border-bottom:1px solid var(--border,#26324d);text-align:center}
+        #ad-overlay .ad-foot{padding:9px 13px;border-top:1px solid var(--border,#334);display:flex;justify-content:space-between;align-items:center;gap:10px}
+        #ad-overlay .ad-apply{font-size:12px;padding:6px 13px;border-radius:6px;cursor:pointer;border:1px solid var(--accent,#388bfd);background:var(--accent,#388bfd);color:#fff}
+        #ad-overlay .ad-apply:disabled{opacity:.5;cursor:default}`;
+      document.head.appendChild(s);
+    }
+  }
+
+  async _autoDesignApply() {
+    const rows = this._autoDesignRows || [];
+    const picks = [...document.querySelectorAll('#ad-overlay .ad-chk:checked')].map(c => rows[+c.dataset.i]).filter(r => r && r.best);
+    if (!picks.length) { this.toast('No hay propuestas seleccionadas', 'warn'); return; }
+    const { profileToSection } = await import('./design/profiles.js?v=145');
+    this.snapshot();
+    let n = 0;
+    for (const r of picks) {
+      const props = profileToSection(r.best.name); if (!props) continue;
+      this.model.updateSection(r.secId, props);
+      const s = this.model.sections.get(r.secId);
+      if (s) s.name = r.best.name;     // renombra la sección al perfil elegido
+      n++;
+    }
+    this.markDirty();
+    this.viewport.renderModel?.(this.model);
+    this.panel.renderSections?.();
+    document.getElementById('ad-overlay')?.remove();
+    this.toast(`Diseño aplicado a ${n} sección(es). Recalcule el análisis (F5) y vuelva a verificar. Ctrl+Z deshace.`, 'ok');
+    this.panel.renderDiseno?.();
+  }
+
+  // ── Predimensionar (#71): diálogo ANTES del análisis ────────────────────────
+  async predimensionarDialog() {
+    const overlay = document.getElementById('modal-overlay');
+    document.getElementById('modal-title').textContent = '⚡ Predimensionar (preliminar)';
+    document.getElementById('modal-body').innerHTML = `
+      <p style="color:var(--text-muted);font-size:11px;margin:0 0 8px">Reglas simples de ingeniería para una sección inicial (antes del análisis). El resultado es <b>editable</b> y preliminar — requiere verificación posterior.</p>
+      <div class="prop-row">
+        <div class="prop-field"><label>Tipo</label><select id="pd-tipo"><option value="viga">Viga</option><option value="columna">Columna</option></select></div>
+        <div class="prop-field"><label>Material</label><select id="pd-mat"><option value="steel">Acero</option><option value="concrete">Hormigón armado</option><option value="timber">Madera</option></select></div>
+      </div>
+      <div class="prop-row">
+        <div class="prop-field"><label>Luz / altura L (m)</label><input type="number" id="pd-L" value="6" step="0.5" style="width:90px"></div>
+        <div class="prop-field" id="pd-q-box"><label>Carga q (kN/m)</label><input type="number" id="pd-q" value="20" step="1" style="width:90px"></div>
+        <div class="prop-field" id="pd-N-box" style="display:none"><label>Axial N (kN)</label><input type="number" id="pd-N" value="800" step="50" style="width:90px"></div>
+        <div class="prop-field" id="pd-fc-box" style="display:none"><label>f'c (MPa)</label><input type="number" id="pd-fc" value="25" step="5" style="width:70px"></div>
+      </div>
+      <div id="pd-out" style="font-size:12px;margin-top:6px;padding:8px;border:1px dashed var(--border);border-radius:6px;color:var(--text-muted)">…</div>
+      <label style="font-size:11px;display:flex;align-items:center;gap:6px;margin-top:6px"><input type="checkbox" id="pd-assign"> Crear sección y asignar a la selección de elementos</label>`;
+    document.getElementById('modal-cancel').style.display = '';
+    overlay.classList.remove('hidden');
+    const tipo = () => document.getElementById('pd-tipo').value, matf = () => document.getElementById('pd-mat').value;
+    const refresh = () => {
+      const isCol = tipo() === 'columna', isC = matf() === 'concrete';
+      document.getElementById('pd-q-box').style.display = isCol ? 'none' : '';
+      document.getElementById('pd-N-box').style.display = isCol ? '' : 'none';
+      document.getElementById('pd-fc-box').style.display = (isCol && isC) ? '' : 'none';
+      const p = predimensionar({ tipo: tipo(), material: matf(), L: +document.getElementById('pd-L').value || 6,
+        q: +document.getElementById('pd-q').value || 20, N: +document.getElementById('pd-N').value || 800, fc: +document.getElementById('pd-fc').value || 25,
+        H: +document.getElementById('pd-L').value || 3 });
+      this._predim = p;
+      const dimTxt = p.profile ? `<b>${p.profile}</b>` : Object.entries(p.dims).map(([k, v]) => `${k}=${(v * 1000).toFixed(0)} mm`).join(' · ');
+      document.getElementById('pd-out').innerHTML = `Propuesta: ${dimTxt}<br><span style="font-size:11px">${p.nota}</span>`;
+    };
+    overlay.querySelectorAll('#pd-tipo,#pd-mat,#pd-L,#pd-q,#pd-N,#pd-fc').forEach(e => e.addEventListener('input', refresh));
+    refresh();
+    const ok = await new Promise(res => { overlay._resolve = res; overlay._reject = () => res(false); });
+    if (!ok) return;
+    const p = this._predim; if (!p) return;
+    if (document.getElementById('pd-assign').checked) {
+      const { profileToSection } = await import('./design/profiles.js?v=145');
+      this.snapshot();
+      // Perfil del catálogo → props directas; forma libre (H.A./madera) → calcular A,I,J.
+      let secProps = p.profile ? profileToSection(p.profile) : { design: { shape: p.shape, dims: p.dims } };
+      if (!p.profile) {
+        const { fromShape } = await import('./design/section_props.js?v=145');
+        const g = fromShape(p.shape, p.dims);
+        if (g) secProps = { A: g.A, Iz: g.Iz, Iy: g.Iy, J: g.J, Avy: g.Avz_web, Avz: g.Avy_flange, design: { shape: p.shape, dims: p.dims } };
+      }
+      const name = p.profile || `Predim ${p.shape} ${Object.values(p.dims).map(v => (v * 1000).toFixed(0)).join('×')}`;
+      const newSec = this.model.addSection({ name, ...secProps });
+      const selEls = this._selElems();
+      for (const id of selEls) this.model.updateElement(id, { secId: newSec.id });
+      this.markDirty(); this.viewport.renderModel?.(this.model); this.panel.renderSections?.();
+      this.toast(`Sección «${name}» creada${selEls.length ? ` y asignada a ${selEls.length} elemento(s)` : ''}. Preliminar — verifique tras analizar.`, 'ok');
+    } else {
+      this.toast(`Predimensionado: ${p.profile || Object.entries(p.dims).map(([k, v]) => `${k}=${(v * 1000).toFixed(0)}mm`).join(' ')} (preliminar)`, 'ok');
+    }
+  }
+
   // Ejecuta un solver de nl_lite (Newton corotacional denso) en un Web Worker
   // para no congelar la UI en modelos grandes (#44). kind: 'nl' = control de
   // carga (solveNonlinear), 'dc' = control de desplazamiento (solveNonlinearDC).
@@ -3620,7 +3805,7 @@ class App {
     return new Promise((resolve, reject) => {
       let worker;
       try {
-        worker = new Worker(new URL('./solver/nl_worker.js?v=144', import.meta.url), { type: 'module' });
+        worker = new Worker(new URL('./solver/nl_worker.js?v=145', import.meta.url), { type: 'module' });
       } catch (e) {
         try { resolve(kind === 'dc' ? solveNonlinearDC(opts) : solveNonlinear(opts)); }
         catch (err) { reject(err); }
@@ -3877,7 +4062,7 @@ class App {
 
       // Iteración de subespacio en el Worker (no bloquea la UI)
       const rawModes = await new Promise((resolve, reject) => {
-        const worker = new Worker(new URL('./solver/buckling_worker.js?v=144', import.meta.url), { type: 'module' });
+        const worker = new Worker(new URL('./solver/buckling_worker.js?v=145', import.meta.url), { type: 'module' });
         worker.postMessage({ Kff_flat, Kgff_flat, nF, nModes, dense },
           [Kff_flat.buffer, Kgff_flat.buffer]);   // transfer — zero copy
         worker.onmessage = (ev) => { worker.terminate(); ev.data.error ? reject(new Error(ev.data.error)) : resolve(ev.data.modes); };
@@ -5793,7 +5978,7 @@ class App {
               selectedNodes: sel.filter(s => s.type === 'node').map(s => s.id) };
     }
     this.snapshot();
-    const { aplicarOperaciones } = await import('./model/model_ops.js?v=144');
+    const { aplicarOperaciones } = await import('./model/model_ops.js?v=145');
     const res = aplicarOperaciones(this.model, ops, ctx);
     // los resultados previos dejan de ser válidos tras modificar la geometría/cargas
     this.viewport.clearResults?.();
@@ -5841,7 +6026,7 @@ class App {
     this._showProgress('Generando el modelo…', 'Aplicando reglas y cargas normativas');
     try {
       const libs = await this._cargarBibliotecasAsistente();
-      const { generarModelo } = await import('../asistente/generador.js?v=144');
+      const { generarModelo } = await import('../asistente/generador.js?v=145');
       const modelo = generarModelo(ficha, libs);
 
       if (modo === 'sobreponer') {
@@ -6902,7 +7087,7 @@ class App {
     const deflex = this._calcularDeflexionesVigas(diseno?.params);
     const drift  = this._calcularDrift();
     try {
-      const { Docx } = await import('./io/docx.js?v=144');
+      const { Docx } = await import('./io/docx.js?v=145');
       const blob = this._memoriaDocx(Docx, imgs, diseno, deflex, drift).blob();
       this._downloadBlob(blob, 'memoria_calculo.docx');
       this.toast('Memoria Word (.docx) descargada', 'ok');
@@ -7073,7 +7258,7 @@ class App {
   // Verificación de diseño (flexión/corte/axial) por elemento, usando los
   // resultados actuales y los parámetros editables de asistente/diseno_params.json.
   async _calcularDiseno() {
-    const ver = '?v=144';
+    const ver = '?v=145';
     let params = null;
     try { params = await fetch('asistente/diseno_params.json' + ver).then(r => r.json()); }
     catch (e) { console.error('No se pudo cargar diseno_params.json:', e); return null; }

@@ -22,20 +22,20 @@
 // Unidades del modelo: kN, m (las resistencias de diseño se dan en MPa).
 // ──────────────────────────────────────────────────────────────────────────────
 
-import { Model } from '../model/model.js?v=144';
-import { Serializer } from '../model/serializer.js?v=144';
-import { StaticSolver } from '../solver/static_solver.js?v=144';
-import { ModalSolver } from '../solver/modal_solver.js?v=144';
-import { ModalResults } from '../solver/modal_results.js?v=144';
-import { buildNodeIndex, assembleK, assembleF, getNodeDOFs } from '../solver/assembler.js?v=144';
-import { assembleKg } from '../solver/geometric.js?v=144';
-import { makeFactor } from '../solver/linsolve.js?v=144';
-import { solveBuckling } from '../solver/buckling.js?v=144';
-import { StagedSolver } from '../solver/staged.js?v=144';
-import { verificarElemento, listDesignCodes, getDesignCode, registerDesignCode } from '../design/diseno.js?v=144';
-import { checkDeflection, checkDrift } from '../design/serviceability.js?v=144';
-import { resolveMaterial } from '../design/material_props.js?v=144';
-import { resolveSectionProps } from '../design/section_props.js?v=144';
+import { Model } from '../model/model.js?v=145';
+import { Serializer } from '../model/serializer.js?v=145';
+import { StaticSolver } from '../solver/static_solver.js?v=145';
+import { ModalSolver } from '../solver/modal_solver.js?v=145';
+import { ModalResults } from '../solver/modal_results.js?v=145';
+import { buildNodeIndex, assembleK, assembleF, getNodeDOFs } from '../solver/assembler.js?v=145';
+import { assembleKg } from '../solver/geometric.js?v=145';
+import { makeFactor } from '../solver/linsolve.js?v=145';
+import { solveBuckling } from '../solver/buckling.js?v=145';
+import { StagedSolver } from '../solver/staged.js?v=145';
+import { verificarElemento, listDesignCodes, getDesignCode, registerDesignCode } from '../design/diseno.js?v=145';
+import { checkDeflection, checkDrift } from '../design/serviceability.js?v=145';
+import { resolveMaterial } from '../design/material_props.js?v=145';
+import { resolveSectionProps } from '../design/section_props.js?v=145';
 
 // ── numeric.js disponible como global (navegador) o cargado bajo demanda (Node) ──
 let _numReady = false;

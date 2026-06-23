@@ -1,8 +1,8 @@
 // ──────────────────────────────────────────────────────────────────────────────
 // PropertiesPanel — right-side panel: node/element properties + mat/sec tabs
 // ──────────────────────────────────────────────────────────────────────────────
-import { computeFloorCR, computeFloorCM, computeTributaryWeights } from '../solver/diaphragm.js?v=144';
-import { localAxes } from '../solver/timoshenko.js?v=144';
+import { computeFloorCR, computeFloorCM, computeTributaryWeights } from '../solver/diaphragm.js?v=145';
+import { localAxes } from '../solver/timoshenko.js?v=145';
 
 export class PropertiesPanel {
   constructor(panelEl, app) {
@@ -129,6 +129,10 @@ export class PropertiesPanel {
       <td class="${malo(x) ? 'dc-bad' : aj(x) ? 'dc-warn' : 'dc-ok'}">${malo(x) ? '✗' : aj(x) ? '!' : '✓'}</td></tr>`).join('');
     body.innerHTML = `
       ${codeSelHTML}
+      <div class="dis-actions" style="display:flex;gap:6px;margin:4px 0 8px">
+        <button id="btn-predim" class="btn-secondary" style="flex:1;font-size:11px" title="Predimensionar (antes del análisis): propone una sección inicial por reglas simples.">⚡ Predimensionar</button>
+        <button id="btn-autodiseno" class="btn-secondary" style="flex:1;font-size:11px" title="Diseñar (después del análisis): elige del catálogo el perfil de acero más liviano que cumple D/C≤1.">🧮 Diseñar (auto)</button>
+      </div>
       <div class="dis-summary">Estados: <b>${esc(dis.caso || 'activo')}</b><br>
         <span class="dc-ok">${nOk} cumplen</span> · <span class="dc-warn">${nAj} ajustados</span> · <span class="dc-bad">${nNo} no cumplen</span></div>
       <div style="max-height:58vh;overflow:auto;border:1px solid var(--border,#334);border-radius:5px">
@@ -139,6 +143,8 @@ export class PropertiesPanel {
       const id = +tr.dataset.elem;
       if (this.app.viewport.selectElements) this.app.viewport.selectElements([id]);
     }));
+    body.querySelector('#btn-predim')?.addEventListener('click', () => this.app.predimensionarDialog());
+    body.querySelector('#btn-autodiseno')?.addEventListener('click', () => this.app.autoDesignDialog(dis));
     this._bindDesignCodeSelector(body);
   }
 
@@ -146,7 +152,7 @@ export class PropertiesPanel {
   // madera). Cambiarlo fija model.designSettings.codeByFamily y re-verifica.
   async _designCodeSelectorHTML() {
     try {
-      const mod = this._designMod || (this._designMod = await import('../design/diseno.js?v=144'));
+      const mod = this._designMod || (this._designMod = await import('../design/diseno.js?v=145'));
       const fams = new Set();
       for (const m of this.app.model.materials.values()) {
         const fam = (m.design?.family) || mod.clasificarMaterial(m.name);
@@ -2156,7 +2162,7 @@ export class PropertiesPanel {
     if (!shapeSel) return;
     // Catálogo de perfiles tabulados (#66): poblar y aplicar al elegir.
     const catSel = card.querySelector('.sd-catalog');
-    if (catSel) import('../design/profiles.js?v=144').then(({ catalogFamilies, catalogNames, profileToSection }) => {
+    if (catSel) import('../design/profiles.js?v=145').then(({ catalogFamilies, catalogNames, profileToSection }) => {
       let html = '<option value="">— elegir perfil comercial —</option>';
       for (const fam of catalogFamilies()) html += `<optgroup label="${fam}">` + catalogNames(fam).map(n => `<option value="${n}" ${sec.design?.profile === n ? 'selected' : ''}>${n}</option>`).join('') + '</optgroup>';
       catSel.innerHTML = html;
@@ -2194,7 +2200,7 @@ export class PropertiesPanel {
       const s = this.app.model.sections.get(sec.id);
       if (!s.design?.shape || s.design.shape === 'generic') { this.app.toast('Elija una forma con dimensiones primero', 'warn'); return; }
       try {
-        const { fromShape } = await import('../design/section_props.js?v=144');
+        const { fromShape } = await import('../design/section_props.js?v=145');
         const g = fromShape(s.design.shape, s.design);
         if (!g) { this.app.toast('Faltan dimensiones de la forma', 'warn'); return; }
         this.app.snapshot();

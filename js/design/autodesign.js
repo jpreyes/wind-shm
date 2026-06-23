@@ -14,8 +14,8 @@
 //    peso, preferir secciones repetidas (continuidad).
 // ──────────────────────────────────────────────────────────────────────────────
 
-import { verificarElemento } from './diseno.js?v=144';
-import { profileToSection, catalogNames } from './profiles.js?v=144';
+import { verificarElemento } from './diseno.js?v=145';
+import { profileToSection, catalogNames } from './profiles.js?v=145';
 
 // Peso por metro relativo (kg/m) = A·ρ; si no hay ρ, ρ=7850 (acero) sólo para ordenar.
 function weightPerM(sec, mat) { return (sec.A || 0) * (mat?.rho || mat?.density || 7850); }

@@ -7,9 +7,9 @@
 // For UDL this reduces to the exact parabolic formula.
 // Displacements at arbitrary xi use cubic Hermite shape functions.
 // ──────────────────────────────────────────────────────────────────────────────
-import { localAxes, stiffnessMatrix, transformMatrix, fixedEndForces, applyReleases, condenseFEF, recoverReleasedDisp } from './timoshenko.js?v=144';
-import { getNodeDOFs } from './assembler.js?v=144';
-import { areaStress, areaBendingStress, areaStrain, areaCurvature, vonMises } from './membrane.js?v=144';
+import { localAxes, stiffnessMatrix, transformMatrix, fixedEndForces, applyReleases, condenseFEF, recoverReleasedDisp } from './timoshenko.js?v=145';
+import { getNodeDOFs } from './assembler.js?v=145';
+import { areaStress, areaBendingStress, areaStrain, areaCurvature, vonMises } from './membrane.js?v=145';
 
 function _toLocalLoad(load, ex, ey, ez) {
   const w   = load.w;
