@@ -290,7 +290,7 @@ y los 3 motores+UI de **puentes**. Lo que queda abierto, ordenado por esfuerzo c
 
 **🆕 UX recién detectada en uso (resultados/vista) — prioridad media**
 - ✅ **«Volver a vista modelo» ≠ «Limpiar resultados»** `[#88]` (G21) — hecho: botón de barra **«Vista modelo»** no destructivo (`exitResultsView`) + acción destructiva «🗑 Limpiar Resultados (descartar)» en el menú. Ver G21.
-- ⬜ **Resultados como PESTAÑAS (sin ventanas flotantes)** `[#90]` (G21) — Estático/Modal/Espectro/Rótulas/Dinámico/Pushover/Pandeo/P-Delta como pestañas del super-tab Resultados; los NL-lite dejan de ser overlays flotantes y pasan a su panel.
+- ✅ **Resultados como PESTAÑAS (sin ventanas flotantes)** `[#90]` (G21) — **hecho (v170–v171)**: los 6 overlays flotantes (Dinámico, Pushover, Pandeo, No lineal, Cargas móviles, Dinámico NL) migrados a pestañas del super-tab Resultados; ningún resultado NL queda como ventana flotante.
 - ✅ **Selección por cuadro con modo dedicado** `[#89]` (G20) — nuevo modo **«Cuadro»** en la barra lateral (`data-mode="boxselect"`): arrastrar con la izquierda dibuja el recuadro y selecciona nodos+elementos **sin** apretar Alt (Ctrl al soltar añade). El disparador del rubber-band acepta `mode==='boxselect'` además de `select`+Alt; clic sin arrastre = selección puntual. Verificado en navegador (edificio Valdivia → 216 objetos seleccionados por recuadro).
 
 **✅ Correcciones / mejoras recientes ya resueltas (v160–v172)**
