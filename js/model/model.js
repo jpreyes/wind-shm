@@ -37,6 +37,9 @@ export class Model {
     // null = usar los defaults de la app (compatibilidad con archivos viejos).
     this.memoria        = null;
     this.analysisParams = null;
+    // Ajustes de diseño: código por familia de material (acero/hormigón/madera).
+    // null = usar el código por defecto de cada familia (AISC 360 LRFD, ACI 318…).
+    this.designSettings = null;   // { codeByFamily: { steel:'EN1993-1-1', ... } }
 
     this._initDefaults();
   }

@@ -7,7 +7,7 @@
 // nodes=[[x,y,z]…] y cells=[[i,j,k]|[i,j,k,l]…], así sirve para mallas estructuradas
 // (mesh_map) y libres (mesh_free).  AUTÓNOMO → verificable en Node.
 // ──────────────────────────────────────────────────────────────────────────────
-import { quadMinScaledJacobian } from './mesh_map.js?v=135';
+import { quadMinScaledJacobian } from './mesh_map.js?v=136';
 
 const sub = (a, b) => [a[0] - b[0], a[1] - b[1], a[2] - b[2]];
 const cross = (a, b) => [a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0]];

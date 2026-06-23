@@ -1,7 +1,7 @@
 // ──────────────────────────────────────────────────────────────────────────────
 // Serializer — JSON (.s3d) and CSV import/export
 // ──────────────────────────────────────────────────────────────────────────────
-import { Model } from './model.js?v=135';
+import { Model } from './model.js?v=136';
 
 export class Serializer {
 
@@ -75,6 +75,7 @@ export class Serializer {
     // Datos por proyecto (#41 / #39); ausentes en archivos viejos → null (defaults app).
     m.memoria        = obj.memoria || null;
     m.analysisParams = obj.analysisParams || null;
+    m.designSettings = obj.designSettings || null;
 
     if (obj._counters) {
       m._cnt = { ...m._cnt, ...obj._counters };
