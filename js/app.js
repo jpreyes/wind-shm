@@ -1,36 +1,37 @@
 // ──────────────────────────────────────────────────────────────────────────────
 // App — main orchestrator
 // ──────────────────────────────────────────────────────────────────────────────
-import { Model }           from './model/model.js?v=143';
-import { Serializer }      from './model/serializer.js?v=143';
-import { Viewport }        from './ui/viewport.js?v=143';
-import { PropertiesPanel } from './ui/properties.js?v=143';
-import { MenuBar }         from './ui/menu.js?v=143';
-import { UndoStack }       from './utils/undo.js?v=143';
-import { StaticSolver, ensureDefaultLC }   from './solver/static_solver.js?v=143';
-import { Results }                         from './solver/postprocess.js?v=143';
-import { ModalSolver }                     from './solver/modal_solver.js?v=143';
-import { buildNodeIndex, assembleK, assembleF, getNodeDOFs } from './solver/assembler.js?v=143';
-import { assembleSparseGlobal, extractFreeCSR } from './solver/sparse.js?v=143';
-import { solveNonlinear, solveNonlinearDC } from './solver/nl_lite.js?v=143';
-import { assembleKg } from './solver/geometric.js?v=143';
-import { makeFactor } from './solver/linsolve.js?v=143';
-import { formFind } from './solver/formfind.js?v=143';
-import { ModalResults }                    from './solver/modal_results.js?v=143';
-import { modalTimeHistory }                from './solver/timehistory.js?v=143';
-import { parseAccelerogram, accStats, scaleToPGA, DEMO_PRESETS, G as GACC } from './solver/accelerograms.js?v=143';
-import { SpectrumSolver }                  from './solver/spectrum_solver.js?v=143';
-import { StagedSolver }                    from './solver/staged.js?v=143';
-import { tendonEquivalentLoads, applyTendon, tendonEcc } from './solver/tendon.js?v=143';
-import { buildLane, influenceLine, movingLoadEnvelope, responseReaction, responseSection } from './solver/moving_load.js?v=143';
-import { newmarkNonlinear, shearBuilding, rayleighDamping } from './solver/nl_timehistory.js?v=143';
-import { autoDetectDiaphragms, computeFloorCR, applyDiaphragmConstraints } from './solver/diaphragm.js?v=143';
-import { splitElement, splitByLength, discretizeAll, joinElements, intersectarElementos } from './model/discretize.js?v=143';
-import { localAxes, stiffnessMatrix, massMatrix, transformMatrix, globalStiffness, applyReleases } from './solver/timoshenko.js?v=143';
-import { blockCells, cornerGridIndices } from './model/mesher.js?v=143';
-import { coonsGridFromCorners } from './model/mesh_map.js?v=143';
-import { meshPolygonIntoModel } from './model/mesh_free.js?v=143';
-import { smoothAreasInModel } from './model/mesh_quality.js?v=143';
+import { Model }           from './model/model.js?v=144';
+import { Serializer }      from './model/serializer.js?v=144';
+import { Viewport }        from './ui/viewport.js?v=144';
+import { PropertiesPanel } from './ui/properties.js?v=144';
+import { MenuBar }         from './ui/menu.js?v=144';
+import { UndoStack }       from './utils/undo.js?v=144';
+import { StaticSolver, ensureDefaultLC }   from './solver/static_solver.js?v=144';
+import { Results }                         from './solver/postprocess.js?v=144';
+import { ModalSolver }                     from './solver/modal_solver.js?v=144';
+import { buildNodeIndex, assembleK, assembleF, getNodeDOFs } from './solver/assembler.js?v=144';
+import { assembleSparseGlobal, extractFreeCSR } from './solver/sparse.js?v=144';
+import { solveNonlinear, solveNonlinearDC } from './solver/nl_lite.js?v=144';
+import { assembleKg } from './solver/geometric.js?v=144';
+import { makeFactor } from './solver/linsolve.js?v=144';
+import { formFind } from './solver/formfind.js?v=144';
+import { ModalResults }                    from './solver/modal_results.js?v=144';
+import { modalTimeHistory }                from './solver/timehistory.js?v=144';
+import { parseAccelerogram, accStats, scaleToPGA, DEMO_PRESETS, G as GACC } from './solver/accelerograms.js?v=144';
+import { SpectrumSolver }                  from './solver/spectrum_solver.js?v=144';
+import { StagedSolver }                    from './solver/staged.js?v=144';
+import { tendonEquivalentLoads, applyTendon, tendonEcc } from './solver/tendon.js?v=144';
+import { buildLane, influenceLine, movingLoadEnvelope, responseReaction, responseSection } from './solver/moving_load.js?v=144';
+import { newmarkNonlinear, shearBuilding, rayleighDamping } from './solver/nl_timehistory.js?v=144';
+import { checkDrift } from './design/serviceability.js?v=144';
+import { autoDetectDiaphragms, computeFloorCR, applyDiaphragmConstraints } from './solver/diaphragm.js?v=144';
+import { splitElement, splitByLength, discretizeAll, joinElements, intersectarElementos } from './model/discretize.js?v=144';
+import { localAxes, stiffnessMatrix, massMatrix, transformMatrix, globalStiffness, applyReleases } from './solver/timoshenko.js?v=144';
+import { blockCells, cornerGridIndices } from './model/mesher.js?v=144';
+import { coonsGridFromCorners } from './model/mesh_map.js?v=144';
+import { meshPolygonIntoModel } from './model/mesh_free.js?v=144';
+import { smoothAreasInModel } from './model/mesh_quality.js?v=144';
 
 class App {
   constructor() {
@@ -1758,7 +1759,7 @@ class App {
   _staticWorkerSolve(K, nDOF, freeDOF, Flist, dense = false) {
     return new Promise((resolve, reject) => {
       let worker;
-      try { worker = new Worker(new URL('./solver/static_worker.js?v=143', import.meta.url), { type: 'module' }); }
+      try { worker = new Worker(new URL('./solver/static_worker.js?v=144', import.meta.url), { type: 'module' }); }
       catch (e) { reject(e); return; }
       this._staticWorker = worker;
       const cancelar = () => { try { worker.terminate(); } catch (e) {} this._staticWorker = null; this._hideProgress(); reject(new Error('cancelado')); };
@@ -1787,7 +1788,7 @@ class App {
   _staticWorkerSolveSparse(csr, cf, nDOF, freeDOF, Flist) {
     return new Promise((resolve, reject) => {
       let worker;
-      try { worker = new Worker(new URL('./solver/static_worker.js?v=143', import.meta.url), { type: 'module' }); }
+      try { worker = new Worker(new URL('./solver/static_worker.js?v=144', import.meta.url), { type: 'module' }); }
       catch (e) { reject(e); return; }
       this._staticWorker = worker;
       const cancelar = () => { try { worker.terminate(); } catch (e) {} this._staticWorker = null; this._hideProgress(); reject(new Error('cancelado')); };
@@ -2107,7 +2108,7 @@ class App {
       // ── Run Stodola in a Web Worker (non-blocking) ───────────────────────────
       const denseModal = !!this._config?.analisis?.matrizDensa;
       const modes = await new Promise((resolve, reject) => {
-        const worker = new Worker(new URL('./solver/modal_worker.js?v=143', import.meta.url), { type: 'module' });
+        const worker = new Worker(new URL('./solver/modal_worker.js?v=144', import.meta.url), { type: 'module' });
         worker.postMessage({ Kff_flat, Mff_flat, nF, nModes, dense: denseModal, method: modalMethod },
           [Kff_flat.buffer, Mff_flat.buffer]); // transfer — zero copy
         worker.onmessage = (ev) => {
@@ -2509,7 +2510,7 @@ class App {
       // Modal por iteración de subespacio en worker (no bloquea la UI).
       const dense = !!this._config?.analisis?.matrizDensa;
       const rawModes = await new Promise((resolve, reject) => {
-        const w = new Worker(new URL('./solver/modal_worker.js?v=143', import.meta.url), { type: 'module' });
+        const w = new Worker(new URL('./solver/modal_worker.js?v=144', import.meta.url), { type: 'module' });
         w.postMessage({ Kff_flat: Kff, Mff_flat: Mff, nF, nModes, dense, method: 'subspace' }, [Kff.buffer, Mff.buffer]);
         w.onmessage = ev => { w.terminate(); ev.data.error ? reject(new Error(ev.data.error)) : resolve(ev.data.modes); };
         w.onerror = ev => { w.terminate(); reject(new Error(ev.message || 'Error en worker modal')); };
@@ -2578,7 +2579,7 @@ class App {
   _thSolveInWorker(modes, ag, dt, zeta) {
     return new Promise((resolve, reject) => {
       let w;
-      try { w = new Worker(new URL('./solver/timehistory_worker.js?v=143', import.meta.url), { type: 'module' }); }
+      try { w = new Worker(new URL('./solver/timehistory_worker.js?v=144', import.meta.url), { type: 'module' }); }
       catch (e) {
         try { const r = modalTimeHistory({ modes: modes.map(m => ({ ...m, phi: new Float64Array(0) })), ag, dt, zeta }); resolve({ q: r.q, peakModal: r.peakModal }); }
         catch (err) { reject(err); }
@@ -3296,11 +3297,20 @@ class App {
       const driftPeak = new Array(n).fill(0);
       for (const u of res.U) for (let i = 0; i < n; i++) { const d = Math.abs(u[i] - (i > 0 ? u[i - 1] : 0)); if (d > driftPeak[i]) driftPeak[i] = d; }
       const yielded = st.map((s, i) => driftPeak[i] > dy[i] * 1.0001);
+      // Deriva de entrepiso Δ/h vs límite normativo (NCh433 por defecto, #68).
+      const driftCode = this._lastNLTH?.driftCode || 'NCh433';
+      let worstDrift = { ratio: 0, story: 0, dr: 0 };
+      for (let i = 0; i < n; i++) {
+        const h = st[i].z - (i > 0 ? st[i - 1].z : 0);
+        const c = checkDrift({ drift: driftPeak[i], h, code: driftCode });
+        if (c.ratio > worstDrift.ratio) worstDrift = { ratio: c.ratio, story: i, dr: c.demanda, limite: c.limite };
+      }
       const stats = accStats(ag, dt);
       const T1 = 2 * Math.PI / w1;
 
       this._nlthResult = { stories: st, dir, zeta, alpha, ag, dt, agName, nSteps: res.U.length, U: res.U,
-        monDof: n - 1, peak: res.peak, peakStep: res.peakStep, dy, driftPeak, yielded, stats, T1, w1, springs: sb.springs };
+        monDof: n - 1, peak: res.peak, peakStep: res.peakStep, dy, driftPeak, yielded, stats, T1, w1, springs: sb.springs,
+        driftCode, worstDrift };
       const nY = yielded.filter(Boolean).length;
       this.toast(`Time-history NL OK · ${n} pisos · ${dir} · T₁=${T1.toFixed(3)}s · u_techo máx ${res.peak.toExponential(2)} m · ${nY} piso(s) en fluencia`, 'ok');
       this._nlthOpenOverlay();
@@ -3567,7 +3577,8 @@ class App {
     if (ro) ro.innerHTML = `t = <b>${t.toFixed(3)} s</b> / ${((R.nSteps - 1) * R.dt).toFixed(2)} s · a_g = ${ag.toFixed(3)} m/s²<br>`
       + `u(${R.stories[R.monDof].label}) = ${R._hist[step].toExponential(3)} m · máx = <b>${(R._histPeak ?? 0).toExponential(3)} m</b><br>`
       + `${R.stories.length} pisos · T₁=${R.T1.toFixed(3)} s · ζ=${(R.zeta * 100).toFixed(1)}% · α=${R.alpha} · dir ${R.dir} · PGA=${R.stats.pga.toFixed(2)} m/s²<br>`
-      + `pisos en fluencia: <b>${nY}/${R.stories.length}</b> · deriva residual monitor ${uResid.toExponential(2)} m · ${R.agName}`;
+      + `pisos en fluencia: <b>${nY}/${R.stories.length}</b> · deriva residual monitor ${uResid.toExponential(2)} m<br>`
+      + `deriva máx Δ/h = <b>${(R.worstDrift?.dr ?? 0).toExponential(2)}</b> (piso ${(R.worstDrift?.story ?? 0) + 1}) vs límite ${R.driftCode} ${(R.worstDrift?.limite ?? 0)} → <b style="color:${(R.worstDrift?.ratio ?? 0) > 1 ? '#ef4444' : '#22c55e'}">${(R.worstDrift?.ratio ?? 0).toFixed(2)}</b> · ${R.agName}`;
   }
 
   _nlthTogglePlay() {
@@ -3609,7 +3620,7 @@ class App {
     return new Promise((resolve, reject) => {
       let worker;
       try {
-        worker = new Worker(new URL('./solver/nl_worker.js?v=143', import.meta.url), { type: 'module' });
+        worker = new Worker(new URL('./solver/nl_worker.js?v=144', import.meta.url), { type: 'module' });
       } catch (e) {
         try { resolve(kind === 'dc' ? solveNonlinearDC(opts) : solveNonlinear(opts)); }
         catch (err) { reject(err); }
@@ -3866,7 +3877,7 @@ class App {
 
       // Iteración de subespacio en el Worker (no bloquea la UI)
       const rawModes = await new Promise((resolve, reject) => {
-        const worker = new Worker(new URL('./solver/buckling_worker.js?v=143', import.meta.url), { type: 'module' });
+        const worker = new Worker(new URL('./solver/buckling_worker.js?v=144', import.meta.url), { type: 'module' });
         worker.postMessage({ Kff_flat, Kgff_flat, nF, nModes, dense },
           [Kff_flat.buffer, Kgff_flat.buffer]);   // transfer — zero copy
         worker.onmessage = (ev) => { worker.terminate(); ev.data.error ? reject(new Error(ev.data.error)) : resolve(ev.data.modes); };
@@ -5782,7 +5793,7 @@ class App {
               selectedNodes: sel.filter(s => s.type === 'node').map(s => s.id) };
     }
     this.snapshot();
-    const { aplicarOperaciones } = await import('./model/model_ops.js?v=143');
+    const { aplicarOperaciones } = await import('./model/model_ops.js?v=144');
     const res = aplicarOperaciones(this.model, ops, ctx);
     // los resultados previos dejan de ser válidos tras modificar la geometría/cargas
     this.viewport.clearResults?.();
@@ -5830,7 +5841,7 @@ class App {
     this._showProgress('Generando el modelo…', 'Aplicando reglas y cargas normativas');
     try {
       const libs = await this._cargarBibliotecasAsistente();
-      const { generarModelo } = await import('../asistente/generador.js?v=143');
+      const { generarModelo } = await import('../asistente/generador.js?v=144');
       const modelo = generarModelo(ficha, libs);
 
       if (modo === 'sobreponer') {
@@ -6891,7 +6902,7 @@ class App {
     const deflex = this._calcularDeflexionesVigas(diseno?.params);
     const drift  = this._calcularDrift();
     try {
-      const { Docx } = await import('./io/docx.js?v=143');
+      const { Docx } = await import('./io/docx.js?v=144');
       const blob = this._memoriaDocx(Docx, imgs, diseno, deflex, drift).blob();
       this._downloadBlob(blob, 'memoria_calculo.docx');
       this.toast('Memoria Word (.docx) descargada', 'ok');
@@ -7062,7 +7073,7 @@ class App {
   // Verificación de diseño (flexión/corte/axial) por elemento, usando los
   // resultados actuales y los parámetros editables de asistente/diseno_params.json.
   async _calcularDiseno() {
-    const ver = '?v=143';
+    const ver = '?v=144';
     let params = null;
     try { params = await fetch('asistente/diseno_params.json' + ver).then(r => r.json()); }
     catch (e) { console.error('No se pudo cargar diseno_params.json:', e); return null; }
