@@ -17,23 +17,24 @@
 // verificarElemento se mantiene utilizable como antes.
 // ──────────────────────────────────────────────────────────────────────────────
 
-import { resolveMaterial, clasificarMaterial } from './material_props.js?v=141';
-import { resolveSectionProps } from './section_props.js?v=141';
-import { registerDesignCode, getDesignCode, defaultCodeFor, setDefaultCode, listDesignCodes } from './registry.js?v=141';
-import { aisc360_lrfd, aisc360_asd } from './codes/aisc360.js?v=141';
-import { eurocode3 } from './codes/eurocode3.js?v=141';
-import { aci318, eurocode2 } from './codes/concrete.js?v=141';
-import { timber_nch1198 } from './codes/timber.js?v=141';
+import { resolveMaterial, clasificarMaterial } from './material_props.js?v=142';
+import { resolveSectionProps } from './section_props.js?v=142';
+import { registerDesignCode, getDesignCode, defaultCodeFor, setDefaultCode, listDesignCodes } from './registry.js?v=142';
+import { aisc360_lrfd, aisc360_asd } from './codes/aisc360.js?v=142';
+import { eurocode3 } from './codes/eurocode3.js?v=142';
+import { aci318, eurocode2 } from './codes/concrete.js?v=142';
+import { timber_nch1198 } from './codes/timber.js?v=142';
+import { eurocode9 } from './codes/eurocode9.js?v=142';
 
 // ── Registro de códigos por defecto (idempotente) ───────────────────────────────
 let _registered = false;
 export function registerBuiltinCodes() {
   if (_registered) return;
-  [aisc360_lrfd, aisc360_asd, eurocode3, aci318, eurocode2, timber_nch1198].forEach(registerDesignCode);
+  [aisc360_lrfd, aisc360_asd, eurocode3, aci318, eurocode2, timber_nch1198, eurocode9].forEach(registerDesignCode);
   setDefaultCode('steel', 'AISC360-16:LRFD');
   setDefaultCode('concrete', 'ACI318-19');
   setDefaultCode('timber', 'NCh1198');
-  setDefaultCode('aluminum', 'AISC360-16:LRFD');   // sin código de aluminio propio aún
+  setDefaultCode('aluminum', 'EN1999-1-1');        // Eurocódigo 9 (aluminio)
   _registered = true;
 }
 registerBuiltinCodes();
