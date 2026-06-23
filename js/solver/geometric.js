@@ -10,7 +10,7 @@
 // [u1,v1,w1,rx1,ry1,rz1, u2,v2,w2,rx2,ry2,rz2], plano XZ con dw/dx = −θy).
 // N en TRACCIÓN positiva (compresión N<0 → reduce la rigidez → pandeo).
 // ──────────────────────────────────────────────────────────────────────────────
-import { localAxes, transformMatrix, globalStiffness } from './timoshenko.js?v=127';
+import { localAxes, transformMatrix, globalStiffness } from './timoshenko.js?v=128';
 
 // 12×12 geométrica local a partir del axial N (tracción +) y la longitud L.
 // Forma consistente (Przemieniecti) para flexión en ambos planos; los términos

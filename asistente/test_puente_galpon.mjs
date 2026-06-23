@@ -54,6 +54,17 @@ ok(eqg.finite, `solución finita: ΣRz=${eqg.Rz.toFixed(1)} kN`);
 ok(Math.abs(eqg.Rz - eqg.W) / Math.abs(eqg.W) < 1e-3, `ΣRz=Σaplicada (${eqg.Rz.toFixed(1)} vs ${eqg.W.toFixed(1)} kN)`);
 ok(Math.abs(eqg.W - 1.0 * 20 * 30) / (1.0 * 20 * 30) < 1e-3, `CV techo = 1·luz·largo = ${20 * 30} kN (es ${eqg.W.toFixed(0)})`);
 
+// ── PUENTES en ARCO / CABLE (lecciones de los ejemplos: deben RESOLVER estables) ──
+console.log('── PUENTE arco/cable (arco, bowstring, network, atirantado, colgante) ──');
+for (const tipo of ['arco', 'arco_atirantado', 'network', 'atirantado', 'colgante']) {
+  const mj = generarModelo({ modo: '2D', tipologia: 'puente', secciones: { material: 'acero' }, puente: { tipo, largo_m: 80, ancho_m: 8, flecha_m: 14 } }, { reglas, materiales, perfiles });
+  const eq = equilibrio(mj, 'CV');
+  ok(eq.finite && Math.abs(eq.Rz) > 1, `${tipo}: solución FINITA y estable (${mj.nodes.length}n/${mj.elements.length}e, ΣRz=${eq.Rz.toFixed(1)} kN)`);
+  ok(Math.abs(eq.Rz - eq.W) / Math.abs(eq.W) < 1e-2, `${tipo}: equilibrio ΣRz=Σaplicada (${eq.Rz.toFixed(0)} vs ${eq.W.toFixed(0)} kN)`);
+  const usados = new Set(); for (const e of mj.elements) { usados.add(e.n1); usados.add(e.n2); }
+  ok(usados.size === mj.nodes.length, `${tipo}: sin nodos huérfanos (${usados.size}/${mj.nodes.length})`);
+}
+
 fs.rmSync(tmp, { recursive: true, force: true });
 console.log(fail === 0 ? '\n✅ PUENTE+GALPÓN: OK' : `\n❌ ${fail} FALLARON`);
 process.exit(fail === 0 ? 0 : 1);

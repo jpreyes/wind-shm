@@ -45,6 +45,26 @@
     {
       "desc": "estructura libre a medida dando coordenadas de barras, marco simple por primitivas",
       "ficha": { "modo": "2D", "tipologia": "primitivas", "material_defecto": "S275", "elementos": [{ "tipo": "columna", "desde": [0, 0, 0], "hasta": [0, 0, 3], "seccion": "HEB200" }, { "tipo": "columna", "desde": [5, 0, 0], "hasta": [5, 0, 3], "seccion": "HEB200" }, { "tipo": "viga", "desde": [0, 0, 3], "hasta": [5, 0, 3], "seccion": "IPE300", "carga_kN_m": 20 }], "apoyos": [{ "z": 0, "tipo": "empotrado" }] }
+    },
+    {
+      "desc": "puente en arco atirantado bowstring, arco sobre el tablero, pendolas verticales, apoyos solo verticales",
+      "ficha": { "modo": "2D", "tipologia": "puente", "secciones": { "material": "acero" }, "puente": { "tipo": "arco_atirantado", "largo_m": 80, "ancho_m": 10, "flecha_m": 16, "n_pendolas": 10 } }
+    },
+    {
+      "desc": "puente arco network ferroviario, pendolas inclinadas cruzadas, tipo Brunn Schanack o Barqueta",
+      "ficha": { "modo": "2D", "tipologia": "puente", "secciones": { "material": "acero" }, "puente": { "tipo": "network", "largo_m": 100, "ancho_m": 10, "flecha_m": 17 } }
+    },
+    {
+      "desc": "puente atirantado cable stayed con pilon central y tirantes en abanico, tipo Treng Treng o Severin",
+      "ficha": { "modo": "2D", "tipologia": "puente", "secciones": { "material": "acero" }, "puente": { "tipo": "atirantado", "largo_m": 140, "ancho_m": 12, "altura_pilon_m": 35 } }
+    },
+    {
+      "desc": "puente colgante de suspension con cable parabolico, torres y pendolas, tipo Golden Gate",
+      "ficha": { "modo": "2D", "tipologia": "puente", "secciones": { "material": "acero" }, "puente": { "tipo": "colgante", "largo_m": 200, "ancho_m": 12, "flecha_m": 30, "altura_torre_m": 40 } }
+    },
+    {
+      "desc": "puente en arco de tablero superior con montantes, tipo Salginatobel, hormigon",
+      "ficha": { "modo": "2D", "tipologia": "puente", "secciones": { "material": "H30" }, "puente": { "tipo": "arco", "largo_m": 90, "ancho_m": 6, "flecha_m": 13 } }
     }
   ]
 }

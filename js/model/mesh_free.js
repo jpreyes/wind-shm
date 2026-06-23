@@ -15,8 +15,8 @@
 // Limitación de esta fase: polígono SIMPLE (sin agujeros). Las regiones con huecos se
 // arman por multi-parche (mesh_map) o quedan para la fase de paving.
 // ──────────────────────────────────────────────────────────────────────────────
-import { quadMinScaledJacobian } from './mesh_map.js?v=127';
-import { triQuality, boundaryNodes, laplacianSmooth } from './mesh_quality.js?v=127';
+import { quadMinScaledJacobian } from './mesh_map.js?v=128';
+import { triQuality, boundaryNodes, laplacianSmooth } from './mesh_quality.js?v=128';
 
 const EPS = 1e-9;
 const signedArea2 = (pts) => { let s = 0; for (let i = 0; i < pts.length; i++) { const a = pts[i], b = pts[(i + 1) % pts.length]; s += a[0] * b[1] - b[0] * a[1]; } return s / 2; };

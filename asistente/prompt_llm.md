@@ -29,6 +29,21 @@ La ficha debe cumplir este esquema (campos):
   cierre_viento, proteccion_nieve, nieve, viento, sismo }`
 - `sismo`: `{ zona (1|2|3), suelo ("A".."E"), categoria ("I".."IV"), R }`
 
+Tipologías de PUENTE (`tipologia:"puente"` + `puente:{...}`):
+- Viga/celosía sobre pilas: `tipo:"tablero"` o `"viga_central"` (ver esquema).
+- **Arco y cable** (lecciones de los ejemplos): `tipo` = `"arco"` (arco de tablero
+  superior con montantes, tipo Salginatobel), `"arco_atirantado"` (bowstring: arco
+  sobre el tablero-tirante, péndolas verticales, apoyos sólo verticales), `"network"`
+  (bowstring con péndolas inclinadas **cruzadas**, tipo Brunn-Schanack/Barqueta),
+  `"atirantado"` (pilón central + tirantes en abanico, cable-stayed tipo Treng
+  Treng/Severin), `"colgante"` (cable parabólico colgante + torres + péndolas, tipo
+  Golden Gate). Campos: `flecha_m` (flecha del arco o sagita del cable), `n_pendolas`,
+  `altura_pilon_m`/`altura_torre_m`, `escuadria_arco`/`escuadria_pilon`, `ancho_m`.
+  El generador aplica las reglas de estabilidad (apoyos articulado+rodillo, cable
+  colgante con mínimo al centro, péndolas cruzadas en network, rigidez de cable para
+  análisis lineal estable). Ej.: *"puente arco atirantado de 80 m, flecha 16 m"* →
+  `{"tipologia":"puente","puente":{"tipo":"arco_atirantado","largo_m":80,"flecha_m":16}}`.
+
 Reglas:
 - Si un dato no se menciona, **omítelo** (el generador aplica defaults). No inventes
   valores de ingeniería.

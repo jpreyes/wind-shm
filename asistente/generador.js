@@ -1191,12 +1191,134 @@ export function generarCerchaEspacial(ficha, libs) {
 }
 
 // ──────────────────────────────────────────────────────────────────────────────
+// Tipología PUENTE — formas de ARCO y CABLE (lecciones de los ejemplos/verificaciones)
+//   tipo: 'arco' (arco de tablero superior con montantes, tipo Salginatobel) ·
+//         'arco_atirantado'/'bowstring' (tirante = tablero, péndolas verticales) ·
+//         'network' (arco atirantado con péndolas inclinadas CRUZADAS) ·
+//         'atirantado'/'cable_stayed' (pilón + tirantes en abanico, asimétrico) ·
+//         'colgante'/'suspension' (cable parabólico COLGANTE + péndolas + torres).
+//   Reglas aprendidas (para que el modelo RESUELVA bien):
+//     · Apoyos: un extremo articulado (fija X) y el otro rodillo → sin mecanismo
+//       lateral del tablero; arranques de arco articulados; base de pilón/torre fija.
+//     · Cable colgante = parábola con MÍNIMO al centro (cuelga), no joroba.
+//     · Network = péndolas inclinadas que se cruzan (desfase ±off).
+//     · Las péndolas/cables se modelan con algo de rigidez a flexión (I surrogate)
+//       para que el ANÁLISIS LINEAL sea estable; el cable real toma su rigidez de la
+//       tracción → para precisión, análisis geométrico/no lineal (Kg/NL-lite). Se avisa.
+//     · Sin nodos huérfanos (getNode deduplica por coordenada; los arranques del arco
+//       reutilizan los nodos del tablero).
+// ──────────────────────────────────────────────────────────────────────────────
+const PUENTE_ARCO_TIPOS = /arco|atirant|bowstring|network|colg|cable|suspen/i;
+export function generarPuenteArco(ficha, libs) {
+  const materiales = libs.materiales || [], perfiles = libs.perfiles || [];
+  const avisos = []; const aviso = (t, m) => avisos.push({ tipo: t, msg: m });
+  const sec = ficha.secciones || {}, p = ficha.puente || {};
+  const matByName = new Map(materiales.map((m) => [String(m.nombre).trim().toLowerCase(), m]));
+  const pickMat = (n) => { const r = resolverMaterialFlexible(n, materiales, aviso); if (r) return r; const d = matByName.get('s275'); return d ? filaAMaterial(d) : { name: 'S275', E: 2.1e8, G: 8.08e7, nu: 0.3, rho: 7.85 }; };
+  const mat = pickMat(sec.material); mat.id = 1;
+
+  const tipo = String(p.tipo || '').toLowerCase();
+  const esColg = /colg|suspen/.test(tipo), esStay = /atirant|cable.?stay/.test(tipo) && !/arco/.test(tipo);
+  const esNet = /network/.test(tipo), esBow = /bowstring|arco.?atirant/.test(tipo) || esNet;
+  const esArco = !esColg && !esStay && !esBow;   // arco de tablero superior por defecto
+
+  const L = p.largo_m > 0 ? p.largo_m : 80; if (!(p.largo_m > 0)) aviso('reemplazo', 'Largo no indicado: 80 m.');
+  const W = p.ancho_m > 0 ? p.ancho_m : 8;
+  const f = p.flecha_m > 0 ? p.flecha_m : (esColg ? +(L * 0.10).toFixed(2) : +(L / 6).toFixed(2));   // flecha/sagita
+  const Hp = p.altura_pilon_m || p.altura_torre_m || (esStay ? +(L * 0.25).toFixed(2) : (esColg ? +(L * 0.12).toFixed(2) : f));
+  const nseg = Math.max(6, Math.round(p.n_pendolas || p.n_paneles_por_vano || Math.round(L / 8)));
+
+  // secciones
+  const sArco = pickSeccionGen(p.escuadria_arco ?? p.escuadria_pilon ?? sec.arco, perfiles, { b_cm: 50, h_cm: 90 }, 'Arco/pilón/torre', aviso); sArco.id = 2;
+  const sDeck = pickSeccionGen(p.escuadria_viga ?? sec.vigas, perfiles, { b_cm: 50, h_cm: 70 }, 'Tablero/tirante', aviso); sDeck.id = 3;
+  // cable/péndola con I surrogate (estabilidad del análisis lineal)
+  const sCable = { id: 4, name: 'Cable/péndola', A: 0.02, Iy: 0.02, Iz: 0.02, J: 1e-3, Avy: 0.01, Avz: 0.01, kappay: 0.9, kappaz: 0.9 };
+  aviso('nota', 'Cables/péndolas modelados con rigidez a flexión para un análisis LINEAL estable; para precisión use el análisis geométrico/no lineal (pandeo/Kg o NL-lite).');
+
+  const nodes = [], elements = []; let nid = 0, eid = 0; const nodeAt = new Map(), elemAt = new Set();
+  const rk = (v) => Math.round(v * 1e5) / 1e5;
+  const getNode = (x, z, restr) => { const k = `${rk(x)}|${rk(z)}`; let id = nodeAt.get(k); if (id == null) { id = ++nid; nodeAt.set(k, id); nodes.push({ id, x: rk(x), y: 0, z: rk(z), restraints: restr || { ux: 0, uy: 0, uz: 0, rx: 0, ry: 0, rz: 0 }, nodeMass: { mx: 0, my: 0, mz: 0 }, springs: { kux: 0, kuy: 0, kuz: 0, krx: 0, kry: 0, krz: 0 } }); } else if (restr) Object.assign(nodes[id - 1].restraints, restr); return id; };
+  const addEl = (n1, n2, s) => { if (n1 == null || n2 == null || n1 === n2) return null; const ek = `${Math.min(n1, n2)}-${Math.max(n1, n2)}`; if (elemAt.has(ek)) return null; elemAt.add(ek); const id = ++eid; elements.push({ id, n1, n2, matId: 1, secId: s, releases: Array(12).fill(0) }); return id; };
+  const PIN = { ux: 1, uz: 1 }, ROLL = { uz: 1 }, FIX = { ux: 1, uy: 1, uz: 1, rx: 1, ry: 1, rz: 1 };
+  const dx = L / nseg;
+  const X = []; for (let i = 0; i <= nseg; i++) X.push(+(i * dx).toFixed(4));
+  const deckEls = [], topEls = [];
+
+  // Tablero (z=0), articulado en el extremo izq, rodillo en el der → sin mecanismo
+  const deck = X.map((x, i) => getNode(x, 0, i === 0 ? PIN : i === nseg ? ROLL : {}));
+  for (let i = 0; i < nseg; i++) deckEls.push(addEl(deck[i], deck[i + 1], sDeck.id));
+
+  if (esArco) {
+    // Arco de tablero superior (montantes del arco al tablero). Arranques articulados.
+    const zA = (x) => f * (1 - ((x - L / 2) / (L / 2)) ** 2);   // parábola
+    // arco POR DEBAJO del tablero (tablero recto arriba, arco bajo él): z negativo;
+    // arranques en los extremos del tablero (reutiliza esos nodos → sin huérfanos)
+    const archN = X.map((x, i) => (i === 0 || i === nseg) ? deck[i] : getNode(x, -zA(x)));
+    for (let i = 0; i < nseg; i++) topEls.push(addEl(archN[i], archN[i + 1], sArco.id));
+    for (let i = 1; i < nseg; i++) addEl(deck[i], archN[i], sCable.id);   // montantes
+    aviso('nota', 'Arco de tablero superior: el arco trabaja a compresión y los montantes transfieren el tablero al arco.');
+  } else if (esBow) {
+    // Bowstring / network: arco SOBRE el tablero (tirante), péndolas verticales o cruzadas
+    const zA = (x) => f * (1 - ((x - L / 2) / (L / 2)) ** 2);
+    const arch = X.map((x, i) => (i === 0 || i === nseg) ? deck[i] : getNode(x, zA(x)));
+    for (let i = 0; i < nseg; i++) addEl(arch[i], arch[i + 1], sArco.id);
+    if (esNet) { const off = Math.max(2, Math.round(nseg / 6)); for (let i = 1; i < nseg; i++) for (const t of [i - off, i + off]) if (t >= 1 && t <= nseg - 1) addEl(arch[i], deck[t], sCable.id); }
+    else for (let i = 1; i < nseg; i++) addEl(arch[i], deck[i], sCable.id);   // péndolas verticales
+    topEls.push(...deckEls);
+    aviso('nota', `${esNet ? 'Network: péndolas inclinadas CRUZADAS' : 'Bowstring: péndolas verticales'}; el tablero actúa de tirante (toma el empuje del arco) → apoyos sólo verticales.`);
+  } else if (esStay) {
+    // Atirantado: pilón central, tirantes en abanico a ambos lados
+    const xc = +(L / 2).toFixed(4); const ip = Math.round(nseg / 2);
+    const base = deck[ip]; nodes[base - 1].restraints = { ...FIX };   // base del pilón fija (pila)
+    const top = getNode(xc, Hp);
+    addEl(base, top, sArco.id);
+    for (let i = 0; i <= nseg; i++) if (i !== ip && Math.abs(i - ip) > 1) addEl(top, deck[i], sCable.id);
+    topEls.push(...deckEls);
+    aviso('nota', 'Atirantado: el pilón ancla los tirantes en su cabeza; trabajan a tracción colgando el tablero.');
+  } else if (esColg) {
+    // Colgante: torres a L/5 y 4L/5, cable COLGANTE (parábola con mínimo al centro), péndolas
+    const xT1 = +(L * 0.2).toFixed(4), xT2 = +(L * 0.8).toFixed(4), Ht = Hp;
+    const t1b = getNode(xT1, 0), t1t = getNode(xT1, Ht), t2b = getNode(xT2, 0), t2t = getNode(xT2, Ht);
+    nodes[t1b - 1].restraints = { ...FIX }; nodes[t2b - 1].restraints = { ...FIX };
+    addEl(t1b, t1t, sArco.id); addEl(t2b, t2t, sArco.id);
+    const a1 = getNode(0, 0, FIX), a2 = getNode(L, 0, FIX);   // anclajes
+    const zC = (x) => Ht - f * (1 - ((x - (xT1 + xT2) / 2) / ((xT2 - xT1) / 2)) ** 2);   // COLGANTE (mín al centro)
+    const cab = [a1, t1t]; for (const x of X) if (x > xT1 + 1e-6 && x < xT2 - 1e-6) cab.push(getNode(x, zC(x))); cab.push(t2t, a2);
+    for (let i = 0; i < cab.length - 1; i++) addEl(cab[i], cab[i + 1], sCable.id);
+    for (const x of X) if (x > xT1 + 1e-6 && x < xT2 - 1e-6) { const c = getNode(x, zC(x)), d = getNode(x, 0); addEl(c, d, sCable.id); }
+    topEls.push(...deckEls);
+    aviso('nota', 'Colgante: el cable principal cuelga (parábola con mínimo al centro) y se ancla en los extremos; las péndolas cuelgan el tablero.');
+  }
+
+  // ── Cargas: CM (peso propio) + CV (sobrecarga sobre el tablero) ──
+  const cg = ficha.cargas || {};
+  let qCM = cg.muerta_adicional_kN_m2; if (qCM == null) { qCM = 2.0; aviso('estimado', 'Peso de tablero no indicado: 2.0 kN/m².'); }
+  let qCV = cg.sobrecarga_uso_kN_m2; if (qCV == null) { qCV = 4.0; aviso('estimado', 'Sobrecarga de puente no indicada: 4.0 kN/m².'); }
+  const lcCM = { id: 1, name: 'CM', loads: [], selfWeight: true, type: 'static', specDir: null };
+  const lcCV = { id: 2, name: 'CV', loads: [], selfWeight: false, type: 'static', specDir: null };
+  for (const e of (topEls.length ? topEls : deckEls)) { if (e == null) continue; lcCM.loads.push({ type: 'dist', elemId: e, dir: 'gravity', w: +(qCM * W).toFixed(6) }); lcCV.loads.push({ type: 'dist', elemId: e, dir: 'gravity', w: +(qCV * W).toFixed(6) }); }
+
+  return {
+    version: '1.0', units: 'kN-m', mode: '2D',
+    nodes, elements, materials: [mat], sections: [sArco, sDeck, sCable], diaphragms: [],
+    loadCases: [lcCM, lcCV],
+    combinations: [{ id: 1, name: '1.4CM', factors: [{ lcId: 1, factor: 1.4 }] }, { id: 2, name: '1.2CM+1.6CV', factors: [{ lcId: 1, factor: 1.2 }, { lcId: 2, factor: 1.6 }] }],
+    grids: { x: X, y: [0], z: [0, f] },
+    _counters: { nodes: nodes.length, elements: elements.length, materials: 1, sections: 3, diaphragms: 0, loadCases: 2, combinations: 2 },
+    _generado: { por: 'asistente/generador.js (puente arco/cable)', reglas: (libs.reglas && libs.reglas._meta) ? libs.reglas._meta.version : undefined, resumen: `puente ${tipo || 'arco'} ${L}×${W} m, flecha ${f} m, ${nseg} segmentos: ${nodes.length} nodos, ${elements.length} barras` },
+    _avisos: avisos,
+  };
+}
+
+// ──────────────────────────────────────────────────────────────────────────────
 // Tipología PUENTE (tablero sobre pilas; viga continua o vigas de celosía)
 //   Tablero de largo L × ancho W a la altura H sobre pilas (pórticos) cada luz_pila.
 //   tipo_viga='viga' → vigas longitudinales continuas; 'cercha' → vigas de celosía
 //   (Warren/Pratt/Howe) de canto bajo el tablero. Determinista y resiliente.
 // ──────────────────────────────────────────────────────────────────────────────
 export function generarPuente(ficha, libs) {
+  // Formas de arco/cable (arco, bowstring, network, atirantado, colgante) → generador propio
+  if (PUENTE_ARCO_TIPOS.test(String((ficha.puente || {}).tipo || ''))) return generarPuenteArco(ficha, libs);
   const materiales = libs.materiales || [], perfiles = libs.perfiles || [];
   const avisos = []; const aviso = (t, m) => avisos.push({ tipo: t, msg: m });
   const matByName = new Map(materiales.map((m) => [String(m.nombre).trim().toLowerCase(), m]));
