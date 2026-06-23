@@ -73,8 +73,8 @@ export class MenuBar {
       case 'join-elems':  a.joinSelectedElements();   break;
       case 'inter-elems': a.unirInterseccion();       break;
       case 'crear-area':  a.crearAreaSeleccion();     break;
-      case 'mallar-panel': a.mallarPanelSeleccion();  break;
-      case 'mallar-region': a.mallarRegionLibre();    break;
+      case 'mallar-panel':  a.viewport.startMeshPick('panel'); break;   // #78: modo → clic en nodos
+      case 'mallar-region': a.viewport.startMeshPick('free');  break;
       case 'suavizar-malla': a.suavizarMalla();       break;
       case 'crear-link':   a.crearLinkSeleccion();    break;
       case 'grids':       a.defineGridsDialog();      break;

@@ -29,8 +29,8 @@
       window.dispatchEvent(new Event('pwa-installed'));
     });
   </script>
-  <link rel="stylesheet" href="style.css?v=154">
-  <link rel="stylesheet" href="ui-v2.css?v=154">
+  <link rel="stylesheet" href="style.css?v=155">
+  <link rel="stylesheet" href="ui-v2.css?v=155">
   <script type="importmap">
   {
     "imports": {
@@ -91,8 +91,8 @@
           <li data-action="join-elems">Unir Elementos Seleccionados</li>
           <li data-action="inter-elems">Unir en Intersección (crear nodo)…</li>
           <li data-action="crear-area">Crear elemento de área (membrana 3/4 nodos)…</li>
-          <li data-action="mallar-panel">Mallar panel (4 esquinas → malla)…</li>
-          <li data-action="mallar-region">Mallar región libre (N nodos → quad/tri)…</li>
+          <li data-action="mallar-panel">Mallar panel (4 esquinas) — clic en nodos…</li>
+          <li data-action="mallar-region">Mallar región libre — clic en nodos…</li>
           <li data-action="suavizar-malla">Suavizar malla (calidad)…</li>
           <li data-action="crear-link">Crear link / coupling (2 nodos)…</li>
           <li class="sep"></li>
@@ -252,6 +252,14 @@
         </svg>
         <span>Área</span>
       </button>
+      <button class="tool" data-mode="meshpick" title="Mallar región: activa el modo y luego haz clic en los nodos del contorno → Enter para mallar (Esc reinicia)">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4">
+          <rect x="3.5" y="3.5" width="17" height="17" rx="1"/>
+          <line x1="3.5" y1="9.2" x2="20.5" y2="9.2"/><line x1="3.5" y1="14.8" x2="20.5" y2="14.8"/>
+          <line x1="9.2" y1="3.5" x2="9.2" y2="20.5"/><line x1="14.8" y1="3.5" x2="14.8" y2="20.5"/>
+        </svg>
+        <span>Mallar</span>
+      </button>
       <button class="tool" data-mode="addsupport" title="Asignar Apoyo  R">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
           <circle cx="12" cy="5" r="2.5" fill="currentColor" stroke="none"/>
@@ -307,6 +315,21 @@
             <input type="checkbox" id="magnet-snap" checked style="accent-color:var(--accent);cursor:pointer">
             Imán
           </label>
+        </div>
+        <div class="vp-ctrl">
+          <label style="display:flex;align-items:center;gap:5px;cursor:pointer;font-size:11px;color:var(--text-muted)"
+            title="Fijar nodos: impide mover un nodo al arrastrarlo con el mouse (evita moverlo sin querer). Desmárcalo para poder arrastrar los nodos seleccionados.">
+            <input type="checkbox" id="drag-lock" style="accent-color:var(--accent);cursor:pointer">
+            🔒 Fijar
+          </label>
+        </div>
+        <div class="vp-ctrl">
+          <label title="Plano de arrastre de nodos: en qué plano se mueve el nodo al arrastrarlo (XY = horizontal, XZ = vertical frontal, YZ = vertical lateral).">Plano</label>
+          <select id="drag-plane" title="Plano de arrastre de nodos" style="max-width:64px">
+            <option value="xy" selected>XY</option>
+            <option value="xz">XZ</option>
+            <option value="yz">YZ</option>
+          </select>
         </div>
         <div class="vp-ctrl">
           <label style="display:flex;align-items:center;gap:5px;cursor:pointer;font-size:11px;color:var(--text-muted)"
@@ -994,7 +1017,7 @@
 
 <!-- numeric.js para solver (Fase 2+) -->
 <script src="lib/numeric.js"></script>
-<script type="module" src="js/app.js?v=154"></script>
+<script type="module" src="js/app.js?v=155"></script>
 
 <!-- PWA: registrar el service worker (offline). Solo en contexto seguro
      (https o localhost); el navegador deja navigator.serviceWorker undefined

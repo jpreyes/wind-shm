@@ -6,7 +6,7 @@
 // estabilidad de columna CP (Ylinen). Unidades: kN, m, kN/m² (se reporta en MPa).
 // ──────────────────────────────────────────────────────────────────────────────
 
-import { finalize } from './aisc360.js?v=154';
+import { finalize } from './aisc360.js?v=155';
 
 const MPA = 1000;
 const ratObj = (D, C, extra = {}) => ({

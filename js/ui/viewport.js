@@ -38,6 +38,13 @@ export class Viewport {
     this.app = app;
     this.mode = 'select';
 
+    // Arrastre de nodos (#79): plano de arrastre (xy|xz|yz) y candado (no mover).
+    this._dragPlane = 'xy';
+    this._dragLock  = false;
+    // Mallado por modo (#78): nodos del contorno en curso + tipo (free|panel).
+    this._meshPick  = [];
+    this._meshKind  = 'free';
+
     this._renderer = null;
     this._scene    = null;
     this._camera   = null;
@@ -189,6 +196,13 @@ export class Viewport {
     document.getElementById('magnet-snap')?.addEventListener('change', e => {
       this._magnetSnap = e.target.checked;
     });
+    // Arrastre de nodos (#79): candado (fijar) + plano de arrastre.
+    document.getElementById('drag-lock')?.addEventListener('change', e => {
+      this._dragLock = e.target.checked;
+    });
+    document.getElementById('drag-plane')?.addEventListener('change', e => {
+      this._dragPlane = e.target.value;   // 'xy' | 'xz' | 'yz'
+    });
 
     // Escape cancels addelem
     document.addEventListener('keydown', e => {
@@ -203,8 +217,15 @@ export class Viewport {
           this._cancelAreaPick();
           document.getElementById('sb-sel').textContent = 'Área: selección reiniciada';
         }
+        if (this.mode === 'meshpick' && this._meshPick?.length) {
+          this._cancelMeshPick();
+          document.getElementById('sb-sel').textContent = 'Mallado: selección reiniciada';
+        }
+        // Cancelar un rubber-band en curso (#80).
+        if (this._rubber) { this._hideRubberBox(); this._rubber = null; this._controls.enabled = true; }
       }
-      if (e.key === 'Enter' && this.mode === 'addarea') { e.preventDefault(); this._finishArea(); }
+      if (e.key === 'Enter' && this.mode === 'addarea')  { e.preventDefault(); this._finishArea(); }
+      if (e.key === 'Enter' && this.mode === 'meshpick') { e.preventDefault(); this._finishMeshPick(); }
     });
 
     this._animate();
@@ -1162,6 +1183,14 @@ export class Viewport {
   // ── Pointer events ─────────────────────────────────────────────────────────
   _onMove(e) {
     if (e.buttons & 2 || e.buttons & 4) return;
+
+    // Selección por cuadro (#80): mientras se arrastra con Alt, actualiza el recuadro.
+    if (this._rubber && (e.buttons & 1)) {
+      this._rubber.x1 = e.clientX; this._rubber.y1 = e.clientY;
+      this._updateRubberBox();
+      return;
+    }
+
     this._mouse.copy(this._ndc(e));
     this._raycaster.setFromCamera(this._mouse, this._camera);
 
@@ -1180,17 +1209,20 @@ export class Viewport {
       }
       const node = this.app.model.nodes.get(this._dragNode);
       if (node) {
-        // Project onto the horizontal plane at the node's Z
-        const plane = new THREE.Plane(new THREE.Vector3(0, 1, 0), -node.z);
-        const pt    = new THREE.Vector3();
+        // Plano de arrastre (#79). m2t: model(x,y,z) → three(x, z, y).
+        //   xy → fija Z (plano horizontal),  xz → fija Y,  yz → fija X.
+        let plane;
+        if (this._dragPlane === 'xz')      plane = new THREE.Plane(new THREE.Vector3(0, 0, 1), -node.y);
+        else if (this._dragPlane === 'yz') plane = new THREE.Plane(new THREE.Vector3(1, 0, 0), -node.x);
+        else                               plane = new THREE.Plane(new THREE.Vector3(0, 1, 0), -node.z);
+        const pt = new THREE.Vector3();
         this._raycaster.ray.intersectPlane(plane, pt);
         if (pt && isFinite(pt.x)) {
-          let nx = pt.x, ny = pt.z; // Three.js X→model X, Three.js Z→model Y
-          if (this._snapSize > 0) {
-            nx = Math.round(nx / this._snapSize) * this._snapSize;
-            ny = Math.round(ny / this._snapSize) * this._snapSize;
-          }
-          node.x = nx; node.y = ny;
+          const snap = v => (this._snapSize > 0 ? Math.round(v / this._snapSize) * this._snapSize : v);
+          // pt en coords three → model: x=pt.x, y=pt.z, z=pt.y.
+          if (this._dragPlane === 'xz')      { node.x = snap(pt.x); node.z = snap(pt.y); }
+          else if (this._dragPlane === 'yz') { node.y = snap(pt.z); node.z = snap(pt.y); }
+          else                               { node.x = snap(pt.x); node.y = snap(pt.z); }
           const mesh = this._nodeMeshes.get(this._dragNode);
           if (mesh) mesh.position.copy(this.m2t(node.x, node.y, node.z));
           // Update connected element geometries live
@@ -1201,7 +1233,7 @@ export class Viewport {
             }
           }
           document.getElementById('sb-coords').textContent =
-            `X: ${nx.toFixed(3)}  Y: ${ny.toFixed(3)}  Z: ${node.z.toFixed(3)}`;
+            `X: ${node.x.toFixed(3)}  Y: ${node.y.toFixed(3)}  Z: ${node.z.toFixed(3)}  [plano ${this._dragPlane.toUpperCase()}]`;
         }
       }
       return; // skip normal hover/preview while dragging
@@ -1227,8 +1259,21 @@ export class Viewport {
     if (e.button !== 0) return;
     this._ptrDownPos = [e.clientX, e.clientY];
 
-    // P3-10: Prepare node drag when clicking a selected node in select mode
-    if (this.mode === 'select') {
+    // Selección por cuadro (rubber-band, #80): Alt + arrastrar en modo selección.
+    // Tiene prioridad sobre el arrastre de nodo (Alt desactiva el drag).
+    if (this.mode === 'select' && !this._inResultsMode && e.altKey) {
+      const r = this._renderer.domElement.getBoundingClientRect();
+      this._rubber = { x0: e.clientX, y0: e.clientY, x1: e.clientX, y1: e.clientY,
+                       rect: r, add: e.ctrlKey || e.metaKey };
+      this._controls.enabled = false;
+      this._showRubberBox();
+      return;
+    }
+
+    // P3-10: Prepare node drag when clicking a selected node in select mode.
+    // No se arma con el candado puesto (#79) ni mientras se ven resultados (evita
+    // mover un nodo sobre la deformada y dejarlo "fantasma").
+    if (this.mode === 'select' && !this._inResultsMode && !this._dragLock) {
       this._mouse.copy(this._ndc(e));
       this._raycaster.setFromCamera(this._mouse, this._camera);
       const hits = this._raycaster.intersectObjects([...this._nodeMeshes.values()]);
@@ -1247,11 +1292,27 @@ export class Viewport {
   _onUp(e) {
     if (e.button !== 0) return;
 
+    // Selección por cuadro (#80): al soltar, selecciona lo que cae en el recuadro.
+    if (this._rubber) {
+      this._commitRubberBox();
+      this._hideRubberBox();
+      this._rubber = null;
+      this._controls.enabled = true;
+      this._ptrDownPos = null;
+      return;
+    }
+
     // P3-10: Commit or cancel node drag ──────────────────────────────────────
     if (this._isDragging) {
-      const node = this.app.model.nodes.get(this._dragNode);
+      const id = this._dragNode;
+      const node = this.app.model.nodes.get(id);
       if (node) {
         this.refreshNode(node);          // sync support symbol, connected elems
+        // Mantener el nodo SELECCIONADO y su malla viva tras moverlo (#79): un nodo
+        // sin elementos sigue siendo un nodo real, seleccionable; no queda "fantasma".
+        if (!this._nodeMeshes.has(id)) this.addNodeMesh(node);
+        this._selected.add(`node:${id}`);
+        this._setColor('node', id, COL.NODE_SEL, null);
         this.app.markDirty();
         if (this.app.panel._currentTab === 'sel') this.app.panel.showNode(node);
       }
@@ -1289,6 +1350,7 @@ export class Viewport {
       case 'addnode':    this._clickAddNode();     break;
       case 'addelem':    this._clickAddElem();     break;
       case 'addarea':    this._clickAddArea();      break;
+      case 'meshpick':   this._clickMeshPick();     break;
       case 'addsupport': this._clickAddSupport(e);  break;
     }
   }
@@ -1690,6 +1752,126 @@ export class Viewport {
     this._areaPick = [];
   }
 
+  // ── Mallado por MODO (#78): activar el modo y luego clic en los nodos del
+  //    contorno (igual que el modo Área), Enter para mallar, Esc para reiniciar.
+  //    kind: 'free' (región libre N nodos) | 'panel' (4 esquinas transfinito).
+  startMeshPick(kind = 'free') {
+    this._meshKind = (kind === 'panel') ? 'panel' : 'free';
+    // Si ya hay nodos seleccionados, se arrastran al contorno (no se pierde el atajo
+    // de «seleccionar y mallar»); si no, se empieza a clicar desde cero (#78).
+    const sel = [...this._selected].filter(k => k.startsWith('node:')).map(k => +k.split(':')[1]);
+    this.clearSelection();
+    this._meshPick = (kind === 'panel') ? sel.slice(0, 4) : sel;
+    this.setMode('meshpick');
+    for (const id of this._meshPick) this._setColor('node', id, COL.NODE_SEL, null);
+    if (this._meshPick.length) {
+      const n = this._meshPick.length;
+      document.getElementById('sb-sel').textContent = (this._meshKind === 'panel')
+        ? `Mallar panel: ${n}/4 esquinas` : `Mallar región: ${n} nodos · Enter para mallar`;
+    }
+  }
+
+  _clickMeshPick() {
+    const snap = this._nearestNodeSnap();
+    if (!snap) { this.app.toast('Clic sobre un nodo del contorno a mallar', 'warn'); return; }
+    if (!this._meshPick) this._meshPick = [];
+    const i = this._meshPick.indexOf(snap.id);
+    if (i >= 0) { this._meshPick.splice(i, 1); this._refreshColor('node', snap.id); }
+    else {
+      if (this._meshKind === 'panel' && this._meshPick.length >= 4) {
+        this.app.toast('El panel transfinito usa 4 esquinas. Enter para mallar o Esc para reiniciar.', 'warn'); return;
+      }
+      this._meshPick.push(snap.id); this._setColor('node', snap.id, COL.NODE_SEL, null);
+    }
+    const n = this._meshPick.length;
+    const sb = document.getElementById('sb-sel');
+    if (this._meshKind === 'panel')
+      sb.textContent = `Mallar panel: ${n}/4 esquinas` + (n === 4 ? ' · Enter para mallar' : '');
+    else
+      sb.textContent = n >= 3 ? `Mallar región: ${n} nodos · Enter para mallar` : `Mallar región: ${n} nodos · faltan ${3 - n}`;
+    if (this._meshKind === 'panel' && n === 4) this._finishMeshPick();
+  }
+
+  _finishMeshPick() {
+    const ids = (this._meshPick || []).slice();
+    const kind = this._meshKind;
+    if (kind === 'panel' && ids.length !== 4) { this.app.toast('El panel transfinito necesita 4 nodos esquina', 'warn'); return; }
+    if (kind !== 'panel' && ids.length < 3)   { this.app.toast('La región libre necesita ≥3 nodos de contorno', 'warn'); return; }
+    this._cancelMeshPick();
+    if (kind === 'panel') this.app.mallarPanelSeleccion(ids);
+    else                  this.app.mallarRegionLibre(ids);
+  }
+
+  _cancelMeshPick() {
+    for (const id of (this._meshPick || [])) this._refreshColor('node', id);
+    this._meshPick = [];
+  }
+
+  // ── Selección por cuadro / rubber-band (#80): recuadro DOM sobre el viewport ──
+  _showRubberBox() {
+    let box = this._rubberEl;
+    if (!box) {
+      box = document.createElement('div');
+      box.style.cssText = 'position:fixed;border:1px solid var(--accent,#38bdf8);background:rgba(56,189,248,.14);pointer-events:none;z-index:50;display:none';
+      (document.getElementById('viewport-wrap') || document.body).appendChild(box);
+      this._rubberEl = box;
+    }
+    box.style.display = 'block';
+    this._updateRubberBox();
+  }
+  _updateRubberBox() {
+    const b = this._rubber, box = this._rubberEl;
+    if (!b || !box) return;
+    const x = Math.min(b.x0, b.x1), y = Math.min(b.y0, b.y1);
+    box.style.left = x + 'px'; box.style.top = y + 'px';
+    box.style.width = Math.abs(b.x1 - b.x0) + 'px'; box.style.height = Math.abs(b.y1 - b.y0) + 'px';
+  }
+  _hideRubberBox() { if (this._rubberEl) this._rubberEl.style.display = 'none'; }
+
+  _commitRubberBox() {
+    const b = this._rubber; if (!b) return;
+    const r = b.rect;
+    // Un clic sin arrastre real → selección puntual normal (no rubber-band).
+    if (Math.hypot(b.x1 - b.x0, b.y1 - b.y0) < 5) {
+      this._mouse.set(((b.x1 - r.left) / r.width) * 2 - 1, -((b.y1 - r.top) / r.height) * 2 + 1);
+      this._raycaster.setFromCamera(this._mouse, this._camera);
+      this._clickSelect(b.add);
+      return;
+    }
+    const xmin = Math.min(b.x0, b.x1), xmax = Math.max(b.x0, b.x1);
+    const ymin = Math.min(b.y0, b.y1), ymax = Math.max(b.y0, b.y1);
+    const W = r.width, H = r.height;
+    const toScreen = (p) => {                       // mundo → px de pantalla (cliente)
+      const v = p.clone().project(this._camera);
+      return [r.left + (v.x + 1) / 2 * W, r.top + (1 - (v.y + 1) / 2) * H];
+    };
+    const inBox = (sx, sy) => sx >= xmin && sx <= xmax && sy >= ymin && sy <= ymax;
+    if (!b.add) this.clearSelection();
+    // Nodos: por su centro.
+    for (const [id, mesh] of this._nodeMeshes) {
+      if (!mesh.visible) continue;
+      const [sx, sy] = toScreen(mesh.position);
+      if (inBox(sx, sy) && !this._selected.has(`node:${id}`)) {
+        this._selected.add(`node:${id}`); this._setColor('node', id, COL.NODE_SEL, null);
+      }
+    }
+    // Elementos: ambos extremos dentro del recuadro.
+    for (const [id, line] of this._elemLines) {
+      if (!line.visible) continue;
+      const el = this.app.model.elements.get(id); if (!el) continue;
+      const n1 = this.app.model.nodes.get(el.n1), n2 = this.app.model.nodes.get(el.n2);
+      if (!n1 || !n2) continue;
+      const [a, b1] = toScreen(this.m2t(n1.x, n1.y, n1.z));
+      const [c, d]  = toScreen(this.m2t(n2.x, n2.y, n2.z));
+      if (inBox(a, b1) && inBox(c, d) && !this._selected.has(`elem:${id}`)) {
+        this._selected.add(`elem:${id}`); this._elemLines.get(id).material.color.set(COL.ELEM_SEL);
+      }
+    }
+    const n = this._selected.size;
+    document.getElementById('sb-sel').textContent = n ? `${n} objeto(s) seleccionado(s)  [Alt+arrastrar = cuadro]` : 'Sin selección';
+    this._notifyMultiSelection();
+  }
+
   // ── Add Support mode ───────────────────────────────────────────────────────
   _clickAddSupport(e) {
     const hits = this._raycaster.intersectObjects([...this._nodeMeshes.values()]);
@@ -1849,7 +2031,7 @@ export class Viewport {
     // Si se elige una herramienta de MODELADO mientras se ven resultados, salir
     // del modo resultados: si no, _onPointerUp intercepta el clic (_clickResults)
     // y la herramienta (p.ej. Apoyo) "no hace nada".
-    if (this._inResultsMode && (mode === 'addnode' || mode === 'addelem' || mode === 'addarea' || mode === 'addsupport')) {
+    if (this._inResultsMode && (mode === 'addnode' || mode === 'addelem' || mode === 'addarea' || mode === 'meshpick' || mode === 'addsupport')) {
       this.clearResults();
       this.app?.toast?.('Resultados ocultos para editar el modelo', 'info');
     }
@@ -1863,6 +2045,7 @@ export class Viewport {
       this._previewSphere.visible = false;
     }
     if (mode !== 'addarea' && this._areaPick?.length) this._cancelAreaPick();
+    if (mode !== 'meshpick' && this._meshPick?.length) this._cancelMeshPick();
     // PAN (manito): arrastrar con la izquierda panea en vez de orbitar. Al salir
     // del modo se restaura el orbit (salvo en vista 2D/elevación, que ya panea).
     if (mode === 'pan') {
@@ -1883,6 +2066,7 @@ export class Viewport {
       addnode:    'Agregar Nodo',
       addelem:    'Agregar Elemento',
       addarea:    'Agregar Área',
+      meshpick:   this._meshKind === 'panel' ? 'Mallar panel (4 esquinas)' : 'Mallar región',
       addsupport: 'Asignar Apoyo'
     };
     document.getElementById('sb-mode').textContent = `Modo: ${names[mode] || mode}`;
@@ -1892,13 +2076,16 @@ export class Viewport {
       addnode:    'Clic en la grilla para crear nodo',
       addelem:    'Clic en un nodo o en la grilla (crea nodo) → destino  ·  Imán: pega a nodo cercano  ·  Esc cancela',
       addarea:    'Clic en 3 nodos (CST) o 4 (QUAD) → Enter para crear  ·  Esc reinicia',
+      meshpick:   this._meshKind === 'panel'
+                    ? 'Clic en las 4 esquinas del panel → se malla solo al 4º nodo  ·  Esc reinicia'
+                    : 'Clic en los nodos del contorno → Enter para mallar  ·  Esc reinicia',
       addsupport: 'Clic en un nodo para editar sus restricciones'
     };
     const el = document.getElementById('vp-hint');
     el.textContent = hints[mode] || '';
     el.classList.toggle('visible', !!hints[mode]);
     // Cursor
-    const cur = (mode === 'addnode' || mode === 'addelem' || mode === 'addarea') ? 'crosshair'
+    const cur = (mode === 'addnode' || mode === 'addelem' || mode === 'addarea' || mode === 'meshpick') ? 'crosshair'
               : mode === 'pan' ? 'grab' : 'default';
     this._renderer.domElement.style.cursor = cur;
   }

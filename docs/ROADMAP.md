@@ -180,11 +180,11 @@ similaridad. `[#]` referencia el pedido original. Estado: ⬜ pendiente · 🟡 
 - ⬜ **Conversión geométrica y de propiedades** `[#76]`: `ifcToPortico.js` + `ifcGeometrySimplifier.js` — eje inicial/final de cada barra, crear nodos, **snap** por tolerancia (inicial 0.01 m), unidades→m, ejes globales Z vertical; curvas/complejas → segmentos rectos o advertencia. **Materiales**: leer IFC o crear genérico con aviso (no bloquear). **Secciones**: reconocer rect/círculo/perfiles simples o aproximar por *bounding box* o genérica con aviso (no bloquear). `ifcWarnings.js` centraliza advertencias.
 - ⬜ **Ventana flotante + side-by-side + confirmación** `[#77]`: `ifcImportDialog.js` (resumen del archivo, conteos por tipo, tabla con importar sí/no · tipo · nombre · nivel · material · sección · estado · advertencias; filtros) + `ifcSideBySidePreview.js` (IFC seleccionado a la izquierda vs PÓRTICO convertido a la derecha, cámaras sincronizadas, colores por estado). Robusto (no falla con no-soportados), **no modifica el modelo hasta confirmar**, integrado al **undo/redo**. Entrada en **Archivo → «Importar IFC…»**.
 
-## G20 · UX de edición, mallado y arranque 🟡 *(detectado en uso real; #81/#83/#84 hechos)*
+## G20 · UX de edición, mallado y arranque ✅ *(completo; #82 deja la pestaña «Temporales» para G7)*
 *Fricciones y oportunidades observadas usando el mallador y la edición de nodos; varias son quick-wins de interacción.*
-- ⬜ **Mallado: invertir el flujo (botón primero, luego nodos)** `[#78]`: hoy se seleccionan los nodos del contorno y *después* se aprieta «Mallar», lo que es confuso (costó mucho mallar). Cambiar a: **primero** se activa el modo «Mallar región» (botón) y **luego** se van seleccionando/clickeando los nodos del contorno, con guía visual del polígono en curso y Enter/Esc para confirmar/cancelar (igual que el modo Área/Elemento). Aplica a «Mallar región libre» y «Mallar panel (4 esquinas)».
-- ⬜ **Arrastrar nodos con el mouse — convertir el «bug» en funcionalidad** `[#79]`: hoy, al correr un análisis con un nodo seleccionado, el nodo se *mueve* pero queda como **nodo fantasma huérfano** (bola nodal sin conectividad) que ya **no se puede seleccionar** ni devolver a su posición original, y no es claro si entra en la matriz de rigidez → **bug a corregir** (no dejar nodos sueltos no seleccionables; permitir revertir/seleccionar siempre; aclarar su efecto en K). Reconvertirlo en una **funcionalidad de arrastre**: **Ctrl+clic** sobre el nodo lo selecciona, se **suelta** el mouse y luego se **mueve** moviendo el mouse (clic para fijar). Opción de **mover o no** (candado), y **elegir el plano** de arrastre: hoy sólo se mueve en **X–Y** (Z fijo); permitir también **X–Z** y **Y–Z**. *(El usuario lo valora como «buenísima funcionalidad, hay que mejorarla».)*
-- ⬜ **Selección por cuadro (rubber-band)** `[#80]`: permitir **selección por rectángulo** arrastrando con el mouse mientras se mantiene **Alt** (o modificador similar) + clic, además de la selección puntual actual. Selecciona nodos/elementos dentro del recuadro.
+- ✅ **Mallado: invertir el flujo (botón primero, luego nodos)** `[#78]`: nuevo **modo «Mallar»** (botón en la barra lateral + menú Editar) `viewport.startMeshPick('free'|'panel')`: se activa el modo y **luego** se clican los nodos del contorno (resaltados), **Enter** malla / **Esc** reinicia, igual que el modo Área. «panel» se cierra solo al 4º nodo (transfinito); «free» acepta ≥3 (región libre). Si ya había nodos seleccionados, se arrastran al contorno (no se pierde el atajo). `mallarPanelSeleccion`/`mallarRegionLibre` aceptan ahora `ids` opcional. Verificado en navegador.
+- ✅ **Arrastrar nodos con el mouse — convertido en funcionalidad** `[#79]`: arrastre robusto en modo selección con (a) **selector de plano** XY/XZ/YZ (combo en el overlay; el nodo se mueve sólo en ese plano) y (b) **candado «🔒 Fijar»** que impide moverlo sin querer; el arrastre **no se arma en modo resultados** (evita el «nodo fantasma» sobre la deformada) y el nodo **queda seleccionado y con malla viva** tras moverlo (no huérfano no seleccionable). Verificado en navegador: arrastre en XZ → Y fijo, nodo (0,0,0)→(2.5,0,2.5) con snap, sigue seleccionable.
+- ✅ **Selección por cuadro (rubber-band)** `[#80]`: **Alt + arrastrar** en modo selección dibuja un recuadro (div DOM) y al soltar selecciona los **nodos** (por su centro) y **elementos** (ambos extremos dentro) que caen en él; **Ctrl** añade a la selección actual; Esc cancela. Verificado en navegador (la caja captura exactamente los nodos contenidos).
 - ✅ **Nodos de malla más pequeños** `[#81]`: los nodos «de malla» (usados por áreas pero por **ninguna barra**) se dibujan con radio **0.55·NODE_R** (vs los nodos de modelo a NODE_R) para no saturar la vista; `viewport._recomputeMeshNodeSet(model)` clasifica por conectividad en cada `renderModel` (sin flag ni persistencia; sobrevive a guardar/cargar). Verificado en navegador: nodo de barra r=0.12, nodo sólo-área r=0.066.
 - 🟡 **Limpiar temporales + pestaña «Temporales»** `[#82]` *(limpiar/listar hecho; falta integrar con G7)*: **Archivo → «🧹 Autoguardados temporales…»** (`manageAutosavesDialog`) lista los slots `portico_autosave_*` (marca la sesión actual), permite **eliminar** cada uno, **reanudar** uno (con confirmación, descarta el trabajo actual) o **«Limpiar todos»**; helper compartido `_deleteAutosave(key, legacy)`. Verificado en navegador. *(Pendiente: integrarlo como **pestaña «Temporales»** dentro de la gestión multi-modelo `G7`.)*
 - ✅ **Auto-cierre de la ventana de inicio / recuperación** `[#83]`: tras **~8 s sin interacción**, la **portada/landing** (IIFE en `index.html`) y el **diálogo de «recuperar autoguardado»** (`_autosaveRecoveryDialog`) se **cierran solos** y pasan a un **modelo nuevo** vacío; cualquier interacción (pointer/teclado/wheel/touch) reinicia el contador, y si el **manual** está abierto encima se pospone. No bloquea el arranque.
@@ -237,7 +237,7 @@ esfuerzo creciente (incluye los **pendientes normativos** de G16):*
 ---
 
 ## ✅/⬜ FALTANTES — lista única ordenada por FACILIDAD de implementación
-*Todo lo que queda ⬜/🟡 a la fecha (v154), de lo MÁS FÁCIL a lo más difícil (esfuerzo, no complejidad teórica). El detalle de cada uno está en su grupo arriba; aquí sólo lo que FALTA.*
+*Todo lo que queda ⬜/🟡 a la fecha (v155), de lo MÁS FÁCIL a lo más difícil (esfuerzo, no complejidad teórica). El detalle de cada uno está en su grupo arriba; aquí sólo lo que FALTA.*
 
 **🟢 Triviales (constante/CSS/timeout, < ½ día)** — ✅ **ambos hechos (v154)**
 1. ✅ **Nodos de malla más pequeños** `[#81]` (G20) — hecho (radio 0.55·NODE_R para nodos sólo-área; ver G20).
@@ -246,13 +246,13 @@ esfuerzo creciente (incluye los **pendientes normativos** de G16):*
 **🟢 Fáciles (cambio acotado, reusa lo existente)**
 3. 🟡 **Limpiar temporales + pestaña «Temporales»** `[#82]` (G20) — **limpiar/listar hecho** (Archivo → «Autoguardados temporales…»); falta integrarlo como pestaña dentro de multi-modelo (G7).
 4. ✅ **Limitar dimensiones en el diseño (ancho/alto máx.)** `[#84]` (G20) — hecho (`prefs.maxWidth/maxHeight` + inputs en el overlay; ver G20).
-5. **Materializar más casos de verificación** `[#19]` (G9) — **sin código nuevo**: construir `.s3d` + manifiesto (1-001, 1-007, 1-002, etc.). Laborioso pero mecánico. **← SIGUIENTE fácil.**
-6. **Refinos finos de diseño** (G16): armado multicapa explícito en P-M biaxial + parábola-rectángulo EC2 `[#65]`; centro de cortante del canal `[#67]`; flecha relativa a la cuerda por elemento en la tabla `[#68]`.
+5. **Materializar más casos de verificación** `[#19]` (G9) — **sin código nuevo**: construir `.s3d` + manifiesto (1-001, 1-007, 1-002, etc.). Laborioso pero mecánico. **← PARA EL FINAL**
+6. **Refinos finos de diseño** (G16): armado multicapa explícito en P-M biaxial + parábola-rectángulo EC2 `[#65]`; centro de cortante del canal `[#67]`; flecha relativa a la cuerda por elemento en la tabla `[#68]`. **← PARA EL FINAL**
 
-**🟡 Medios (UI de viewport o motor acotado)**
-7. **Mallado: invertir el flujo (botón → luego nodos)** `[#78]` (G20) — refactor del modo mallar como el modo Área.
-8. **Selección por cuadro (rubber-band con Alt)** `[#80]` (G20) — interacción de selección por rectángulo.
-9. **Arrastrar nodos con el mouse + corregir bug de nodos fantasma** `[#79]` (G20) — Ctrl+clic-arrastrar, elegir plano XY/XZ/YZ, no dejar nodos huérfanos no seleccionables.
+**🟡 Medios (UI de viewport o motor acotado)** — ✅ **trío de viewport de G20 hecho (v155)**
+7. ✅ **Mallado: invertir el flujo (botón → luego nodos)** `[#78]` (G20) — hecho (modo «Mallar»; ver G20).
+8. ✅ **Selección por cuadro (rubber-band con Alt)** `[#80]` (G20) — hecho (Alt+arrastrar; ver G20).
+9. ✅ **Arrastrar nodos con el mouse + corregir bug de nodos fantasma** `[#79]` (G20) — hecho (plano XY/XZ/YZ + candado, sin huérfanos; ver G20).
 10. **Time-history modal con elementos de ÁREA** `[#51]` (G12) — verificar muro/losa end-to-end + historia de tensiones σ(t) de área.
 11. **Time-history NO LINEAL — rótulas concentradas en extremos de barra** `[#48b]` (G12) — hoy es edificio de corte; falta el modelo completo con rótulas por elemento.
 12. **UX de los análisis avanzados + `.md` por funcionalidad** `[#20]` (G9) — ejemplos guiados (pandeo, form-finding, pushover) y docs.
@@ -265,10 +265,10 @@ esfuerzo creciente (incluye los **pendientes normativos** de G16):*
 17. **Otras capacidades parciales** `[#G14]` — resorte de extremo (1-008), viga sobre fundación (1-013), pandeo de cáscara (2-016/2-017), viga corotacional gran rotación (1-029).
 18. **Time-history con cáscaras NO LINEALES — completa y simplificada** `[#85]` (G12) — dos vías: **(A) completa** sobre la malla real (rigurosa, **más costosa**) y **(B) simplificada** condensando paneles a barra(s) corotacional(es) y devolviendo esfuerzos integrados a las áreas (rápida; implementar primero).
 19. **Macromodelos (infill wall de albañilería, etc.)** `[#86]` (G13) — objeto 2D «panel» que expande a una red de barras + cables + resortes/links NL calibrados (puntal diagonal equivalente); catálogo de macromodelos.
-20. **Documentación integral de toda funcionalidad** `[#21]` (G9) — qué hace, teoría mínima, cómo ejecutarla, ejemplo, por cada feature.
+20. **Documentación integral de toda funcionalidad** `[#21]` (G9) — qué hace, teoría mínima, cómo ejecutarla, ejemplo, por cada feature. **← PARA EL FINAL**
 21. **Mesheador — paving/calidad avanzada** `[#52]` (G13) — fases 1-3 hechas; quedan refinamientos (recombinación quad avanzada, métricas).
 
 **🔴 Grandes (módulos/arquitectura)**
-22. **Interoperabilidad SAP2000 / ETABS (`.s2k`/`.e2k`)** `[#74]` (G18) — modelo neutro + import/export, verificable headless.
+22. **Interoperabilidad SAP2000 / ETABS /INP CALCULIX/ABAQUS /DAT SOFISTIK/OPENSEES/VECTOR (`.s2k`/`.e2k` / `.INP`/`.dat`)** `[#74]` (G18) — modelo neutro + import/export, verificable headless.
 23. **Proyecto multi-modelo en una sola memoria** `[#17]` (G7) — serializer multi-modelo + estado de modelo activo + generador de memoria que los recorre (incluye la pestaña «Temporales» del `[#82]`).
 24. **Importador IFC (web-ifc)** `[#75]`/`[#76]`/`[#77]` (G19) — el más grande: loader + clasificador + conversión + ventana side-by-side con confirmación.
