@@ -125,7 +125,7 @@ export class MenuBar {
       case 'export-spectrum': a.exportSpectrumResults();     break;
       case 'bases-calculo':  a.generarBasesCalculo();        break;
       case 'memoria-docx':   a.generarMemoriaDocx();         break;
-      case 'clear-results':  a.clearResults();               break;
+      case 'clear-results':  a.clearResultsConfirm();        break;
     }
   }
 }

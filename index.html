@@ -29,8 +29,8 @@
       window.dispatchEvent(new Event('pwa-installed'));
     });
   </script>
-  <link rel="stylesheet" href="style.css?v=163">
-  <link rel="stylesheet" href="ui-v2.css?v=163">
+  <link rel="stylesheet" href="style.css?v=164">
+  <link rel="stylesheet" href="ui-v2.css?v=164">
   <script type="importmap">
   {
     "imports": {
@@ -168,7 +168,7 @@
           <li data-action="global-matrices">Ver Matrices Globales K · M…</li>
           <li data-action="diag-estabilidad">Diagnosticar estabilidad (nodos sueltos)…</li>
           <li class="sep"></li>
-          <li data-action="clear-results" title="DESCARTA todos los resultados calculados (estático, modal, espectro, NL, diseño) y revierte la malla auto-discretizada. Para sólo volver a ver el modelo sin borrar nada, usa «Vista modelo» en la barra.">🗑 Limpiar Resultados (descartar)</li>
+          <li data-action="clear-results" style="color:#ef4444" title="DESCARTA todos los resultados calculados (estático, modal, espectro, NL, diseño) y revierte la malla auto-discretizada. Pide confirmación. Para sólo volver a ver el modelo sin borrar nada, usa «Vista modelo» en la barra."><span style="color:#ef4444;font-weight:700">✕</span> Limpiar Resultados (descartar)</li>
         </ul>
       </div>
 
@@ -1018,7 +1018,7 @@
 
 <!-- numeric.js para solver (Fase 2+) -->
 <script src="lib/numeric.js"></script>
-<script type="module" src="js/app.js?v=163"></script>
+<script type="module" src="js/app.js?v=164"></script>
 
 <!-- PWA: registrar el service worker (offline). Solo en contexto seguro
      (https o localhost); el navegador deja navigator.serviceWorker undefined
