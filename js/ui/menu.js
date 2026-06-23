@@ -73,6 +73,9 @@ export class MenuBar {
       case 'inter-elems': a.unirInterseccion();       break;
       case 'crear-area':  a.crearAreaSeleccion();     break;
       case 'mallar-panel': a.mallarPanelSeleccion();  break;
+      case 'mallar-region': a.mallarRegionLibre();    break;
+      case 'suavizar-malla': a.suavizarMalla();       break;
+      case 'crear-link':   a.crearLinkSeleccion();    break;
       case 'grids':       a.defineGridsDialog();      break;
       case 'global-matrices': a.showGlobalMatrices(); break;
       case 'help-guia':     a.openHelp('guia');     break;
