@@ -9,7 +9,7 @@
 // migraremos a InstancedMesh + atenuación por shader (ver docs/wind-shm-issues.md).
 // ─────────────────────────────────────────────────────────────────────────────
 import * as THREE from 'three';
-import { circularFoundation } from './structures.js?v=201';
+import { circularFoundation } from './structures.js?v=202';
 
 export const TOWER_H = 90;          // altura de buje (m), coherente con el macromodelo
 
@@ -122,5 +122,5 @@ export function createTurbine(o = {}) {
   const gateway = { mesh: gw, mat: gMat, phase: Math.random() * 6.28 };
 
   return { id, type: 'turbine', label: `Torre ${id}`, height: TOWER_H, power: '~3 MW',
-           group, rotor, sensors, gateway, bodyMats, dimMats: bodyMats, spin };
+           group, top, rotor, sensors, gateway, bodyMats, dimMats: bodyMats, spin, yaw };
 }

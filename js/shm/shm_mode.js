@@ -8,12 +8,12 @@
 //   inspecciones y señal temporal EN VIVO desde un Web Worker (DataSource).
 // Recortes (modelado) los hace shm.css ocultando, no borrando.
 // ─────────────────────────────────────────────────────────────────────────────
-import { FleetView } from './fleet_view.js?v=201';
-import { DataSource } from './data_source.js?v=201';
-import { computeTwin } from './digital_twin.js?v=201';
+import { FleetView } from './fleet_view.js?v=202';
+import { DataSource } from './data_source.js?v=202';
+import { computeTwin } from './digital_twin.js?v=202';
 
 const F1_BASE = { turbine: 0.283, hv: 1.6 };
-const REWIND_VER = 'v201';   // versión visible del build (subir junto al cache-bust)
+const REWIND_VER = 'v202';   // versión visible del build (subir junto al cache-bust)
 const LAYOUT_KEY = 'rewind-layout';
 const loadLayout = () => { try { return JSON.parse(localStorage.getItem(LAYOUT_KEY)); } catch { return null; } };
 const FS = 62.5;   // frecuencia de muestreo de la señal (Hz), igual que shm_worker.js
@@ -121,10 +121,11 @@ async function boot() {
     setLoad((i + 1) / NT * 70, `Cargando torres eólicas ${i + 1}/${NT}`);
     await delay(30);
   }
+  if (saved) fleet.turbines.forEach((t, i) => { const y = saved.turbines[i]?.yaw; if (y != null) fleet.setYaw(t.id, y); });
   setLoad(72, `Cargando torres de alta tensión 0/${NHV}`); await delay(60);
   fleet.buildSubstation();                               // 2 torres AT
   for (let k = 2; k < NHV; k++) fleet.addHVTower();
-  if (saved) fleet.substation.towers.forEach((h, i) => { const p = saved.hv?.[i]; if (p) h.group.position.set(p.x, 0, p.z); });
+  if (saved) fleet.substation.towers.forEach((h, i) => { const p = saved.hv?.[i]; if (p) { h.group.position.set(p.x, 0, p.z); if (p.yaw != null) fleet.setYaw(h.id, p.yaw); } });
   fleet.rebuildCables();
   setLoad(84, `Cargando torres de alta tensión ${NHV}/${NHV}`); await delay(120);
 
@@ -142,8 +143,8 @@ async function boot() {
   const syncData = () => { ds.init(buildManifest()); dash.setStructures(fleet.getStructures()); };
   const saveLayout = () => {
     try {
-      const t = fleet.turbines.map(x => ({ x: +x.group.position.x.toFixed(1), z: +x.group.position.z.toFixed(1) }));
-      const hv = (fleet.substation?.towers || []).map(x => ({ x: +x.group.position.x.toFixed(1), z: +x.group.position.z.toFixed(1) }));
+      const t = fleet.turbines.map(x => ({ x: +x.group.position.x.toFixed(1), z: +x.group.position.z.toFixed(1), yaw: +fleet.getYaw(x.id).toFixed(4) }));
+      const hv = (fleet.substation?.towers || []).map(x => ({ x: +x.group.position.x.toFixed(1), z: +x.group.position.z.toFixed(1), yaw: +fleet.getYaw(x.id).toFixed(4) }));
       localStorage.setItem(LAYOUT_KEY, JSON.stringify({ turbines: t, hv }));
     } catch {}
   };
@@ -382,7 +383,15 @@ function buildDashboard(panel, fleet, actions) {
         <div class="row"><span>Temperatura</span><b id="d-temp">—</b></div>
         <div class="row"><span>Clasificación ML</span><b id="d-cls">…</b></div>
         <div class="row"><span>Índice de daño</span><b id="d-dmg">${dmg}%</b></div>
-        <div class="note" style="font-size:10px">Clasificación entregada por el servicio ML que vigila todos los sensores.</div>`;
+        <div class="note" style="font-size:10px">Clasificación entregada por el servicio ML que vigila todos los sensores.</div>
+        <div class="yaw-ctrl">
+          <label>Orientación <b id="yaw-val"></b></label>
+          <input type="range" id="yaw-slider" min="0" max="359" step="1">
+        </div>`;
+      const sl = body.querySelector('#yaw-slider'), vv = body.querySelector('#yaw-val');
+      const deg0 = Math.round(((fleet.getYaw(o.id) * 180 / Math.PI) % 360 + 360) % 360);
+      sl.value = deg0; vv.textContent = deg0 + '°';
+      sl.addEventListener('input', () => { vv.textContent = sl.value + '°'; fleet.setYaw(o.id, sl.value * Math.PI / 180); fleet.onLayoutChange?.(); });
     } else if (pane === 'senal') {
       body.innerHTML = `<div class="note" style="margin-top:0">Señal de aceleración en vivo (se mueve en tiempo real):</div><div id="sig-wrap"></div>`;
       const wrap = body.querySelector('#sig-wrap');

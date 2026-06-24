@@ -91,6 +91,10 @@ body.shm #shm-panel {
 #shm-panel .shm-detail-foot { padding: 10px 14px; border-top: 1px solid var(--border); }
 #shm-panel .shm-detail-foot button { width: 100%; font: inherit; font-size: 12px; cursor: pointer; background: var(--bg3); color: var(--text); border: 1px solid var(--border2); border-radius: 8px; padding: 9px; }
 #shm-panel .shm-detail-foot button:hover { background: var(--bg4); }
+#shm-panel .yaw-ctrl { margin-top: 12px; padding-top: 10px; border-top: 1px solid var(--border); }
+#shm-panel .yaw-ctrl label { display: flex; justify-content: space-between; font-size: 12px; color: var(--text-muted); margin-bottom: 6px; }
+#shm-panel .yaw-ctrl label b { color: var(--text); }
+#shm-panel .yaw-ctrl input[type=range] { width: 100%; accent-color: var(--accent); cursor: pointer; }
 #shm-panel .shm-title { font-size: 14px; font-weight: 700; letter-spacing: .2px; }
 #shm-panel .shm-sub { font-size: 11px; color: var(--text-muted); margin-top: 2px; }
 

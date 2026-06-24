@@ -7,8 +7,8 @@
 // ─────────────────────────────────────────────────────────────────────────────
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
-import { createTurbine, TOWER_H } from './turbine_mesh.js?v=201';
-import { createSubstationTower, groundCable, overheadLine } from './structures.js?v=201';
+import { createTurbine, TOWER_H } from './turbine_mesh.js?v=202';
+import { createSubstationTower, groundCable, overheadLine } from './structures.js?v=202';
 
 const SPACING = 235;
 
@@ -161,6 +161,17 @@ export class FleetView {
   setSensorStatus(structId, sensorId, status) {
     const st = this.getStructure(structId); if (!st) return;
     const se = st.sensors.find(x => x.id === sensorId); if (se) se.status = status;
+  }
+
+  // Orientación (yaw): gira el cabezal de la turbina (góndola+rotor) o la torre AT.
+  setYaw(structId, rad) {
+    const st = this.getStructure(structId); if (!st) return;
+    if (st.top) st.top.rotation.y = rad; else st.group.rotation.y = rad;
+    st.yaw = rad;
+  }
+  getYaw(structId) {
+    const st = this.getStructure(structId); if (!st) return 0;
+    return st.top ? st.top.rotation.y : (st.group.rotation.y || 0);
   }
 
   // Alarma de emergencia: faro rojo titilante sobre la estructura.
