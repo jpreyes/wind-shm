@@ -11,7 +11,7 @@
 // Para AGREGAR más macromodelos: registrarlos en `macro_registry.js` (ver el registro
 // de `infill` al final de este archivo y la guía `docs/macromodelos.md`).
 // ─────────────────────────────────────────────────────────────────────────────
-import { registerMacro } from './macro_registry.js?v=202';
+import { registerMacro } from './macro_registry.js?v=203';
 
 /**
  * Ancho del puntal diagonal equivalente (Mainstone / FEMA 356).

@@ -11,7 +11,7 @@
 // cada par (material, sección) en uso; al importar se crea un material y una sección por
 // cada sección SAP usada.  Unidades del intercambio: KN, m, C.
 // ──────────────────────────────────────────────────────────────────────────────
-import { registerFormat } from '../registry.js?v=202';
+import { registerFormat } from '../registry.js?v=203';
 
 const G_ACC = 9.80665;   // peso específico = densidad · g  (UnitWeight ↔ UnitMass)
 const RF = ['PI', 'V2I', 'V3I', 'TI', 'M2I', 'M3I', 'PJ', 'V2J', 'V3J', 'TJ', 'M2J', 'M3J'];  // liberaciones (orden 12 GDL local)

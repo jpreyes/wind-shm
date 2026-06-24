@@ -8,12 +8,12 @@
 //   inspecciones y señal temporal EN VIVO desde un Web Worker (DataSource).
 // Recortes (modelado) los hace shm.css ocultando, no borrando.
 // ─────────────────────────────────────────────────────────────────────────────
-import { FleetView } from './fleet_view.js?v=202';
-import { DataSource } from './data_source.js?v=202';
-import { computeTwin } from './digital_twin.js?v=202';
+import { FleetView } from './fleet_view.js?v=203';
+import { DataSource } from './data_source.js?v=203';
+import { computeTwin } from './digital_twin.js?v=203';
 
 const F1_BASE = { turbine: 0.283, hv: 1.6 };
-const REWIND_VER = 'v202';   // versión visible del build (subir junto al cache-bust)
+const REWIND_VER = 'v203';   // versión visible del build (subir junto al cache-bust)
 const LAYOUT_KEY = 'rewind-layout';
 const loadLayout = () => { try { return JSON.parse(localStorage.getItem(LAYOUT_KEY)); } catch { return null; } };
 const FS = 62.5;   // frecuencia de muestreo de la señal (Hz), igual que shm_worker.js
@@ -679,12 +679,12 @@ function buildDashboard(panel, fleet, actions) {
     const fAxis = (g, w, h, fMax) => { g.fillStyle = '#888'; g.font = '9px sans-serif'; for (let f = 0; f <= fMax; f += 2) { const x = f / fMax * w; g.fillText(f + ' Hz', Math.min(x, w - 22), h - 2); } };
     const topSid = () => (o.sensors.find(s => /top|s1/.test(s.id)) || o.sensors[0])?.id;
 
-    const imgSignal = (sid) => { const { c, g, w, h } = mk(560, 150); const b = sigBuf[sid] || []; g.strokeStyle = '#cfd6dd'; g.beginPath(); g.moveTo(0, h / 2); g.lineTo(w, h / 2); g.stroke(); g.strokeStyle = '#1f6feb'; g.lineWidth = 1; g.beginPath(); for (let i = 0; i < b.length; i++) { const x = i / 700 * w, y = h / 2 - b[i] * h * 0.4; i ? g.lineTo(x, y) : g.moveTo(x, y); } g.stroke(); return c.toDataURL('image/png'); };
-    const imgFFT = (sid) => { const { c, g, w, h } = mk(560, 150); const { mag, df } = fftMag(sigBuf[sid] || []); const fMax = 8, bins = Math.min(mag.length, Math.floor(fMax / (df || 1))); let mx = 1e-9; for (let i = 1; i < bins; i++) mx = Math.max(mx, mag[i]); g.fillStyle = '#1f6feb'; for (let i = 1; i < bins; i++) { const x = i / bins * w, bh = mag[i] / mx * (h - 18); g.fillRect(x, h - 12 - bh, Math.max(1, w / bins - 1), bh); } fAxis(g, w, h, fMax); return c.toDataURL('image/png'); };
-    const imgPSD = (sid) => { const { c, g, w, h } = mk(560, 150); const { mag, df } = fftMag(sigBuf[sid] || []); const fMax = 8, bins = Math.min(mag.length, Math.floor(fMax / (df || 1))); const dB = []; let lo = 1e9, hi = -1e9; for (let i = 1; i < bins; i++) { const v = 10 * Math.log10(mag[i] * mag[i] + 1e-12); dB[i] = v; lo = Math.min(lo, v); hi = Math.max(hi, v); } const rng = (hi - lo) || 1; g.strokeStyle = '#0d9488'; g.lineWidth = 1.2; g.beginPath(); for (let i = 1; i < bins; i++) { const x = i / bins * w, y = (h - 14) - ((dB[i] - lo) / rng) * (h - 22); i === 1 ? g.moveTo(x, y) : g.lineTo(x, y); } g.stroke(); fAxis(g, w, h, fMax); return c.toDataURL('image/png'); };
-    const imgWavelet = (sid) => {
+    const imgSignal = (buf) => { const { c, g, w, h } = mk(560, 150); const b = buf || []; g.strokeStyle = '#cfd6dd'; g.beginPath(); g.moveTo(0, h / 2); g.lineTo(w, h / 2); g.stroke(); g.strokeStyle = '#1f6feb'; g.lineWidth = 1; g.beginPath(); for (let i = 0; i < b.length; i++) { const x = i / 700 * w, y = h / 2 - b[i] * h * 0.4; i ? g.lineTo(x, y) : g.moveTo(x, y); } g.stroke(); return c.toDataURL('image/png'); };
+    const imgFFT = (buf) => { const { c, g, w, h } = mk(560, 150); const { mag, df } = fftMag(buf || []); const fMax = 8, bins = Math.min(mag.length, Math.floor(fMax / (df || 1))); let mx = 1e-9; for (let i = 1; i < bins; i++) mx = Math.max(mx, mag[i]); g.fillStyle = '#1f6feb'; for (let i = 1; i < bins; i++) { const x = i / bins * w, bh = mag[i] / mx * (h - 18); g.fillRect(x, h - 12 - bh, Math.max(1, w / bins - 1), bh); } fAxis(g, w, h, fMax); return c.toDataURL('image/png'); };
+    const imgPSD = (buf) => { const { c, g, w, h } = mk(560, 150); const { mag, df } = fftMag(buf || []); const fMax = 8, bins = Math.min(mag.length, Math.floor(fMax / (df || 1))); const dB = []; let lo = 1e9, hi = -1e9; for (let i = 1; i < bins; i++) { const v = 10 * Math.log10(mag[i] * mag[i] + 1e-12); dB[i] = v; lo = Math.min(lo, v); hi = Math.max(hi, v); } const rng = (hi - lo) || 1; g.strokeStyle = '#0d9488'; g.lineWidth = 1.2; g.beginPath(); for (let i = 1; i < bins; i++) { const x = i / bins * w, y = (h - 14) - ((dB[i] - lo) / rng) * (h - 22); i === 1 ? g.moveTo(x, y) : g.lineTo(x, y); } g.stroke(); fAxis(g, w, h, fMax); return c.toDataURL('image/png'); };
+    const imgWavelet = (buf) => {
       const { c, g, w, h } = mk(560, 170);
-      const raw = sigBuf[sid] || []; const N = 256, x = raw.slice(-N);
+      const raw = buf || []; const N = 256, x = raw.slice(-N);
       if (x.length > 16) {
         const m = x.reduce((a, b) => a + b, 0) / x.length; for (let i = 0; i < x.length; i++) x[i] -= m;
         const fs = FS, nf = 30, freqs = []; for (let i = 0; i < nf; i++) freqs.push(0.2 * Math.pow(8 / 0.2, i / (nf - 1)));
@@ -728,8 +728,18 @@ function buildDashboard(panel, fleet, actions) {
       const sensRows = (d.sensors || o.sensors).map((se, i) => `<tr><td>${se.id}</td><td>MEMS · acelerómetro</td><td>${o.type === 'hv' ? 'nodo ' + (i + 1) : (se.id.includes('mid') ? 'centro del fuste' : 'tope del fuste')}</td><td>${se.status === 'fault' ? '<span class="warn">FALLA</span>' : 'Operativo'}</td><td>${se.rms != null ? (se.rms * 1000).toFixed(1) + ' mg' : '—'}</td></tr>`).join('');
       const evRows = (clsEvents[o.id] || []).slice(-12).reverse().map(e => `<tr><td>${fmtT(e.t)}</td><td>${CLS[e.from]} → ${e.to >= 3 ? `<span class="warn">${CLS[e.to]}</span>` : CLS[e.to]}</td></tr>`).join('') || '<tr><td colspan="2">Sin cambios registrados.</td></tr>';
       const mRows = (actions.log || []).filter(m => m.id === o.id).slice(-12).reverse().map(m => `<tr><td>${fmtT(m.t)}</td><td>${esc(m.action)}</td></tr>`).join('') || '<tr><td colspan="2">Sin acciones de mantenimiento.</td></tr>';
+      // Buffer sintético para el gateway (nodo de enlace en la base de la torre).
+      const gwBuf = []; for (let i = 0; i < 300; i++) gwBuf.push(0.22 * Math.sin(2 * Math.PI * 0.283 * i / FS) + 0.08 * (Math.random() - 0.5));
+      const vibBlock = (label, buf, fault) => `
+        <h3>${esc(label)}${fault ? ' · <span class="warn">en falla</span>' : ''}</h3>
+        <div class="plot"><div class="cap">Señal temporal</div><img src="${imgSignal(buf)}"></div>
+        <div class="vib2"><div class="plot"><div class="cap">FFT</div><img src="${imgFFT(buf)}"></div><div class="plot"><div class="cap">PSD</div><img src="${imgPSD(buf)}"></div></div>
+        <div class="plot"><div class="cap">Escalograma wavelet (Morlet)</div><img src="${imgWavelet(buf)}"></div>`;
+      const vibSensores = (o.sensors).map(se => vibBlock(`Sensor ${se.id} — MEMS acelerómetro`, sigBuf[se.id], se.status === 'fault')).join('');
+      const vibGateway = o.type === 'turbine' ? vibBlock('Gateway — nodo de enlace (base)', gwBuf, false) : '';
       detalle = `
         <h2>2 · Estructura ${esc(o.label)}</h2>
+        <div class="cls-big">Estado: <b style="color:${cls >= 3 ? '#c0271f' : '#1a7f37'}">${CLS[cls]}</b></div>
         <div class="cols">
           <div class="draw">${schematic(o)}</div>
           <table class="ficha">
@@ -745,15 +755,12 @@ function buildDashboard(panel, fleet, actions) {
         </div>
         <h3>Sensores</h3>
         <table><thead><tr><th>ID</th><th>Tipo</th><th>Ubicación</th><th>Estado</th><th>RMS</th></tr></thead><tbody>${sensRows}</tbody></table>
-        <h3>Análisis de vibración (acelerómetro superior)</h3>
-        <div class="plot"><div class="cap">Señal temporal</div><img src="${imgSignal(sid)}"></div>
-        <div class="plot"><div class="cap">Espectro FFT</div><img src="${imgFFT(sid)}"></div>
-        <div class="plot"><div class="cap">Densidad espectral de potencia (PSD)</div><img src="${imgPSD(sid)}"></div>
-        <div class="plot"><div class="cap">Escalograma wavelet (Morlet)</div><img src="${imgWavelet(sid)}"></div>
         <h3>Historial de anomalías y advertencias</h3>
         <table><thead><tr><th>Fecha y hora</th><th>Cambio de nivel</th></tr></thead><tbody>${evRows}</tbody></table>
         <h3>Acciones de mantenimiento</h3>
-        <table><thead><tr><th>Fecha y hora</th><th>Acción</th></tr></thead><tbody>${mRows}</tbody></table>`;
+        <table><thead><tr><th>Fecha y hora</th><th>Acción</th></tr></thead><tbody>${mRows}</tbody></table>
+        <h2>3 · Análisis de vibración — todos los sensores y gateway</h2>
+        ${vibSensores}${vibGateway}`;
     }
 
     // Compilado del parque (cuando no hay torre objetivo): historial y mantenimiento de toda la flota.
@@ -795,6 +802,9 @@ function buildDashboard(panel, fleet, actions) {
   .plot { margin: 8px 0 14px; }
   .plot .cap { font-size: 11px; color: #555; margin-bottom: 3px; }
   .plot img { width: 100%; border: 1px solid #e2e2e2; border-radius: 4px; }
+  .vib2 { display: flex; gap: 14px; } .vib2 .plot { flex: 1; min-width: 0; }
+  .cls-big { display: inline-block; font-size: 19px; margin: 8px 0 16px; padding: 10px 18px; border: 1.5px solid #ccc; border-radius: 10px; }
+  .cls-big b { font-weight: 700; }
   footer { margin-top: 40px; border-top: 1px solid #ccc; padding-top: 10px; color: #777; font-size: 11px; }
   .noprint { position: fixed; top: 14px; right: 14px; }
   .noprint button { font: inherit; padding: 9px 16px; border: 0; border-radius: 8px; background: #0d9488; color: #fff; cursor: pointer; }

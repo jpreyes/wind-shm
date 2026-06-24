@@ -9,7 +9,7 @@
 // Unidades: kN, m, kN/m². √f'c usa f'c en MPa (kN/m² ÷ 1000).
 // ──────────────────────────────────────────────────────────────────────────────
 
-import { finalize } from './aisc360.js?v=202';
+import { finalize } from './aisc360.js?v=203';
 
 const ratObj = (D, C, extra = {}) => ({
   demanda: +(+D).toFixed(4), capacidad: +(+C).toFixed(4),

@@ -7,8 +7,8 @@
 // ─────────────────────────────────────────────────────────────────────────────
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
-import { createTurbine, TOWER_H } from './turbine_mesh.js?v=202';
-import { createSubstationTower, groundCable, overheadLine } from './structures.js?v=202';
+import { createTurbine, TOWER_H } from './turbine_mesh.js?v=203';
+import { createSubstationTower, groundCable, overheadLine } from './structures.js?v=203';
 
 const SPACING = 235;
 
@@ -157,7 +157,7 @@ export class FleetView {
   getStructures() { return this.structures.map(s => ({ id: s.id, type: s.type, label: s.label, height: s.height })); }
   getStructure(id) { return this.structures.find(s => s.id === id) || null; }
   selectById(id) { const o = this.getStructure(id); if (o) this.selectTurbine(o); }
-  _addLabel(st) { const sp = makeLabelSprite(st.label); sp.position.set(0, 5, 11); st.group.add(sp); st._label = sp; }   // al pie del modelo
+  _addLabel(st) { const sp = makeLabelSprite(st.label); sp.position.set(0, 2, 14); st.group.add(sp); st._label = sp; }   // al pie, fuera de la fundación
   setSensorStatus(structId, sensorId, status) {
     const st = this.getStructure(structId); if (!st) return;
     const se = st.sensors.find(x => x.id === sensorId); if (se) se.status = status;
@@ -371,6 +371,13 @@ export class FleetView {
       for (const mat of (st.dimMats || st.bodyMats || [])) {
         mat.transparent = st.dim > 0.01; mat.opacity = op;
         if (mat.emissive) mat.emissive.setRGB(rp, 0, 0);
+      }
+      // Oscilación leve de la punta por el viento (sway sobre la base, ejes X/Z)
+      if (!this.paused) {
+        if (st._sw === undefined) st._sw = Math.random() * 6.28;
+        const amp = st.type === 'hv' ? 0.0025 : 0.006;
+        st.group.rotation.z = amp * Math.sin(tt * 0.9 + st._sw);
+        st.group.rotation.x = amp * 0.7 * Math.sin(tt * 0.7 + st._sw * 1.3);
       }
     }
 
