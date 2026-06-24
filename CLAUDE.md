@@ -2,7 +2,18 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
-## What this is
+## wind-shm: what this fork is
+
+This repo (`jpreyes/wind-shm`) is a **fork of structweb3d/PÓRTICO** being repurposed into a **Structural Health Monitoring (SHM) tool for wind turbines**. `origin` → `wind-shm`, `upstream` → `structweb3d` (pull PÓRTICO improvements from upstream; ship SHM work to origin). The shared base below still applies verbatim — same vanilla-JS + Three.js engine, no build step, Spanish UI/commits.
+
+**The pivot, in one line:** stop *building* models; start *monitoring a fleet*. Plan:
+- **Keep & reuse** (already in the codebase, useful as the physics-based **digital twin**): static, dynamic/time-history (feed measured accelerograms), modal (`subspace.js` is the OMA-ready eigen core), nonlinear P-Delta (`geometric.js`) and nonlinear compression (`nl_lite.js`). The new commit `#86` added a **pluggable MACROMODELOS registry** — that is the intended hook for the wind-turbine model.
+- **Add:** a `Turbine` macro-model (mast + nacelle + spinning blades + wind); a multi-turbine field (`InstancedMesh` + LOD + frustum culling → ~100 turbines at 60fps); cinematic select-and-zoom (others dimmed); a **liveness layer** (sensors + gateways as one `THREE.Points`/instanced layer, blink = heartbeat via shader time-uniform + per-instance phase, color = active/stale/offline — must show for **all on-screen turbines**, not just the selected one); an SHM dashboard in the right panel (Señal · Datos · Estado estructural · Movimiento · Avanzado); ML across the fleet (population-based SHM); a hybrid **`DataSource`** abstraction (`SimulatedSource` ↔ `LiveSource`, same schema) with the real path being gateway → Cloudflare Worker + Durable Object → WebSocket → browser.
+- **Remove later** (Juan Patricio will specify which): modeling toolbar (node/element/area/mesh/support creation), response spectrum, rigid diaphragms, load combinations, CSV geometry editing.
+
+Each turbine carries **2 MEMS accelerometers** (top + mid mast) + a gateway → the 2-node config is intentional (enough for the first 2 bending modes + an ML feature vector).
+
+## What this is (shared base from structweb3d)
 
 **PÓRTICO** — a browser-based 3D structural analysis (FEM) + teaching app for the Instituto de Obras Civiles, Universidad Austral de Chile (Dr. Juan Patricio Reyes). Vanilla JS ES modules + Three.js + a small `numeric.js`. **No build step, no bundler, no framework, no `package.json`** — `index.html` loads `js/app.js` directly via an importmap. UI text, code comments, and git commit messages are in **Spanish**; match that.
 
@@ -17,11 +28,11 @@ The app must run from a static server with no install. It is also a PWA (install
 
 ## Versioned imports — the cache-busting convention (important)
 
-Every internal import and worker URL carries a query string, e.g. `import { Model } from './model/model.js?v=123'`. This is a **global app version** used to bust browser/SW caches. When you ship a change to shipped JS/CSS, **bump it across all files at once** (current version: **v123**):
+Every internal import and worker URL carries a query string, e.g. `import { Model } from './model/model.js?v=199'`. This is a **global app version** used to bust browser/SW caches. When you ship a change to shipped JS/CSS, **bump it across all files at once** (current version: **v199**):
 
 ```bash
-files=$(grep -rl "v=123" --include=*.js --include=*.html js index.html sw.js)
-for f in $files; do sed -i 's/v=123/v=124/g' "$f"; done   # ~20 files
+files=$(grep -rl "v=199" --include=*.js --include=*.html js index.html sw.js)
+for f in $files; do sed -i 's/v=199/v=200/g' "$f"; done   # ~20 files
 ```
 
 Gotchas:
@@ -64,10 +75,11 @@ Use the preview tools to verify UI/solver changes (serve on 8765). **The PWA ser
 
 ## Git & editing conventions
 
-- **Workflow:** commit directly to `main` and push (established for this repo). Commit messages in Spanish; this project ends them with a `Co-Authored-By: Claude` trailer.
+- **Remotes:** `origin` → `jpreyes/wind-shm` (push SHM work here), `upstream` → `jpreyes/structweb3d` (`git fetch upstream` / merge to pull PÓRTICO improvements).
+- **Workflow:** commit directly to `main` and push. Commit messages in Spanish; this project ends them with a `Co-Authored-By: Claude` trailer.
 - **Never `git add -A`.** Several large directories are intentionally untracked / git-ignored: `excel/` (instructor source spreadsheets), `referencias/` (verification PDFs/manuals), `node_modules/`, and `examples/portico_simple_v3.s3d`. Stage explicit paths instead.
 - **Do not use PowerShell `Get-Content`/`Set-Content` for bulk text edits** — PS 5.1 corrupts UTF-8 accents (the codebase is full of `áéíóñ`). Use `sed` via the Bash tool, or the Edit tool.
-- The Bash tool's working directory can reset to `C:\Workspace`; `cd /c/Workspace/analisis_estructural_dinamico` at the start of compound commands.
+- The Bash tool's working directory resets to the repo root (`C:\Respaldos\wind-shm`) between calls; prefer absolute paths, and `cd /c/Respaldos/wind-shm` at the start of compound commands if needed.
 
 ## Roadmap
 
