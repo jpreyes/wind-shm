@@ -10,7 +10,8 @@
 // [u1,v1,w1,rx1,ry1,rz1, u2,v2,w2,rx2,ry2,rz2], plano XZ con dw/dx = −θy).
 // N en TRACCIÓN positiva (compresión N<0 → reduce la rigidez → pandeo).
 // ──────────────────────────────────────────────────────────────────────────────
-import { localAxes, transformMatrix, globalStiffness } from './timoshenko.js?v=178';
+import { localAxes, transformMatrix, globalStiffness } from './timoshenko.js?v=179';
+import { assembleAreasKgInto } from './membrane.js?v=179';
 
 // 12×12 geométrica local a partir del axial N (tracción +) y la longitud L.
 // Forma consistente (Przemieniecti) para flexión en ambos planos; los términos
@@ -86,5 +87,8 @@ export function assembleKg(model, nodeIndex, uGlobal) {
       for (let j = 0; j < 12; j++)
         Kg[ed[i] * nDOF + ed[j]] += KgG[i][j];
   }
+  // Rigidez geométrica de membrana/cáscara (pandeo de cáscara, 2-016/2-017): el
+  // estado de tensión en el plano de las áreas rigidiza/ablanda la flexión transversal.
+  if (model.areas?.size) assembleAreasKgInto({ add: (i, j, v) => { Kg[i * nDOF + j] += v; } }, model, nodeIndex, uGlobal);
   return { Kg, Nmax, Nby };
 }

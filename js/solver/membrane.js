@@ -14,7 +14,7 @@
 // Convención de GDL local: [u1,v1, u2,v2, ...] (x,y en el plano del elemento).
 // ──────────────────────────────────────────────────────────────────────────────
 
-import { mitc4Plate, dktPlate, plateMoments, plateCurvatures, plateThermalLoad, plateD } from './plate.js?v=178';
+import { mitc4Plate, dktPlate, plateMoments, plateCurvatures, plateThermalLoad, plateD } from './plate.js?v=179';
 
 // Matriz constitutiva D (3×3) plana. planeStrain=false → tensión plana.
 export function Dmatrix(E, nu, planeStrain = false) {
@@ -203,7 +203,7 @@ function shapeQ4(xi, eta) {
 }
 
 // B (3×8) y det(J) en un punto de Gauss. coords = [[x,y]×4].
-function bMatrixQ4(coords, xi, eta) {
+export function bMatrixQ4(coords, xi, eta) {
   const { dNdxi, dNdeta } = shapeQ4(xi, eta);
   let J00 = 0, J01 = 0, J10 = 0, J11 = 0;
   for (let i = 0; i < 4; i++) {
@@ -363,6 +363,54 @@ export function assembleAreasInto(writer, model, nodeIndex, opts = {}) {
       } else {                        // sin placa: regular las 3 rotaciones
         for (let r = 3; r < 6; r++) writer.add(gdof[a] + r, gdof[a] + r, kr);
       }
+    }
+  }
+}
+
+// ── Rigidez GEOMÉTRICA de membrana/cáscara (pandeo de cáscara, 2-016/2-017) ──────
+// Bajo un estado de tensión en el plano (σx, σy, τxy) las áreas aportan una rigidez
+// geométrica a la traslación TRANSVERSAL (fuera del plano, dirección ez del elemento):
+//   Kg_w[i][j] = ∫ (∂Ni·S·∂Nj) t dA,  S = [[σx,τxy],[τxy,σy]],  ∂N = [∂N/∂x, ∂N/∂y].
+// La tracción en el plano rigidiza (estabiliza), la compresión ablanda → pandeo.
+// Se proyecta el GDL transversal local w = u·ez al bloque global (ez⊗ez) de las
+// traslaciones. CST: gradientes constantes (exactos); QUAD: gradientes en el centro
+// (1 punto de Gauss). `uGlobal` = desplazamiento del estado de referencia.
+export function assembleAreasKgInto(writer, model, nodeIndex, uGlobal) {
+  for (const area of model.areas.values()) {
+    if (!hasMembrane(area)) continue;             // la placa pura no tiene tensión en plano
+    const coords3d = area.nodes.map(id => { const n = model.nodes.get(id); return n ? [n.x, n.y, n.z] : null; });
+    const mat = model.materials.get(area.matId);
+    if (coords3d.some(c => !c) || !mat) continue;
+    const { ex, ey, ez, local } = areaLocalFrame(coords3d);
+    const D = Dmatrix(mat.E, mat.nu, area.planeStrain);
+    const nN = area.nodes.length;
+    const gdof = area.nodes.map(id => 6 * nodeIndex.get(id));
+    // Desplazamientos en-plano locales por nodo: [u·ex, u·ey]
+    const uloc = new Array(2 * nN);
+    for (let a = 0; a < nN; a++) {
+      const g = gdof[a]; const ux = uGlobal[g] || 0, uy = uGlobal[g + 1] || 0, uz = uGlobal[g + 2] || 0;
+      uloc[2*a]   = ux*ex[0] + uy*ex[1] + uz*ex[2];
+      uloc[2*a+1] = ux*ey[0] + uy*ey[1] + uz*ey[2];
+    }
+    // Tensión de membrana + gradientes de forma (∂N/∂x, ∂N/∂y) y área
+    let sx, sy, txy, A; const gx = [], gy = [];
+    if (nN === 3) {
+      const cs = cstElement(local, D, area.thickness);
+      [sx, sy, txy] = cstStress(cs.B, D, uloc); A = cs.area;
+      for (let i = 0; i < 3; i++) { gx.push(cs.B[0][2*i]); gy.push(cs.B[1][2*i+1]); }
+    } else {
+      const { B } = bMatrixQ4(local, 0, 0);
+      [sx, sy, txy] = quadStressCenter(local, D, uloc);
+      // área del cuadrilátero (shoelace en coords locales)
+      A = 0; for (let i = 0; i < nN; i++) { const j = (i+1)%nN; A += local[i][0]*local[j][1] - local[j][0]*local[i][1]; }
+      A = Math.abs(A) / 2;
+      for (let i = 0; i < nN; i++) { gx.push(B[0][2*i]); gy.push(B[1][2*i+1]); }
+    }
+    const tA = (area.thickness || 0) * A;
+    for (let a = 0; a < nN; a++) for (let b = 0; b < nN; b++) {
+      const kw = tA * (gx[a]*sx*gx[b] + gy[a]*sy*gy[b] + txy*(gx[a]*gy[b] + gy[a]*gx[b]));
+      if (!kw) continue;
+      for (let r = 0; r < 3; r++) for (let s = 0; s < 3; s++) { const v = kw * ez[r] * ez[s]; if (v) writer.add(gdof[a] + r, gdof[b] + s, v); }
     }
   }
 }
