@@ -81,7 +81,13 @@ body.shm #shm-panel {
 /* Encabezado del dashboard */
 #shm-panel .shm-head {
   padding: 12px 14px; border-bottom: 1px solid var(--border);
+  display: flex; align-items: center; gap: 10px;
 }
+#shm-report-btn {
+  flex: none; font: inherit; font-size: 12px; cursor: pointer; white-space: nowrap;
+  background: var(--accent); color: #fff; border: 0; border-radius: 8px; padding: 7px 11px;
+}
+#shm-report-btn:hover { background: var(--accent-dim); }
 #shm-panel .shm-title { font-size: 14px; font-weight: 700; letter-spacing: .2px; }
 #shm-panel .shm-sub { font-size: 11px; color: var(--text-muted); margin-top: 2px; }
 

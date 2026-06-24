@@ -61,14 +61,15 @@ async function boot() {
   fleet.renderer.domElement.classList.add('shm-canvas');
   window.shmFleet = fleet;
 
-  // Estado de reconocimiento/informe de anomalías
-  const ack = new Set(), informed = new Set(), rawAnom = new Set();
+  // Estado de reconocimiento/informe de anomalías + bitácora de mantenimiento
+  const ack = new Set(), informed = new Set(), rawAnom = new Set(), maintLog = [];
   const actions = {
     isAnom: (id) => rawAnom.has(id),
     isAck: (id) => ack.has(id),
     isInformed: (id) => informed.has(id),
-    dismiss: (id) => { ack.has(id) ? ack.delete(id) : ack.add(id); },
-    report: (obj) => { informed.add(obj.id); downloadReport(obj); },
+    log: maintLog,
+    dismiss: (id) => { const on = !ack.has(id); on ? ack.add(id) : ack.delete(id); maintLog.push({ t: Date.now(), id, action: on ? 'Anomalía reconocida (descartada)' : 'Alarma reactivada' }); },
+    report: (obj) => { informed.add(obj.id); maintLog.push({ t: Date.now(), id: obj.id, action: 'Informe de falla emitido' }); downloadReport(obj); },
   };
 
   buildToolbar(toolbar, fleet);
@@ -259,8 +260,11 @@ function buildDashboard(panel, fleet, actions) {
   el.id = 'shm-panel';
   el.innerHTML = `
     <div class="shm-head">
-      <div class="shm-title">🌬️ ReWind — SHM</div>
-      <div class="shm-sub">Salud estructural del parque en tiempo real</div>
+      <div style="flex:1">
+        <div class="shm-title">🌬️ ReWind — SHM</div>
+        <div class="shm-sub">Salud estructural del parque en tiempo real</div>
+      </div>
+      <button id="shm-report-btn" title="Generar informe imprimible">📄 Informe</button>
     </div>
     <div class="shm-fleet">
       <div class="shm-stat"><div class="k">Estructuras</div><div class="v" id="shm-count">0</div></div>
@@ -275,6 +279,7 @@ function buildDashboard(panel, fleet, actions) {
     <div class="shm-detail" id="shm-detail"><div class="empty">Selecciona una estructura<br>(en la lista o en la vista).</div></div>`;
   panel.appendChild(el);
   const $ = (s) => el.querySelector(s);
+  el.querySelector('#shm-report-btn').addEventListener('click', () => buildReport());
 
   let list = [], current = null, pane = 'datos', sigBuf = {}, sigRAF = null, freqHist = {};
   let specOff = null, specLast = 0;                 // espectrograma (offscreen + scroll)
@@ -648,6 +653,141 @@ function buildDashboard(panel, fleet, actions) {
     for (const p of prof) g.lineTo(X(p[key]), Y(p.z));
     g.lineTo(4, Y(zMax)); g.closePath(); g.fill(); g.stroke();
     g.fillStyle = '#7e8da0'; g.font = '10px Inter, sans-serif'; g.fillText(key, w - 12, 11);
+  }
+
+  // ── Informe imprimible (abre en pestaña nueva, listo para PDF) ────────────
+  function buildReport() {
+    const o = current;
+    const fmtT = (t) => new Date(t).toLocaleString('es-CL');
+    const esc = (s) => String(s).replace(/[<>&]/g, c => ({ '<': '&lt;', '>': '&gt;', '&': '&amp;' }[c]));
+
+    // — utilidades de imagen (lienzo blanco, tinta oscura; los dibujos sí llevan color) —
+    const mk = (w, h) => { const c = document.createElement('canvas'); c.width = w * 2; c.height = h * 2; const g = c.getContext('2d'); g.scale(2, 2); g.fillStyle = '#fff'; g.fillRect(0, 0, w, h); return { c, g, w, h }; };
+    const fAxis = (g, w, h, fMax) => { g.fillStyle = '#888'; g.font = '9px sans-serif'; for (let f = 0; f <= fMax; f += 2) { const x = f / fMax * w; g.fillText(f + ' Hz', Math.min(x, w - 22), h - 2); } };
+    const topSid = () => (o.sensors.find(s => /top|s1/.test(s.id)) || o.sensors[0])?.id;
+
+    const imgSignal = (sid) => { const { c, g, w, h } = mk(560, 150); const b = sigBuf[sid] || []; g.strokeStyle = '#cfd6dd'; g.beginPath(); g.moveTo(0, h / 2); g.lineTo(w, h / 2); g.stroke(); g.strokeStyle = '#1f6feb'; g.lineWidth = 1; g.beginPath(); for (let i = 0; i < b.length; i++) { const x = i / 700 * w, y = h / 2 - b[i] * h * 0.4; i ? g.lineTo(x, y) : g.moveTo(x, y); } g.stroke(); return c.toDataURL('image/png'); };
+    const imgFFT = (sid) => { const { c, g, w, h } = mk(560, 150); const { mag, df } = fftMag(sigBuf[sid] || []); const fMax = 8, bins = Math.min(mag.length, Math.floor(fMax / (df || 1))); let mx = 1e-9; for (let i = 1; i < bins; i++) mx = Math.max(mx, mag[i]); g.fillStyle = '#1f6feb'; for (let i = 1; i < bins; i++) { const x = i / bins * w, bh = mag[i] / mx * (h - 18); g.fillRect(x, h - 12 - bh, Math.max(1, w / bins - 1), bh); } fAxis(g, w, h, fMax); return c.toDataURL('image/png'); };
+    const imgPSD = (sid) => { const { c, g, w, h } = mk(560, 150); const { mag, df } = fftMag(sigBuf[sid] || []); const fMax = 8, bins = Math.min(mag.length, Math.floor(fMax / (df || 1))); const dB = []; let lo = 1e9, hi = -1e9; for (let i = 1; i < bins; i++) { const v = 10 * Math.log10(mag[i] * mag[i] + 1e-12); dB[i] = v; lo = Math.min(lo, v); hi = Math.max(hi, v); } const rng = (hi - lo) || 1; g.strokeStyle = '#0d9488'; g.lineWidth = 1.2; g.beginPath(); for (let i = 1; i < bins; i++) { const x = i / bins * w, y = (h - 14) - ((dB[i] - lo) / rng) * (h - 22); i === 1 ? g.moveTo(x, y) : g.lineTo(x, y); } g.stroke(); fAxis(g, w, h, fMax); return c.toDataURL('image/png'); };
+    const imgWavelet = (sid) => {
+      const { c, g, w, h } = mk(560, 170);
+      const raw = sigBuf[sid] || []; const N = 256, x = raw.slice(-N);
+      if (x.length > 16) {
+        const m = x.reduce((a, b) => a + b, 0) / x.length; for (let i = 0; i < x.length; i++) x[i] -= m;
+        const fs = FS, nf = 30, freqs = []; for (let i = 0; i < nf; i++) freqs.push(0.2 * Math.pow(8 / 0.2, i / (nf - 1)));
+        const cols = 140, rows = [];
+        let gmax = 1e-9;
+        for (const f of freqs) {
+          const s = (6 / (2 * Math.PI * f)) * fs, half = Math.min(x.length, Math.ceil(s * 3)), row = new Float32Array(cols);
+          for (let cI = 0; cI < cols; cI++) {
+            const t = Math.floor(cI / cols * x.length); let re = 0, im = 0;
+            for (let k = -half; k <= half; k++) { const i = t + k; if (i < 0 || i >= x.length) continue; const tt = k / s, env = Math.exp(-0.5 * tt * tt), a = 6 * tt; re += x[i] * env * Math.cos(a); im += x[i] * env * Math.sin(a); }
+            const v = Math.hypot(re, im) / Math.sqrt(s); row[cI] = v; if (v > gmax) gmax = v;
+          }
+          rows.push(row);
+        }
+        const cw = w / cols, rh = (h - 14) / rows.length;
+        for (let r = 0; r < rows.length; r++) for (let cI = 0; cI < cols; cI++) { g.fillStyle = heat(rows[rows.length - 1 - r][cI] / gmax); g.fillRect(cI * cw, r * rh, Math.ceil(cw), Math.ceil(rh)); }
+      }
+      g.fillStyle = '#888'; g.font = '9px sans-serif'; g.fillText('8 Hz', 2, 10); g.fillText('0.2 Hz', 2, h - 16); g.fillText('tiempo →', w - 50, h - 2);
+      return c.toDataURL('image/png');
+    };
+
+    // — dibujo esquemático de la estructura —
+    const schematic = (st) => {
+      if (st.type === 'hv') return `<svg viewBox="0 0 120 200" width="120" height="200"><g fill="none" stroke="#0d9488" stroke-width="1.5"><path d="M40 190 L58 20 L62 20 L80 190"/><path d="M44 150 H76 M48 110 H72 M52 70 H68"/><path d="M40 190 L72 150 M80 190 L48 150 M44 150 L68 110 M76 150 L52 110"/><path d="M30 70 H90 M34 50 H86"/></g><circle cx="60" cy="22" r="3" fill="#16a34a"/><circle cx="58" cy="110" r="3" fill="#16a34a"/><circle cx="32" cy="70" r="3" fill="#16a34a"/><circle cx="60" cy="150" r="3" fill="#16a34a"/></svg>`;
+      return `<svg viewBox="0 0 120 200" width="120" height="200"><line x1="60" y1="195" x2="60" y2="50" stroke="#5aa9e6" stroke-width="6" stroke-linecap="round"/><ellipse cx="60" cy="195" rx="22" ry="4" fill="#d6dde5"/><rect x="52" y="40" width="22" height="10" rx="3" fill="#9bc6ea"/><g stroke="#5aa9e6" stroke-width="4" stroke-linecap="round"><line x1="58" y1="44" x2="58" y2="14"/><line x1="58" y1="44" x2="84" y2="58"/><line x1="58" y1="44" x2="32" y2="58"/></g><circle cx="58" cy="44" r="3.5" fill="#2dd4bf"/><circle cx="63" cy="60" r="3.5" fill="#16a34a"/><circle cx="63" cy="125" r="3.5" fill="#16a34a"/></svg>`;
+    };
+
+    // — tabla resumen de la flota —
+    const rowsHtml = list.map(s => {
+      const d = window.shmData?.get(s.id) || {};
+      const cls = d.cls || 0, fault = (d.sensors || []).some(x => x.status === 'fault');
+      const alerta = cls >= 3 || fault;
+      const clsCell = cls >= 3 ? `<span class="warn">${CLS[cls]}</span>` : CLS[cls];
+      return `<tr><td>${esc(s.label)}</td><td>${s.type === 'hv' ? 'Torre AT' : 'Aerogenerador'}</td><td>${s.height} m</td><td>${(d.sensors || s.sensors).length}</td><td>${clsCell}</td><td>${alerta ? '<span class="warn">Alerta</span>' : 'Operativa'}</td></tr>`;
+    }).join('');
+
+    let detalle = '';
+    if (o) {
+      const d = window.shmData?.get(o.id) || {}; const sid = topSid();
+      const cls = d.cls || 0;
+      const sensRows = (d.sensors || o.sensors).map((se, i) => `<tr><td>${se.id}</td><td>MEMS · acelerómetro</td><td>${o.type === 'hv' ? 'nodo ' + (i + 1) : (se.id.includes('mid') ? 'centro del fuste' : 'tope del fuste')}</td><td>${se.status === 'fault' ? '<span class="warn">FALLA</span>' : 'Operativo'}</td><td>${se.rms != null ? (se.rms * 1000).toFixed(1) + ' mg' : '—'}</td></tr>`).join('');
+      const evRows = (clsEvents[o.id] || []).slice(-12).reverse().map(e => `<tr><td>${fmtT(e.t)}</td><td>${CLS[e.from]} → ${e.to >= 3 ? `<span class="warn">${CLS[e.to]}</span>` : CLS[e.to]}</td></tr>`).join('') || '<tr><td colspan="2">Sin cambios registrados.</td></tr>';
+      const mRows = (actions.log || []).filter(m => m.id === o.id).slice(-12).reverse().map(m => `<tr><td>${fmtT(m.t)}</td><td>${esc(m.action)}</td></tr>`).join('') || '<tr><td colspan="2">Sin acciones de mantenimiento.</td></tr>';
+      detalle = `
+        <h2>2 · Estructura ${esc(o.label)}</h2>
+        <div class="cols">
+          <div class="draw">${schematic(o)}</div>
+          <table class="ficha">
+            <tr><th>Tipo</th><td>${o.type === 'hv' ? 'Torre de alta tensión' : 'Aerogenerador'}</td></tr>
+            <tr><th>Altura</th><td>${o.height} m</td></tr>
+            ${o.type === 'turbine' ? '<tr><th>Potencia</th><td>~3 MW</td></tr>' : ''}
+            <tr><th>f₁ gemelo digital</th><td>${window.shmTwin?.[o.type] ? window.shmTwin[o.type].toFixed(3) + ' Hz' : '—'}</td></tr>
+            <tr><th>f₁ actual</th><td>${d.f1 != null ? d.f1.toFixed(3) + ' Hz' : '—'}</td></tr>
+            <tr><th>Temperatura</th><td>${d.temp != null ? d.temp.toFixed(1) + ' °C' : '—'}</td></tr>
+            <tr><th>Índice de daño</th><td>${Math.round((d.dmg || 0) * 100)} %</td></tr>
+            <tr><th>Clasificación ML</th><td>${cls >= 3 ? `<span class="warn">${CLS[cls]}</span>` : CLS[cls]}</td></tr>
+          </table>
+        </div>
+        <h3>Sensores</h3>
+        <table><thead><tr><th>ID</th><th>Tipo</th><th>Ubicación</th><th>Estado</th><th>RMS</th></tr></thead><tbody>${sensRows}</tbody></table>
+        <h3>Análisis de vibración (acelerómetro superior)</h3>
+        <div class="plot"><div class="cap">Señal temporal</div><img src="${imgSignal(sid)}"></div>
+        <div class="plot"><div class="cap">Espectro FFT</div><img src="${imgFFT(sid)}"></div>
+        <div class="plot"><div class="cap">Densidad espectral de potencia (PSD)</div><img src="${imgPSD(sid)}"></div>
+        <div class="plot"><div class="cap">Escalograma wavelet (Morlet)</div><img src="${imgWavelet(sid)}"></div>
+        <h3>Historial de anomalías y advertencias</h3>
+        <table><thead><tr><th>Fecha y hora</th><th>Cambio de nivel</th></tr></thead><tbody>${evRows}</tbody></table>
+        <h3>Acciones de mantenimiento</h3>
+        <table><thead><tr><th>Fecha y hora</th><th>Acción</th></tr></thead><tbody>${mRows}</tbody></table>`;
+    }
+
+    const nAlarm = list.filter(s => { const d = window.shmData?.get(s.id) || {}; return (d.cls || 0) >= 3 || (d.sensors || []).some(x => x.status === 'fault'); }).length;
+    const html = `<!doctype html><html lang="es"><head><meta charset="utf-8">
+<title>Informe ReWind — Salud estructural</title>
+<style>
+  @page { margin: 18mm; }
+  * { box-sizing: border-box; }
+  body { font-family: 'Helvetica Neue', Arial, sans-serif; color: #1a1a1a; line-height: 1.55; margin: 32px auto; max-width: 820px; padding: 0 24px; }
+  header { display: flex; align-items: center; gap: 14px; border-bottom: 2px solid #1a1a1a; padding-bottom: 14px; }
+  header svg { flex: none; }
+  .htxt h1 { font-family: Georgia, serif; font-size: 24px; margin: 0; letter-spacing: .3px; }
+  .htxt .meta { color: #666; font-size: 12px; margin-top: 3px; }
+  h2 { font-family: Georgia, serif; font-size: 18px; margin: 34px 0 4px; padding-bottom: 5px; border-bottom: 1px solid #0d9488; }
+  h3 { font-size: 13px; text-transform: uppercase; letter-spacing: .06em; color: #444; margin: 22px 0 6px; }
+  p.lead { color: #444; }
+  table { border-collapse: collapse; width: 100%; font-size: 12px; margin: 4px 0 6px; }
+  th, td { border: 0; border-bottom: 1px solid #d8d8d8; padding: 6px 8px; text-align: left; vertical-align: top; }
+  thead th { border-bottom: 1.5px solid #333; font-weight: 600; }
+  table.ficha th { width: 42%; font-weight: 600; border-bottom: 1px solid #eee; }
+  table.ficha td { border-bottom: 1px solid #eee; }
+  .warn { color: #c0271f; font-weight: 700; }
+  .cols { display: flex; gap: 22px; align-items: flex-start; }
+  .draw { flex: none; }
+  .plot { margin: 8px 0 14px; }
+  .plot .cap { font-size: 11px; color: #555; margin-bottom: 3px; }
+  .plot img { width: 100%; border: 1px solid #e2e2e2; border-radius: 4px; }
+  footer { margin-top: 40px; border-top: 1px solid #ccc; padding-top: 10px; color: #777; font-size: 11px; }
+  .noprint { position: fixed; top: 14px; right: 14px; }
+  .noprint button { font: inherit; padding: 9px 16px; border: 0; border-radius: 8px; background: #0d9488; color: #fff; cursor: pointer; }
+  @media print { .noprint { display: none; } body { margin: 0; } }
+</style></head><body>
+<header>
+  <svg width="34" height="40" viewBox="0 0 24 24"><line x1="12" y1="23" x2="12" y2="12" stroke="#0d9488" stroke-width="2" stroke-linecap="round"/><g stroke="#0d9488" stroke-width="2" stroke-linecap="round"><line x1="12" y1="11" x2="12" y2="3"/><line x1="12" y1="11" x2="19" y2="15"/><line x1="12" y1="11" x2="5" y2="15"/></g><circle cx="12" cy="11" r="1.7" fill="#0d9488"/></svg>
+  <div class="htxt"><h1>Informe de salud estructural</h1><div class="meta">ReWind · Parque eólico · ${fmtT(Date.now())}</div></div>
+</header>
+<h2>1 · Resumen de la flota</h2>
+<p class="lead">${list.length} estructuras monitoreadas · ${nAlarm ? `<span class="warn">${nAlarm} en alerta</span>` : 'sin alertas activas'}.</p>
+<table><thead><tr><th>Estructura</th><th>Tipo</th><th>Altura</th><th>Sensores</th><th>Clasificación ML</th><th>Estado</th></tr></thead><tbody>${rowsHtml}</tbody></table>
+${detalle}
+<footer>Generado por ReWind — plataforma de monitoreo de salud estructural (SHM). Clasificación de daño por servicio ML sobre la telemetría de los acelerómetros MEMS. Documento de carácter informativo.</footer>
+<div class="noprint"><button onclick="window.print()">🖨 Imprimir / Guardar PDF</button></div>
+</body></html>`;
+
+    const win = window.open('', '_blank');
+    if (!win) { alert('Permite las ventanas emergentes para ver el informe.'); return; }
+    win.document.open(); win.document.write(html); win.document.close();
   }
 
   return { setStructures, select, onTick, setAlarms, refresh: () => { if (current) renderPane(); } };
