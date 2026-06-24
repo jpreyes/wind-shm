@@ -308,11 +308,16 @@ function buildDashboard(panel, fleet, actions) {
     el.querySelectorAll('.shm-row').forEach(r => r.classList.toggle('alarm', set.has(r.dataset.id)));
     const n = $('#shm-alarm-count'); if (n) n.textContent = ids.length;
   }
-  // Barra de acción sobre la falla de la estructura seleccionada (Descartar / Informar).
+  // Barra de acción sobre la falla (Descartar / Informar). Sólo se re-renderiza al
+  // cambiar el estado — si se reconstruyera cada tick, se perderían los clics.
+  let _abKey = '';
   function updateAlarmBar() {
     const bar = $('#shm-alarmbar'); if (!bar || !current || !actions) return;
-    if (!actions.isAnom(current.id)) { bar.style.display = 'none'; bar.innerHTML = ''; return; }
+    if (!actions.isAnom(current.id)) { if (_abKey !== 'none') { bar.style.display = 'none'; bar.innerHTML = ''; _abKey = 'none'; } return; }
     const acked = actions.isAck(current.id), inf = actions.isInformed(current.id);
+    const key = `${current.id}|${acked}|${inf}`;
+    if (key === _abKey) return;            // sin cambios → no tocar el DOM (no romper clics)
+    _abKey = key;
     bar.style.display = 'block'; bar.classList.toggle('acked', acked);
     bar.innerHTML = `
       <div class="ab-head"><span class="ab-ico">⚠</span> <b>${acked ? 'Anomalía reconocida' : 'Anomalía detectada'}</b>${inf ? ' · informada' : ''}</div>
@@ -320,8 +325,8 @@ function buildDashboard(panel, fleet, actions) {
         <button class="ab-btn ab-dismiss">${acked ? 'Reactivar alarma' : 'Descartar'}</button>
         <button class="ab-btn ab-report">Informar</button>
       </div>`;
-    bar.querySelector('.ab-dismiss').onclick = () => { actions.dismiss(current.id); updateAlarmBar(); };
-    bar.querySelector('.ab-report').onclick = () => { actions.report(current); updateAlarmBar(); };
+    bar.querySelector('.ab-dismiss').addEventListener('click', () => { actions.dismiss(current.id); updateAlarmBar(); });
+    bar.querySelector('.ab-report').addEventListener('click', () => { actions.report(current); updateAlarmBar(); });
   }
 
   function select(obj) {
@@ -344,6 +349,7 @@ function buildDashboard(panel, fleet, actions) {
         <button class="shm-tab" data-p="insp">Inspección</button>
       </div>
       <div class="shm-body" id="shm-pane"></div>`;
+    _abKey = '';
     updateAlarmBar();
     el.querySelectorAll('.shm-tab').forEach(t => t.addEventListener('click', () => { pane = t.dataset.p; renderPane(); }));
     renderPane();

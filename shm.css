@@ -14,6 +14,16 @@
 #load-row { display: flex; justify-content: space-between; align-items: baseline; margin-top: 9px; font-size: 12px; color: var(--text-muted); }
 #load-pct { font-weight: 600; color: var(--text); }
 
+/* ── Responsive: el panel derecho SIEMPRE visible ──────────────────────────── */
+/* El viewport (columna 1fr) debe poder encoger; si no, empuja el panel fuera y
+   #main lo recorta. min-width:0 lo permite. El ancho del panel se adapta. */
+body.shm #viewport-wrap { min-width: 0; }
+body.shm #viewport-container { min-width: 0; }
+body.shm #viewport-container > canvas { max-width: 100%; }
+body.shm #menubar { min-width: 0; overflow-x: auto; }
+@media (max-width: 1024px) { body.shm #main { grid-template-columns: var(--toolbar-w) 1fr 5px min(var(--panel-w), 50vw); } }
+@media (max-width: 680px)  { body.shm #main { grid-template-columns: var(--toolbar-w) 1fr 5px min(var(--panel-w), 62vw); } }
+
 /* ── Recorte: herramientas de modelado del toolbar izquierdo ───────────────── */
 body.shm #toolbar [data-mode="boxselect"],
 body.shm #toolbar [data-mode="addnode"],
