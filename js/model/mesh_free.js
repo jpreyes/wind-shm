@@ -15,8 +15,9 @@
 // Soporta AGUJEROS (opts.holes): cada hueco se fusiona al contorno con un puente de
 // ancho cero (bridging estilo earcut) → polígono simple que ear-clipping triangula.
 // ──────────────────────────────────────────────────────────────────────────────
-import { quadMinScaledJacobian, weldPoints } from './mesh_map.js?v=183';
-import { triQuality, boundaryNodes, laplacianSmooth } from './mesh_quality.js?v=183';
+import { quadMinScaledJacobian, weldPoints } from './mesh_map.js?v=184';
+import { triQuality, boundaryNodes, laplacianSmooth } from './mesh_quality.js?v=184';
+import { maxWeightMatching } from './matching.js?v=184';
 
 const EPS = 1e-9;
 const signedArea2 = (pts) => { let s = 0; for (let i = 0; i < pts.length; i++) { const a = pts[i], b = pts[(i + 1) % pts.length]; s += a[0] * b[1] - b[0] * a[1]; } return s / 2; };
@@ -108,8 +109,13 @@ export function uniformRefine(V, tris) {
   return out;
 }
 
-// ── 4. Recombinación a cuadriláteros (emparejado voraz por calidad) ──────────────
-export function recombineToQuads(V, tris, minJac = 0.30) {
+// ── 4. Recombinación a cuadriláteros ─────────────────────────────────────────────
+// Empareja triángulos adyacentes que formen un buen quad.  Por defecto resuelve el
+// EMPAREJAMIENTO DE PESO MÁXIMO exacto (Edmonds/«Blossom», `matching.js`) sobre el
+// grafo «triángulo–triángulo» con peso = calidad del quad → óptimo GLOBAL (más quads
+// y de mejor calidad que el emparejado voraz, como en Gmsh).  `opts.blossom===false`
+// vuelve al voraz (orden por calidad descendente). Devuelve celdas [tri…] + [quad…].
+export function recombineToQuads(V, tris, minJac = 0.30, opts = {}) {
   const key = (a, b) => a < b ? `${a},${b}` : `${b},${a}`;
   const edge = new Map();
   tris.forEach((t, ti) => { for (let e = 0; e < 3; e++) { const a = t[e], b = t[(e + 1) % 3], opp = t[(e + 2) % 3]; const k = key(a, b); if (!edge.has(k)) edge.set(k, []); edge.get(k).push({ ti, opp, a, b }); } });
@@ -122,12 +128,87 @@ export function recombineToQuads(V, tris, minJac = 0.30) {
     const jac = quadMinScaledJacobian(lift(quad[0]), lift(quad[1]), lift(quad[2]), lift(quad[3]));
     if (jac > minJac) cands.push({ t1: e1.ti, t2: e2.ti, quad, jac });
   }
-  cands.sort((a, b) => b.jac - a.jac);
   const used = new Array(tris.length).fill(false);
   const cells = [];
-  for (const c of cands) { if (used[c.t1] || used[c.t2]) continue; used[c.t1] = used[c.t2] = true; cells.push(c.quad); }
+
+  if (opts.blossom !== false && cands.length) {
+    // Grafo de matching: vértices = triángulos, aristas = quads candidatos.
+    // Peso entero = calidad·SCALE (la aritmética de duales del Blossom es exacta así).
+    const SCALE = 1e6;
+    const mEdges = cands.map(c => [c.t1, c.t2, Math.max(1, Math.round(c.jac * SCALE))]);
+    const quadByPair = new Map();
+    for (const c of cands) quadByPair.set(key(c.t1, c.t2), c.quad);
+    const mate = maxWeightMatching(mEdges, tris.length);
+    for (let a = 0; a < mate.length; a++) {
+      const b = mate[a];
+      if (b > a && !used[a] && !used[b]) {
+        const quad = quadByPair.get(key(a, b));
+        if (quad) { cells.push(quad); used[a] = used[b] = true; }
+      }
+    }
+  } else {
+    // Emparejado voraz (fallback): mejor calidad primero, sin conflictos.
+    cands.sort((a, b) => b.jac - a.jac);
+    for (const c of cands) { if (used[c.t1] || used[c.t2]) continue; used[c.t1] = used[c.t2] = true; cells.push(c.quad); }
+  }
   tris.forEach((t, ti) => { if (!used[ti]) cells.push(t); });
   return cells;
+}
+
+// ── Optimización TOPOLÓGICA de valencia (edge-flips por regularidad) ─────────────
+// Voltea aristas interiores de la triangulación para acercar la VALENCIA de cada nodo
+// a la ideal (6 interior, 4 borde): minimiza Σ(val−ideal)² localmente.  Complementa a
+// los flips de Delaunay (que optimizan ÁNGULOS): una triangulación con valencias
+// regulares se recombina en quads más uniformes.  Sólo acepta un flip si (a) reduce la
+// desviación de valencia, (b) no invierte y (c) no degrada en exceso la forma de las
+// dos celdas (guardia de calidad).  El costo decrece estrictamente → termina.
+export function valenceOptimize(V, tris, opts = {}) {
+  const maxPass = opts.maxPass ?? 20;
+  const qGuard = opts.qGuard ?? 0.5;       // calidad mín. del par ≥ qGuard·(antes)
+  const nV = V.length;
+  const bnd = boundaryNodes(V.map(p => [p[0], p[1], 0]), tris);
+  const ideal = (v) => bnd.has(v) ? 4 : 6;
+  const key = (a, b) => a < b ? `${a},${b}` : `${b},${a}`;
+  const triQ = (a, b, c) => triQuality([V[a][0], V[a][1], 0], [V[b][0], V[b][1], 0], [V[c][0], V[c][1], 0]).quality;
+  tris = tris.map(t => t.slice());
+
+  for (let pass = 0; pass < maxPass; pass++) {
+    // valencia (nº de aristas incidentes) por nodo
+    const val = new Array(nV).fill(0); const seen = new Set();
+    for (const t of tris) for (let e = 0; e < 3; e++) { const a = t[e], b = t[(e + 1) % 3], k = key(a, b); if (!seen.has(k)) { seen.add(k); val[a]++; val[b]++; } }
+    // arista → triángulos incidentes
+    const edge = new Map();
+    tris.forEach((t, ti) => { for (let e = 0; e < 3; e++) { const a = t[e], b = t[(e + 1) % 3], opp = t[(e + 2) % 3]; const k = key(a, b); if (!edge.has(k)) edge.set(k, []); edge.get(k).push({ ti, opp, a, b }); } });
+    const dirty = new Array(tris.length).fill(false);
+    let flipped = false;
+    for (const [, arr] of edge) {
+      if (arr.length !== 2) continue;
+      const [e1, e2] = arr;
+      if (dirty[e1.ti] || dirty[e2.ti]) continue;
+      const u = e1.a, v = e1.b, p = e1.opp, q = e2.opp;
+      if (p === q || edge.has(key(p, q))) continue;        // ya existe esa arista → no-manifold
+      // ¿mejora la valencia?  (sólo cambian u,v,p,q)
+      const cost = (x, d) => { const t = val[x] + d - ideal(x); return t * t; };
+      const before = cost(u, 0) + cost(v, 0) + cost(p, 0) + cost(q, 0);
+      const after = cost(u, -1) + cost(v, -1) + cost(p, 1) + cost(q, 1);
+      if (after >= before) continue;
+      // validez + guardia de calidad geométrica (mismas combinaciones que delaunayFlips)
+      let t1n = [p, u, q], t2n = [p, q, v];
+      if (!(triArea(V[t1n[0]], V[t1n[1]], V[t1n[2]]) > EPS && triArea(V[t2n[0]], V[t2n[1]], V[t2n[2]]) > EPS)) {
+        t1n = [p, q, u]; t2n = [p, v, q];
+        if (!(triArea(V[t1n[0]], V[t1n[1]], V[t1n[2]]) > EPS && triArea(V[t2n[0]], V[t2n[1]], V[t2n[2]]) > EPS)) continue;
+      }
+      const T1 = tris[e1.ti], T2 = tris[e2.ti];
+      const qOld = Math.min(triQ(T1[0], T1[1], T1[2]), triQ(T2[0], T2[1], T2[2]));
+      const qNew = Math.min(triQ(t1n[0], t1n[1], t1n[2]), triQ(t2n[0], t2n[1], t2n[2]));
+      if (qNew < qGuard * qOld) continue;                  // no degradar la forma por la valencia
+      tris[e1.ti] = t1n; tris[e2.ti] = t2n;
+      val[u]--; val[v]--; val[p]++; val[q]++;
+      dirty[e1.ti] = dirty[e2.ti] = true; flipped = true;
+    }
+    if (!flipped) break;
+  }
+  return tris;
 }
 
 // ── Agujeros: fusión de huecos en el contorno (bridging estilo earcut) ──────────
@@ -166,10 +247,12 @@ function eliminateHoles(outer, holes) {
 // ── Orquestador: polígono 2D → malla {V, cells, boundary} ───────────────────────
 /**
  * @param {Array} outer  vértices del contorno [[x,y]…] (sin repetir el primero)
- * @param {object} opts  { h, levels, recombine=true, minQuad=0.30, smooth=3, holes:[[[x,y]…]…] }
- *   h       = tamaño de elemento objetivo (deriva los niveles de refinamiento)
- *   levels  = niveles de refinamiento uniforme explícitos (alternativa a h)
- *   holes   = lista de agujeros (cada uno un anillo [[x,y]…]); se fusionan por puentes.
+ * @param {object} opts  { h, levels, recombine=true, blossom=true, valence=true, minQuad=0.30, smooth=3, holes:[…] }
+ *   h        = tamaño de elemento objetivo (deriva los niveles de refinamiento)
+ *   levels   = niveles de refinamiento uniforme explícitos (alternativa a h)
+ *   blossom  = recombinación a quad por matching de peso máximo (Edmonds); false = voraz
+ *   valence  = optimización topológica de valencia (edge-flips de regularidad) antes de recombinar
+ *   holes    = lista de agujeros (cada uno un anillo [[x,y]…]); se fusionan por puentes.
  * @returns { V:[[x,y]…], cells:[[i,j,k]|[i,j,k,l]…], boundary:Set, stats }
  */
 export function triangulatePolygon(outer, opts = {}) {
@@ -192,7 +275,9 @@ export function triangulatePolygon(outer, opts = {}) {
     levels = Math.min(6, Math.max(0, Math.ceil(Math.log2(maxEdge / opts.h))));
   }
   for (let l = 0; l < (levels || 0); l++) { tris = uniformRefine(V, tris); tris = delaunayFlips(V, tris); }
-  let cells = (opts.recombine !== false) ? recombineToQuads(V, tris, opts.minQuad ?? 0.30) : tris;
+  // Optimización topológica de valencia (regulariza la malla antes de recombinar).
+  if (opts.valence !== false) tris = valenceOptimize(V, tris, opts.valenceOpts || {});
+  let cells = (opts.recombine !== false) ? recombineToQuads(V, tris, opts.minQuad ?? 0.30, { blossom: opts.blossom !== false }) : tris;
   // suavizado (nodos interiores)
   const sm = opts.smooth ?? 3;
   if (sm > 0) { const V3 = V.map(p => [p[0], p[1], 0]); const r = laplacianSmooth(V3, cells, { iters: sm, omega: 0.5 }); r.nodes.forEach((p, i) => { V[i][0] = p[0]; V[i][1] = p[1]; }); }
