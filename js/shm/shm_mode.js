@@ -59,6 +59,7 @@ function boot() {
 
   buildToolbar(toolbar, fleet);
   const nameplate = buildNameplate(vpwrap);
+  const banner = buildBanner(vpwrap);
   const dash = buildDashboard(panel, fleet);
 
   document.getElementById('btn-zoomext')?.addEventListener('click', () => fleet.clearSelection());
@@ -69,8 +70,18 @@ function boot() {
   const ds = new DataSource(liveUrl ? { liveUrl } : {});
   window.shmData = ds;
   ds.onTick = (msg) => {
-    for (const id in msg.summaries)
-      for (const se of msg.summaries[id].sensors) fleet.setSensorStatus(id, se.id, se.status);
+    const alarmed = [];
+    for (const id in msg.summaries) {
+      const sum = msg.summaries[id];
+      for (const se of sum.sensors) fleet.setSensorStatus(id, se.id, se.status);
+      // Anomalía = daño alto (≥25%) o algún sensor en falla
+      const anom = (sum.dmg || 0) >= 0.25 || sum.sensors.some(s => s.status === 'fault');
+      fleet.setAlarm(id, anom);
+      if (anom) alarmed.push(id);
+    }
+    banner.update(alarmed.map(id => fleet.getStructure(id)?.label || id));
+    nameplate.alarm(fleet.selected && alarmed.includes(fleet.selected.id));
+    dash.setAlarms(alarmed);
     dash.onTick(msg);
   };
 
@@ -160,13 +171,31 @@ function buildToolbar(toolbar, fleet) {
 function buildNameplate(vpwrap) {
   const el = document.createElement('div');
   el.id = 'shm-nameplate';
-  el.innerHTML = `<span class="np-dot"></span><span class="np-name">—</span><span class="np-type">—</span>`;
+  el.innerHTML = `<span class="np-dot"></span><span class="np-name">—</span><span class="np-type">—</span><span class="np-alarm">⚠ Anomalía detectada</span>`;
   (vpwrap || document.body).appendChild(el);
   return {
     show(obj) {
       if (!obj) { el.classList.remove('show'); return; }
       el.querySelector('.np-name').textContent = obj.label;
       el.querySelector('.np-type').textContent = obj.type === 'hv' ? 'Torre de alta tensión' : `Aerogenerador · ${obj.power || ''}`;
+      el.classList.add('show');
+    },
+    alarm(on) { el.classList.toggle('alarm', !!on); },
+  };
+}
+
+// ── Banner de emergencia (titilante) sobre la vista ──────────────────────────
+function buildBanner(vpwrap) {
+  const el = document.createElement('div');
+  el.id = 'shm-banner';
+  el.innerHTML = `<span class="b-ico">⚠</span><span class="b-txt"></span>`;
+  (vpwrap || document.body).appendChild(el);
+  return {
+    update(labels) {
+      if (!labels.length) { el.classList.remove('show'); return; }
+      const n = labels.length;
+      el.querySelector('.b-txt').textContent =
+        `ANOMALÍA DETECTADA — ${labels.slice(0, 3).join(', ')}${n > 3 ? ` y ${n - 3} más` : ''}`;
       el.classList.add('show');
     },
   };
@@ -185,6 +214,7 @@ function buildDashboard(panel, fleet) {
       <div class="shm-stat"><div class="k">Estructuras</div><div class="v" id="shm-count">0</div></div>
       <div class="shm-stat"><div class="k">Sensores OK</div><div class="v" style="color:var(--success)" id="shm-ok">0</div></div>
       <div class="shm-stat"><div class="k">Fallas</div><div class="v" style="color:var(--danger)" id="shm-fault">0</div></div>
+      <div class="shm-stat"><div class="k">Alarmas</div><div class="v" style="color:var(--danger)" id="shm-alarm-count">0</div></div>
     </div>
     <div class="shm-listwrap">
       <div class="shm-list-h">Estructuras del parque</div>
@@ -211,6 +241,11 @@ function buildDashboard(panel, fleet) {
   }
   function highlight() {
     el.querySelectorAll('.shm-row').forEach(r => r.classList.toggle('active', current && r.dataset.id === current.id));
+  }
+  function setAlarms(ids) {
+    const set = new Set(ids);
+    el.querySelectorAll('.shm-row').forEach(r => r.classList.toggle('alarm', set.has(r.dataset.id)));
+    const n = $('#shm-alarm-count'); if (n) n.textContent = ids.length;
   }
 
   function select(obj) {
@@ -408,7 +443,7 @@ function buildDashboard(panel, fleet) {
     draw();
   }
 
-  return { setStructures, select, onTick, refresh: () => { if (current) renderPane(); } };
+  return { setStructures, select, onTick, setAlarms, refresh: () => { if (current) renderPane(); } };
 }
 
 if (document.readyState === 'complete') boot();

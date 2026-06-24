@@ -131,6 +131,27 @@ body.shm #shm-nameplate.show { display: flex; }
 #shm-nameplate .np-name { font-size: 14px; font-weight: 600; }
 #shm-nameplate .np-type { font-size: 11px; color: var(--text-muted); }
 #shm-nameplate .np-dot { width: 10px; height: 10px; border-radius: 50%; background: var(--success); box-shadow: 0 0 8px var(--success); }
+#shm-nameplate .np-alarm { display: none; color: var(--danger); font-weight: 600; font-size: 13px; }
+#shm-nameplate.alarm .np-dot { background: var(--danger); box-shadow: 0 0 10px var(--danger); animation: shm-blink 0.7s steps(1) infinite; }
+#shm-nameplate.alarm .np-alarm { display: inline; animation: shm-blink 0.7s steps(1) infinite; }
+#shm-nameplate.alarm { border-color: var(--danger); }
+
+/* Banner de emergencia (titilante) */
+#shm-banner {
+  position: absolute; top: 14px; left: 50%; transform: translateX(-50%); z-index: 7;
+  display: none; align-items: center; gap: 10px; padding: 9px 18px; border-radius: 10px;
+  background: var(--danger); color: #fff; font-family: var(--font); font-weight: 600; font-size: 14px;
+  letter-spacing: .3px; box-shadow: 0 6px 22px rgba(220,40,40,0.45);
+}
+body.shm #shm-banner.show { display: flex; animation: shm-blink 0.8s steps(1) infinite; }
+#shm-banner .b-ico { font-size: 18px; }
+
+/* Fila de la lista en alarma */
+#shm-panel .shm-row.alarm { background: color-mix(in srgb, var(--danger) 14%, transparent); }
+#shm-panel .shm-row.alarm .nm { color: var(--danger); font-weight: 600; }
+#shm-panel .shm-row.alarm .dot { background: var(--danger); box-shadow: 0 0 6px var(--danger); animation: shm-blink 0.7s steps(1) infinite; }
+
+@keyframes shm-blink { 0%,100% { opacity: 1; } 50% { opacity: 0.25; } }
 
 #shm-panel .empty { color: var(--text-muted); font-size: 13px; text-align: center; margin-top: 30px; line-height: 1.6; }
 #shm-panel canvas.sig { width: 100%; height: 90px; background: var(--bg); border: 1px solid var(--border); border-radius: var(--radius-sm); display: block; margin-bottom: 6px; }

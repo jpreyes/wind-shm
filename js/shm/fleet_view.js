@@ -131,6 +131,20 @@ export class FleetView {
     const se = st.sensors.find(x => x.id === sensorId); if (se) se.status = status;
   }
 
+  // Alarma de emergencia: faro rojo titilante sobre la estructura.
+  setAlarm(structId, on) {
+    const st = this.getStructure(structId); if (!st || st.alarm === on) return;
+    st.alarm = on;
+    if (on && !st._beacon) {
+      const mat = new THREE.MeshStandardMaterial({ color: 0x220000, emissive: 0xff2a2a, emissiveIntensity: 1.6, transparent: true, opacity: 0.95 });
+      const b = new THREE.Mesh(new THREE.SphereGeometry(2.6, 16, 12), mat);
+      b.position.set(0, (st.height || 90) + 9, 0);
+      b.userData = { turbineId: structId };
+      st.group.add(b); st._beacon = { mesh: b, mat };
+    }
+    if (st._beacon) st._beacon.mesh.visible = on;
+  }
+
   // ── Encuadre / animación de entrada ───────────────────────────────────────
   setPaused(p) { this.paused = !!p; }
 
@@ -297,11 +311,16 @@ export class FleetView {
     }
 
     // Resalte: la seleccionada queda nítida, TODAS las demás se atenúan (cuerpo, no sensores)
+    const alarmPulse = 0.5 + 0.5 * Math.sin(tt * 8);
     for (const st of this.structures) {
       const target = (this.selected && st !== this.selected) ? 1 : 0;
       st.dim = (st.dim || 0) + (target - (st.dim || 0)) * Math.min(dt * 4, 1);
       const op = 1 - 0.82 * st.dim;
-      for (const mat of (st.dimMats || st.bodyMats || [])) { mat.transparent = st.dim > 0.01; mat.opacity = op; }
+      const rp = st.alarm ? 0.6 * alarmPulse : 0;   // titileo rojo en alarma
+      for (const mat of (st.dimMats || st.bodyMats || [])) {
+        mat.transparent = st.dim > 0.01; mat.opacity = op;
+        if (mat.emissive) mat.emissive.setRGB(rp, 0, 0);
+      }
     }
 
     // TODOS los sensores parpadean SIEMPRE — verde=OK, rojo=falla (vistazo de salud)
@@ -310,6 +329,13 @@ export class FleetView {
       const fault = s.status === 'fault';
       s.mat.emissive.setHex(fault ? RED : GREEN);
       s.mat.emissiveIntensity = 0.5 + 1.1 * (0.5 + 0.5 * Math.sin(tt * (fault ? 5.5 : 3.2) + s.phase));
+    }
+
+    // Faro de emergencia: titileo rápido sobre las estructuras en alarma
+    for (const st of this.structures) if (st.alarm && st._beacon) {
+      const p = 0.5 + 0.5 * Math.sin(tt * 8);
+      st._beacon.mat.emissiveIntensity = 0.5 + 2.2 * p;
+      st._beacon.mesh.scale.setScalar(0.75 + 0.55 * p);
     }
 
     // Animación de entrada / vuelo general (con easing)
