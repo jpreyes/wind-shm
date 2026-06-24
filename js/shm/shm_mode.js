@@ -8,12 +8,12 @@
 //   inspecciones y señal temporal EN VIVO desde un Web Worker (DataSource).
 // Recortes (modelado) los hace shm.css ocultando, no borrando.
 // ─────────────────────────────────────────────────────────────────────────────
-import { FleetView } from './fleet_view.js?v=203';
-import { DataSource } from './data_source.js?v=203';
-import { computeTwin } from './digital_twin.js?v=203';
+import { FleetView } from './fleet_view.js?v=204';
+import { DataSource } from './data_source.js?v=204';
+import { computeTwin } from './digital_twin.js?v=204';
 
 const F1_BASE = { turbine: 0.283, hv: 1.6 };
-const REWIND_VER = 'v203';   // versión visible del build (subir junto al cache-bust)
+const REWIND_VER = 'v204';   // versión visible del build (subir junto al cache-bust)
 const LAYOUT_KEY = 'rewind-layout';
 const loadLayout = () => { try { return JSON.parse(localStorage.getItem(LAYOUT_KEY)); } catch { return null; } };
 const FS = 62.5;   // frecuencia de muestreo de la señal (Hz), igual que shm_worker.js
@@ -671,6 +671,7 @@ function buildDashboard(panel, fleet, actions) {
   //  target = estructura → informe de esa torre · target = null → compilado del parque
   function buildReport(target) {
     const o = target;
+    const coverImg = new URL('images/example.jpg', location.href).href;   // ruta absoluta (la pestaña nueva no tiene base)
     const fmtT = (t) => new Date(t).toLocaleString('es-CL');
     const esc = (s) => String(s).replace(/[<>&]/g, c => ({ '<': '&lt;', '>': '&gt;', '&': '&amp;' }[c]));
 
@@ -706,6 +707,21 @@ function buildDashboard(panel, fleet, actions) {
       return c.toDataURL('image/png');
     };
 
+    // — deformada (mapa de calor de desplazamientos) del fuste —
+    const imgDeformed = (prof) => {
+      const { c, g, w, h } = mk(200, 320);
+      if (!prof || !prof.length) return c.toDataURL('image/png');
+      const zMax = prof[prof.length - 1].z || 1, dMax = Math.max(...prof.map(p => p.disp), 1e-9);
+      const cx = w * 0.36, amp = w * 0.42, baseY = h - 16, topY = 14;
+      const Y = (z) => baseY - (z / zMax) * (baseY - topY), X = (d) => cx + (d / dMax) * amp;
+      g.strokeStyle = '#cbd2da'; g.setLineDash([4, 4]); g.beginPath(); g.moveTo(cx, baseY); g.lineTo(cx, topY); g.stroke(); g.setLineDash([]);
+      g.lineWidth = 7; g.lineCap = 'round';
+      for (let i = 1; i < prof.length; i++) { const a = prof[i - 1], b = prof[i]; g.strokeStyle = heat(b.disp / dMax); g.beginPath(); g.moveTo(X(a.disp), Y(a.z)); g.lineTo(X(b.disp), Y(b.z)); g.stroke(); }
+      g.fillStyle = '#9aa6b3'; g.fillRect(cx - 16, baseY, 32, 4);
+      g.fillStyle = '#666'; g.font = '10px sans-serif'; g.fillText('base', cx + 12, baseY - 2); g.fillText('punta', Math.min(X(prof[prof.length - 1].disp) + 6, w - 30), topY + 8);
+      return c.toDataURL('image/png');
+    };
+
     // — dibujo esquemático de la estructura —
     const schematic = (st) => {
       if (st.type === 'hv') return `<svg viewBox="0 0 120 200" width="120" height="200"><g fill="none" stroke="#0d9488" stroke-width="1.5"><path d="M40 190 L58 20 L62 20 L80 190"/><path d="M44 150 H76 M48 110 H72 M52 70 H68"/><path d="M40 190 L72 150 M80 190 L48 150 M44 150 L68 110 M76 150 L52 110"/><path d="M30 70 H90 M34 50 H86"/></g><circle cx="60" cy="22" r="3" fill="#16a34a"/><circle cx="58" cy="110" r="3" fill="#16a34a"/><circle cx="32" cy="70" r="3" fill="#16a34a"/><circle cx="60" cy="150" r="3" fill="#16a34a"/></svg>`;
@@ -737,6 +753,33 @@ function buildDashboard(panel, fleet, actions) {
         <div class="plot"><div class="cap">Escalograma wavelet (Morlet)</div><img src="${imgWavelet(buf)}"></div>`;
       const vibSensores = (o.sensors).map(se => vibBlock(`Sensor ${se.id} — MEMS acelerómetro`, sigBuf[se.id], se.status === 'fault')).join('');
       const vibGateway = o.type === 'turbine' ? vibBlock('Gateway — nodo de enlace (base)', gwBuf, false) : '';
+      // Estado estructural: deformada (mapa de calor de desplazamientos) del gemelo digital.
+      const prof2 = window.shmTwin?.turbineProfile;
+      let estado = '';
+      if (o.type === 'turbine' && prof2?.length) {
+        const maxD = Math.max(...prof2.map(p => p.disp));
+        estado = `
+          <h3>Estado estructural — deformada (mapa de calor de desplazamientos)</h3>
+          <div class="cols">
+            <div class="draw"><img src="${imgDeformed(prof2)}" style="width:150px;border:1px solid #e2e2e2;border-radius:6px"></div>
+            <table class="ficha">
+              <tr><th>Fecha y hora</th><td>${fmtT(Date.now())}</td></tr>
+              <tr><th>Desplazamiento máx (punta)</th><td>${(maxD * 1000).toFixed(1)} mm</td></tr>
+              <tr><th>Deriva (drift)</th><td>${(maxD / o.height * 100).toFixed(3)} % de H</td></tr>
+              <tr><th>Bajo carga</th><td>Empuje de viento + peso propio</td></tr>
+            </table>
+          </div>
+          <div class="note">Mapa de calor: azul = bajo desplazamiento (base) → rojo = máximo (punta). Calculado por el gemelo digital (solver de PÓRTICO).</div>`;
+      } else if (o.type === 'hv' && window.shmTwin?.hvAxial) {
+        const ax = window.shmTwin.hvAxial;
+        estado = `
+          <h3>Estado estructural (reticulado)</h3>
+          <table class="ficha">
+            <tr><th>Fecha y hora</th><td>${fmtT(Date.now())}</td></tr>
+            <tr><th>Axial máx · tracción</th><td>${ax.tMax.toFixed(0)} kN</td></tr>
+            <tr><th>Axial máx · compresión</th><td>${ax.cMax.toFixed(0)} kN</td></tr>
+          </table>`;
+      }
       detalle = `
         <h2>2 · Estructura ${esc(o.label)}</h2>
         <div class="cls-big">Estado: <b style="color:${cls >= 3 ? '#c0271f' : '#1a7f37'}">${CLS[cls]}</b></div>
@@ -753,6 +796,7 @@ function buildDashboard(panel, fleet, actions) {
             <tr><th>Clasificación ML</th><td>${cls >= 3 ? `<span class="warn">${CLS[cls]}</span>` : CLS[cls]}</td></tr>
           </table>
         </div>
+        ${estado}
         <h3>Sensores</h3>
         <table><thead><tr><th>ID</th><th>Tipo</th><th>Ubicación</th><th>Estado</th><th>RMS</th></tr></thead><tbody>${sensRows}</tbody></table>
         <h3>Historial de anomalías y advertencias</h3>
@@ -808,8 +852,24 @@ function buildDashboard(panel, fleet, actions) {
   footer { margin-top: 40px; border-top: 1px solid #ccc; padding-top: 10px; color: #777; font-size: 11px; }
   .noprint { position: fixed; top: 14px; right: 14px; }
   .noprint button { font: inherit; padding: 9px 16px; border: 0; border-radius: 8px; background: #0d9488; color: #fff; cursor: pointer; }
-  @media print { .noprint { display: none; } body { margin: 0; } }
+  .cover { position: relative; height: 94vh; min-height: 560px; margin: -32px -24px 30px; overflow: hidden; display: flex; align-items: flex-end; border-radius: 0; }
+  .cover img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
+  .cover .veil { position: absolute; inset: 0; background: linear-gradient(180deg, rgba(8,16,28,.12) 0%, rgba(8,16,28,.28) 45%, rgba(8,16,28,.82) 100%); }
+  .cover .ct { position: relative; padding: 0 46px 56px; color: #fff; }
+  .cover .kicker { letter-spacing: .34em; font-size: 12px; text-transform: uppercase; opacity: .92; display: flex; align-items: center; gap: 10px; }
+  .cover h1.big { font-family: Georgia, serif; font-weight: 700; font-size: 56px; line-height: 1.02; margin: 12px 0 16px; text-shadow: 0 2px 22px rgba(0,0,0,.45); }
+  .cover .meta2 { font-size: 14px; opacity: .94; border-top: 2px solid rgba(255,255,255,.55); padding-top: 12px; display: inline-block; }
+  @media print { .noprint { display: none; } body { margin: 0; } .cover { height: 246mm; page-break-after: always; } }
 </style></head><body>
+<section class="cover">
+  <img src="${coverImg}" alt="Parque eólico">
+  <div class="veil"></div>
+  <div class="ct">
+    <div class="kicker"><svg width="20" height="24" viewBox="0 0 24 24"><line x1="12" y1="23" x2="12" y2="12" stroke="#fff" stroke-width="2" stroke-linecap="round"/><g stroke="#fff" stroke-width="2" stroke-linecap="round"><line x1="12" y1="11" x2="12" y2="3"/><line x1="12" y1="11" x2="19" y2="15"/><line x1="12" y1="11" x2="5" y2="15"/></g></svg> ReWind · Monitoreo de salud estructural</div>
+    <h1 class="big">Informe<br>Parque Eólico</h1>
+    <div class="meta2">${fmtT(Date.now())} &nbsp;·&nbsp; ${list.length} estructuras &nbsp;·&nbsp; ${o ? esc(o.label) : 'compilado'} &nbsp;·&nbsp; ${REWIND_VER}</div>
+  </div>
+</section>
 <header>
   <svg width="34" height="40" viewBox="0 0 24 24"><line x1="12" y1="23" x2="12" y2="12" stroke="#0d9488" stroke-width="2" stroke-linecap="round"/><g stroke="#0d9488" stroke-width="2" stroke-linecap="round"><line x1="12" y1="11" x2="12" y2="3"/><line x1="12" y1="11" x2="19" y2="15"/><line x1="12" y1="11" x2="5" y2="15"/></g><circle cx="12" cy="11" r="1.7" fill="#0d9488"/></svg>
   <div class="htxt"><h1>Informe de salud estructural</h1><div class="meta">ReWind ${REWIND_VER} · ${o ? esc(o.label) : 'Informe compilado del parque'} · ${fmtT(Date.now())}</div></div>

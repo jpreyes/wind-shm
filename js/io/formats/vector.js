@@ -12,7 +12,7 @@
 // Secciones del .dat: 1 título · 2 constantes · 3 nodos · 4 propiedades · 5 barras ·
 // 8 cargas nodales · 9 control · 10 salida.  Registrado en el `registry`.
 // ──────────────────────────────────────────────────────────────────────────────
-import { registerFormat } from '../registry.js?v=203';
+import { registerFormat } from '../registry.js?v=204';
 
 // ── helpers de campo fijo ────────────────────────────────────────────────────
 // Entero positivo justificado a la derecha (en BZ los espacios cuentan como 0).

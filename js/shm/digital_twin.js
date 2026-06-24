@@ -6,12 +6,12 @@
 // macromodelo `turbine`; la torre de alta tensión usa el generador de torres de
 // PÓRTICO (celosía 3D). Requiere numeric.js (presente en el navegador).
 // ─────────────────────────────────────────────────────────────────────────────
-import { Model } from '../model/model.js?v=203';
-import { Serializer } from '../model/serializer.js?v=203';
-import { insertTurbine } from '../model/macros/turbine.js?v=203';
-import { ModalSolver } from '../solver/modal_solver.js?v=203';
-import { StaticSolver } from '../solver/static_solver.js?v=203';
-import { generarTorre } from '../../asistente/generador.js?v=203';
+import { Model } from '../model/model.js?v=204';
+import { Serializer } from '../model/serializer.js?v=204';
+import { insertTurbine } from '../model/macros/turbine.js?v=204';
+import { ModalSolver } from '../solver/modal_solver.js?v=204';
+import { StaticSolver } from '../solver/static_solver.js?v=204';
+import { generarTorre } from '../../asistente/generador.js?v=204';
 
 // f₁ del aerogenerador (macromodelo: fuste cónico + RNA + resortes de fundación).
 export function turbineF1() {
@@ -46,7 +46,8 @@ export function turbineDiagram() {
   const prof = [];
   for (const e of segs) for (const [xi, nid] of [[0, e.n1], [1, e.n2]]) {
     const v = res.getElemAtXi(e.id, xi), z = m.nodes.get(nid).z;
-    prof.push({ z, N: Math.abs(v.N), V: Math.hypot(v.Vy || 0, v.Vz || 0), M: Math.hypot(v.My || 0, v.Mz || 0) });
+    prof.push({ z, N: Math.abs(v.N), V: Math.hypot(v.Vy || 0, v.Vz || 0), M: Math.hypot(v.My || 0, v.Mz || 0),
+                disp: Math.hypot(v.ux || 0, v.uy || 0, v.uz || 0) });   // desplazamiento total (m)
   }
   prof.sort((a, b) => a.z - b.z);
   return prof;

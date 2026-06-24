@@ -10,7 +10,7 @@
 //
 // Limitaciones: liberaciones de extremo y cargas distribuidas no se exportan (se avisan).
 // ──────────────────────────────────────────────────────────────────────────────
-import { registerFormat } from '../registry.js?v=203';
+import { registerFormat } from '../registry.js?v=204';
 
 const G_ACC = 9.80665;   // GAM (peso específico) = ρ·g
 const num = (v) => { v = +v || 0; if (v === 0) return '0'; const a = Math.abs(v); return (a < 1e-4 || a >= 1e6) ? v.toExponential(6) : String(+v.toPrecision(9)); };
