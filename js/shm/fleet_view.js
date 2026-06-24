@@ -27,6 +27,7 @@ export class FleetView {
   constructor(container) {
     this.container = container;
     this.turbines = [];
+    this.structures = [];            // turbinas + torres AT (todo lo seleccionable)
     this.selected = null;
     this._focusing = false;
     this.paused = false;             // animación de aspas (toggle)
@@ -95,6 +96,7 @@ export class FleetView {
     t.dim = 0;                       // 0 = nítida, 1 = atenuada
     t.group.position.copy(this._slot(this.turbines.length));
     this.turbines.push(t);
+    this.structures.push(t);
     this.scene.add(t.group);
     this._relayout();
     this.onChange?.(this.turbines.length);
@@ -115,6 +117,15 @@ export class FleetView {
     this.onSelect?.(t || null);
   }
   clearSelection() { this.selectTurbine(null); this.frameGeneral(); }
+
+  // Catálogo de estructuras (para la lista de la barra lateral).
+  getStructures() { return this.structures.map(s => ({ id: s.id, type: s.type, label: s.label, height: s.height })); }
+  getStructure(id) { return this.structures.find(s => s.id === id) || null; }
+  selectById(id) { const o = this.getStructure(id); if (o) this.selectTurbine(o); }
+  setSensorStatus(structId, sensorId, status) {
+    const st = this.getStructure(structId); if (!st) return;
+    const se = st.sensors.find(x => x.id === sensorId); if (se) se.status = status;
+  }
 
   // ── Encuadre / animación de entrada ───────────────────────────────────────
   setPaused(p) { this.paused = !!p; }
@@ -160,6 +171,7 @@ export class FleetView {
       this.scene.add(hv.group);
       this.substation.towers.push(hv);
       this.substation.sensors.push(...hv.sensors);
+      this.structures.push(hv);
     }
     // Conductores aéreos entre las dos torres (a la altura de las ménsulas).
     for (const yf of [0.82, 0.97]) {
@@ -221,11 +233,11 @@ export class FleetView {
     const r = this.renderer.domElement.getBoundingClientRect();
     const m = new THREE.Vector2(((e.clientX - r.left) / r.width) * 2 - 1, -((e.clientY - r.top) / r.height) * 2 + 1);
     this.raycaster.setFromCamera(m, this.camera);
-    const hits = this.raycaster.intersectObjects(this.turbines.map(t => t.group), true);
+    const hits = this.raycaster.intersectObjects(this.structures.map(s => s.group), true);
     if (!hits.length) { this.clearSelection(); return; }
     const id = hits[0].object.userData.turbineId;
-    const t = this.turbines.find(x => x.id === id);
-    if (t) this.selectTurbine(t === this.selected ? null : t);
+    const o = this.getStructure(id);
+    if (o) { if (o === this.selected) this.clearSelection(); else this.selectTurbine(o); }
   }
 
   _animate = () => {
@@ -234,20 +246,22 @@ export class FleetView {
 
     for (const t of this.turbines) {
       if (!this.paused) t.rotor.rotation.z += t.spin * dt;
-      // Atenuación suave de las no seleccionadas
+      // Atenuación del cuerpo de las no seleccionadas (los sensores NO se atenúan)
       const target = (this.selected && t !== this.selected) ? 1 : 0;
       t.dim += (target - t.dim) * Math.min(dt * 4, 1);
       const op = 1 - 0.78 * t.dim;
       for (const mat of t.bodyMats) { mat.transparent = t.dim > 0.01; mat.opacity = op; }
-      // Capa de vida: parpadeo (latido) bien visible. Se apaga al atenuar.
-      const live = 1 - t.dim;
-      for (const s of t.sensors) s.mat.emissiveIntensity = (0.7 + 1.1 * (0.5 + 0.5 * Math.sin(tt * 3.2 + s.phase))) * live;
-      t.gateway.mat.emissiveIntensity = (0.6 + 1.0 * (0.5 + 0.5 * Math.sin(tt * 1.6 + t.gateway.phase))) * live;
+      // Gateway: siempre encendido (indica que la torre transmite)
+      t.gateway.mat.emissiveIntensity = 0.6 + 1.0 * (0.5 + 0.5 * Math.sin(tt * 1.6 + t.gateway.phase));
     }
 
-    // Sensores de la subestación (siempre activos)
-    if (this.substation) for (const s of this.substation.sensors)
-      s.mat.emissiveIntensity = 0.7 + 1.1 * (0.5 + 0.5 * Math.sin(tt * 3.0 + s.phase));
+    // TODOS los sensores parpadean SIEMPRE — verde=OK, rojo=falla (vistazo de salud)
+    const GREEN = 0x2bff77, RED = 0xff3b3b;
+    for (const st of this.structures) for (const s of st.sensors) {
+      const fault = s.status === 'fault';
+      s.mat.emissive.setHex(fault ? RED : GREEN);
+      s.mat.emissiveIntensity = 0.5 + 1.1 * (0.5 + 0.5 * Math.sin(tt * (fault ? 5.5 : 3.2) + s.phase));
+    }
 
     // Animación de entrada / vuelo general (con easing)
     if (this._intro) {
@@ -260,8 +274,9 @@ export class FleetView {
     // Zoom cinematográfico hacia la torre seleccionada
     else if (this._focusing && this.selected) {
       const p = this.selected.group.position;
-      const tgt = new THREE.Vector3(p.x, TOWER_H * 0.55, p.z);
-      const desired = new THREE.Vector3(p.x + 70, TOWER_H * 0.8, p.z + 110);
+      const h = this.selected.height || TOWER_H;
+      const tgt = new THREE.Vector3(p.x, h * 0.55, p.z);
+      const desired = new THREE.Vector3(p.x + 0.8 * h, h * 0.9, p.z + 1.25 * h);
       this.controls.target.lerp(tgt, dt * 2.5);
       this.camera.position.lerp(desired, dt * 2.5);
       if (this.camera.position.distanceTo(desired) < 4) this._focusing = false;

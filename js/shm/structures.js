@@ -89,13 +89,13 @@ export function createSubstationTower(o = {}) {
 
   // 4 sensores bien visibles: 2 arriba, 1 medio, 1 en ménsula.
   const sensors = [];
-  const place = (v) => { const s = sensorDot(0x2bff77); s.mesh.position.copy(v); s.mesh.userData = { turbineId: id }; group.add(s.mesh); sensors.push({ ...s, phase: Math.random() * 6.28 }); };
+  const place = (v) => { const s = sensorDot(0x2bff77); s.mesh.position.copy(v); s.mesh.userData = { turbineId: id }; group.add(s.mesh); sensors.push({ id: `s${sensors.length + 1}`, ...s, phase: Math.random() * 6.28, status: 'ok' }); };
   place(lvl[panels][0].clone().add(new THREE.Vector3(0.4, 0.4, 0.4)));
   place(lvl[panels][2].clone().add(new THREE.Vector3(-0.4, 0.4, -0.4)));
   place(new THREE.Vector3(base * 0.55, H * 0.45, base * 0.55));
   place(new THREE.Vector3(topW + 8.5, H * 0.82, 0));
 
-  return { id, group, sensors, topY: H };
+  return { id, type: 'hv', label: `Torre AT ${id}`, height: H, group, sensors, topY: H };
 }
 
 // Cable de conexión por el suelo (cilindro oscuro, leve curva).

@@ -113,7 +113,7 @@ export function createTurbine(o = {}) {
     const r = THREE.MathUtils.lerp(2.7, 1.05, hy);    // radio del fuste cónico a esa altura
     s.position.set(0, TOWER_H * hy, r + 0.2);          // al frente, centrado en el eje
     s.userData = { turbineId: id, sensor: tag };
-    group.add(s); sensors.push({ mesh: s, mat: m, tag, phase: Math.random() * 6.28 });
+    group.add(s); sensors.push({ id: tag, mesh: s, mat: m, tag, phase: Math.random() * 6.28, status: 'ok' });
   }
   const gMat = mkLive(0x47b6ff);
   const gw = new THREE.Mesh(gatewayGeo, gMat);
@@ -121,5 +121,6 @@ export function createTurbine(o = {}) {
   group.add(gw);
   const gateway = { mesh: gw, mat: gMat, phase: Math.random() * 6.28 };
 
-  return { id, group, rotor, sensors, gateway, bodyMats, spin };
+  return { id, type: 'turbine', label: `Torre ${id}`, height: TOWER_H, power: '~3 MW',
+           group, rotor, sensors, gateway, bodyMats, spin };
 }

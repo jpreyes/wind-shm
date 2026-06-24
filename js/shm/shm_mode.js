@@ -1,206 +1,285 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// shm_mode.js — integra el parque eólico (wind-shm) DENTRO del shell de PÓRTICO.
+// shm_mode.js — integra ReWind (parque + monitor SHM) DENTRO del shell de PÓRTICO.
 //
-// Reutiliza el chrome de PÓRTICO (toolbar, panel, menú, tema) y, bajo `body.shm`:
-//   · monta la flota Three.js en el #viewport-container real (oculta el canvas FE),
-//   · agrega el botón «Agregar torre» al toolbar,
-//   · convierte el panel derecho en el dashboard SHM (Señal·Datos·Estado·Movimiento·Avanzado).
-// Los recortes (modelado) los hace shm.css ocultando, no borrando (reversible).
-//
-// NOTA: el dashboard usa datos de muestra/sintéticos por ahora; el enganche al
-// DataSource real (gateway/nube) y a los análisis del gemelo digital viene después.
+// · Monta la flota en el viewport real, agrega botones (Torre, Detener).
+// · Lista de estructuras seleccionables en la barra (torres + torres AT).
+// · Nameplate (cuadro con el nombre) sobre la vista.
+// · Panel específico al seleccionar: datos, sensores (estado), daño, altura,
+//   inspecciones y señal temporal EN VIVO desde un Web Worker (DataSource).
+// Recortes (modelado) los hace shm.css ocultando, no borrando.
 // ─────────────────────────────────────────────────────────────────────────────
 import { FleetView } from './fleet_view.js?v=199';
+import { DataSource } from './data_source.js?v=199';
 
-const F1_REF = 0.283;   // f₁ modelada del macromodelo `turbine` (Hz), línea base SHM
+const F1_BASE = { turbine: 0.283, hv: 1.6 };
 
 function boot() {
   const container = document.getElementById('viewport-container');
   const toolbar = document.getElementById('toolbar');
   const panel = document.getElementById('panel');
+  const vpwrap = document.getElementById('viewport-wrap');
   if (!container || !panel) { console.warn('[shm] shell de PÓRTICO no encontrado'); return; }
 
   document.body.classList.add('shm');
 
-  // ── Flota en el viewport real de PÓRTICO ──────────────────────────────────
   const fleet = new FleetView(container);
   fleet.renderer.domElement.classList.add('shm-canvas');
   window.shmFleet = fleet;
 
-  // ── Botón «Agregar torre» en el toolbar (estilo .tool) ────────────────────
-  if (toolbar) {
-    const sep = document.createElement('div'); sep.className = 'tool-sep';
-    const btn = document.createElement('button');
-    btn.id = 'shm-add-tool'; btn.className = 'tool tool-action';
-    btn.title = 'Agregar torre al parque';
-    btn.innerHTML = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-        <line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>
-      </svg><span>Torre</span>`;
-    btn.addEventListener('click', () => fleet.addTurbine());
+  buildToolbar(toolbar, fleet);
+  const nameplate = buildNameplate(vpwrap);
+  const dash = buildDashboard(panel, fleet);
 
-    // Toggle: detener / reanudar la animación de las aspas
-    const pauseBtn = document.createElement('button');
-    pauseBtn.id = 'shm-pause-tool'; pauseBtn.className = 'tool tool-action';
-    const paintPause = () => {
-      pauseBtn.title = fleet.paused ? 'Reanudar animación de aspas' : 'Detener animación de aspas';
-      pauseBtn.innerHTML = fleet.paused
-        ? `<svg viewBox="0 0 24 24" fill="currentColor"><polygon points="6,4 20,12 6,20"/></svg><span>Animar</span>`
-        : `<svg viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="5" width="4" height="14" rx="1"/><rect x="14" y="5" width="4" height="14" rx="1"/></svg><span>Detener</span>`;
-    };
-    pauseBtn.addEventListener('click', () => { fleet.setPaused(!fleet.paused); paintPause(); });
-    paintPause();
-    toolbar.append(sep, btn, pauseBtn);
-  }
-
-  // Zoom-extensión existente → vista general de la flota
   document.getElementById('btn-zoomext')?.addEventListener('click', () => fleet.clearSelection());
 
-  // ── Dashboard SHM en el panel derecho ─────────────────────────────────────
-  const dash = buildDashboard(panel);
-  fleet.onChange = (n) => dash.setCount(n);
-  fleet.onSelect = (t) => dash.select(t);
-
-  // ── 10 torres por defecto para probar todo ────────────────────────────────
+  // Flota + subestación
   for (let i = 0; i < 10; i++) fleet.addTurbine();
-  dash.setCount(fleet.turbines.length);
-
-  // Subestación (torres de alta tensión) + cables de conexión.
   fleet.buildSubstation();
-
-  // Animación de entrada: barrido aéreo que desciende sobre el parque.
   fleet.playIntro();
+
+  // ── Manifiesto de telemetría (con algunas fallas y daño para demostrar) ────
+  const manifest = fleet.structures.map(s => ({
+    id: s.id, type: s.type, f1: F1_BASE[s.type] || 0.5, dmg: 0,
+    sensors: s.sensors.map(se => ({ id: se.id, status: 'ok' })),
+  }));
+  const setFault = (idx, sidx) => { if (manifest[idx]?.sensors[sidx]) manifest[idx].sensors[sidx].status = 'fault'; };
+  setFault(2, 1);                         // una turbina con su acelerómetro central en falla
+  if (manifest.length > 1) setFault(manifest.length - 1, 2);   // un sensor de una torre AT
+  const dmgIdx = 4; if (manifest[dmgIdx]) manifest[dmgIdx].dmg = 0.45;   // una torre con daño
+  // refleja el estado inicial en los puntos 3D de inmediato
+  for (const m of manifest) for (const se of m.sensors) fleet.setSensorStatus(m.id, se.id, se.status);
+
+  // ── DataSource (Web Worker sintético; intercambiable por la nube) ──────────
+  const ds = new DataSource();
+  window.shmData = ds;
+  ds.onTick = (msg) => {
+    for (const id in msg.summaries)
+      for (const se of msg.summaries[id].sensors) fleet.setSensorStatus(id, se.id, se.status);
+    dash.onTick(msg);
+  };
+  ds.init(manifest);
+
+  fleet.onChange = () => dash.setStructures(fleet.getStructures());
+  fleet.onSelect = (obj) => { dash.select(obj); nameplate.show(obj); ds.focus(obj ? obj.id : null); };
+
+  dash.setStructures(fleet.getStructures());
 }
 
-// ── Construcción del dashboard (DOM con tema de PÓRTICO vía variables CSS) ────
-function buildDashboard(panel) {
+// ── Toolbar: botones Agregar torre / Detener animación ───────────────────────
+function buildToolbar(toolbar, fleet) {
+  if (!toolbar) return;
+  const sep = document.createElement('div'); sep.className = 'tool-sep';
+  const add = document.createElement('button');
+  add.id = 'shm-add-tool'; add.className = 'tool tool-action'; add.title = 'Agregar torre al parque';
+  add.innerHTML = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg><span>Torre</span>`;
+  add.addEventListener('click', () => fleet.addTurbine());
+
+  const pause = document.createElement('button');
+  pause.id = 'shm-pause-tool'; pause.className = 'tool tool-action';
+  const paint = () => {
+    pause.title = fleet.paused ? 'Reanudar animación de aspas' : 'Detener animación de aspas';
+    pause.innerHTML = fleet.paused
+      ? `<svg viewBox="0 0 24 24" fill="currentColor"><polygon points="6,4 20,12 6,20"/></svg><span>Animar</span>`
+      : `<svg viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="5" width="4" height="14" rx="1"/><rect x="14" y="5" width="4" height="14" rx="1"/></svg><span>Detener</span>`;
+  };
+  pause.addEventListener('click', () => { fleet.setPaused(!fleet.paused); paint(); });
+  paint();
+  toolbar.append(sep, add, pause);
+}
+
+// ── Nameplate (cuadro con el nombre sobre la vista) ──────────────────────────
+function buildNameplate(vpwrap) {
+  const el = document.createElement('div');
+  el.id = 'shm-nameplate';
+  el.innerHTML = `<span class="np-dot"></span><span class="np-name">—</span><span class="np-type">—</span>`;
+  (vpwrap || document.body).appendChild(el);
+  return {
+    show(obj) {
+      if (!obj) { el.classList.remove('show'); return; }
+      el.querySelector('.np-name').textContent = obj.label;
+      el.querySelector('.np-type').textContent = obj.type === 'hv' ? 'Torre de alta tensión' : `Aerogenerador · ${obj.power || ''}`;
+      el.classList.add('show');
+    },
+  };
+}
+
+// ── Dashboard SHM ────────────────────────────────────────────────────────────
+function buildDashboard(panel, fleet) {
   const el = document.createElement('aside');
   el.id = 'shm-panel';
   el.innerHTML = `
     <div class="shm-head">
-      <div class="shm-title">🌬️ Parque eólico — SHM</div>
-      <div class="shm-sub">Monitoreo de salud estructural en tiempo real</div>
+      <div class="shm-title">🌬️ ReWind — SHM</div>
+      <div class="shm-sub">Salud estructural del parque en tiempo real</div>
     </div>
     <div class="shm-fleet">
-      <div class="shm-stat"><div class="k">Torres</div><div class="v" id="shm-count">0</div></div>
-      <div class="shm-stat"><div class="k">Sensores</div><div class="v" id="shm-sensors">0</div></div>
-      <div class="shm-stat"><div class="k">En línea</div><div class="v" style="color:var(--success)" id="shm-online">0</div></div>
+      <div class="shm-stat"><div class="k">Estructuras</div><div class="v" id="shm-count">0</div></div>
+      <div class="shm-stat"><div class="k">Sensores OK</div><div class="v" style="color:var(--success)" id="shm-ok">0</div></div>
+      <div class="shm-stat"><div class="k">Fallas</div><div class="v" style="color:var(--danger)" id="shm-fault">0</div></div>
     </div>
-    <div class="shm-tabs" id="shm-tabs" style="display:none">
-      <button class="shm-tab active" data-pane="datos">Datos</button>
-      <button class="shm-tab" data-pane="senal">Señal</button>
-      <button class="shm-tab" data-pane="estado">Estado</button>
-      <button class="shm-tab" data-pane="mov">Movimiento</button>
-      <button class="shm-tab" data-pane="avz">Avanzado</button>
+    <div class="shm-listwrap">
+      <div class="shm-list-h">Estructuras del parque</div>
+      <div class="shm-list" id="shm-list"></div>
     </div>
-    <div class="shm-body" id="shm-body">
-      <div class="empty">Selecciona una torre en el parque<br>para ver su estado estructural.</div>
-    </div>`;
+    <div class="shm-detail" id="shm-detail"><div class="empty">Selecciona una estructura<br>(en la lista o en la vista).</div></div>`;
   panel.appendChild(el);
+  const $ = (s) => el.querySelector(s);
 
-  const $ = (id) => el.querySelector(id);
-  let current = null, sigRAF = null;
+  let list = [], current = null, pane = 'datos', sigBuf = {}, sigRAF = null;
 
-  // Conmutación de pestañas
-  el.querySelectorAll('.shm-tab').forEach(tab => tab.addEventListener('click', () => {
-    el.querySelectorAll('.shm-tab').forEach(t => t.classList.toggle('active', t === tab));
-    render(tab.dataset.pane);
-  }));
-
-  function setCount(n) {
-    $('#shm-count').textContent = n;
-    $('#shm-sensors').textContent = n * 2;
-    $('#shm-online').textContent = n;   // todas en línea (sim)
+  function setStructures(structs) {
+    list = structs;
+    $('#shm-count').textContent = structs.length;
+    const lc = $('#shm-list'); lc.innerHTML = '';
+    for (const s of structs) {
+      const row = document.createElement('button');
+      row.className = 'shm-row'; row.dataset.id = s.id;
+      row.innerHTML = `<span class="dot"></span><span class="nm">${s.label}</span><span class="ty">${s.type === 'hv' ? 'AT' : 'T'}</span>`;
+      row.addEventListener('click', () => fleet.selectById(s.id));
+      lc.appendChild(row);
+    }
+    highlight();
+  }
+  function highlight() {
+    el.querySelectorAll('.shm-row').forEach(r => r.classList.toggle('active', current && r.dataset.id === current.id));
   }
 
-  function select(t) {
-    current = t;
-    $('#shm-tabs').style.display = t ? 'flex' : 'none';
-    if (!t) { stopSig(); $('#shm-body').innerHTML = '<div class="empty">Selecciona una torre en el parque<br>para ver su estado estructural.</div>'; return; }
-    const active = el.querySelector('.shm-tab.active');
-    render(active ? active.dataset.pane : 'datos');
+  function select(obj) {
+    current = obj; highlight();
+    sigBuf = {};
+    if (!obj) { stopSig(); $('#shm-detail').innerHTML = '<div class="empty">Selecciona una estructura<br>(en la lista o en la vista).</div>'; return; }
+    renderDetail();
   }
 
-  function render(pane) {
+  function renderDetail() {
+    const o = current; if (!o) return;
+    $('#shm-detail').innerHTML = `
+      <div class="shm-tabs">
+        <button class="shm-tab" data-p="datos">Datos</button>
+        <button class="shm-tab" data-p="senal">Señal</button>
+        <button class="shm-tab" data-p="sensores">Sensores</button>
+        <button class="shm-tab" data-p="insp">Inspección</button>
+      </div>
+      <div class="shm-body" id="shm-pane"></div>`;
+    el.querySelectorAll('.shm-tab').forEach(t => t.addEventListener('click', () => { pane = t.dataset.p; renderPane(); }));
+    renderPane();
+  }
+
+  function renderPane() {
     stopSig();
-    const t = current; if (!t) return;
-    const rpm = (t.spin * 60 / (2 * Math.PI)).toFixed(1);
-    const body = $('#shm-body');
+    el.querySelectorAll('.shm-tab').forEach(t => t.classList.toggle('active', t.dataset.p === pane));
+    const o = current, body = $('#shm-pane'); if (!o || !body) return;
+    const sum = (window.shmData && window.shmData.get(o.id)) || null;
     if (pane === 'datos') {
+      const dmg = sum ? Math.round((sum.dmg || 0) * 100) : 0;
+      const light = dmg < 8 ? 'ok' : dmg < 25 ? 'warn' : 'bad';
       body.innerHTML = `
-        <div class="row"><span>Torre</span><b>${t.id}</b></div>
-        <div class="row"><span>Modelo</span><b>~3 MW (ref.)</b></div>
-        <div class="row"><span>Rotor</span><b>${rpm} rpm</b></div>
-        <div class="row"><span>Viento (sim)</span><b>${(6 + Math.random() * 6).toFixed(1)} m/s</b></div>
-        <div class="row"><span>f₁ modelada</span><b>${F1_REF.toFixed(3)} Hz</b></div>
-        <div class="row"><span>Enlace gateway</span><b style="color:var(--success)"><span class="light ok"></span>en línea</b></div>
-        <div class="note">Datos de muestra. Próximo: enganche al DataSource (gateway/nube) y a la f₁ del gemelo digital.</div>`;
+        <div class="row"><span>Estructura</span><b>${o.label}</b></div>
+        <div class="row"><span>Tipo</span><b>${o.type === 'hv' ? 'Torre de alta tensión' : 'Aerogenerador'}</b></div>
+        <div class="row"><span>Altura</span><b>${o.height} m</b></div>
+        ${o.type === 'turbine' ? `<div class="row"><span>Potencia</span><b>~3 MW</b></div>` : ''}
+        <div class="row"><span>Sensores</span><b id="d-ns">—</b></div>
+        <div class="row"><span>f₁ actual</span><b id="d-f1">—</b></div>
+        <div class="row"><span>Temperatura</span><b id="d-temp">—</b></div>
+        <div class="row"><span>Estado</span><b><span class="light ${light}" id="d-light"></span><span id="d-state">${light === 'ok' ? 'Sano' : light === 'warn' ? 'Vigilar' : 'Alerta'}</span></b></div>
+        <div class="row"><span>Índice de daño</span><b id="d-dmg">${dmg}%</b></div>`;
     } else if (pane === 'senal') {
-      body.innerHTML = `
-        <div class="row" style="border:0"><span>Acelerómetro superior</span><b style="color:#33ff88">acc-top</b></div>
-        <canvas class="sig" id="sig-top"></canvas>
-        <div class="row" style="border:0"><span>Acelerómetro central</span><b style="color:#33ff88">acc-mid</b></div>
-        <canvas class="sig" id="sig-mid"></canvas>
-        <div class="note">Forma de onda sintética (2 MEMS). Real-time desde la nube: próximo hito.</div>`;
+      body.innerHTML = `<div class="note" style="margin-top:0">Señal de aceleración en vivo (se mueve en tiempo real):</div><div id="sig-wrap"></div>`;
+      const wrap = body.querySelector('#sig-wrap');
+      for (const se of o.sensors) {
+        const lab = document.createElement('div'); lab.className = 'row'; lab.style.border = '0';
+        lab.innerHTML = `<span>${se.id}</span><b class="sig-st">…</b>`;
+        const cv = document.createElement('canvas'); cv.className = 'sig'; cv.dataset.sid = se.id;
+        wrap.append(lab, cv);
+      }
       startSig();
-    } else if (pane === 'estado') {
-      const f = (F1_REF * (0.985 + Math.random() * 0.02)).toFixed(3);
-      body.innerHTML = `
-        <div class="row"><span>Estado estructural</span><b><span class="light ok"></span>Sano</b></div>
-        <div class="row"><span>f₁ actual</span><b>${f} Hz</b></div>
-        <div class="row"><span>f₁ línea base</span><b>${F1_REF.toFixed(3)} Hz</b></div>
-        <div class="row"><span>Desviación</span><b>${(((f - F1_REF) / F1_REF) * 100).toFixed(2)} %</b></div>
-        <div class="note">Semáforo por desviación de frecuencia (verde &lt;2% · ámbar 2–5% · rojo &gt;5%). ML poblacional: próximo.</div>`;
-    } else if (pane === 'mov') {
-      body.innerHTML = `
-        <div class="row"><span>Despl. punta (sim)</span><b>${(20 + Math.random() * 30).toFixed(0)} mm</b></div>
-        <div class="row"><span>Modo dominante</span><b>1ª flexión fore-aft</b></div>
-        <div class="row"><span>RMS aceleración</span><b>${(0.02 + Math.random() * 0.03).toFixed(3)} g</b></div>
-        <div class="note">Movimiento estimado de la torre. Se alimentará del time-history del gemelo digital.</div>`;
+    } else if (pane === 'sensores') {
+      body.innerHTML = o.sensors.map(se =>
+        `<div class="shm-sensor"><span class="dot ${se.status}"></span><span style="flex:1">${se.id}</span><b class="s-rms" data-sid="${se.id}">—</b></div>`
+      ).join('') + `<div class="note">Verde = operativo · Rojo = en falla. Estado y RMS en vivo desde el gateway (sim).</div>`;
     } else {
+      const seed = o.id.split('').reduce((a, c) => a + c.charCodeAt(0), 0);
+      const days = 30 + (seed % 120);
+      const last = new Date(Date.now() - days * 864e5).toLocaleDateString('es-CL');
+      const next = new Date(Date.now() + (180 - days % 180) * 864e5).toLocaleDateString('es-CL');
+      const fault = o.sensors.some(s => s.status === 'fault');
       body.innerHTML = `
-        <div class="note" style="font-size:13px;color:var(--text)">Vista avanzada (gemelo digital):</div>
-        <ul style="margin:8px 0 0 16px;font-size:12px;color:var(--text-muted);line-height:1.9">
-          <li>FFT / PSD de cada sensor</li>
-          <li>Seguimiento de frecuencias naturales</li>
-          <li>Diagramas N/V/M de la torre</li>
-          <li>Análisis no lineal de daño (rótulas, p–y)</li>
-          <li>Conteo de fatiga (rainflow)</li>
-        </ul>
-        <div class="note">Se enganchará al solver de PÓRTICO (modal, time-history, P-Δ) que conservamos.</div>`;
+        <div class="row"><span>Última inspección</span><b>${last}</b></div>
+        <div class="row"><span>Próxima inspección</span><b>${next}</b></div>
+        <div class="row"><span>Sensores instalados</span><b>${o.sensors.length}</b></div>
+        <div class="row"><span>Observación</span><b style="color:${fault ? 'var(--danger)' : 'var(--success)'}">${fault ? 'Revisar sensor en falla' : 'Sin novedades'}</b></div>
+        <div class="note">Historial de inspecciones (datos de muestra). Se integrará con el registro de mantenimiento.</div>`;
+    }
+    updateDynamic(sum);
+  }
+
+  // Actualiza los números dinámicos del panel abierto.
+  function updateDynamic(sum) {
+    if (!current || !sum) return;
+    if (pane === 'datos') {
+      const ns = sum.sensors.length, ok = sum.sensors.filter(s => s.status === 'ok').length;
+      const set = (id, v) => { const n = $('#' + id); if (n) n.textContent = v; };
+      set('d-ns', `${ok}/${ns} OK`);
+      set('d-f1', `${sum.f1.toFixed(3)} Hz`);
+      set('d-temp', `${sum.temp.toFixed(1)} °C`);
+    } else if (pane === 'sensores') {
+      for (const se of sum.sensors) {
+        const n = el.querySelector(`.s-rms[data-sid="${se.id}"]`);
+        if (n) { n.textContent = se.status === 'fault' ? 'FALLA' : `${(se.rms * 1000).toFixed(1)} mg`; n.style.color = se.status === 'fault' ? 'var(--danger)' : ''; }
+        const dot = n && n.parentElement.querySelector('.dot'); if (dot) dot.className = `dot ${se.status}`;
+      }
+    } else if (pane === 'senal') {
+      for (const se of sum.sensors) { const b = [...el.querySelectorAll('#sig-wrap .row')].find(r => r.firstChild.textContent === se.id)?.querySelector('.sig-st'); if (b) { b.textContent = se.status === 'fault' ? 'falla' : 'ok'; b.style.color = se.status === 'fault' ? 'var(--danger)' : 'var(--success)'; } }
     }
   }
 
-  // Sparklines sintéticas de los 2 acelerómetros
-  function startSig() {
-    const cTop = $('#sig-top'), cMid = $('#sig-mid');
-    if (!cTop || !cMid) return;
-    const draw = (cv, freqHz, amp, phase, t) => {
-      const dpr = Math.min(devicePixelRatio, 2);
-      const w = cv.clientWidth, h = cv.clientHeight;
-      cv.width = w * dpr; cv.height = h * dpr;
-      const g = cv.getContext('2d'); g.scale(dpr, dpr);
-      g.clearRect(0, 0, w, h);
-      g.strokeStyle = '#33ff88'; g.lineWidth = 1.5; g.beginPath();
-      for (let x = 0; x < w; x++) {
-        const tt = t + x / w * 2;
-        const y = h / 2 + amp * h * 0.35 * (Math.sin(tt * freqHz * 6.28 + phase) + 0.4 * Math.sin(tt * freqHz * 18 + phase) + 0.3 * (Math.random() - 0.5));
-        x === 0 ? g.moveTo(x, y) : g.lineTo(x, y);
+  function onTick(msg) {
+    // contadores de flota
+    let ok = 0, fault = 0;
+    for (const id in msg.summaries) for (const se of msg.summaries[id].sensors) (se.status === 'fault' ? fault++ : ok++);
+    $('#shm-ok').textContent = ok; $('#shm-fault').textContent = fault;
+    // puntos de la lista
+    for (const s of list) {
+      const sum = msg.summaries[s.id]; if (!sum) continue;
+      const row = el.querySelector(`.shm-row[data-id="${s.id}"]`); if (!row) continue;
+      row.querySelector('.dot').className = 'dot' + (sum.sensors.some(x => x.status === 'fault') ? ' fault' : '');
+    }
+    // buffers de señal de la estructura enfocada
+    if (current && msg.waves[current.id]) {
+      for (const w of msg.waves[current.id]) {
+        (sigBuf[w.id] || (sigBuf[w.id] = [])).push(...w.samples);
+        const buf = sigBuf[w.id]; if (buf.length > 700) buf.splice(0, buf.length - 700);
       }
-      g.stroke();
+    }
+    if (current) updateDynamic(msg.summaries[current.id]);
+  }
+
+  // Dibujo de la señal en vivo desde los buffers.
+  function startSig() {
+    const draw = () => {
+      const cvs = el.querySelectorAll('#sig-wrap canvas.sig');
+      cvs.forEach(cv => {
+        const sid = cv.dataset.sid, buf = sigBuf[sid] || [];
+        const dpr = Math.min(devicePixelRatio, 2), w = cv.clientWidth, h = cv.clientHeight || 80;
+        cv.width = w * dpr; cv.height = h * dpr; const g = cv.getContext('2d'); g.scale(dpr, dpr);
+        g.clearRect(0, 0, w, h);
+        const fault = current?.sensors.find(s => s.id === sid)?.status === 'fault';
+        g.strokeStyle = fault ? '#ff3b3b' : '#2bff77'; g.lineWidth = 1.5; g.beginPath();
+        const n = Math.max(buf.length, 1), step = w / 700;
+        for (let i = 0; i < buf.length; i++) {
+          const x = i * step, y = h / 2 - buf[i] * h * 0.4;
+          i === 0 ? g.moveTo(x, y) : g.lineTo(x, y);
+        }
+        g.stroke();
+      });
+      sigRAF = requestAnimationFrame(draw);
     };
-    const loop = () => {
-      const t = performance.now() / 1000;
-      draw(cTop, F1_REF, 1.0, 0, t);
-      draw(cMid, F1_REF, 0.55, 1.7, t);   // el central oscila menos que la punta
-      sigRAF = requestAnimationFrame(loop);
-    };
-    loop();
+    draw();
   }
   function stopSig() { if (sigRAF) { cancelAnimationFrame(sigRAF); sigRAF = null; } }
 
-  return { setCount, select };
+  return { setStructures, select, onTick };
 }
 
-// Arrancar cuando el shell de PÓRTICO ya está montado.
 if (document.readyState === 'complete') boot();
 else window.addEventListener('load', boot);
