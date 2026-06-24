@@ -9,7 +9,7 @@
 //   Main → Worker: { modes:[{omega, gamma}], ag:Float64Array, dt, zeta }
 //   Worker → Main: { q:[Float64Array]·nModes, peakModal:Float64Array }  |  { error }
 // ──────────────────────────────────────────────────────────────────────────────
-import { sdofResponse } from './timehistory.js?v=188';
+import { sdofResponse } from './timehistory.js?v=189';
 
 self.onmessage = (e) => {
   const { modes, ag, dt, zeta } = e.data;

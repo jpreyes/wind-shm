@@ -21,7 +21,7 @@
 // AUTÓNOMO (sin dependencias salvo la conectividad de `mesher.js`) → verificable en
 // Node.  Índice de grilla idéntico a mesher.js: idx(i,j)=i*(ny+1)+j.
 // ──────────────────────────────────────────────────────────────────────────────
-import { blockCells, cornerGridIndices } from './mesher.js?v=188';
+import { blockCells, cornerGridIndices } from './mesher.js?v=189';
 
 // Re-export de la conectividad (misma convención de grilla) para comodidad.
 export { blockCells, cornerGridIndices };
