@@ -167,11 +167,27 @@ export class FleetView {
       const tip = 2.2 + (yf === 0.82 ? 9 : 7);
       this.scene.add(overheadLine(new THREE.Vector3(xs[0] + tip, y, zsub), new THREE.Vector3(xs[1] - tip, y, zsub)));
     }
-    // Cables de conexión por el suelo: cada turbina → poste HV más cercano.
-    for (const t of this.turbines) {
-      const p = t.group.position;
-      const hub = new THREE.Vector3(p.x < center.x ? xs[0] : xs[1], 0, zsub);
-      this.scene.add(groundCable(p, hub));
+    // Cadena colectora: las turbinas se conectan ENTRE SÍ y un ÚNICO cable
+    // (alimentador) llega a la subestación.
+    const pts = this.turbines.map(t => t.group.position.clone());
+    if (pts.length) {
+      // Subestación de enganche = poste HV más cercano al parque.
+      const hubs = this.substation.towers.map(hv => new THREE.Vector3(hv.group.position.x, 1, hv.group.position.z));
+      // Cadena por vecino más cercano, empezando por la turbina más cercana a la subestación.
+      const rest = pts.map((_, i) => i);
+      const dHub = (i) => Math.min(...hubs.map(h => pts[i].distanceTo(h)));
+      let start = rest.reduce((b, i) => dHub(i) < dHub(b) ? i : b, rest[0]);
+      const order = [start]; rest.splice(rest.indexOf(start), 1);
+      while (rest.length) {
+        const last = order[order.length - 1];
+        const n = rest.reduce((b, i) => pts[i].distanceTo(pts[last]) < pts[b].distanceTo(pts[last]) ? i : b, rest[0]);
+        order.push(n); rest.splice(rest.indexOf(n), 1);
+      }
+      // Único alimentador: subestación más cercana → primera turbina de la cadena.
+      const hub = hubs.reduce((b, h) => h.distanceTo(pts[order[0]]) < b.distanceTo(pts[order[0]]) ? h : b, hubs[0]);
+      this.scene.add(groundCable(hub, pts[order[0]]));
+      // Cadena entre turbinas consecutivas.
+      for (let k = 0; k < order.length - 1; k++) this.scene.add(groundCable(pts[order[k]], pts[order[k + 1]]));
     }
     this.frameGeneral();   // reencuadra incluyendo la subestación
   }
