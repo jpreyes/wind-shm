@@ -944,21 +944,10 @@
 
     <h1 class="hero-title">ReWind</h1>
     <p class="hero-tag">Monitoreo de salud estructural de torres eólicas</p>
-    <p class="hero-desc">
-      Visualiza tu parque eólico, sigue los sensores en tiempo real y conoce el
-      estado estructural de cada torre mediante un gemelo digital — directamente
-      en tu navegador.
-    </p>
-    <div class="hero-chips">
-      <span>Flota 3D</span><span>Sensores MEMS</span><span>Frecuencias naturales</span>
-      <span>Gemelo digital</span><span>Estado en tiempo real</span>
+    <div id="load-wrap">
+      <div id="load-bar-bg"><div id="load-bar"></div></div>
+      <div id="load-row"><span id="load-status">Iniciando…</span><span id="load-pct">0%</span></div>
     </div>
-    <div class="hero-actions">
-      <button id="btn-enter">Entrar al monitor <span class="arrow">→</span></button>
-      <button id="btn-install" type="button">⤓ Instalar app</button>
-    </div>
-    <div class="hero-kbd">o presiona <kbd>Enter</kbd></div>
-    <div id="install-hint" class="install-hint" hidden></div>
   </main>
 
   <footer class="landing-credit">
@@ -967,116 +956,13 @@
   </div><!-- /.landing-card -->
 
 <script>
-/* Portada: entrar con clic, Enter o Escape; bloquea atajos del app mientras está visible */
-(function () {
-  const landing = document.getElementById('landing');
-  if (!landing) return;
-  function enter() {
-    landing.classList.add('exit');
-    document.removeEventListener('keydown', onKey, true);
-    if (typeof stopIdle === 'function') stopIdle();   // detiene el auto-cierre (#83)
-    setTimeout(function () { landing.remove(); }, 700);
-  }
-  function onKey(e) {
-    // Si el manual (ayuda) está abierto sobre la portada, que él maneje las teclas
-    const help = document.getElementById('help-overlay');
-    if (help && !help.classList.contains('hidden')) return;
-    e.stopPropagation();
-    if (e.key === 'Enter' || e.key === 'Escape') { e.preventDefault(); enter(); }
-  }
-  document.getElementById('btn-enter').addEventListener('click', enter);
-  document.addEventListener('keydown', onKey, true);
-
-  // ── Auto-cierre por inactividad (#83) ──
-  // Si nadie interactúa con la portada en ~8 s, se entra solo al laboratorio
-  // (modelo nuevo vacío) para no bloquear el arranque. Cualquier interacción
-  // reinicia el contador; si el manual está abierto encima, se pospone.
-  var idleEvents = ['pointerdown', 'pointermove', 'keydown', 'wheel', 'touchstart'];
-  var idleT = null;
-  function stopIdle() {
-    clearTimeout(idleT);
-    idleEvents.forEach(function (ev) { document.removeEventListener(ev, resetIdle, true); });
-  }
-  function idleEnter() {
-    var help = document.getElementById('help-overlay');
-    if (help && !help.classList.contains('hidden')) { resetIdle(); return; }   // leyendo el manual
-    enter();
-  }
-  function resetIdle() {
-    if (landing.classList.contains('exit')) return;   // ya saliendo
-    clearTimeout(idleT);
-    idleT = setTimeout(idleEnter, 8000);
-  }
-  idleEvents.forEach(function (ev) { document.addEventListener(ev, resetIdle, { passive: true, capture: true }); });
-  resetIdle();
-
-  // ── "Generar modelo con el asistente": entra al laboratorio y abre el diálogo
-  //    "Asistente — generar modelo desde ficha". ──
-  // Si la app ya terminó de inicializar (_ready), abrimos el diálogo nosotros; si
-  // aún está inicializando (p.ej. mostrando "¿recuperar sesión?"), dejamos el flag
-  // y la app abre el diálogo al terminar (evita chocar con el modal de arranque).
-  function abrirAsistente() {
-    window.__porticoGoAsistente = true;
-    enter();   // oculta la portada
-    const go = () => {
-      const app = window.app;
-      if (app && app._ready) {
-        if (window.__porticoGoAsistente && typeof app.asistenteDialog === 'function') {
-          window.__porticoGoAsistente = false;
-          app.asistenteDialog();
-        }
-      } else {
-        setTimeout(go, 120);   // init en curso → la app lo abrirá al terminar
-      }
-    };
-    go();
-  }
-  document.getElementById('btn-asistente')?.addEventListener('click', abrirAsistente);
-
-  // ── Botón "Manual de uso" — abre la Ayuda sin entrar al laboratorio ──
-  document.getElementById('btn-manual')?.addEventListener('click', () => {
-    if (window.app && typeof window.app.openHelp === 'function') {
-      window.app.openHelp('guia');
-    }
-  });
-
-  // ── Botón "Instalar app" (PWA) ──
-  const installBtn = document.getElementById('btn-install');
-  const hint = document.getElementById('install-hint');
-  const standalone = window.matchMedia('(display-mode: standalone)').matches ||
-                     window.navigator.standalone === true;
-
-  if (standalone) {
-    // Ya está instalada y abierta como app → no mostrar el botón
-    installBtn.hidden = true;
-  } else {
-    installBtn.classList.toggle('ready', !!window.__pwaInstall);
-    window.addEventListener('pwa-installable', () => installBtn.classList.add('ready'));
-    window.addEventListener('pwa-installed', () => {
-      installBtn.hidden = true;
-      hint.hidden = false;
-      hint.textContent = '✓ App instalada. Búscala en tu menú de aplicaciones.';
-    });
-
-    installBtn.addEventListener('click', async () => {
-      const dp = window.__pwaInstall;
-      if (dp) {
-        dp.prompt();
-        const choice = await dp.userChoice;
-        window.__pwaInstall = null;
-        if (choice && choice.outcome === 'accepted') {
-          installBtn.hidden = true;
-        }
-      } else {
-        // Sin prompt nativo (ya instalada, Firefox o Safari): mostrar instrucciones
-        hint.hidden = false;
-        hint.innerHTML = 'Para instalar: usa el ícono <b>⊕ / instalar</b> de la barra de ' +
-          'direcciones, o el menú <b>⋮ → Instalar PÓRTICO</b>. En iPhone/iPad: ' +
-          '<b>Compartir → Agregar a inicio</b>.';
-      }
-    });
-  }
-})();
+/* Portada = pantalla de carga. shm_mode.js maneja el progreso y la cierra al
+   terminar. Aquí sólo dejamos el cierre + un fallback por si la carga fallara. */
+window.__rewindCloseLanding = function () {
+  const l = document.getElementById('landing'); if (!l || l.classList.contains('exit')) return;
+  l.classList.add('exit'); setTimeout(function () { l.remove(); }, 700);
+};
+setTimeout(function () { window.__rewindCloseLanding(); }, 25000);   // fallback de seguridad
 </script>
 
 <!-- Aviso de rotación: banner inferior NO bloqueante. En vertical sugiere girar

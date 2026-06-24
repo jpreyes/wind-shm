@@ -45,7 +45,10 @@ function tick() {
       rms = Math.max(rms, r);
       return { id: se.id, status: se.status, rms: r };
     });
-    summaries[s.id] = { f1, temp, rms, dmg: s.dmg, sensors };
+    // Clasificador ML (simulado): nivel de daño 0..4 desde daño + estado de sensores.
+    let cls = s.dmg < 0.05 ? 0 : s.dmg < 0.15 ? 1 : s.dmg < 0.30 ? 2 : s.dmg < 0.50 ? 3 : 4;
+    if (sensors.some(se => se.status === 'fault')) cls = Math.max(cls, 2);
+    summaries[s.id] = { f1, temp, rms, dmg: s.dmg, cls, sensors };
 
     if (s.id === focus) {
       waves[s.id] = s.sensors.map(se => {

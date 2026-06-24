@@ -16,6 +16,9 @@ const F1_BASE = { turbine: 0.283, hv: 1.6 };
 const LAYOUT_KEY = 'rewind-layout';
 const loadLayout = () => { try { return JSON.parse(localStorage.getItem(LAYOUT_KEY)); } catch { return null; } };
 const FS = 62.5;   // frecuencia de muestreo de la señal (Hz), igual que shm_worker.js
+// Clasificador ML de daño (0..4)
+const CLS = ['Sin daño', 'Leve', 'Moderado', 'Alto', 'Muy alto'];
+const CLS_COL = ['var(--success)', '#9bbb3a', 'var(--warn)', '#fb7185', 'var(--danger)'];
 
 // FFT radix-2 (Cooley-Tukey) de la mayor potencia de 2 ≤ buffer; ventana de Hann.
 // Devuelve { mag: amplitud por bin, df: Hz por bin }.
@@ -44,12 +47,12 @@ function fftMag(buf) {
   return { mag, df: FS / n };
 }
 
-function boot() {
+async function boot() {
   const container = document.getElementById('viewport-container');
   const toolbar = document.getElementById('toolbar');
   const panel = document.getElementById('panel');
   const vpwrap = document.getElementById('viewport-wrap');
-  if (!container || !panel) { console.warn('[shm] shell de PÓRTICO no encontrado'); return; }
+  if (!container || !panel) { console.warn('[shm] shell de PÓRTICO no encontrado'); window.__rewindCloseLanding?.(); return; }
 
   document.body.classList.add('shm');
 
@@ -85,8 +88,8 @@ function boot() {
     for (const id in msg.summaries) {
       const sum = msg.summaries[id];
       for (const se of sum.sensors) fleet.setSensorStatus(id, se.id, se.status);
-      // Anomalía = daño alto (≥25%) o algún sensor en falla
-      const anom = (sum.dmg || 0) >= 0.25 || sum.sensors.some(s => s.status === 'fault');
+      // Anomalía = clasificación ML alta (≥ Alto) o algún sensor en falla
+      const anom = (sum.cls || 0) >= 3 || sum.sensors.some(s => s.status === 'fault');
       if (anom) rawAnom.add(id);
       const eff = anom && !ack.has(id);   // reconocida (descartada) → se silencia el titileo
       fleet.setAlarm(id, eff);
@@ -98,18 +101,29 @@ function boot() {
     dash.onTick(msg);
   };
 
-  // ── Flota + subestación: restaurar el orden guardado o sembrar por defecto ──
+  // ── Carga del parque con barra de progreso en la portada ──────────────────
+  const delay = (ms) => new Promise(r => setTimeout(r, ms));
+  const setLoad = (pct, status) => {
+    const bar = document.getElementById('load-bar'), st = document.getElementById('load-status'), pc = document.getElementById('load-pct');
+    if (bar) bar.style.width = pct + '%';
+    if (pc) pc.textContent = Math.round(pct) + '%';
+    if (st && status) st.textContent = status;
+  };
   const saved = loadLayout();
-  if (saved && saved.turbines?.length) {
-    for (const p of saved.turbines) fleet.addTurbine({ pos: p });
-    fleet.buildSubstation();
-    while (fleet.substation.towers.length < (saved.hv?.length || 2)) fleet.addHVTower();
-    fleet.substation.towers.forEach((h, i) => { const p = saved.hv?.[i]; if (p) h.group.position.set(p.x, 0, p.z); });
-    fleet.rebuildCables();
-  } else {
-    for (let i = 0; i < 10; i++) fleet.addTurbine();
-    fleet.buildSubstation();
+  const NT = saved?.turbines?.length || 10;
+  const NHV = Math.max(2, saved?.hv?.length || 2);
+
+  for (let i = 0; i < NT; i++) {
+    fleet.addTurbine(saved ? { pos: saved.turbines[i] } : {});
+    setLoad((i + 1) / NT * 70, `Cargando torres eólicas ${i + 1}/${NT}`);
+    await delay(30);
   }
+  setLoad(72, `Cargando torres de alta tensión 0/${NHV}`); await delay(60);
+  fleet.buildSubstation();                               // 2 torres AT
+  for (let k = 2; k < NHV; k++) fleet.addHVTower();
+  if (saved) fleet.substation.towers.forEach((h, i) => { const p = saved.hv?.[i]; if (p) h.group.position.set(p.x, 0, p.z); });
+  fleet.rebuildCables();
+  setLoad(84, `Cargando torres de alta tensión ${NHV}/${NHV}`); await delay(120);
 
   // Fallas y daño de demostración (mientras se conectan los sensores reales)
   const dmgMap = {};
@@ -138,15 +152,17 @@ function boot() {
   syncData();
   fleet.playIntro();
 
-  // ── Gemelo digital: f₁ real por el solver modal de PÓRTICO (async) ─────────
-  setTimeout(() => {
-    const tw = computeTwin();
-    window.shmTwin = tw;
-    if (tw.turbine) F1_BASE.turbine = tw.turbine;
-    if (tw.hv) F1_BASE.hv = tw.hv;
-    syncData();           // re-init worker con las f₁ del gemelo
-    dash.refresh();
-  }, 1400);
+  // ── Gemelo digital: f₁ + diagramas por el solver de PÓRTICO (bloqueante) ───
+  setLoad(90, 'Calculando gemelo digital…'); await delay(60);
+  const tw = computeTwin();
+  window.shmTwin = tw;
+  if (tw.turbine) F1_BASE.turbine = tw.turbine;
+  if (tw.hv) F1_BASE.hv = tw.hv;
+  syncData();           // re-init worker con las f₁ del gemelo
+  dash.refresh();
+
+  setLoad(100, 'Listo'); await delay(280);
+  window.__rewindCloseLanding?.();
 }
 
 // ── Toolbar: Torre · Torre AT · Detener · Editar ─────────────────────────────
@@ -260,6 +276,14 @@ function buildDashboard(panel, fleet, actions) {
   const $ = (s) => el.querySelector(s);
 
   let list = [], current = null, pane = 'datos', sigBuf = {}, sigRAF = null, freqHist = {};
+  let specOff = null, specLast = 0;                 // espectrograma (offscreen + scroll)
+  const SPEC_W = 170, SPEC_BINS = 48, SPEC_FMAX = 6;
+  const heat = (t) => {
+    t = Math.max(0, Math.min(1, t));
+    const s = [[12, 16, 32], [22, 90, 190], [30, 200, 200], [240, 220, 60], [232, 50, 40]];
+    const x = t * (s.length - 1), i = Math.floor(x), f = x - i, a = s[i], b = s[Math.min(i + 1, s.length - 1)];
+    return `rgb(${a[0] + (b[0] - a[0]) * f | 0},${a[1] + (b[1] - a[1]) * f | 0},${a[2] + (b[2] - a[2]) * f | 0})`;
+  };
 
   function setStructures(structs) {
     list = structs;
@@ -300,7 +324,7 @@ function buildDashboard(panel, fleet, actions) {
 
   function select(obj) {
     current = obj; highlight();
-    sigBuf = {}; freqHist = {};
+    sigBuf = {}; freqHist = {}; specOff = null;
     if (!obj) { stopSig(); $('#shm-detail').innerHTML = '<div class="empty">Selecciona una estructura<br>(en la lista o en la vista).</div>'; return; }
     renderDetail();
   }
@@ -339,8 +363,9 @@ function buildDashboard(panel, fleet, actions) {
         <div class="row"><span>f₁ gemelo digital</span><b>${window.shmTwin?.[o.type] ? window.shmTwin[o.type].toFixed(3) + ' Hz' : '… calculando'}</b></div>
         <div class="row"><span>f₁ actual</span><b id="d-f1">—</b></div>
         <div class="row"><span>Temperatura</span><b id="d-temp">—</b></div>
-        <div class="row"><span>Estado</span><b><span class="light ${light}" id="d-light"></span><span id="d-state">${light === 'ok' ? 'Sano' : light === 'warn' ? 'Vigilar' : 'Alerta'}</span></b></div>
-        <div class="row"><span>Índice de daño</span><b id="d-dmg">${dmg}%</b></div>`;
+        <div class="row"><span>Clasificación ML</span><b id="d-cls">…</b></div>
+        <div class="row"><span>Índice de daño</span><b id="d-dmg">${dmg}%</b></div>
+        <div class="note" style="font-size:10px">Clasificación entregada por el servicio ML que vigila todos los sensores.</div>`;
     } else if (pane === 'senal') {
       body.innerHTML = `<div class="note" style="margin-top:0">Señal de aceleración en vivo (se mueve en tiempo real):</div><div id="sig-wrap"></div>`;
       const wrap = body.querySelector('#sig-wrap');
@@ -356,13 +381,31 @@ function buildDashboard(panel, fleet, actions) {
         `<div class="shm-sensor"><span class="dot ${se.status}"></span><span style="flex:1">${se.id}</span><b class="s-rms" data-sid="${se.id}">—</b></div>`
       ).join('') + `<div class="note">Verde = operativo · Rojo = en falla. Estado y RMS en vivo desde el gateway (sim).</div>`;
     } else if (pane === 'avz') {
+      const nvm = o.type === 'turbine'
+        ? `<div class="note">Diagramas del gemelo digital — fuste bajo viento + peso propio:</div>
+           <div id="nvm-wrap" style="display:flex;gap:6px">
+             <canvas class="sig nvm" data-k="N" style="height:130px;flex:1"></canvas>
+             <canvas class="sig nvm" data-k="V" style="height:130px;flex:1"></canvas>
+             <canvas class="sig nvm" data-k="M" style="height:130px;flex:1"></canvas>
+           </div>
+           <div class="row" style="border:0"><span>N · V · M (base)</span><b id="nvm-info">…</b></div>`
+        : `<div class="note">Esfuerzo axial del reticulado (gemelo, bajo viento):</div>
+           <div class="row"><span>Axial máx · tracción</span><b id="hv-t">…</b></div>
+           <div class="row"><span>Axial máx · compresión</span><b id="hv-c">…</b></div>`;
       body.innerHTML = `
         <div class="note" style="margin-top:0">Espectro de frecuencias (FFT) del acelerómetro superior:</div>
         <canvas class="sig" id="fft-canvas" style="height:110px"></canvas>
         <div class="row" style="border:0"><span>Pico dominante</span><b id="fft-peak">—</b></div>
+        <div class="note">Espectrograma (frecuencia–tiempo) del acelerómetro superior:</div>
+        <canvas class="sig" id="spec-canvas" style="height:90px"></canvas>
         <div class="note">Seguimiento de la frecuencia natural f₁ (vs. línea base del gemelo):</div>
         <canvas class="sig" id="freq-canvas" style="height:80px"></canvas>
-        <div class="note">El descenso sostenido de f₁ indica pérdida de rigidez (daño). N/V/M del gemelo: próximo.</div>`;
+        ${nvm}
+        <div class="note">f₁ a la baja = pérdida de rigidez (daño). Diagramas del solver de PÓRTICO.</div>`;
+      if (o.type === 'hv') {
+        const ax = window.shmTwin?.hvAxial;
+        if (ax) { $('#hv-t').textContent = `${ax.tMax.toFixed(0)} kN`; $('#hv-c').textContent = `${ax.cMax.toFixed(0)} kN`; }
+      }
       startAvz();
     } else {
       const seed = o.id.split('').reduce((a, c) => a + c.charCodeAt(0), 0);
@@ -389,6 +432,9 @@ function buildDashboard(panel, fleet, actions) {
       set('d-ns', `${ok}/${ns} OK`);
       set('d-f1', `${sum.f1.toFixed(3)} Hz`);
       set('d-temp', `${sum.temp.toFixed(1)} °C`);
+      set('d-dmg', `${Math.round((sum.dmg || 0) * 100)} %`);
+      const cls = sum.cls || 0, cn = $('#d-cls');
+      if (cn) { cn.textContent = CLS[cls]; cn.style.color = CLS_COL[cls]; }
     } else if (pane === 'sensores') {
       for (const se of sum.sensors) {
         const n = el.querySelector(`.s-rms[data-sid="${se.id}"]`);
@@ -409,7 +455,9 @@ function buildDashboard(panel, fleet, actions) {
     for (const s of list) {
       const sum = msg.summaries[s.id]; if (!sum) continue;
       const row = el.querySelector(`.shm-row[data-id="${s.id}"]`); if (!row) continue;
-      row.querySelector('.dot').className = 'dot' + (sum.sensors.some(x => x.status === 'fault') ? ' fault' : '');
+      const dot = row.querySelector('.dot'), c = CLS_COL[sum.cls || 0];
+      if (row.classList.contains('alarm')) { dot.style.background = ''; dot.style.boxShadow = ''; }  // CSS maneja el rojo titilante
+      else { dot.style.background = c; dot.style.boxShadow = `0 0 6px ${c}`; }
     }
     // buffers de señal de la estructura enfocada
     if (current && msg.waves[current.id]) {
@@ -490,13 +538,61 @@ function buildDashboard(panel, fleet, actions) {
           g.stroke();
         }
       }
+      // Espectrograma (frecuencia–tiempo) del acelerómetro superior
+      const sc = el.querySelector('#spec-canvas');
+      if (o && sc) {
+        if (!specOff) { specOff = document.createElement('canvas'); specOff.width = SPEC_W; specOff.height = SPEC_BINS; specOff.getContext('2d').fillRect(0, 0, SPEC_W, SPEC_BINS); }
+        const now = performance.now();
+        if (now - specLast > 110) {
+          specLast = now;
+          const sid = (o.sensors.find(s => /top|s1/.test(s.id)) || o.sensors[0])?.id;
+          const { mag, df } = fftMag(sigBuf[sid] || []);
+          const og = specOff.getContext('2d');
+          og.drawImage(specOff, -1, 0);                 // desplaza a la izquierda
+          let mx = 1e-9; for (let i = 1; i < mag.length; i++) if (mag[i] > mx) mx = mag[i];
+          for (let y = 0; y < SPEC_BINS; y++) {
+            const bi = Math.round(((y / SPEC_BINS) * SPEC_FMAX) / (df || 1));
+            og.fillStyle = heat((mag[bi] || 0) / mx);
+            og.fillRect(SPEC_W - 1, SPEC_BINS - 1 - y, 1, 1);   // baja frecuencia abajo
+          }
+        }
+        const dpr = Math.min(devicePixelRatio, 2), w = sc.clientWidth, h = sc.clientHeight || 90;
+        sc.width = w * dpr; sc.height = h * dpr; const g = sc.getContext('2d'); g.scale(dpr, dpr);
+        g.imageSmoothingEnabled = false; g.clearRect(0, 0, w, h); g.drawImage(specOff, 0, 0, w, h);
+      }
+
+      // Diagramas N/V/M del fuste (turbina)
+      const prof = window.shmTwin?.turbineProfile;
+      const nvmCanvases = el.querySelectorAll('#nvm-wrap canvas.nvm');
+      if (o && o.type === 'turbine' && prof && nvmCanvases.length) {
+        nvmCanvases.forEach(cv => drawNVM(cv, prof, cv.dataset.k));
+        const base = prof[0] || {};
+        const info = $('#nvm-info'); if (info) info.textContent = `${(base.N || 0).toFixed(0)} kN · ${(base.V || 0).toFixed(0)} kN · ${(base.M || 0).toFixed(0)} kN·m`;
+      }
       sigRAF = requestAnimationFrame(draw);
     };
     draw();
   }
 
+  // Dibuja un diagrama (N|V|M) vs altura del fuste.
+  const NVM_COL = { N: '#a78bfa', V: '#fb923c', M: '#38bdf8' };
+  function drawNVM(cv, prof, key) {
+    const dpr = Math.min(devicePixelRatio, 2), w = cv.clientWidth, h = cv.clientHeight || 130;
+    cv.width = w * dpr; cv.height = h * dpr; const g = cv.getContext('2d'); g.scale(dpr, dpr);
+    g.clearRect(0, 0, w, h);
+    const zMax = prof[prof.length - 1].z || 1, vMax = Math.max(...prof.map(p => p[key]), 1e-9);
+    const X = (v) => 4 + (v / vMax) * (w - 8), Y = (z) => h - 4 - (z / zMax) * (h - 16);
+    g.strokeStyle = 'rgba(127,140,160,0.5)'; g.beginPath(); g.moveTo(4, Y(0)); g.lineTo(4, Y(zMax)); g.stroke();
+    g.fillStyle = NVM_COL[key] + '55'; g.strokeStyle = NVM_COL[key]; g.lineWidth = 1.5;
+    g.beginPath(); g.moveTo(4, Y(0));
+    for (const p of prof) g.lineTo(X(p[key]), Y(p.z));
+    g.lineTo(4, Y(zMax)); g.closePath(); g.fill(); g.stroke();
+    g.fillStyle = '#7e8da0'; g.font = '10px Inter, sans-serif'; g.fillText(key, w - 12, 11);
+  }
+
   return { setStructures, select, onTick, setAlarms, refresh: () => { if (current) renderPane(); } };
 }
 
-if (document.readyState === 'complete') boot();
-else window.addEventListener('load', boot);
+function startBoot() { boot().catch(e => { console.error('[shm] boot', e); window.__rewindCloseLanding?.(); }); }
+if (document.readyState === 'complete') startBoot();
+else window.addEventListener('load', startBoot);

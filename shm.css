@@ -7,6 +7,13 @@
    Todo bajo `body.shm` → quitar la clase devuelve PÓRTICO intacto.
    ═══════════════════════════════════════════════════════════════════════════ */
 
+/* ── Pantalla de carga (portada) ───────────────────────────────────────────── */
+#load-wrap { width: 300px; max-width: 82vw; margin: 16px auto 0; }
+#load-bar-bg { height: 9px; border-radius: 6px; background: rgba(127,140,160,0.25); overflow: hidden; }
+#load-bar { height: 100%; width: 0%; border-radius: 6px; background: linear-gradient(90deg, var(--accent), var(--teal)); transition: width .25s ease; }
+#load-row { display: flex; justify-content: space-between; align-items: baseline; margin-top: 9px; font-size: 12px; color: var(--text-muted); }
+#load-pct { font-weight: 600; color: var(--text); }
+
 /* ── Recorte: herramientas de modelado del toolbar izquierdo ───────────────── */
 body.shm #toolbar [data-mode="boxselect"],
 body.shm #toolbar [data-mode="addnode"],

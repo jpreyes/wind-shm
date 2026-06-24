@@ -77,6 +77,7 @@ export class FleetView {
 
     this._lights();
     this._ground();
+    this._buildWind();
 
     this.raycaster = new THREE.Raycaster();
     this.clock = new THREE.Clock();
@@ -100,6 +101,17 @@ export class FleetView {
     const grid = new THREE.GridHelper(6000, 60, line, line);
     grid.material.opacity = 0.35; grid.material.transparent = true;
     this.scene.add(grid);
+  }
+
+  // Partículas de viento que cruzan el parque (deriva en +X, reciclan).
+  _buildWind() {
+    const N = 460, B = 1500, pos = new Float32Array(N * 3);
+    for (let i = 0; i < N; i++) { pos[i * 3] = (Math.random() - 0.5) * 2 * B; pos[i * 3 + 1] = 6 + Math.random() * 120; pos[i * 3 + 2] = (Math.random() - 0.5) * 2 * B; }
+    const geom = new THREE.BufferGeometry(); geom.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+    const mat = new THREE.PointsMaterial({ color: 0xaedcf2, size: 1.8, transparent: true, opacity: 0.5, depthWrite: false });
+    const pts = new THREE.Points(geom, mat); pts.frustumCulled = false;
+    this.scene.add(pts);
+    this.wind = { geom, pos, B, speed: 75 };
   }
 
   // Posición en una grilla dispersa centrada (con jitter determinista).
@@ -145,7 +157,7 @@ export class FleetView {
   getStructures() { return this.structures.map(s => ({ id: s.id, type: s.type, label: s.label, height: s.height })); }
   getStructure(id) { return this.structures.find(s => s.id === id) || null; }
   selectById(id) { const o = this.getStructure(id); if (o) this.selectTurbine(o); }
-  _addLabel(st) { const sp = makeLabelSprite(st.label); sp.position.set(0, (st.height || 90) + (st.type === 'hv' ? 10 : 16), 0); st.group.add(sp); st._label = sp; }
+  _addLabel(st) { const sp = makeLabelSprite(st.label); sp.position.set(0, 5, 11); st.group.add(sp); st._label = sp; }   // al pie del modelo
   setSensorStatus(structId, sensorId, status) {
     const st = this.getStructure(structId); if (!st) return;
     const se = st.sensors.find(x => x.id === sensorId); if (se) se.status = status;
@@ -324,6 +336,13 @@ export class FleetView {
   _animate = () => {
     requestAnimationFrame(this._animate);
     const dt = Math.min(this.clock.getDelta(), 0.05), tt = this.clock.elapsedTime;
+
+    // Viento: deriva las partículas en +X y recíclalas al salir del dominio.
+    if (this.wind) {
+      const { pos, B, speed, geom } = this.wind;
+      for (let i = 0; i < pos.length; i += 3) { pos[i] += speed * dt; if (pos[i] > B) pos[i] -= 2 * B; }
+      geom.attributes.position.needsUpdate = true;
+    }
 
     for (const t of this.turbines) {
       if (!this.paused) t.rotor.rotation.z += t.spin * dt;
