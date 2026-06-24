@@ -311,7 +311,7 @@ y los 3 motores+UI de **puentes**. Lo que queda abierto, ordenado por esfuerzo c
 
 **🟠 Mayores (motor/feature nuevos)**
 16. **IA: torre de transmisión (celosías 3D)** `[#53]` (G13) — vocabulario de ficha + generador paramétrico en el asistente.
-17. **Otras capacidades parciales** `[#G14]` — resorte de extremo (1-008), viga sobre fundación (1-013), pandeo de cáscara (2-016/2-017), viga corotacional gran rotación (1-029).
+17. **Otras capacidades parciales** `[#G14]` — ✅ resorte de extremo (1-008) · ✅ viga sobre fundación (1-013) · 🟡 viga corotacional 2D (1-029, solver hecho, falta UI) · ⬜ pandeo de cáscara (2-016/2-017).
 18. **Macromodelos (infill wall de albañilería, etc.)** `[#86]` (G13) — objeto 2D «panel» que expande a una red de barras + cables + resortes/links NL calibrados (puntal diagonal equivalente); catálogo de macromodelos.
 19. **Documentación integral de toda funcionalidad** `[#21]` (G9) — qué hace, teoría mínima, cómo ejecutarla, ejemplo, por cada feature. **← PARA EL FINAL**
 20. 🟡 **Mesheador — paving/calidad avanzada** `[#52]` (G13) — fases 1-3 hechas. **Refinamiento (v176): suavizado «smart Laplacian»** — `laplacianSmooth` ahora acepta el paso (centroide ω, con búsqueda amortiguada ω→ω/2→ω/4) **sólo si no reduce la calidad mínima** de las celdas incidentes → la calidad mínima de la malla es **monótona no-decreciente** (el Laplaciano plano podía empeorar la peor celda). Es el default → lo usan el pipeline de mallado y el botón «Suavizar malla». Verificado (`test_mesh_smart.mjs` + navegador): malla en L, sin suavizar min=0.60 → **plano la baja a 0.53, smart la mantiene en 0.60** sin invertidos. *(Quedan: recombinación quad avanzada tipo Blossom, optimización topológica de valencia.)*
