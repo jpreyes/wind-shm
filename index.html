@@ -29,8 +29,8 @@
       window.dispatchEvent(new Event('pwa-installed'));
     });
   </script>
-  <link rel="stylesheet" href="style.css?v=176">
-  <link rel="stylesheet" href="ui-v2.css?v=176">
+  <link rel="stylesheet" href="style.css?v=177">
+  <link rel="stylesheet" href="ui-v2.css?v=177">
   <script type="importmap">
   {
     "imports": {
@@ -479,6 +479,7 @@
         <button class="vtab" data-vtab="asistente">Asistente</button>
         <button class="vtab" data-vtab="resultados">Resultados</button>
         <button class="vtab" data-vtab="diseno">Diseño</button>
+        <button class="vtab" data-vtab="temporales" title="Autoguardados temporales: copias automáticas de las sesiones recientes (reanudar / eliminar)">Temporales</button>
       </div>
 
       <div id="panel-content">
@@ -626,6 +627,16 @@
               <textarea id="asis-mod-nl" rows="3" class="sp-textarea" placeholder="Ej.: agrega carga viva de 20 kN/m a todas las vigas · anexa un piso de 3 m encima · agrega un vano de 5 m hacia la derecha · aplica modificador de rigidez 0.5 a la selección"></textarea>
             </div>
             <button class="btn-add" id="btn-asis-side-mod" style="margin-top:8px;background:rgba(45,212,191,0.12);color:var(--teal);border-color:var(--teal)">✦ Aplicar cambio</button>
+          </div>
+        </div>
+
+        <!-- ══ TEMPORALES (autoguardados, #82) ══ -->
+        <div id="vpanel-temporales" class="vpanel-content">
+          <div style="padding:8px">
+            <div class="prop-title" style="margin-bottom:4px">Autoguardados temporales</div>
+            <p class="panel-hint" style="margin-top:0">Copias automáticas de las sesiones recientes (cada ~5 min). Reanude una (descarta el trabajo actual no guardado), elimine las que no use, o límpielas todas.</p>
+            <div id="temporales-body"></div>
+            <button class="btn-add" id="btn-temp-clear" style="margin-top:8px;background:rgba(210,153,34,0.14);color:var(--warn);border-color:var(--warn)">🧹 Limpiar todos</button>
           </div>
         </div>
 
@@ -1057,7 +1068,7 @@
 
 <!-- numeric.js para solver (Fase 2+) -->
 <script src="lib/numeric.js"></script>
-<script type="module" src="js/app.js?v=176"></script>
+<script type="module" src="js/app.js?v=177"></script>
 
 <!-- PWA: registrar el service worker (offline). Solo en contexto seguro
      (https o localhost); el navegador deja navigator.serviceWorker undefined
