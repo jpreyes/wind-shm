@@ -28,7 +28,7 @@ const COL = {
   AXIS_Y:      0x44cc44,
   AXIS_Z:      0x4488ff,
 };
-const NODE_R      = 0.12;
+const NODE_R      = 0.08;   // radio VISUAL del nodo (el área de selección es mayor, ver _pickNodes)
 const NODE_SEG    = 8;
 const SNAP_PX     = 22;   // screen-space snap radius in pixels
 
@@ -1278,7 +1278,7 @@ export class Viewport {
     if (this.mode === 'select' && !this._inResultsMode && !this._dragLock) {
       this._mouse.copy(this._ndc(e));
       this._raycaster.setFromCamera(this._mouse, this._camera);
-      const hits = this._raycaster.intersectObjects([...this._nodeMeshes.values()]);
+      const hits = this._pickNodes();   // imán de pantalla (igual que la selección)
       if (hits.length) {
         const id = hits[0].object.userData.id;
         if (this._selected.has(`node:${id}`)) {
@@ -1358,9 +1358,33 @@ export class Viewport {
   }
 
   // ── Select mode ────────────────────────────────────────────────────────────
+  // Picking de nodos con "imán" de pantalla (como el colisionador agrandado de una
+  // moneda en un juego): primero el rayo preciso contra la esfera; si falla, agarra
+  // el nodo VISIBLE más cercano al cursor dentro de un radio en píxeles. Así el nodo
+  // puede dibujarse chico pero seguir siendo fácil de seleccionar.
+  _pickNodes() {
+    const hits = this._raycaster.intersectObjects([...this._nodeMeshes.values()]);
+    if (hits.length) return hits;
+    const rect = this._renderer.domElement.getBoundingClientRect();
+    const mx = (this._mouse.x + 1) / 2 * rect.width;
+    const my = (1 - this._mouse.y) / 2 * rect.height;
+    const PICK_PX = 13;                       // radio del "imán" en píxeles
+    let best = null, bestD = PICK_PX * PICK_PX;
+    const v = new THREE.Vector3();
+    for (const mesh of this._nodeMeshes.values()) {
+      if (!mesh.visible) continue;
+      v.copy(mesh.position).project(this._camera);
+      if (v.z > 1) continue;                  // detrás de la cámara
+      const px = (v.x + 1) / 2 * rect.width, py = (1 - v.y) / 2 * rect.height;
+      const d = (px - mx) ** 2 + (py - my) ** 2;
+      if (d < bestD) { bestD = d; best = { object: mesh, distance: mesh.position.distanceTo(this._camera.position) }; }
+    }
+    return best ? [best] : [];
+  }
+
   _hoverUpdate() {
     const prev = this._hovered;
-    const nodeHits = this._raycaster.intersectObjects([...this._nodeMeshes.values()]);
+    const nodeHits = this._pickNodes();
     const elemHits = this._raycaster.intersectObjects([...this._elemLines.values()].filter(l => l.visible));
     const diaPlanes = [...this._diaGroups.values()]
       .map(g => g.children.find(c => c.userData.type === 'diaphragm')).filter(Boolean);
@@ -1392,7 +1416,7 @@ export class Viewport {
   }
 
   _clickSelect(ctrlHeld = false) {
-    const nodeHits = this._raycaster.intersectObjects([...this._nodeMeshes.values()]);
+    const nodeHits = this._pickNodes();
     const elemHits = this._raycaster.intersectObjects([...this._elemLines.values()].filter(l => l.visible));
     const diaPlanes = [...this._diaGroups.values()]
       .map(g => g.children.find(c => c.userData.type === 'diaphragm')).filter(Boolean);
