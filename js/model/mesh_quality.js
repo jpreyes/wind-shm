@@ -7,7 +7,7 @@
 // nodes=[[x,y,z]…] y cells=[[i,j,k]|[i,j,k,l]…], así sirve para mallas estructuradas
 // (mesh_map) y libres (mesh_free).  AUTÓNOMO → verificable en Node.
 // ──────────────────────────────────────────────────────────────────────────────
-import { quadMinScaledJacobian } from './mesh_map.js?v=175';
+import { quadMinScaledJacobian } from './mesh_map.js?v=176';
 
 const sub = (a, b) => [a[0] - b[0], a[1] - b[1], a[2] - b[2]];
 const cross = (a, b) => [a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0]];
@@ -124,18 +124,35 @@ function moveKeepsValid(nodes, cells, incident, ni, p) {
   return ok;
 }
 
+// Calidad NORMALIZADA de una celda (0 = degenerada/invertida, 1 = ideal):
+// triángulo → 4√3·A/Σℓ² (1 = equilátero); cuadrilátero → Jacobiano escalado mínimo.
+function cellQuality(nodes, c) {
+  return c.length === 3
+    ? triQuality(nodes[c[0]], nodes[c[1]], nodes[c[2]]).quality
+    : quadMinScaledJacobian(nodes[c[0]], nodes[c[1]], nodes[c[2]], nodes[c[3]]);
+}
+
+// Calidad mínima entre las celdas incidentes al nodo `ni` (con el nodo en su pos. actual).
+function incidentMinQuality(nodes, cells, incident, ni) {
+  let q = Infinity;
+  for (const ci of incident) { const v = cellQuality(nodes, cells[ci]); if (v < q) q = v; }
+  return q;
+}
+
 /**
  * Suavizado Laplaciano RESTRINGIDO de los nodos interiores.  Mueve cada nodo
- * interior hacia el centroide de sus vecinos (factor ω), pero sólo si el movimiento
- * NO invierte ninguna celda incidente (suavizado «inteligente»).  Los nodos de
- * borde quedan fijos (o los indicados en opts.fixed).
+ * interior hacia el centroide de sus vecinos (factor ω).  En modo «smart» (def.)
+ * el paso sólo se acepta si NO reduce la calidad mínima de las celdas incidentes
+ * (con búsqueda de paso amortiguado ω → ω/2 → ω/4); así la calidad mínima de la
+ * malla es monótona no-decreciente.  Los nodos de borde quedan fijos.
  * @param {Array} nodes  [[x,y,z]…]  (se devuelve una COPIA suavizada)
  * @param {Array} cells  [[i,j,k]|[i,j,k,l]…]
- * @param {object} opts  { iters=5, omega=0.5, fixed=Set|bool[] }
+ * @param {object} opts  { iters=5, omega=0.5, fixed=Set|bool[], smart=true }
  * @returns { nodes, before, after, moved }
  */
 export function laplacianSmooth(nodes, cells, opts = {}) {
   const iters = opts.iters ?? 5, omega = opts.omega ?? 0.5;
+  const smart = opts.smart ?? true;
   const out = nodes.map(p => [p[0], p[1], p[2]]);
   const nb = nodeNeighbors(out, cells);
   const incident = Array.from({ length: out.length }, () => []);
@@ -152,8 +169,23 @@ export function laplacianSmooth(nodes, cells, opts = {}) {
       let cx = 0, cy = 0, cz = 0;
       for (const j of nb[i]) { cx += out[j][0]; cy += out[j][1]; cz += out[j][2]; }
       const k = nb[i].length;
-      const target = [out[i][0] + omega * (cx / k - out[i][0]), out[i][1] + omega * (cy / k - out[i][1]), out[i][2] + omega * (cz / k - out[i][2])];
-      if (moveKeepsValid(out, cells, incident[i], i, target)) { out[i] = target; if (it === 0) moved++; }
+      const dir = [cx / k - out[i][0], cy / k - out[i][1], cz / k - out[i][2]];
+      if (!smart) {
+        const target = [out[i][0] + omega * dir[0], out[i][1] + omega * dir[1], out[i][2] + omega * dir[2]];
+        if (moveKeepsValid(out, cells, incident[i], i, target)) { out[i] = target; if (it === 0) moved++; }
+        continue;
+      }
+      // Smart: aceptar el paso (amortiguado) sólo si mejora la calidad mínima local.
+      const q0 = incidentMinQuality(out, cells, incident[i], i);
+      const old = out[i]; let accepted = false;
+      for (let w = omega; w >= omega / 4 - 1e-9; w *= 0.5) {
+        const target = [old[0] + w * dir[0], old[1] + w * dir[1], old[2] + w * dir[2]];
+        if (!moveKeepsValid(out, cells, incident[i], i, target)) continue;
+        out[i] = target;
+        if (incidentMinQuality(out, cells, incident[i], i) >= q0 - 1e-12) { accepted = true; break; }
+        out[i] = old;
+      }
+      if (accepted && it === 0) moved++;
     }
   }
   return { nodes: out, before, after: meshStats(out, cells), moved };
