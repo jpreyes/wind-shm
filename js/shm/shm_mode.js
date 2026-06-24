@@ -8,11 +8,12 @@
 //   inspecciones y señal temporal EN VIVO desde un Web Worker (DataSource).
 // Recortes (modelado) los hace shm.css ocultando, no borrando.
 // ─────────────────────────────────────────────────────────────────────────────
-import { FleetView } from './fleet_view.js?v=200';
-import { DataSource } from './data_source.js?v=200';
-import { computeTwin } from './digital_twin.js?v=200';
+import { FleetView } from './fleet_view.js?v=201';
+import { DataSource } from './data_source.js?v=201';
+import { computeTwin } from './digital_twin.js?v=201';
 
 const F1_BASE = { turbine: 0.283, hv: 1.6 };
+const REWIND_VER = 'v201';   // versión visible del build (subir junto al cache-bust)
 const LAYOUT_KEY = 'rewind-layout';
 const loadLayout = () => { try { return JSON.parse(localStorage.getItem(LAYOUT_KEY)); } catch { return null; } };
 const FS = 62.5;   // frecuencia de muestreo de la señal (Hz), igual que shm_worker.js
@@ -262,9 +263,9 @@ function buildDashboard(panel, fleet, actions) {
     <div class="shm-head">
       <div style="flex:1">
         <div class="shm-title">🌬️ ReWind — SHM</div>
-        <div class="shm-sub">Salud estructural del parque en tiempo real</div>
+        <div class="shm-sub">Salud estructural en tiempo real · <span style="opacity:.7">${REWIND_VER}</span></div>
       </div>
-      <button id="shm-report-btn" title="Generar informe imprimible">📄 Informe</button>
+      <button id="shm-report-btn" title="Informe compilado de todo el parque">📄 Parque</button>
     </div>
     <div class="shm-fleet">
       <div class="shm-stat"><div class="k">Estructuras</div><div class="v" id="shm-count">0</div></div>
@@ -279,7 +280,7 @@ function buildDashboard(panel, fleet, actions) {
     <div class="shm-detail" id="shm-detail"><div class="empty">Selecciona una estructura<br>(en la lista o en la vista).</div></div>`;
   panel.appendChild(el);
   const $ = (s) => el.querySelector(s);
-  el.querySelector('#shm-report-btn').addEventListener('click', () => buildReport());
+  el.querySelector('#shm-report-btn').addEventListener('click', () => buildReport(null));   // compilado del parque
 
   let list = [], current = null, pane = 'datos', sigBuf = {}, sigRAF = null, freqHist = {};
   let specOff = null, specLast = 0;                 // espectrograma (offscreen + scroll)
@@ -353,10 +354,12 @@ function buildDashboard(panel, fleet, actions) {
         <button class="shm-tab" data-p="avz">Avanzado</button>
         <button class="shm-tab" data-p="insp">Inspección</button>
       </div>
-      <div class="shm-body" id="shm-pane"></div>`;
+      <div class="shm-body" id="shm-pane"></div>
+      <div class="shm-detail-foot"><button id="shm-tower-report">📄 Informe de esta torre</button></div>`;
     _abKey = '';
     updateAlarmBar();
     el.querySelectorAll('.shm-tab').forEach(t => t.addEventListener('click', () => { pane = t.dataset.p; renderPane(); }));
+    el.querySelector('#shm-tower-report').addEventListener('click', () => buildReport(current));
     renderPane();
   }
 
@@ -656,8 +659,9 @@ function buildDashboard(panel, fleet, actions) {
   }
 
   // ── Informe imprimible (abre en pestaña nueva, listo para PDF) ────────────
-  function buildReport() {
-    const o = current;
+  //  target = estructura → informe de esa torre · target = null → compilado del parque
+  function buildReport(target) {
+    const o = target;
     const fmtT = (t) => new Date(t).toLocaleString('es-CL');
     const esc = (s) => String(s).replace(/[<>&]/g, c => ({ '<': '&lt;', '>': '&gt;', '&': '&amp;' }[c]));
 
@@ -743,6 +747,20 @@ function buildDashboard(panel, fleet, actions) {
         <table><thead><tr><th>Fecha y hora</th><th>Acción</th></tr></thead><tbody>${mRows}</tbody></table>`;
     }
 
+    // Compilado del parque (cuando no hay torre objetivo): historial y mantenimiento de toda la flota.
+    let compilado = '';
+    if (!o) {
+      const allEv = [];
+      for (const id in clsEvents) for (const e of clsEvents[id]) allEv.push({ ...e, id });
+      allEv.sort((a, b) => b.t - a.t);
+      const evRows = allEv.slice(0, 20).map(e => `<tr><td>${fmtT(e.t)}</td><td>${esc(fleet.getStructure(e.id)?.label || e.id)}</td><td>${CLS[e.from]} → ${e.to >= 3 ? `<span class="warn">${CLS[e.to]}</span>` : CLS[e.to]}</td></tr>`).join('') || '<tr><td colspan="3">Sin cambios registrados.</td></tr>';
+      const mRows = (actions.log || []).slice(-20).reverse().map(m => `<tr><td>${fmtT(m.t)}</td><td>${esc(fleet.getStructure(m.id)?.label || m.id)}</td><td>${esc(m.action)}</td></tr>`).join('') || '<tr><td colspan="3">Sin acciones registradas.</td></tr>';
+      compilado = `
+        <h2>2 · Historial de anomalías y advertencias</h2>
+        <table><thead><tr><th>Fecha y hora</th><th>Estructura</th><th>Cambio de nivel</th></tr></thead><tbody>${evRows}</tbody></table>
+        <h2>3 · Bitácora de mantenimiento</h2>
+        <table><thead><tr><th>Fecha y hora</th><th>Estructura</th><th>Acción</th></tr></thead><tbody>${mRows}</tbody></table>`;
+    }
     const nAlarm = list.filter(s => { const d = window.shmData?.get(s.id) || {}; return (d.cls || 0) >= 3 || (d.sensors || []).some(x => x.status === 'fault'); }).length;
     const html = `<!doctype html><html lang="es"><head><meta charset="utf-8">
 <title>Informe ReWind — Salud estructural</title>
@@ -775,12 +793,12 @@ function buildDashboard(panel, fleet, actions) {
 </style></head><body>
 <header>
   <svg width="34" height="40" viewBox="0 0 24 24"><line x1="12" y1="23" x2="12" y2="12" stroke="#0d9488" stroke-width="2" stroke-linecap="round"/><g stroke="#0d9488" stroke-width="2" stroke-linecap="round"><line x1="12" y1="11" x2="12" y2="3"/><line x1="12" y1="11" x2="19" y2="15"/><line x1="12" y1="11" x2="5" y2="15"/></g><circle cx="12" cy="11" r="1.7" fill="#0d9488"/></svg>
-  <div class="htxt"><h1>Informe de salud estructural</h1><div class="meta">ReWind · Parque eólico · ${fmtT(Date.now())}</div></div>
+  <div class="htxt"><h1>Informe de salud estructural</h1><div class="meta">ReWind ${REWIND_VER} · ${o ? esc(o.label) : 'Informe compilado del parque'} · ${fmtT(Date.now())}</div></div>
 </header>
 <h2>1 · Resumen de la flota</h2>
 <p class="lead">${list.length} estructuras monitoreadas · ${nAlarm ? `<span class="warn">${nAlarm} en alerta</span>` : 'sin alertas activas'}.</p>
 <table><thead><tr><th>Estructura</th><th>Tipo</th><th>Altura</th><th>Sensores</th><th>Clasificación ML</th><th>Estado</th></tr></thead><tbody>${rowsHtml}</tbody></table>
-${detalle}
+${detalle}${compilado}
 <footer>Generado por ReWind — plataforma de monitoreo de salud estructural (SHM). Clasificación de daño por servicio ML sobre la telemetría de los acelerómetros MEMS. Documento de carácter informativo.</footer>
 <div class="noprint"><button onclick="window.print()">🖨 Imprimir / Guardar PDF</button></div>
 </body></html>`;

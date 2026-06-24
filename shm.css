@@ -88,6 +88,9 @@ body.shm #shm-panel {
   background: var(--accent); color: #fff; border: 0; border-radius: 8px; padding: 7px 11px;
 }
 #shm-report-btn:hover { background: var(--accent-dim); }
+#shm-panel .shm-detail-foot { padding: 10px 14px; border-top: 1px solid var(--border); }
+#shm-panel .shm-detail-foot button { width: 100%; font: inherit; font-size: 12px; cursor: pointer; background: var(--bg3); color: var(--text); border: 1px solid var(--border2); border-radius: 8px; padding: 9px; }
+#shm-panel .shm-detail-foot button:hover { background: var(--bg4); }
 #shm-panel .shm-title { font-size: 14px; font-weight: 700; letter-spacing: .2px; }
 #shm-panel .shm-sub { font-size: 11px; color: var(--text-muted); margin-top: 2px; }
 
