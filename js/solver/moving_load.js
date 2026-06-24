@@ -17,8 +17,8 @@
 // La carga puntual se reparte a los nodos del elemento que la contiene por funciones
 // de forma de Hermite (fuerzas y momentos nodales consistentes → respuesta exacta).
 // ──────────────────────────────────────────────────────────────────────────────
-import { buildNodeIndex, assembleK, assembleF, getNodeDOFs } from './assembler.js?v=199';
-import { Results } from './postprocess.js?v=199';
+import { buildNodeIndex, assembleK, assembleF, getNodeDOFs } from './assembler.js?v=200';
+import { Results } from './postprocess.js?v=200';
 
 const NUM = () => (typeof window !== 'undefined' && window.numeric) || (typeof globalThis !== 'undefined' && globalThis.numeric);
 

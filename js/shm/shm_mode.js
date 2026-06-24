@@ -8,9 +8,9 @@
 //   inspecciones y señal temporal EN VIVO desde un Web Worker (DataSource).
 // Recortes (modelado) los hace shm.css ocultando, no borrando.
 // ─────────────────────────────────────────────────────────────────────────────
-import { FleetView } from './fleet_view.js?v=199';
-import { DataSource } from './data_source.js?v=199';
-import { computeTwin } from './digital_twin.js?v=199';
+import { FleetView } from './fleet_view.js?v=200';
+import { DataSource } from './data_source.js?v=200';
+import { computeTwin } from './digital_twin.js?v=200';
 
 const F1_BASE = { turbine: 0.283, hv: 1.6 };
 const LAYOUT_KEY = 'rewind-layout';
