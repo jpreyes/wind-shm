@@ -1,0 +1,109 @@
+/* ═══════════════════════════════════════════════════════════════════════════
+   shm.css — MODO SHM sobre el shell de PÓRTICO (wind-shm)
+   Reutiliza el chrome de PÓRTICO (toolbar, panel, menú, tema de colores) y:
+   · oculta lo que acordamos sacar (modelado) — NO lo borra (reversible),
+   · muestra la flota de torres en el viewport,
+   · convierte el panel derecho en el dashboard SHM.
+   Todo bajo `body.shm` → quitar la clase devuelve PÓRTICO intacto.
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+/* ── Recorte: herramientas de modelado del toolbar izquierdo ───────────────── */
+body.shm #toolbar [data-mode="boxselect"],
+body.shm #toolbar [data-mode="addnode"],
+body.shm #toolbar [data-mode="addelem"],
+body.shm #toolbar [data-mode="addarea"],
+body.shm #toolbar [data-mode="meshpick"],
+body.shm #toolbar [data-mode="addsupport"] { display: none; }
+
+/* ── Recorte: overlays de modelado del viewport (Z piso, snap, imán, etc.) ── */
+body.shm #vp-overlays { display: none; }
+
+/* ── Recorte: super-tab Diseño + sub-tabs de modelado (se mantiene Sel.) ───── */
+body.shm .vtab[data-vtab="diseno"],
+body.shm #panel-tabs .ptab[data-tab="nodos"],
+body.shm #panel-tabs .ptab[data-tab="elems"],
+body.shm #panel-tabs .ptab[data-tab="dia"],
+body.shm #panel-tabs .ptab[data-tab="cargas"] { display: none; }
+
+/* ── Recorte: items de menú (espectro, modelado, combinaciones) ────────────── */
+body.shm li[data-action="run-spectrum"],
+body.shm li[data-action="disc-all"],
+body.shm li[data-action="join-elems"],
+body.shm li[data-action="inter-elems"],
+body.shm li[data-action="crear-area"],
+body.shm li[data-action="mallar-panel"],
+body.shm li[data-action="mallar-region"],
+body.shm li[data-action="suavizar-malla"],
+body.shm li[data-action="crear-link"],
+body.shm li[data-action="muro-relleno"],
+body.shm li[data-action="grids"],
+body.shm li[data-action="combos"],
+body.shm li[data-action="combos-norma"],
+body.shm li[data-action="importcsv"],
+body.shm li[data-action="exportcsv"],
+body.shm li[data-action="template"] { display: none; }
+
+/* ── Viewport: mostrar el canvas de la flota, ocultar el FE ────────────────── */
+body.shm #viewport-container > canvas:not(.shm-canvas) { display: none !important; }
+body.shm #viewport-container > canvas.shm-canvas { display: block; }
+
+/* ── Toolbar: botón «Agregar torre» (estilo .tool de PÓRTICO) ──────────────── */
+#shm-add-tool { display: none; }
+body.shm #shm-add-tool { display: flex; }
+
+/* ── Panel derecho: ocultar el panel FE, mostrar el dashboard SHM ──────────── */
+body.shm #panel-vtabs,
+body.shm #panel-content { display: none; }
+#shm-panel { display: none; }
+body.shm #shm-panel {
+  display: flex; flex-direction: column; height: 100%;
+  background: var(--bg2); color: var(--text); font-family: var(--font);
+}
+
+/* Encabezado del dashboard */
+#shm-panel .shm-head {
+  padding: 12px 14px; border-bottom: 1px solid var(--border);
+}
+#shm-panel .shm-title { font-size: 14px; font-weight: 700; letter-spacing: .2px; }
+#shm-panel .shm-sub { font-size: 11px; color: var(--text-muted); margin-top: 2px; }
+
+/* Tira de estado de la flota */
+#shm-panel .shm-fleet {
+  display: flex; gap: 8px; padding: 10px 14px; border-bottom: 1px solid var(--border);
+  flex-wrap: wrap;
+}
+#shm-panel .shm-stat {
+  flex: 1 1 60px; background: var(--bg3); border: 1px solid var(--border);
+  border-radius: var(--radius-sm); padding: 7px 9px;
+}
+#shm-panel .shm-stat .k { font-size: 10px; color: var(--text-muted); text-transform: uppercase; letter-spacing: .04em; }
+#shm-panel .shm-stat .v { font-size: 17px; font-weight: 700; margin-top: 2px; }
+
+/* Pestañas del dashboard de la torre */
+#shm-panel .shm-tabs { display: flex; border-bottom: 1px solid var(--border); overflow-x: auto; }
+#shm-panel .shm-tab {
+  flex: 0 0 auto; background: transparent; border: 0; color: var(--text-muted);
+  padding: 9px 12px; font-size: 12px; cursor: pointer; border-bottom: 2px solid transparent;
+  font-family: inherit; white-space: nowrap;
+}
+#shm-panel .shm-tab:hover { color: var(--text); }
+#shm-panel .shm-tab.active { color: var(--accent); border-bottom-color: var(--accent); }
+
+#shm-panel .shm-body { flex: 1; overflow-y: auto; padding: 14px; }
+#shm-panel .shm-tabpane { display: none; }
+#shm-panel .shm-tabpane.active { display: block; }
+
+/* Filas de datos */
+#shm-panel .row { display: flex; justify-content: space-between; gap: 12px; padding: 6px 0; border-bottom: 1px solid var(--border); font-size: 13px; }
+#shm-panel .row span:first-child { color: var(--text-muted); }
+#shm-panel .row b { font-weight: 600; }
+
+/* Semáforo de estado */
+#shm-panel .light { display: inline-block; width: 10px; height: 10px; border-radius: 50%; margin-right: 6px; vertical-align: middle; }
+#shm-panel .light.ok { background: var(--success); box-shadow: 0 0 8px var(--success); }
+#shm-panel .light.warn { background: var(--warn); box-shadow: 0 0 8px var(--warn); }
+#shm-panel .light.bad { background: var(--danger); box-shadow: 0 0 8px var(--danger); }
+
+#shm-panel .empty { color: var(--text-muted); font-size: 13px; text-align: center; margin-top: 30px; line-height: 1.6; }
+#shm-panel canvas.sig { width: 100%; height: 90px; background: var(--bg); border: 1px solid var(--border); border-radius: var(--radius-sm); display: block; margin-bottom: 6px; }
+#shm-panel .note { font-size: 11px; color: var(--text-muted); margin-top: 10px; line-height: 1.5; }
