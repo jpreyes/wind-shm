@@ -8,12 +8,12 @@
 //   inspecciones y señal temporal EN VIVO desde un Web Worker (DataSource).
 // Recortes (modelado) los hace shm.css ocultando, no borrando.
 // ─────────────────────────────────────────────────────────────────────────────
-import { FleetView } from './fleet_view.js?v=205';
-import { DataSource } from './data_source.js?v=205';
-import { computeTwin } from './digital_twin.js?v=205';
+import { FleetView } from './fleet_view.js?v=206';
+import { DataSource } from './data_source.js?v=206';
+import { computeTwin } from './digital_twin.js?v=206';
 
 const F1_BASE = { turbine: 0.283, hv: 1.6 };
-const REWIND_VER = 'v205';   // versión visible del build (subir junto al cache-bust)
+const REWIND_VER = 'v206';   // versión visible del build (subir junto al cache-bust)
 const LAYOUT_KEY = 'rewind-layout';
 const loadLayout = () => { try { return JSON.parse(localStorage.getItem(LAYOUT_KEY)); } catch { return null; } };
 const FS = 62.5;   // frecuencia de muestreo de la señal (Hz), igual que shm_worker.js
@@ -782,39 +782,40 @@ function buildDashboard(panel, fleet, actions) {
         <div class="plot"><div class="cap">Escalograma wavelet (Morlet)</div><img src="${imgWavelet(buf)}"></div>`;
       const vibSensores = (o.sensors).map(se => vibBlock(`Sensor ${se.id} — MEMS acelerómetro`, sigBuf[se.id], se.status === 'fault')).join('');
       const vibGateway = o.type === 'turbine' ? vibBlock('Gateway — nodo de enlace (base)', gwBuf, false) : '';
-      // Estado estructural: deformada (mapa de calor de desplazamientos) del gemelo digital.
-      const prof2 = window.shmTwin?.turbineProfile;
+      // Estado estructural: deformada a partir de lo que MIDEN los sensores (no de una carga).
+      // Desplazamiento ≈ aceleración_RMS / (2π·f₁)²  en cada sensor (a su altura) + base = 0.
+      const f1m = (window.shmTwin?.[o.type]) || (o.type === 'hv' ? 1.6 : 0.283);
+      const w2 = Math.pow(2 * Math.PI * f1m, 2) || 1;
+      const ctrl = [{ z: 0, disp: 0 }];
+      for (const se of o.sensors) {
+        const tel = (d.sensors || []).find(s => s.id === se.id);
+        if (!tel || tel.status === 'fault') continue;     // ignora sensores en falla
+        ctrl.push({ z: se.mesh?.position?.y ?? 0, disp: (tel.rms || 0) * 9.81 / w2 });
+      }
+      ctrl.sort((a, b) => a.z - b.z);
+      const measProf = [];
+      if (ctrl.length >= 2) {
+        const top = ctrl[ctrl.length - 1];
+        if (top.z < o.height - 1) ctrl.push({ z: o.height, disp: top.disp * (o.height / Math.max(top.z, 1)) });  // extrapola a la punta
+        const zMax = ctrl[ctrl.length - 1].z, N = 40;
+        for (let i = 0; i <= N; i++) { const z = zMax * i / N; let k = 0; while (k < ctrl.length - 1 && ctrl[k + 1].z < z) k++; const a = ctrl[k], b = ctrl[Math.min(k + 1, ctrl.length - 1)], t = b.z > a.z ? (z - a.z) / (b.z - a.z) : 0; measProf.push({ z, disp: a.disp + (b.disp - a.disp) * t }); }
+      }
       let estado = '';
-      if (o.type === 'turbine' && prof2?.length) {
-        const maxD = Math.max(...prof2.map(p => p.disp));
+      if (measProf.length) {
+        const maxD = Math.max(...measProf.map(p => p.disp), 1e-9);
         estado = `
-          <h3>Estado estructural — deformada (mapa de calor de desplazamientos)</h3>
+          <h3>Estado estructural — deformada (desplazamientos medidos por los sensores)</h3>
           <div class="cols">
-            <div class="draw"><img src="${imgDeformed(prof2, 'turbine')}" style="width:210px;border:1px solid #e2e2e2;border-radius:6px"></div>
+            <div class="draw"><img src="${imgDeformed(measProf, o.type)}" style="width:210px;border:1px solid #e2e2e2;border-radius:6px"></div>
             <table class="ficha">
               <tr><th>Fecha y hora</th><td>${fmtT(Date.now())}</td></tr>
               <tr><th>Desplazamiento máx (punta)</th><td>${(maxD * 1000).toFixed(1)} mm</td></tr>
               <tr><th>Deriva (drift)</th><td>${(maxD / o.height * 100).toFixed(3)} % de H</td></tr>
-              <tr><th>Bajo carga</th><td>Empuje de viento + peso propio</td></tr>
+              <tr><th>Fuente</th><td>Medición de los sensores (RMS → desplazamiento)</td></tr>
+              ${o.type === 'hv' && window.shmTwin?.hvAxial ? `<tr><th>Axial máx (gemelo)</th><td>${window.shmTwin.hvAxial.tMax.toFixed(0)} / ${window.shmTwin.hvAxial.cMax.toFixed(0)} kN</td></tr>` : ''}
             </table>
           </div>
-          <div class="note">Deformada amplificada del aerogenerador; color = magnitud del desplazamiento (ver barra). Calculado por el gemelo digital (solver de PÓRTICO).</div>`;
-      } else if (o.type === 'hv' && window.shmTwin?.hvAxial) {
-        const ax = window.shmTwin.hvAxial, hp = ax.profile || [];
-        const maxD = hp.length ? Math.max(...hp.map(p => p.disp)) : 0;
-        estado = `
-          <h3>Estado estructural — deformada (mapa de calor de desplazamientos)</h3>
-          <div class="cols">
-            ${hp.length ? `<div class="draw"><img src="${imgDeformed(hp, 'hv')}" style="width:210px;border:1px solid #e2e2e2;border-radius:6px"></div>` : ''}
-            <table class="ficha">
-              <tr><th>Fecha y hora</th><td>${fmtT(Date.now())}</td></tr>
-              <tr><th>Desplazamiento máx (punta)</th><td>${(maxD * 1000).toFixed(1)} mm</td></tr>
-              <tr><th>Axial máx · tracción</th><td>${ax.tMax.toFixed(0)} kN</td></tr>
-              <tr><th>Axial máx · compresión</th><td>${ax.cMax.toFixed(0)} kN</td></tr>
-              <tr><th>Bajo carga</th><td>Viento sobre la celosía</td></tr>
-            </table>
-          </div>
-          <div class="note">Deformada amplificada de la torre de alta tensión; color = magnitud del desplazamiento (ver barra). Gemelo digital (solver de PÓRTICO).</div>`;
+          <div class="note">Deformada estimada a partir de la vibración MEDIDA por los sensores (no de una carga). Color = magnitud del desplazamiento (ver barra).</div>`;
       }
       detalle = `
         <h2>2 · Estructura ${esc(o.label)}</h2>

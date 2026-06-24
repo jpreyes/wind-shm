@@ -7,8 +7,8 @@
 // ─────────────────────────────────────────────────────────────────────────────
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
-import { createTurbine, TOWER_H } from './turbine_mesh.js?v=205';
-import { createSubstationTower, groundCable, overheadLine } from './structures.js?v=205';
+import { createTurbine, TOWER_H } from './turbine_mesh.js?v=206';
+import { createSubstationTower, groundCable, overheadLine } from './structures.js?v=206';
 
 const SPACING = 235;
 
