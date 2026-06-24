@@ -29,8 +29,8 @@
       window.dispatchEvent(new Event('pwa-installed'));
     });
   </script>
-  <link rel="stylesheet" href="style.css?v=174">
-  <link rel="stylesheet" href="ui-v2.css?v=174">
+  <link rel="stylesheet" href="style.css?v=175">
+  <link rel="stylesheet" href="ui-v2.css?v=175">
   <script type="importmap">
   {
     "imports": {
@@ -374,6 +374,16 @@
                    cursor:pointer;font-size:11px;white-space:nowrap">3D</button>
         </div>
         <div class="vp-hint" id="vp-hint"></div>
+        <!-- Selector de caso de carga — parte de la barra (reacomoda con flex-wrap) -->
+        <div id="lc-overlay">
+          <div class="vp-ctrl">
+            <label>Caso</label>
+            <select id="lc-select"></select>
+            <button id="btn-add-lc" title="Nuevo caso de carga o combinación" style="background:transparent;border:none;color:var(--accent);cursor:pointer;font-size:16px;padding:0 4px;">＋</button>
+            <button id="btn-edit-lc" title="Editar caso activo: nombre, peso propio, eliminar" style="background:transparent;border:none;color:var(--text-muted);cursor:pointer;font-size:13px;padding:0 4px;">✎</button>
+            <button id="btn-toggle-loads" title="Mostrar / ocultar las flechas de carga" style="background:transparent;border:none;color:var(--success);cursor:pointer;font-size:13px;padding:0 4px;">⬇ cargas</button>
+          </div>
+        </div>
       </div>
 
       <!-- Results overlay — visible only after analysis -->
@@ -425,17 +435,6 @@
             style="background:transparent;border:1px solid var(--accent);
                    color:var(--accent);padding:2px 8px;border-radius:3px;
                    cursor:pointer;font-size:11px">📷 PNG</button>
-        </div>
-      </div>
-
-      <!-- Load case selector — visible during model editing -->
-      <div id="lc-overlay">
-        <div class="vp-ctrl">
-          <label>Caso</label>
-          <select id="lc-select"></select>
-          <button id="btn-add-lc" title="Nuevo caso de carga o combinación" style="background:transparent;border:none;color:var(--accent);cursor:pointer;font-size:16px;padding:0 4px;">＋</button>
-          <button id="btn-edit-lc" title="Editar caso activo: nombre, peso propio, eliminar" style="background:transparent;border:none;color:var(--text-muted);cursor:pointer;font-size:13px;padding:0 4px;">✎</button>
-          <button id="btn-toggle-loads" title="Mostrar / ocultar las flechas de carga" style="background:transparent;border:none;color:var(--success);cursor:pointer;font-size:13px;padding:0 4px;">⬇ cargas</button>
         </div>
       </div>
 
@@ -1058,7 +1057,7 @@
 
 <!-- numeric.js para solver (Fase 2+) -->
 <script src="lib/numeric.js"></script>
-<script type="module" src="js/app.js?v=174"></script>
+<script type="module" src="js/app.js?v=175"></script>
 
 <!-- PWA: registrar el service worker (offline). Solo en contexto seguro
      (https o localhost); el navegador deja navigator.serviceWorker undefined

@@ -284,7 +284,10 @@ html, body { height: 100%; overflow: hidden; background: var(--bg); color: var(-
   position: absolute;
   top: 8px;
   left: 8px;
+  right: 8px;            /* límite derecho → flex-wrap reacomoda en vez de desbordar */
   display: flex;
+  flex-wrap: wrap;       /* al angostar la ventana, los controles bajan de fila */
+  align-items: flex-start;
   gap: 8px;
   z-index: 10;
   pointer-events: none;
@@ -824,11 +827,12 @@ html, body { height: 100%; overflow: hidden; background: var(--bg); color: var(-
 }
 
 /* ── Load case overlay ───────────────────────────────────────── */
+/* El selector de caso es parte de la barra #vp-overlays (reacomoda con flex-wrap);
+   antes era un overlay absoluto top-right que se montaba sobre los controles al
+   angostar la ventana. `margin-left:auto` lo empuja a la derecha cuando hay espacio. */
 #lc-overlay {
-  position: absolute;
-  top: 8px;
-  right: 8px;
-  z-index: 12;
+  display: flex;
+  margin-left: auto;
   pointer-events: all;
 }
 

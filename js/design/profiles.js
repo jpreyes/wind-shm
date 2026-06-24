@@ -12,7 +12,7 @@
 // conservador para el diseño). Dimensiones en METROS al exponerse.
 // ──────────────────────────────────────────────────────────────────────────────
 
-import { fromShape } from './section_props.js?v=174';
+import { fromShape } from './section_props.js?v=175';
 
 // [h, b, tw, tf] en mm.
 const IPE = {
