@@ -25,6 +25,14 @@ class NoCacheHandler(http.server.SimpleHTTPRequestHandler):
         pass  # silenciar logs de acceso
 
 os.chdir(os.path.dirname(os.path.abspath(__file__)))
-with socketserver.TCPServer(('', PORT), NoCacheHandler) as httpd:
+
+# Multihilo: el servidor monohilo (TCPServer) se ahogaba con las cargas paralelas
+# de módulos ES (Three.js + varios .js a la vez) → ConnectionAbortedError y
+# conexiones rechazadas. ThreadingTCPServer atiende peticiones concurrentes.
+class Server(socketserver.ThreadingTCPServer):
+    allow_reuse_address = True
+    daemon_threads = True
+
+with Server(('', PORT), NoCacheHandler) as httpd:
     print(f'PORTICO -> http://localhost:{PORT}')
     httpd.serve_forever()

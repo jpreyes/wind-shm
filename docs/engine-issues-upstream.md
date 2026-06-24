@@ -109,6 +109,26 @@ SSI no lineal realista (sísmico, daño de fundación).
 
 ---
 
+## E6 · 🟡 `serve.py` monohilo se ahoga con cargas paralelas de módulos ES
+
+**Dónde.** `serve.py:28` usaba `socketserver.TCPServer` (monohilo).
+
+**Impacto.** Al cargar una página con muchos `import` ES en paralelo (Three.js
+`three.module.js` ~1 MB + varios `.js`), el servidor serializa las peticiones, aborta
+conexiones (`ConnectionAbortedError [WinError 10053]`) y **rechaza** conexiones nuevas
+(`ERR_CONNECTION_REFUSED`) → la página no carga de forma intermitente. Afecta a PÓRTICO
+original igual (mismo `serve.py`); se nota más con apps que importan muchos módulos.
+
+**Fix aplicado en wind-shm** (portar a structweb3d): subclase `ThreadingTCPServer`:
+
+```python
+class Server(socketserver.ThreadingTCPServer):
+    allow_reuse_address = True
+    daemon_threads = True
+```
+
+---
+
 ## Resumen de archivos a tocar
 
 | Ítem | model.js | assembler.js | modal_solver.js | serializer.js | UI |
