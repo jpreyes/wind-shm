@@ -25,7 +25,7 @@
 // análisis y el diseño sean consistentes.
 // ──────────────────────────────────────────────────────────────────────────────
 
-import { polygonProps } from './polygon_props.js?v=204';
+import { polygonProps } from './polygon_props.js?v=205';
 
 // Torsión de St. Venant de un rectángulo macizo (lado largo a, corto b).
 function rectJ(a, b) {

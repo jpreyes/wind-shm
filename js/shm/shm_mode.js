@@ -8,12 +8,12 @@
 //   inspecciones y señal temporal EN VIVO desde un Web Worker (DataSource).
 // Recortes (modelado) los hace shm.css ocultando, no borrando.
 // ─────────────────────────────────────────────────────────────────────────────
-import { FleetView } from './fleet_view.js?v=204';
-import { DataSource } from './data_source.js?v=204';
-import { computeTwin } from './digital_twin.js?v=204';
+import { FleetView } from './fleet_view.js?v=205';
+import { DataSource } from './data_source.js?v=205';
+import { computeTwin } from './digital_twin.js?v=205';
 
 const F1_BASE = { turbine: 0.283, hv: 1.6 };
-const REWIND_VER = 'v204';   // versión visible del build (subir junto al cache-bust)
+const REWIND_VER = 'v205';   // versión visible del build (subir junto al cache-bust)
 const LAYOUT_KEY = 'rewind-layout';
 const loadLayout = () => { try { return JSON.parse(localStorage.getItem(LAYOUT_KEY)); } catch { return null; } };
 const FS = 62.5;   // frecuencia de muestreo de la señal (Hz), igual que shm_worker.js
@@ -707,18 +707,47 @@ function buildDashboard(panel, fleet, actions) {
       return c.toDataURL('image/png');
     };
 
-    // — deformada (mapa de calor de desplazamientos) del fuste —
-    const imgDeformed = (prof) => {
-      const { c, g, w, h } = mk(200, 320);
+    // — deformada EXTRUIDA (silueta de la estructura) + barra de color (mm) —
+    const imgDeformed = (prof, type) => {
+      const W = 280, H = 330, { c, g } = mk(W, H);
       if (!prof || !prof.length) return c.toDataURL('image/png');
       const zMax = prof[prof.length - 1].z || 1, dMax = Math.max(...prof.map(p => p.disp), 1e-9);
-      const cx = w * 0.36, amp = w * 0.42, baseY = h - 16, topY = 14;
-      const Y = (z) => baseY - (z / zMax) * (baseY - topY), X = (d) => cx + (d / dMax) * amp;
+      const towerW = 188, cx = towerW * 0.34, amp = towerW * 0.36, baseY = H - 22, topY = 26;
+      const Y = (z) => baseY - (z / zMax) * (baseY - topY), Xc = (d) => cx + (d / dMax) * amp;
+      const hw0 = type === 'hv' ? 22 : 13, hw1 = type === 'hv' ? 6 : 4.5;
+      const hwAt = (z) => hw0 + (hw1 - hw0) * (z / zMax);
       g.strokeStyle = '#cbd2da'; g.setLineDash([4, 4]); g.beginPath(); g.moveTo(cx, baseY); g.lineTo(cx, topY); g.stroke(); g.setLineDash([]);
-      g.lineWidth = 7; g.lineCap = 'round';
-      for (let i = 1; i < prof.length; i++) { const a = prof[i - 1], b = prof[i]; g.strokeStyle = heat(b.disp / dMax); g.beginPath(); g.moveTo(X(a.disp), Y(a.z)); g.lineTo(X(b.disp), Y(b.z)); g.stroke(); }
-      g.fillStyle = '#9aa6b3'; g.fillRect(cx - 16, baseY, 32, 4);
-      g.fillStyle = '#666'; g.font = '10px sans-serif'; g.fillText('base', cx + 12, baseY - 2); g.fillText('punta', Math.min(X(prof[prof.length - 1].disp) + 6, w - 30), topY + 8);
+      g.lineWidth = 0.6; g.strokeStyle = 'rgba(0,0,0,.12)';
+      for (let i = 1; i < prof.length; i++) {
+        const a = prof[i - 1], b = prof[i], xa = Xc(a.disp), ya = Y(a.z), xb = Xc(b.disp), yb = Y(b.z), wa = hwAt(a.z), wb = hwAt(b.z);
+        g.fillStyle = heat(b.disp / dMax);
+        g.beginPath(); g.moveTo(xa - wa, ya); g.lineTo(xa + wa, ya); g.lineTo(xb + wb, yb); g.lineTo(xb - wb, yb); g.closePath(); g.fill(); g.stroke();
+      }
+      const tip = prof[prof.length - 1], xt = Xc(tip.disp), yt = Y(zMax);
+      if (type === 'hv') {
+        g.strokeStyle = 'rgba(40,55,70,.55)'; g.lineWidth = 1;
+        for (let i = 1; i < prof.length; i += 2) {
+          const a = prof[i - 1], b = prof[Math.min(i, prof.length - 1)], xa = Xc(a.disp), ya = Y(a.z), xb = Xc(b.disp), yb = Y(b.z), wa = hwAt(a.z), wb = hwAt(b.z);
+          g.beginPath(); g.moveTo(xa - wa, ya); g.lineTo(xb + wb, yb); g.moveTo(xa + wa, ya); g.lineTo(xb - wb, yb); g.stroke();
+        }
+        g.beginPath(); g.moveTo(xt - 26, yt + 8); g.lineTo(xt + 26, yt + 8); g.stroke();
+      } else {
+        g.fillStyle = '#9bb4c9'; g.fillRect(xt - 6, yt - 4, 16, 8);
+        g.strokeStyle = '#7f93a6'; g.lineWidth = 2.5; g.lineCap = 'round';
+        for (const ang of [-Math.PI / 2, Math.PI / 6, 5 * Math.PI / 6]) { g.beginPath(); g.moveTo(xt + 4, yt); g.lineTo(xt + 4 + 26 * Math.cos(ang), yt + 26 * Math.sin(ang)); g.stroke(); }
+        g.fillStyle = '#5b6b7a'; g.beginPath(); g.arc(xt + 4, yt, 3, 0, 7); g.fill();
+      }
+      g.fillStyle = '#9aa6b3'; g.fillRect(cx - 18, baseY, 36, 4);
+      g.fillStyle = '#555'; g.font = '10px sans-serif'; g.textAlign = 'left'; g.fillText('base', 6, baseY - 2);
+      // barra de color (mm)
+      const bx = towerW + 30, bw = 16, bTop = 34, bBot = H - 34;
+      for (let py = bTop; py <= bBot; py++) { g.fillStyle = heat((bBot - py) / (bBot - bTop)); g.fillRect(bx, py, bw, 1); }
+      g.strokeStyle = '#bbb'; g.lineWidth = 0.6; g.strokeRect(bx, bTop, bw, bBot - bTop);
+      const mm = dMax * 1000; g.fillStyle = '#333'; g.font = '10px sans-serif';
+      g.fillText(mm.toFixed(0) + ' mm', bx + bw + 5, bTop + 4);
+      g.fillText((mm / 2).toFixed(0), bx + bw + 5, (bTop + bBot) / 2 + 3);
+      g.fillText('0', bx + bw + 5, bBot + 3);
+      g.fillStyle = '#666'; g.fillText('desplaz.', bx - 4, bTop - 8);
       return c.toDataURL('image/png');
     };
 
@@ -761,7 +790,7 @@ function buildDashboard(panel, fleet, actions) {
         estado = `
           <h3>Estado estructural — deformada (mapa de calor de desplazamientos)</h3>
           <div class="cols">
-            <div class="draw"><img src="${imgDeformed(prof2)}" style="width:150px;border:1px solid #e2e2e2;border-radius:6px"></div>
+            <div class="draw"><img src="${imgDeformed(prof2, 'turbine')}" style="width:210px;border:1px solid #e2e2e2;border-radius:6px"></div>
             <table class="ficha">
               <tr><th>Fecha y hora</th><td>${fmtT(Date.now())}</td></tr>
               <tr><th>Desplazamiento máx (punta)</th><td>${(maxD * 1000).toFixed(1)} mm</td></tr>
@@ -769,16 +798,23 @@ function buildDashboard(panel, fleet, actions) {
               <tr><th>Bajo carga</th><td>Empuje de viento + peso propio</td></tr>
             </table>
           </div>
-          <div class="note">Mapa de calor: azul = bajo desplazamiento (base) → rojo = máximo (punta). Calculado por el gemelo digital (solver de PÓRTICO).</div>`;
+          <div class="note">Deformada amplificada del aerogenerador; color = magnitud del desplazamiento (ver barra). Calculado por el gemelo digital (solver de PÓRTICO).</div>`;
       } else if (o.type === 'hv' && window.shmTwin?.hvAxial) {
-        const ax = window.shmTwin.hvAxial;
+        const ax = window.shmTwin.hvAxial, hp = ax.profile || [];
+        const maxD = hp.length ? Math.max(...hp.map(p => p.disp)) : 0;
         estado = `
-          <h3>Estado estructural (reticulado)</h3>
-          <table class="ficha">
-            <tr><th>Fecha y hora</th><td>${fmtT(Date.now())}</td></tr>
-            <tr><th>Axial máx · tracción</th><td>${ax.tMax.toFixed(0)} kN</td></tr>
-            <tr><th>Axial máx · compresión</th><td>${ax.cMax.toFixed(0)} kN</td></tr>
-          </table>`;
+          <h3>Estado estructural — deformada (mapa de calor de desplazamientos)</h3>
+          <div class="cols">
+            ${hp.length ? `<div class="draw"><img src="${imgDeformed(hp, 'hv')}" style="width:210px;border:1px solid #e2e2e2;border-radius:6px"></div>` : ''}
+            <table class="ficha">
+              <tr><th>Fecha y hora</th><td>${fmtT(Date.now())}</td></tr>
+              <tr><th>Desplazamiento máx (punta)</th><td>${(maxD * 1000).toFixed(1)} mm</td></tr>
+              <tr><th>Axial máx · tracción</th><td>${ax.tMax.toFixed(0)} kN</td></tr>
+              <tr><th>Axial máx · compresión</th><td>${ax.cMax.toFixed(0)} kN</td></tr>
+              <tr><th>Bajo carga</th><td>Viento sobre la celosía</td></tr>
+            </table>
+          </div>
+          <div class="note">Deformada amplificada de la torre de alta tensión; color = magnitud del desplazamiento (ver barra). Gemelo digital (solver de PÓRTICO).</div>`;
       }
       detalle = `
         <h2>2 · Estructura ${esc(o.label)}</h2>

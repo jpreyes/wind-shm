@@ -6,12 +6,12 @@
 // macromodelo `turbine`; la torre de alta tensión usa el generador de torres de
 // PÓRTICO (celosía 3D). Requiere numeric.js (presente en el navegador).
 // ─────────────────────────────────────────────────────────────────────────────
-import { Model } from '../model/model.js?v=204';
-import { Serializer } from '../model/serializer.js?v=204';
-import { insertTurbine } from '../model/macros/turbine.js?v=204';
-import { ModalSolver } from '../solver/modal_solver.js?v=204';
-import { StaticSolver } from '../solver/static_solver.js?v=204';
-import { generarTorre } from '../../asistente/generador.js?v=204';
+import { Model } from '../model/model.js?v=205';
+import { Serializer } from '../model/serializer.js?v=205';
+import { insertTurbine } from '../model/macros/turbine.js?v=205';
+import { ModalSolver } from '../solver/modal_solver.js?v=205';
+import { StaticSolver } from '../solver/static_solver.js?v=205';
+import { generarTorre } from '../../asistente/generador.js?v=205';
 
 // f₁ del aerogenerador (macromodelo: fuste cónico + RNA + resortes de fundación).
 export function turbineF1() {
@@ -63,7 +63,15 @@ export function hvAxial() {
   const res = new StaticSolver().solve(m, 2, false);            // caso 2 = Viento (generarTorre)
   let tMax = 0, cMax = 0;
   for (const e of m.elements.values()) { const N = res.getElemAtXi(e.id, 0.5).N; if (N > tMax) tMax = N; if (N < cMax) cMax = N; }
-  return { tMax, cMax };
+  // Perfil de desplazamiento lateral vs altura (de las patas, no de los anillos).
+  const profile = [];
+  for (const e of m.elements.values()) {
+    const n1 = m.nodes.get(e.n1), n2 = m.nodes.get(e.n2);
+    if (!n1 || !n2 || Math.abs(n1.z - n2.z) < 0.5) continue;     // saltar horizontales/crucetas planas
+    for (const [xi, nd] of [[0, n1], [1, n2]]) { const v = res.getElemAtXi(e.id, xi); profile.push({ z: nd.z, disp: Math.hypot(v.ux || 0, v.uy || 0, v.uz || 0) }); }
+  }
+  profile.sort((a, b) => a.z - b.z);
+  return { tMax, cMax, profile };
 }
 
 // Calcula f₁ (una por tipo) + diagramas del gemelo.
