@@ -31,23 +31,7 @@ function boot() {
   const dash = buildDashboard(panel, fleet);
 
   document.getElementById('btn-zoomext')?.addEventListener('click', () => fleet.clearSelection());
-
-  // Flota + subestación
-  for (let i = 0; i < 10; i++) fleet.addTurbine();
-  fleet.buildSubstation();
-  fleet.playIntro();
-
-  // ── Manifiesto de telemetría (con algunas fallas y daño para demostrar) ────
-  const manifest = fleet.structures.map(s => ({
-    id: s.id, type: s.type, f1: F1_BASE[s.type] || 0.5, dmg: 0,
-    sensors: s.sensors.map(se => ({ id: se.id, status: 'ok' })),
-  }));
-  const setFault = (idx, sidx) => { if (manifest[idx]?.sensors[sidx]) manifest[idx].sensors[sidx].status = 'fault'; };
-  setFault(2, 1);                         // una turbina con su acelerómetro central en falla
-  if (manifest.length > 1) setFault(manifest.length - 1, 2);   // un sensor de una torre AT
-  const dmgIdx = 4; if (manifest[dmgIdx]) manifest[dmgIdx].dmg = 0.45;   // una torre con daño
-  // refleja el estado inicial en los puntos 3D de inmediato
-  for (const m of manifest) for (const se of m.sensors) fleet.setSensorStatus(m.id, se.id, se.status);
+  document.title = 'ReWind — SHM de torres eólicas';
 
   // ── DataSource (Web Worker sintético; intercambiable por la nube) ──────────
   const ds = new DataSource();
@@ -57,34 +41,60 @@ function boot() {
       for (const se of msg.summaries[id].sensors) fleet.setSensorStatus(id, se.id, se.status);
     dash.onTick(msg);
   };
-  ds.init(manifest);
 
-  fleet.onChange = () => dash.setStructures(fleet.getStructures());
+  // Flota + subestación
+  for (let i = 0; i < 10; i++) fleet.addTurbine();
+  fleet.buildSubstation();
+
+  // Fallas y daño de demostración (mientras se conectan los sensores reales)
+  const dmgMap = {};
+  if (fleet.structures[2]?.sensors[1]) fleet.structures[2].sensors[1].status = 'fault';
+  const lastHV = [...fleet.structures].reverse().find(s => s.type === 'hv');
+  if (lastHV?.sensors[2]) lastHV.sensors[2].status = 'fault';
+  if (fleet.structures[4]) dmgMap[fleet.structures[4].id] = 0.45;
+
+  const buildManifest = () => fleet.structures.map(s => ({
+    id: s.id, type: s.type, f1: F1_BASE[s.type] || 0.5, dmg: dmgMap[s.id] || 0,
+    sensors: s.sensors.map(se => ({ id: se.id, status: se.status || 'ok' })),
+  }));
+  const syncData = () => { ds.init(buildManifest()); dash.setStructures(fleet.getStructures()); };
+
+  fleet.onChange = syncData;     // re-sincroniza al agregar torres/torres AT
   fleet.onSelect = (obj) => { dash.select(obj); nameplate.show(obj); ds.focus(obj ? obj.id : null); };
 
-  dash.setStructures(fleet.getStructures());
+  syncData();
+  fleet.playIntro();
 }
 
-// ── Toolbar: botones Agregar torre / Detener animación ───────────────────────
+// ── Toolbar: Torre · Torre AT · Detener · Editar ─────────────────────────────
 function buildToolbar(toolbar, fleet) {
   if (!toolbar) return;
+  const mk = (id, title, svg, label, onclick) => {
+    const b = document.createElement('button');
+    b.id = id; b.className = 'tool tool-action'; b.title = title;
+    b.innerHTML = `${svg}<span>${label}</span>`;
+    b.addEventListener('click', () => onclick(b));
+    return b;
+  };
   const sep = document.createElement('div'); sep.className = 'tool-sep';
-  const add = document.createElement('button');
-  add.id = 'shm-add-tool'; add.className = 'tool tool-action'; add.title = 'Agregar torre al parque';
-  add.innerHTML = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg><span>Torre</span>`;
-  add.addEventListener('click', () => fleet.addTurbine());
-
-  const pause = document.createElement('button');
-  pause.id = 'shm-pause-tool'; pause.className = 'tool tool-action';
+  const add = mk('shm-add-tool', 'Agregar aerogenerador',
+    `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>`,
+    'Torre', () => fleet.addTurbine());
+  const hv = mk('shm-hv-tool', 'Agregar torre de alta tensión',
+    `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M12 3 L5 21 M12 3 L19 21 M7 9 H17 M6 13 H18 M5.5 17 H18.5"/></svg>`,
+    'Torre AT', () => fleet.addHVTower());
+  const pause = mk('shm-pause-tool', '', '', '', () => { fleet.setPaused(!fleet.paused); paint(); });
   const paint = () => {
     pause.title = fleet.paused ? 'Reanudar animación de aspas' : 'Detener animación de aspas';
     pause.innerHTML = fleet.paused
       ? `<svg viewBox="0 0 24 24" fill="currentColor"><polygon points="6,4 20,12 6,20"/></svg><span>Animar</span>`
       : `<svg viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="5" width="4" height="14" rx="1"/><rect x="14" y="5" width="4" height="14" rx="1"/></svg><span>Detener</span>`;
   };
-  pause.addEventListener('click', () => { fleet.setPaused(!fleet.paused); paint(); });
   paint();
-  toolbar.append(sep, add, pause);
+  const edit = mk('shm-edit-tool', 'Modo edición: arrastra las estructuras para reubicarlas',
+    `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 20 L4 16 L15 5 L19 9 L8 20 Z"/><line x1="13" y1="7" x2="17" y2="11"/></svg>`,
+    'Editar', (b) => { fleet.setEditMode(!fleet.editMode); b.classList.toggle('active', fleet.editMode); });
+  toolbar.append(sep, add, hv, pause, edit);
 }
 
 // ── Nameplate (cuadro con el nombre sobre la vista) ──────────────────────────

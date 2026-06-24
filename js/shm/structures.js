@@ -7,6 +7,7 @@
 // Los miembros se dibujan con un cilindro unitario reescalado (1 geometría).
 // ─────────────────────────────────────────────────────────────────────────────
 import * as THREE from 'three';
+import { generarTorre } from '../../asistente/generador.js?v=199';
 
 const UNIT_CYL = new THREE.CylinderGeometry(1, 1, 1, 6);
 const _up = new THREE.Vector3(0, 1, 0);
@@ -24,7 +25,7 @@ export function member(a, b, r, mat) {
 
 const steelMat    = new THREE.MeshStandardMaterial({ color: 0x7f8c99, metalness: 0.3, roughness: 0.6 });
 const concreteMat = new THREE.MeshStandardMaterial({ color: 0xc4c8cd, metalness: 0, roughness: 0.95 });
-export const cableMat = new THREE.MeshStandardMaterial({ color: 0x2c3742, metalness: 0.1, roughness: 0.8 });
+export const cableMat = new THREE.MeshStandardMaterial({ color: 0x9aa6b3, metalness: 0.05, roughness: 0.85, transparent: true, opacity: 0.5 });
 
 let _hvId = 0;
 
@@ -48,54 +49,42 @@ function sensorDot(color = 0x2bff77) {
  * @returns { group, sensors[] , topY }
  */
 export function createSubstationTower(o = {}) {
-  const H = o.H ?? 46, base = o.base ?? 6.5, top = o.top ?? 2.2, panels = o.panels ?? 4;
+  const H = o.H ?? 42, base = o.base ?? 7, top = o.top ?? 2.5, panels = o.panels ?? 7;
   const id = `HV-${String(++_hvId).padStart(2, '0')}`;
   const group = new THREE.Group();
   group.userData.turbineId = id;            // reutiliza el picking de la flota
 
-  // Nodos de las 4 patas por nivel.
-  const lvl = [];
-  for (let k = 0; k <= panels; k++) {
-    const w = THREE.MathUtils.lerp(base, top, k / panels);
-    const y = (H * k) / panels;
-    lvl.push([
-      new THREE.Vector3(w, y, w), new THREE.Vector3(w, y, -w),
-      new THREE.Vector3(-w, y, -w), new THREE.Vector3(-w, y, w),
-    ]);
-  }
-  const add = (a, b, r) => group.add(member(a, b, r, steelMat));
-  // Patas + montantes horizontales + diagonales por cara y panel.
-  for (let i = 0; i < 4; i++) add(lvl[0][i], lvl[0][(i + 1) % 4], 0.18);   // base
-  for (let k = 0; k < panels; k++) {
-    for (let i = 0; i < 4; i++) {
-      add(lvl[k][i], lvl[k + 1][i], 0.26);                                  // pata
-      add(lvl[k + 1][i], lvl[k + 1][(i + 1) % 4], 0.18);                    // horizontal
-      add(lvl[k][i], lvl[k + 1][(i + 1) % 4], 0.13);                        // diagonal
-    }
-  }
-  // Ménsulas (cross-arms) para los conductores, a dos alturas.
-  const topW = top;
-  for (const [yf, len] of [[0.82, 9], [0.97, 7]]) {
-    const y = H * yf;
-    for (const sgn of [1, -1]) {
-      const root = new THREE.Vector3(sgn * topW, y, 0);
-      const tip = new THREE.Vector3(sgn * (topW + len), y, 0);
-      group.add(member(root, tip, 0.16, steelMat));
-      group.add(member(new THREE.Vector3(sgn * topW, y - 4, 0), tip, 0.11, steelMat));  // tornapunta
-      // aislador colgante
-      group.add(member(tip, tip.clone().setY(y - 2.2), 0.09, steelMat));
-    }
+  // Geometría REAL desde el generador de torres de transmisión de PÓRTICO
+  // (celosía 3D: 4 patas cónicas + anillos + X por cara + crucetas). Nodos/barras FE.
+  const ficha = { torre: { altura_m: H, base_m: base, cima_m: top, paneles: panels, rotulado: true,
+    crucetas: [{ z_m: H * 0.78, largo_m: base }, { z_m: H * 0.94, largo_m: base * 0.75 }] } };
+  const model = generarTorre(ficha, { materiales: [], perfiles: [] });
+
+  const mat = steelMat.clone();             // material propio → permite atenuar la torre
+  const pos = new Map();                     // id nodo → posición three (model x,y,z → three x,z,y)
+  for (const n of model.nodes) pos.set(n.id, new THREE.Vector3(n.x, n.z, n.y));
+  for (const el of model.elements) {
+    const a = pos.get(el.n1), b = pos.get(el.n2);
+    if (a && b) group.add(member(a, b, el.secId === 1 ? 0.22 : 0.12, mat));   // montante grueso / diagonal fino
   }
 
-  // 4 sensores bien visibles: 2 arriba, 1 medio, 1 en ménsula.
+  // 4 sensores bien visibles en nodos representativos (2 arriba, 1 medio, 1 en cruceta).
+  const ns = model.nodes;
+  const topZ = Math.max(...ns.map(n => n.z));
+  const tops = ns.filter(n => Math.abs(n.z - topZ) < 0.01);
+  const mid = ns.reduce((b, n) => Math.abs(n.z - H / 2) < Math.abs(b.z - H / 2) ? n : b, ns[0]);
+  const armTip = ns.reduce((b, n) => Math.abs(n.x) > Math.abs(b.x) ? n : b, ns[0]);
+  const picks = [tops[0], tops[2] || tops[1] || tops[0], mid, armTip];
   const sensors = [];
-  const place = (v) => { const s = sensorDot(0x2bff77); s.mesh.position.copy(v); s.mesh.userData = { turbineId: id }; group.add(s.mesh); sensors.push({ id: `s${sensors.length + 1}`, ...s, phase: Math.random() * 6.28, status: 'ok' }); };
-  place(lvl[panels][0].clone().add(new THREE.Vector3(0.4, 0.4, 0.4)));
-  place(lvl[panels][2].clone().add(new THREE.Vector3(-0.4, 0.4, -0.4)));
-  place(new THREE.Vector3(base * 0.55, H * 0.45, base * 0.55));
-  place(new THREE.Vector3(topW + 8.5, H * 0.82, 0));
+  for (const n of picks) {
+    const s = sensorDot(0x2bff77);
+    s.mesh.position.copy(pos.get(n.id)).add(new THREE.Vector3(0, 0.6, 0));
+    s.mesh.userData = { turbineId: id };
+    group.add(s.mesh);
+    sensors.push({ id: `s${sensors.length + 1}`, ...s, phase: Math.random() * 6.28, status: 'ok' });
+  }
 
-  return { id, type: 'hv', label: `Torre AT ${id}`, height: H, group, sensors, topY: H };
+  return { id, type: 'hv', label: `Torre AT ${id}`, height: H, group, sensors, dimMats: [mat], topY: H };
 }
 
 // Cable de conexión por el suelo (cilindro oscuro, leve curva).

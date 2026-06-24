@@ -8212,7 +8212,7 @@ class App {
       ? filename.replace(/\.[^.]+$/, '')
       : (this._modelName || (this._fileHandle ? 'modelo' : 'Sin título'));
     if (filename) this._modelName = name;   // recordado para el autoguardado (#43)
-    document.title = (this._dirty ? '● ' : '') + `${name} — PÓRTICO`;
+    document.title = (this._dirty ? '● ' : '') + `${name} — ReWind`;
   }
 
   _updateStats() {
@@ -8355,7 +8355,7 @@ class App {
     const fmt = (v, d = 3) => (v == null || !isFinite(v)) ? '—'
       : (Math.abs(v) >= 1e5 || (Math.abs(v) > 0 && Math.abs(v) < 1e-3) ? (+v).toExponential(2) : (+v).toFixed(d));
     const stripTags = s => String(s ?? '').replace(/<[^>]+>/g, '');
-    const proyecto = (document.title || '').replace(/^●\s*/, '').replace(/\s*—\s*PÓRTICO.*$/i, '').trim() || 'Modelo sin título';
+    const proyecto = (document.title || '').replace(/^●\s*/, '').replace(/\s*—\s*ReWind.*$/i, '').trim() || 'Modelo sin título';
     const fecha = new Date().toLocaleDateString('es-CL', { year: 'numeric', month: 'long', day: 'numeric' });
     const U = m.units || 'kN-m';
     const tieneLogoPro = !!(this._pro && cm.logoEmpresa);
@@ -8750,7 +8750,7 @@ class App {
     const esc = (s) => String(s ?? '').replace(/[&<>"]/g, c => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;' }[c]));
     const fmt = (v, d = 3) => (v == null || !isFinite(v)) ? '—'
       : (Math.abs(v) >= 1e5 || (Math.abs(v) > 0 && Math.abs(v) < 1e-3) ? (+v).toExponential(2) : (+v).toFixed(d));
-    const proyecto = (document.title || '').replace(/^●\s*/, '').replace(/\s*—\s*PÓRTICO.*$/i, '').trim() || 'Modelo sin título';
+    const proyecto = (document.title || '').replace(/^●\s*/, '').replace(/\s*—\s*ReWind.*$/i, '').trim() || 'Modelo sin título';
     const fecha = new Date().toLocaleDateString('es-CL', { year:'numeric', month:'long', day:'numeric' });
     const U = m.units || 'kN-m';
     const cm = this._memoria();   // memoria efectiva: por proyecto + defaults globales (#41)

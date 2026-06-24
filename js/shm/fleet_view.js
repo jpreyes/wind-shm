@@ -33,6 +33,9 @@ export class FleetView {
     this.paused = false;             // animación de aspas (toggle)
     this._intro = null;              // animación de entrada (fly-in)
     this.substation = null;          // { towers[], sensors[] }
+    this.cables = [];                 // mallas de cable (recomponibles)
+    this.editMode = false;           // modo edición: arrastrar estructuras
+    this._drag = null;
     this.onChange = null;            // callback(count) para la UI
 
     const w = container.clientWidth, h = container.clientHeight;
@@ -158,36 +161,58 @@ export class FleetView {
   }
   frameGeneral() { const f = this.frame(); this.flyTo(f.pos, f.tgt, 1300); }
 
-  // Subestación: 2 torres de alta tensión (celosía) + cables desde cada turbina.
+  // Subestación: 2 torres de alta tensión (celosía PÓRTICO) + cables.
   buildSubstation() {
     if (this.substation) return;
     const { center, radius } = this._extent();
     const zsub = center.z + radius + 320;
     this.substation = { towers: [], sensors: [] };
-    const xs = [center.x - 55, center.x + 55];
-    for (const x of xs) {
+    for (const x of [center.x - 55, center.x + 55]) {
       const hv = createSubstationTower({});
-      hv.group.position.set(x, 0, zsub);
+      hv.group.position.set(x, 0, zsub); hv.dim = 0;
       this.scene.add(hv.group);
       this.substation.towers.push(hv);
       this.substation.sensors.push(...hv.sensors);
       this.structures.push(hv);
     }
-    // Conductores aéreos entre las dos torres (a la altura de las ménsulas).
-    for (const yf of [0.82, 0.97]) {
-      const y = this.substation.towers[0].topY * yf;
-      const tip = 2.2 + (yf === 0.82 ? 9 : 7);
-      this.scene.add(overheadLine(new THREE.Vector3(xs[0] + tip, y, zsub), new THREE.Vector3(xs[1] - tip, y, zsub)));
+    this.rebuildCables();
+    this.frameGeneral();
+  }
+
+  // Agrega una torre de alta tensión a la subestación.
+  addHVTower() {
+    if (!this.substation) { this.buildSubstation(); return this.substation.towers[0]; }
+    const tw = this.substation.towers;
+    const zsub = tw[0].group.position.z;
+    const x = tw[tw.length - 1].group.position.x + 60;
+    const hv = createSubstationTower({});
+    hv.group.position.set(x, 0, zsub); hv.dim = 0;
+    this.scene.add(hv.group);
+    tw.push(hv); this.substation.sensors.push(...hv.sensors); this.structures.push(hv);
+    this.rebuildCables();
+    this.onChange?.();
+    return hv;
+  }
+
+  // (Re)construye cables: conductores aéreos entre torres HV + cadena colectora
+  // de turbinas con un ÚNICO alimentador a la subestación.
+  rebuildCables() {
+    if (!this.substation) return;
+    for (const c of this.cables) { this.scene.remove(c); c.geometry?.dispose?.(); }
+    this.cables = [];
+    const addC = (m) => { this.scene.add(m); this.cables.push(m); };
+    const tw = this.substation.towers;
+    const hubs = tw.map(hv => new THREE.Vector3(hv.group.position.x, 1, hv.group.position.z));
+    // conductores aéreos entre torres HV consecutivas
+    for (let i = 0; i < tw.length - 1; i++) {
+      const a = tw[i].group.position, b = tw[i + 1].group.position, y = (tw[i].topY || 40) * 0.9;
+      addC(overheadLine(new THREE.Vector3(a.x, y, a.z), new THREE.Vector3(b.x, y, b.z)));
     }
-    // Cadena colectora: las turbinas se conectan ENTRE SÍ y un ÚNICO cable
-    // (alimentador) llega a la subestación.
+    // cadena colectora + alimentador único
     const pts = this.turbines.map(t => t.group.position.clone());
     if (pts.length) {
-      // Subestación de enganche = poste HV más cercano al parque.
-      const hubs = this.substation.towers.map(hv => new THREE.Vector3(hv.group.position.x, 1, hv.group.position.z));
-      // Cadena por vecino más cercano, empezando por la turbina más cercana a la subestación.
-      const rest = pts.map((_, i) => i);
       const dHub = (i) => Math.min(...hubs.map(h => pts[i].distanceTo(h)));
+      const rest = pts.map((_, i) => i);
       let start = rest.reduce((b, i) => dHub(i) < dHub(b) ? i : b, rest[0]);
       const order = [start]; rest.splice(rest.indexOf(start), 1);
       while (rest.length) {
@@ -195,14 +220,13 @@ export class FleetView {
         const n = rest.reduce((b, i) => pts[i].distanceTo(pts[last]) < pts[b].distanceTo(pts[last]) ? i : b, rest[0]);
         order.push(n); rest.splice(rest.indexOf(n), 1);
       }
-      // Único alimentador: subestación más cercana → primera turbina de la cadena.
       const hub = hubs.reduce((b, h) => h.distanceTo(pts[order[0]]) < b.distanceTo(pts[order[0]]) ? h : b, hubs[0]);
-      this.scene.add(groundCable(hub, pts[order[0]]));
-      // Cadena entre turbinas consecutivas.
-      for (let k = 0; k < order.length - 1; k++) this.scene.add(groundCable(pts[order[k]], pts[order[k + 1]]));
+      addC(groundCable(hub, pts[order[0]]));
+      for (let k = 0; k < order.length - 1; k++) addC(groundCable(pts[order[k]], pts[order[k + 1]]));
     }
-    this.frameGeneral();   // reencuadra incluyendo la subestación
   }
+
+  setEditMode(b) { this.editMode = !!b; this.renderer.domElement.style.cursor = b ? 'move' : ''; if (!b) this._drag = null; }
 
   // Animación de entrada: barrido aéreo que desciende sobre el parque.
   playIntro() {
@@ -219,8 +243,19 @@ export class FleetView {
       this.renderer.setSize(w, h);
     });
     let downXY = null;
-    this.renderer.domElement.addEventListener('pointerdown', e => { downXY = [e.clientX, e.clientY]; });
-    this.renderer.domElement.addEventListener('pointerup', e => {
+    const dom = this.renderer.domElement;
+    dom.addEventListener('pointerdown', e => {
+      downXY = [e.clientX, e.clientY];
+      if (this.editMode) {
+        const o = this._pickStructure(e);
+        if (o) { this._drag = { o }; this.controls.enabled = false; }
+      }
+    });
+    dom.addEventListener('pointermove', e => {
+      if (this._drag) { const p = this._groundPoint(e); if (p) { this._drag.o.group.position.x = p.x; this._drag.o.group.position.z = p.z; this.rebuildCables(); } }
+    });
+    dom.addEventListener('pointerup', e => {
+      if (this._drag) { this._drag = null; this.controls.enabled = true; this.rebuildCables(); downXY = null; return; }
       if (!downXY) return;
       const moved = Math.hypot(e.clientX - downXY[0], e.clientY - downXY[1]);
       downXY = null;
@@ -229,15 +264,24 @@ export class FleetView {
     });
   }
 
-  _pick(e) {
+  _ndc(e) {
     const r = this.renderer.domElement.getBoundingClientRect();
-    const m = new THREE.Vector2(((e.clientX - r.left) / r.width) * 2 - 1, -((e.clientY - r.top) / r.height) * 2 + 1);
-    this.raycaster.setFromCamera(m, this.camera);
+    return new THREE.Vector2(((e.clientX - r.left) / r.width) * 2 - 1, -((e.clientY - r.top) / r.height) * 2 + 1);
+  }
+  _pickStructure(e) {
+    this.raycaster.setFromCamera(this._ndc(e), this.camera);
     const hits = this.raycaster.intersectObjects(this.structures.map(s => s.group), true);
-    if (!hits.length) { this.clearSelection(); return; }
-    const id = hits[0].object.userData.turbineId;
-    const o = this.getStructure(id);
-    if (o) { if (o === this.selected) this.clearSelection(); else this.selectTurbine(o); }
+    return hits.length ? this.getStructure(hits[0].object.userData.turbineId) : null;
+  }
+  _groundPoint(e) {
+    this.raycaster.setFromCamera(this._ndc(e), this.camera);
+    const out = new THREE.Vector3();
+    return this.raycaster.ray.intersectPlane(new THREE.Plane(new THREE.Vector3(0, 1, 0), 0), out) ? out : null;
+  }
+  _pick(e) {
+    const o = this._pickStructure(e);
+    if (!o) { this.clearSelection(); return; }
+    if (o === this.selected) this.clearSelection(); else this.selectTurbine(o);
   }
 
   _animate = () => {
@@ -246,13 +290,16 @@ export class FleetView {
 
     for (const t of this.turbines) {
       if (!this.paused) t.rotor.rotation.z += t.spin * dt;
-      // Atenuación del cuerpo de las no seleccionadas (los sensores NO se atenúan)
-      const target = (this.selected && t !== this.selected) ? 1 : 0;
-      t.dim += (target - t.dim) * Math.min(dt * 4, 1);
-      const op = 1 - 0.78 * t.dim;
-      for (const mat of t.bodyMats) { mat.transparent = t.dim > 0.01; mat.opacity = op; }
       // Gateway: siempre encendido (indica que la torre transmite)
       t.gateway.mat.emissiveIntensity = 0.6 + 1.0 * (0.5 + 0.5 * Math.sin(tt * 1.6 + t.gateway.phase));
+    }
+
+    // Resalte: la seleccionada queda nítida, TODAS las demás se atenúan (cuerpo, no sensores)
+    for (const st of this.structures) {
+      const target = (this.selected && st !== this.selected) ? 1 : 0;
+      st.dim = (st.dim || 0) + (target - (st.dim || 0)) * Math.min(dt * 4, 1);
+      const op = 1 - 0.82 * st.dim;
+      for (const mat of (st.dimMats || st.bodyMats || [])) { mat.transparent = st.dim > 0.01; mat.opacity = op; }
     }
 
     // TODOS los sensores parpadean SIEMPRE — verde=OK, rojo=falla (vistazo de salud)

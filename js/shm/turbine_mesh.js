@@ -122,5 +122,5 @@ export function createTurbine(o = {}) {
   const gateway = { mesh: gw, mat: gMat, phase: Math.random() * 6.28 };
 
   return { id, type: 'turbine', label: `Torre ${id}`, height: TOWER_H, power: '~3 MW',
-           group, rotor, sensors, gateway, bodyMats, spin };
+           group, rotor, sensors, gateway, bodyMats, dimMats: bodyMats, spin };
 }

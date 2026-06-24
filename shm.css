@@ -48,8 +48,9 @@ body.shm #viewport-container > canvas:not(.shm-canvas) { display: none !importan
 body.shm #viewport-container > canvas.shm-canvas { display: block; }
 
 /* ── Toolbar: botones SHM (estilo .tool de PÓRTICO) ────────────────────────── */
-#shm-add-tool, #shm-pause-tool { display: none; }
-body.shm #shm-add-tool, body.shm #shm-pause-tool { display: flex; }
+#shm-add-tool, #shm-pause-tool, #shm-hv-tool, #shm-edit-tool { display: none; }
+body.shm #shm-add-tool, body.shm #shm-pause-tool, body.shm #shm-hv-tool, body.shm #shm-edit-tool { display: flex; }
+body.shm #shm-edit-tool.active { color: var(--accent); background: var(--accent-soft); }
 
 /* ── Panel derecho: ocultar el panel FE, mostrar el dashboard SHM ──────────── */
 body.shm #panel-vtabs,
