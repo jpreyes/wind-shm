@@ -80,6 +80,7 @@ export class MenuBar {
       case 'suavizar-malla': a.suavizarMalla();       break;
       case 'crear-link':   a.crearLinkSeleccion();    break;
       case 'muro-relleno': a.crearMuroRellenoSeleccion(); break;
+      case 'macro-turbine': a.insertMacroFromSelection('turbine'); break;   // wind-shm: torre eólica
       case 'grids':       a.defineGridsDialog();      break;
       case 'global-matrices': a.showGlobalMatrices(); break;
       case 'help-guia':     a.openHelp('guia');     break;

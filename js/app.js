@@ -16,6 +16,7 @@ import { assembleSparseGlobal, extractFreeCSR } from './solver/sparse.js?v=199';
 import { solveNonlinear, solveNonlinearDC } from './solver/nl_lite.js?v=199';
 import { solveCorotBeam, corotBeamForceTangent } from './solver/corotbeam.js?v=199';
 import { insertInfill } from './model/macromodel.js?v=199';
+import './model/macros/turbine.js?v=199';   // registra el macromodelo «Torre eólica» (wind-shm)
 import { listMacros, getMacro, insertMacro } from './model/macro_registry.js?v=199';
 import { assembleKg } from './solver/geometric.js?v=199';
 import { makeFactor } from './solver/linsolve.js?v=199';
