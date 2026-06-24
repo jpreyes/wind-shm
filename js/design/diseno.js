@@ -17,14 +17,14 @@
 // verificarElemento se mantiene utilizable como antes.
 // ──────────────────────────────────────────────────────────────────────────────
 
-import { resolveMaterial, clasificarMaterial } from './material_props.js?v=181';
-import { resolveSectionProps } from './section_props.js?v=181';
-import { registerDesignCode, getDesignCode, defaultCodeFor, setDefaultCode, listDesignCodes } from './registry.js?v=181';
-import { aisc360_lrfd, aisc360_asd } from './codes/aisc360.js?v=181';
-import { eurocode3 } from './codes/eurocode3.js?v=181';
-import { aci318, eurocode2 } from './codes/concrete.js?v=181';
-import { timber_nch1198 } from './codes/timber.js?v=181';
-import { eurocode9 } from './codes/eurocode9.js?v=181';
+import { resolveMaterial, clasificarMaterial } from './material_props.js?v=182';
+import { resolveSectionProps } from './section_props.js?v=182';
+import { registerDesignCode, getDesignCode, defaultCodeFor, setDefaultCode, listDesignCodes } from './registry.js?v=182';
+import { aisc360_lrfd, aisc360_asd } from './codes/aisc360.js?v=182';
+import { eurocode3 } from './codes/eurocode3.js?v=182';
+import { aci318, eurocode2 } from './codes/concrete.js?v=182';
+import { timber_nch1198 } from './codes/timber.js?v=182';
+import { eurocode9 } from './codes/eurocode9.js?v=182';
 
 // ── Registro de códigos por defecto (idempotente) ───────────────────────────────
 let _registered = false;

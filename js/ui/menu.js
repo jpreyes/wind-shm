@@ -77,6 +77,7 @@ export class MenuBar {
       case 'mallar-region': a.viewport.startMeshPick('free');  break;
       case 'suavizar-malla': a.suavizarMalla();       break;
       case 'crear-link':   a.crearLinkSeleccion();    break;
+      case 'muro-relleno': a.crearMuroRellenoSeleccion(); break;
       case 'grids':       a.defineGridsDialog();      break;
       case 'global-matrices': a.showGlobalMatrices(); break;
       case 'help-guia':     a.openHelp('guia');     break;
