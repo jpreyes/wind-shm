@@ -64,6 +64,8 @@ export class MenuBar {
       case 'manage-autosaves': a.manageAutosavesDialog(); break;
       case 'importcsv':   a.importCSV();      break;
       case 'exportcsv':   a.exportCSV();      break;
+      case 'import-interop': a.importInterop(); break;
+      case 'export-interop': a.exportInterop(); break;
       case 'template':    a.downloadTemplate(); break;
       case 'undo':        a.undo();           break;
       case 'redo':        a.redo();           break;

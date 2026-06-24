@@ -17,8 +17,8 @@
 // AUTÓNOMO salvo por linsolve.js (factorización en banda) y subspace.js (núcleo
 // compartido con el modal). Reutilizable en Node + browser + Worker.
 // ──────────────────────────────────────────────────────────────────────────────
-import { makeFactor, rowBands, permRCM } from './linsolve.js?v=186';
-import { smallGenEig, mvBand, dot } from './subspace.js?v=186';
+import { makeFactor, rowBands, permRCM } from './linsolve.js?v=187';
+import { smallGenEig, mvBand, dot } from './subspace.js?v=187';
 
 /**
  * @param {object} o

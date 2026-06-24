@@ -22,22 +22,23 @@
 // Unidades del modelo: kN, m (las resistencias de diseño se dan en MPa).
 // ──────────────────────────────────────────────────────────────────────────────
 
-import { Model } from '../model/model.js?v=186';
-import { Serializer } from '../model/serializer.js?v=186';
-import { StaticSolver } from '../solver/static_solver.js?v=186';
-import { ModalSolver } from '../solver/modal_solver.js?v=186';
-import { ModalResults } from '../solver/modal_results.js?v=186';
-import { buildNodeIndex, assembleK, assembleF, getNodeDOFs } from '../solver/assembler.js?v=186';
-import { assembleKg } from '../solver/geometric.js?v=186';
-import { makeFactor } from '../solver/linsolve.js?v=186';
-import { solveBuckling } from '../solver/buckling.js?v=186';
-import { StagedSolver } from '../solver/staged.js?v=186';
-import { verificarElemento, listDesignCodes, getDesignCode, registerDesignCode } from '../design/diseno.js?v=186';
-import { checkDeflection, checkDrift } from '../design/serviceability.js?v=186';
-import { polygonProps, compositeProps } from '../design/polygon_props.js?v=186';
-import { jointSCWB, strongColumnWeakBeam } from '../design/seismic.js?v=186';
-import { resolveMaterial } from '../design/material_props.js?v=186';
-import { resolveSectionProps } from '../design/section_props.js?v=186';
+import { Model } from '../model/model.js?v=187';
+import { Serializer } from '../model/serializer.js?v=187';
+import { StaticSolver } from '../solver/static_solver.js?v=187';
+import { ModalSolver } from '../solver/modal_solver.js?v=187';
+import { ModalResults } from '../solver/modal_results.js?v=187';
+import { buildNodeIndex, assembleK, assembleF, getNodeDOFs } from '../solver/assembler.js?v=187';
+import { assembleKg } from '../solver/geometric.js?v=187';
+import { makeFactor } from '../solver/linsolve.js?v=187';
+import { solveBuckling } from '../solver/buckling.js?v=187';
+import { StagedSolver } from '../solver/staged.js?v=187';
+import { verificarElemento, listDesignCodes, getDesignCode, registerDesignCode } from '../design/diseno.js?v=187';
+import { checkDeflection, checkDrift } from '../design/serviceability.js?v=187';
+import { polygonProps, compositeProps } from '../design/polygon_props.js?v=187';
+import { jointSCWB, strongColumnWeakBeam } from '../design/seismic.js?v=187';
+import { resolveMaterial } from '../design/material_props.js?v=187';
+import { resolveSectionProps } from '../design/section_props.js?v=187';
+import { registerFormat, listFormats, exportModel, importModel } from '../io/index.js?v=187';
 
 // ── numeric.js disponible como global (navegador) o cargado bajo demanda (Node) ──
 let _numReady = false;
@@ -77,6 +78,15 @@ export class Portico {
   static fromS3D(json) { return new Portico(new Serializer().fromJSON(typeof json === 'string' ? json : JSON.stringify(json))); }
   static from(model) { return new Portico(model); }
   toS3D() { return new Serializer().toJSON(this.model); }
+
+  // ── Interoperabilidad (#74): import/export a otros motores vía modelo neutro ──
+  // El registro de formatos es extensible: `Portico.registerFormat({id,name,ext,write,read})`.
+  static listFormats() { return listFormats(); }
+  static registerFormat(def) { return registerFormat(def); }
+  /** Exporta el modelo al formato `id` → { text, ext, warnings }. */
+  exportTo(id) { return exportModel(this.model, id); }
+  /** Importa texto del formato `id` a un Portico nuevo. */
+  static importFrom(text, id) { return new Portico(importModel(text, id).model); }
 
   // ── PRE-proceso: construcción del modelo ────────────────────────────────────
   material(props) { return this.model.addMaterial(props).id; }
