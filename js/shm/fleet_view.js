@@ -15,6 +15,24 @@ const SPACING = 235;
 // Dispersión pseudo-aleatoria pero determinista (estable entre re-layouts).
 function jitter(n, seed) { const v = Math.sin(n * seed) * 43758.5453; return (v - Math.floor(v) - 0.5); }
 
+// Etiqueta de texto (sprite) que flota sobre la estructura — siempre mira a cámara.
+function makeLabelSprite(text) {
+  const fs = 52, pad = 14, c = document.createElement('canvas');
+  let g = c.getContext('2d');
+  g.font = `bold ${fs}px Inter, system-ui, sans-serif`;
+  c.width = Math.ceil(g.measureText(text).width) + pad * 2; c.height = fs + pad * 2;
+  g = c.getContext('2d');
+  g.font = `bold ${fs}px Inter, system-ui, sans-serif`; g.textAlign = 'center'; g.textBaseline = 'middle';
+  g.fillStyle = 'rgba(15,20,28,0.8)';
+  if (g.roundRect) { g.beginPath(); g.roundRect(0, 0, c.width, c.height, 16); g.fill(); } else g.fillRect(0, 0, c.width, c.height);
+  g.fillStyle = '#e6edf3'; g.fillText(text, c.width / 2, c.height / 2 + 2);
+  const tex = new THREE.CanvasTexture(c); tex.minFilter = THREE.LinearFilter;
+  const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex, transparent: true, depthTest: false }));
+  const Hworld = 9; sp.scale.set((c.width / c.height) * Hworld, Hworld, 1);
+  sp.renderOrder = 20;
+  return sp;
+}
+
 // Lee una variable CSS de tema de PÓRTICO como color hex (#rrggbb).
 function cssColor(name, fallback) {
   try {
@@ -101,6 +119,7 @@ export class FleetView {
     t.group.position.copy(opts.pos ? new THREE.Vector3(opts.pos.x, 0, opts.pos.z) : this._slot(this.turbines.length));
     this.turbines.push(t);
     this.structures.push(t);
+    this._addLabel(t);
     this.scene.add(t.group);
     this.onChange?.(this.turbines.length);
     this.onLayoutChange?.();
@@ -126,6 +145,7 @@ export class FleetView {
   getStructures() { return this.structures.map(s => ({ id: s.id, type: s.type, label: s.label, height: s.height })); }
   getStructure(id) { return this.structures.find(s => s.id === id) || null; }
   selectById(id) { const o = this.getStructure(id); if (o) this.selectTurbine(o); }
+  _addLabel(st) { const sp = makeLabelSprite(st.label); sp.position.set(0, (st.height || 90) + (st.type === 'hv' ? 10 : 16), 0); st.group.add(sp); st._label = sp; }
   setSensorStatus(structId, sensorId, status) {
     const st = this.getStructure(structId); if (!st) return;
     const se = st.sensors.find(x => x.id === sensorId); if (se) se.status = status;
@@ -189,6 +209,7 @@ export class FleetView {
       this.substation.towers.push(hv);
       this.substation.sensors.push(...hv.sensors);
       this.structures.push(hv);
+      this._addLabel(hv);
     }
     this.rebuildCables();
     this.frameGeneral();
@@ -203,7 +224,7 @@ export class FleetView {
     const hv = createSubstationTower({});
     hv.group.position.set(x, 0, zsub); hv.dim = 0;
     this.scene.add(hv.group);
-    tw.push(hv); this.substation.sensors.push(...hv.sensors); this.structures.push(hv);
+    tw.push(hv); this.substation.sensors.push(...hv.sensors); this.structures.push(hv); this._addLabel(hv);
     this.rebuildCables();
     this.onChange?.();
     this.onLayoutChange?.();

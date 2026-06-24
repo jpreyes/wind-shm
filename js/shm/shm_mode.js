@@ -57,10 +57,20 @@ function boot() {
   fleet.renderer.domElement.classList.add('shm-canvas');
   window.shmFleet = fleet;
 
+  // Estado de reconocimiento/informe de anomalías
+  const ack = new Set(), informed = new Set(), rawAnom = new Set();
+  const actions = {
+    isAnom: (id) => rawAnom.has(id),
+    isAck: (id) => ack.has(id),
+    isInformed: (id) => informed.has(id),
+    dismiss: (id) => { ack.has(id) ? ack.delete(id) : ack.add(id); },
+    report: (obj) => { informed.add(obj.id); downloadReport(obj); },
+  };
+
   buildToolbar(toolbar, fleet);
   const nameplate = buildNameplate(vpwrap);
   const banner = buildBanner(vpwrap);
-  const dash = buildDashboard(panel, fleet);
+  const dash = buildDashboard(panel, fleet, actions);
 
   document.getElementById('btn-zoomext')?.addEventListener('click', () => fleet.clearSelection());
   document.title = 'ReWind — SHM de torres eólicas';
@@ -71,13 +81,16 @@ function boot() {
   window.shmData = ds;
   ds.onTick = (msg) => {
     const alarmed = [];
+    rawAnom.clear();
     for (const id in msg.summaries) {
       const sum = msg.summaries[id];
       for (const se of sum.sensors) fleet.setSensorStatus(id, se.id, se.status);
       // Anomalía = daño alto (≥25%) o algún sensor en falla
       const anom = (sum.dmg || 0) >= 0.25 || sum.sensors.some(s => s.status === 'fault');
-      fleet.setAlarm(id, anom);
-      if (anom) alarmed.push(id);
+      if (anom) rawAnom.add(id);
+      const eff = anom && !ack.has(id);   // reconocida (descartada) → se silencia el titileo
+      fleet.setAlarm(id, eff);
+      if (eff) alarmed.push(id);
     }
     banner.update(alarmed.map(id => fleet.getStructure(id)?.label || id));
     nameplate.alarm(fleet.selected && alarmed.includes(fleet.selected.id));
@@ -201,8 +214,30 @@ function buildBanner(vpwrap) {
   };
 }
 
+// Genera y descarga un informe de falla (.txt) de la estructura.
+function downloadReport(obj) {
+  const sum = window.shmData?.get(obj.id) || {};
+  const sensors = sum.sensors || obj.sensors || [];
+  const lines = [
+    'ReWind — Informe de falla',
+    `Fecha: ${new Date().toLocaleString('es-CL')}`,
+    `Estructura: ${obj.label} (${obj.id})`,
+    `Tipo: ${obj.type === 'hv' ? 'Torre de alta tensión' : 'Aerogenerador'}`,
+    `Altura: ${obj.height} m`,
+    `f₁ actual: ${sum.f1 != null ? sum.f1.toFixed(3) + ' Hz' : '—'}`,
+    `Índice de daño: ${Math.round((sum.dmg || 0) * 100)} %`,
+    `Temperatura: ${sum.temp != null ? sum.temp.toFixed(1) + ' °C' : '—'}`,
+    '', 'Sensores:',
+    ...sensors.map(s => `  - ${s.id}: ${s.status === 'fault' ? 'FALLA' : 'OK'}${s.rms != null ? ` (RMS ${(s.rms * 1000).toFixed(1)} mg)` : ''}`),
+  ];
+  const blob = new Blob([lines.join('\n')], { type: 'text/plain;charset=utf-8' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob); a.download = `ReWind_falla_${obj.id}.txt`;
+  document.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(a.href);
+}
+
 // ── Dashboard SHM ────────────────────────────────────────────────────────────
-function buildDashboard(panel, fleet) {
+function buildDashboard(panel, fleet, actions) {
   const el = document.createElement('aside');
   el.id = 'shm-panel';
   el.innerHTML = `
@@ -247,6 +282,21 @@ function buildDashboard(panel, fleet) {
     el.querySelectorAll('.shm-row').forEach(r => r.classList.toggle('alarm', set.has(r.dataset.id)));
     const n = $('#shm-alarm-count'); if (n) n.textContent = ids.length;
   }
+  // Barra de acción sobre la falla de la estructura seleccionada (Descartar / Informar).
+  function updateAlarmBar() {
+    const bar = $('#shm-alarmbar'); if (!bar || !current || !actions) return;
+    if (!actions.isAnom(current.id)) { bar.style.display = 'none'; bar.innerHTML = ''; return; }
+    const acked = actions.isAck(current.id), inf = actions.isInformed(current.id);
+    bar.style.display = 'block'; bar.classList.toggle('acked', acked);
+    bar.innerHTML = `
+      <div class="ab-head"><span class="ab-ico">⚠</span> <b>${acked ? 'Anomalía reconocida' : 'Anomalía detectada'}</b>${inf ? ' · informada' : ''}</div>
+      <div class="ab-actions">
+        <button class="ab-btn ab-dismiss">${acked ? 'Reactivar alarma' : 'Descartar'}</button>
+        <button class="ab-btn ab-report">Informar</button>
+      </div>`;
+    bar.querySelector('.ab-dismiss').onclick = () => { actions.dismiss(current.id); updateAlarmBar(); };
+    bar.querySelector('.ab-report').onclick = () => { actions.report(current); updateAlarmBar(); };
+  }
 
   function select(obj) {
     current = obj; highlight();
@@ -258,6 +308,7 @@ function buildDashboard(panel, fleet) {
   function renderDetail() {
     const o = current; if (!o) return;
     $('#shm-detail').innerHTML = `
+      <div id="shm-alarmbar" style="display:none"></div>
       <div class="shm-tabs">
         <button class="shm-tab" data-p="datos">Datos</button>
         <button class="shm-tab" data-p="senal">Señal</button>
@@ -266,6 +317,7 @@ function buildDashboard(panel, fleet) {
         <button class="shm-tab" data-p="insp">Inspección</button>
       </div>
       <div class="shm-body" id="shm-pane"></div>`;
+    updateAlarmBar();
     el.querySelectorAll('.shm-tab').forEach(t => t.addEventListener('click', () => { pane = t.dataset.p; renderPane(); }));
     renderPane();
   }
@@ -371,7 +423,7 @@ function buildDashboard(panel, fleet) {
       const h = (freqHist[current.id] || (freqHist[current.id] = []));
       h.push(msg.summaries[current.id].f1); if (h.length > 160) h.shift();
     }
-    if (current) updateDynamic(msg.summaries[current.id]);
+    if (current) { updateDynamic(msg.summaries[current.id]); updateAlarmBar(); }
   }
 
   // Dibujo de la señal en vivo desde los buffers.

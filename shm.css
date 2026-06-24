@@ -153,6 +153,18 @@ body.shm #shm-banner.show { display: flex; animation: shm-blink 0.8s steps(1) in
 
 @keyframes shm-blink { 0%,100% { opacity: 1; } 50% { opacity: 0.25; } }
 
+/* Barra de acción sobre la falla (Descartar / Informar) */
+#shm-alarmbar { padding: 10px 12px; border-bottom: 1px solid var(--border); background: color-mix(in srgb, var(--danger) 12%, transparent); }
+#shm-alarmbar.acked { background: color-mix(in srgb, var(--warn) 12%, transparent); }
+#shm-alarmbar .ab-head { font-size: 13px; color: var(--danger); margin-bottom: 8px; }
+#shm-alarmbar.acked .ab-head { color: var(--warn); }
+#shm-alarmbar .ab-ico { font-size: 15px; }
+#shm-alarmbar .ab-actions { display: flex; gap: 8px; }
+#shm-alarmbar .ab-btn { flex: 1; font: inherit; font-size: 12px; cursor: pointer; border: 1px solid var(--border2); background: var(--bg3); color: var(--text); border-radius: 7px; padding: 7px 8px; }
+#shm-alarmbar .ab-btn:hover { background: var(--bg4); }
+#shm-alarmbar .ab-report { background: var(--accent); color: #fff; border-color: transparent; }
+#shm-alarmbar .ab-report:hover { background: var(--accent-dim); }
+
 #shm-panel .empty { color: var(--text-muted); font-size: 13px; text-align: center; margin-top: 30px; line-height: 1.6; }
 #shm-panel canvas.sig { width: 100%; height: 90px; background: var(--bg); border: 1px solid var(--border); border-radius: var(--radius-sm); display: block; margin-bottom: 6px; }
 #shm-panel .note { font-size: 11px; color: var(--text-muted); margin-top: 10px; line-height: 1.5; }
