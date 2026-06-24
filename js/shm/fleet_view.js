@@ -8,8 +8,12 @@
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { createTurbine, TOWER_H } from './turbine_mesh.js?v=199';
+import { createSubstationTower, groundCable, overheadLine } from './structures.js?v=199';
 
-const SPACING = 130;
+const SPACING = 235;
+
+// Dispersión pseudo-aleatoria pero determinista (estable entre re-layouts).
+function jitter(n, seed) { const v = Math.sin(n * seed) * 43758.5453; return (v - Math.floor(v) - 0.5); }
 
 // Lee una variable CSS de tema de PÓRTICO como color hex (#rrggbb).
 function cssColor(name, fallback) {
@@ -27,6 +31,7 @@ export class FleetView {
     this._focusing = false;
     this.paused = false;             // animación de aspas (toggle)
     this._intro = null;              // animación de entrada (fly-in)
+    this.substation = null;          // { towers[], sensors[] }
     this.onChange = null;            // callback(count) para la UI
 
     const w = container.clientWidth, h = container.clientHeight;
@@ -74,12 +79,14 @@ export class FleetView {
     this.scene.add(grid);
   }
 
-  // Posición en una grilla cuadrada centrada.
+  // Posición en una grilla dispersa centrada (con jitter determinista).
   _slot(i) {
     const cols = Math.max(1, Math.ceil(Math.sqrt(this.turbines.length + 1)));
     const r = Math.floor(i / cols), c = i % cols;
     const off = (cols - 1) / 2;
-    return new THREE.Vector3((c - off) * SPACING, 0, (r - off) * SPACING);
+    const jx = jitter(i + 1, 12.9898) * SPACING * 0.4;
+    const jz = jitter(i + 1, 78.233) * SPACING * 0.4;
+    return new THREE.Vector3((c - off) * SPACING + jx, 0, (r - off) * SPACING + jz);
   }
 
   /** Agrega una torre al parque y la coloca en la grilla. */
@@ -117,6 +124,7 @@ export class FleetView {
     const box = new THREE.Box3();
     if (this.turbines.length) for (const t of this.turbines) box.expandByPoint(t.group.position);
     else box.expandByPoint(new THREE.Vector3());
+    if (this.substation) for (const hv of this.substation.towers) box.expandByPoint(hv.group.position);
     const c = box.getCenter(new THREE.Vector3()), s = box.getSize(new THREE.Vector3());
     return { center: c, radius: Math.max(s.x, s.z) / 2 + SPACING };
   }
@@ -138,6 +146,35 @@ export class FleetView {
       to:   { pos: pos.clone(), tgt: tgt.clone() } };
   }
   frameGeneral() { const f = this.frame(); this.flyTo(f.pos, f.tgt, 1300); }
+
+  // Subestación: 2 torres de alta tensión (celosía) + cables desde cada turbina.
+  buildSubstation() {
+    if (this.substation) return;
+    const { center, radius } = this._extent();
+    const zsub = center.z + radius + 320;
+    this.substation = { towers: [], sensors: [] };
+    const xs = [center.x - 55, center.x + 55];
+    for (const x of xs) {
+      const hv = createSubstationTower({});
+      hv.group.position.set(x, 0, zsub);
+      this.scene.add(hv.group);
+      this.substation.towers.push(hv);
+      this.substation.sensors.push(...hv.sensors);
+    }
+    // Conductores aéreos entre las dos torres (a la altura de las ménsulas).
+    for (const yf of [0.82, 0.97]) {
+      const y = this.substation.towers[0].topY * yf;
+      const tip = 2.2 + (yf === 0.82 ? 9 : 7);
+      this.scene.add(overheadLine(new THREE.Vector3(xs[0] + tip, y, zsub), new THREE.Vector3(xs[1] - tip, y, zsub)));
+    }
+    // Cables de conexión por el suelo: cada turbina → poste HV más cercano.
+    for (const t of this.turbines) {
+      const p = t.group.position;
+      const hub = new THREE.Vector3(p.x < center.x ? xs[0] : xs[1], 0, zsub);
+      this.scene.add(groundCable(p, hub));
+    }
+    this.frameGeneral();   // reencuadra incluyendo la subestación
+  }
 
   // Animación de entrada: barrido aéreo que desciende sobre el parque.
   playIntro() {
@@ -186,11 +223,15 @@ export class FleetView {
       t.dim += (target - t.dim) * Math.min(dt * 4, 1);
       const op = 1 - 0.78 * t.dim;
       for (const mat of t.bodyMats) { mat.transparent = t.dim > 0.01; mat.opacity = op; }
-      // Capa de vida: parpadeo (latido). Se apaga al atenuar.
+      // Capa de vida: parpadeo (latido) bien visible. Se apaga al atenuar.
       const live = 1 - t.dim;
-      for (const s of t.sensors) s.mat.emissiveIntensity = (0.35 + 0.65 * (0.5 + 0.5 * Math.sin(tt * 3.2 + s.phase))) * live;
-      t.gateway.mat.emissiveIntensity = (0.35 + 0.65 * (0.5 + 0.5 * Math.sin(tt * 1.6 + t.gateway.phase))) * live;
+      for (const s of t.sensors) s.mat.emissiveIntensity = (0.7 + 1.1 * (0.5 + 0.5 * Math.sin(tt * 3.2 + s.phase))) * live;
+      t.gateway.mat.emissiveIntensity = (0.6 + 1.0 * (0.5 + 0.5 * Math.sin(tt * 1.6 + t.gateway.phase))) * live;
     }
+
+    // Sensores de la subestación (siempre activos)
+    if (this.substation) for (const s of this.substation.sensors)
+      s.mat.emissiveIntensity = 0.7 + 1.1 * (0.5 + 0.5 * Math.sin(tt * 3.0 + s.phase));
 
     // Animación de entrada / vuelo general (con easing)
     if (this._intro) {

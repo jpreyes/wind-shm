@@ -9,6 +9,7 @@
 // migraremos a InstancedMesh + atenuación por shader (ver docs/wind-shm-issues.md).
 // ─────────────────────────────────────────────────────────────────────────────
 import * as THREE from 'three';
+import { circularFoundation } from './structures.js?v=199';
 
 export const TOWER_H = 90;          // altura de buje (m), coherente con el macromodelo
 
@@ -19,7 +20,7 @@ const nacelleGeo = new THREE.BoxGeometry(3.4, 3.2, 9.0);   // góndola (cuerpo d
 const nacelleNose= new THREE.CylinderGeometry(1.7, 1.7, 1.2, 20);  // cuello buje–góndola
 const hubGeo     = new THREE.SphereGeometry(1.7, 22, 16);
 const noseGeo    = new THREE.ConeGeometry(1.55, 3.0, 24);
-const sensorGeo  = new THREE.SphereGeometry(0.8, 16, 12);
+const sensorGeo  = new THREE.SphereGeometry(1.05, 18, 14);
 const gatewayGeo = new THREE.BoxGeometry(2.2, 1.8, 2.2);
 
 // Aspa: perfil cónico con punta redondeada, extruido fino.
@@ -61,6 +62,9 @@ export function createTurbine(o = {}) {
   const group = new THREE.Group();
   group.userData.turbineId = id;
 
+  // Fundación circular típica de aerogenerador
+  group.add(circularFoundation(9));
+
   const bodyMats = [baseMats.tower.clone(), baseMats.nacelle.clone(), baseMats.hub.clone(), baseMats.blade.clone()];
   const [mTower, mNacelle, mHub, mBlade] = bodyMats;
 
@@ -98,21 +102,20 @@ export function createTurbine(o = {}) {
     rotor.add(blade);
   }
 
-  // ── Capa de vida: 2 sensores MEMS + gateway (tenues, semi-transparentes) ──
+  // ── Capa de vida: 2 sensores MEMS + gateway (chillones, bien visibles, centrados) ──
   const mkLive = (color) => new THREE.MeshStandardMaterial({
-    color: 0x0a0a0a, emissive: color, emissiveIntensity: 0.8, roughness: 0.4,
-    transparent: true, opacity: 0.8,
+    color: 0x0a0a0a, emissive: color, emissiveIntensity: 1.4, roughness: 0.35,
   });
   const sensors = [];
   for (const [tag, hy] of [['acc-top', 0.93], ['acc-mid', 0.5]]) {
-    const m = mkLive(0x4fd99a);                        // verde un poco más suave
+    const m = mkLive(0x2bff77);                        // verde brillante
     const s = new THREE.Mesh(sensorGeo, m);
     const r = THREE.MathUtils.lerp(2.7, 1.05, hy);    // radio del fuste cónico a esa altura
-    s.position.set(r + 0.25, TOWER_H * hy, 0);
+    s.position.set(0, TOWER_H * hy, r + 0.2);          // al frente, centrado en el eje
     s.userData = { turbineId: id, sensor: tag };
     group.add(s); sensors.push({ mesh: s, mat: m, tag, phase: Math.random() * 6.28 });
   }
-  const gMat = mkLive(0x5ab4ff);
+  const gMat = mkLive(0x47b6ff);
   const gw = new THREE.Mesh(gatewayGeo, gMat);
   gw.position.set(4.5, 1.0, 4.5); gw.castShadow = true; gw.userData = { turbineId: id, gateway: true };
   group.add(gw);

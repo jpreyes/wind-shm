@@ -64,6 +64,9 @@ function boot() {
   for (let i = 0; i < 10; i++) fleet.addTurbine();
   dash.setCount(fleet.turbines.length);
 
+  // Subestación (torres de alta tensión) + cables de conexión.
+  fleet.buildSubstation();
+
   // Animación de entrada: barrido aéreo que desciende sobre el parque.
   fleet.playIntro();
 }
