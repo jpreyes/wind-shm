@@ -9,7 +9,15 @@ import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { createTurbine, TOWER_H } from './turbine_mesh.js?v=199';
 
-const SKY = 0xbcd4e6, SPACING = 130;
+const SPACING = 130;
+
+// Lee una variable CSS de tema de PÓRTICO como color hex (#rrggbb).
+function cssColor(name, fallback) {
+  try {
+    const v = getComputedStyle(document.body).getPropertyValue(name).trim();
+    return new THREE.Color(v || fallback);
+  } catch { return new THREE.Color(fallback); }
+}
 
 export class FleetView {
   constructor(container) {
@@ -17,21 +25,21 @@ export class FleetView {
     this.turbines = [];
     this.selected = null;
     this._focusing = false;
+    this.paused = false;             // animación de aspas (toggle)
+    this._intro = null;              // animación de entrada (fly-in)
     this.onChange = null;            // callback(count) para la UI
 
     const w = container.clientWidth, h = container.clientHeight;
     this.scene = new THREE.Scene();
-    this.scene.background = new THREE.Color(SKY);
-    this.scene.fog = new THREE.Fog(SKY, 500, 3000);
+    // Fondo igual que el PÓRTICO original (toma el color del tema activo).
+    this.scene.background = cssColor('--bg', '#070a0f');
 
-    this.camera = new THREE.PerspectiveCamera(55, w / h, 1, 6000);
+    this.camera = new THREE.PerspectiveCamera(55, w / h, 1, 8000);
     this.camera.position.set(220, 150, 320);
 
     this.renderer = new THREE.WebGLRenderer({ antialias: true });
     this.renderer.setSize(w, h);
     this.renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
-    this.renderer.shadowMap.enabled = true;
-    this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
     container.appendChild(this.renderer.domElement);
 
     this.controls = new OrbitControls(this.camera, this.renderer.domElement);
@@ -49,23 +57,20 @@ export class FleetView {
   }
 
   _lights() {
-    this.scene.add(new THREE.HemisphereLight(0xcfe3f3, 0x6b7b5e, 0.95));
-    const sun = new THREE.DirectionalLight(0xfff4e6, 1.15);
-    sun.position.set(250, 350, 180); sun.castShadow = true;
-    sun.shadow.mapSize.set(2048, 2048);
-    const c = sun.shadow.camera; c.near = 50; c.far = 1400; c.left = -500; c.right = 500; c.top = 500; c.bottom = -500;
+    this.scene.add(new THREE.HemisphereLight(0xeaf3fb, 0x9aa7b5, 1.15));
+    const sun = new THREE.DirectionalLight(0xffffff, 1.0);
+    sun.position.set(250, 350, 180);
     this.scene.add(sun);
+    const fill = new THREE.DirectionalLight(0xcfe4f5, 0.6);
+    fill.position.set(-200, 160, -180);
+    this.scene.add(fill);
   }
 
+  // Sin suelo ni cielo: solo la grilla del PÓRTICO original (color del tema).
   _ground() {
-    const g = new THREE.Mesh(
-      new THREE.PlaneGeometry(5000, 5000),
-      new THREE.MeshStandardMaterial({ color: 0x8a9a6b, roughness: 1 })
-    );
-    g.rotation.x = -Math.PI / 2; g.receiveShadow = true;
-    this.scene.add(g);
-    const grid = new THREE.GridHelper(5000, 80, 0x6f7f57, 0x7c8c63);
-    grid.material.opacity = 0.25; grid.material.transparent = true;
+    const line = cssColor('--border2', '#2d3a4d');
+    const grid = new THREE.GridHelper(6000, 60, line, line);
+    grid.material.opacity = 0.35; grid.material.transparent = true;
     this.scene.add(grid);
   }
 
@@ -102,7 +107,45 @@ export class FleetView {
     this._focusing = !!t;
     this.onSelect?.(t || null);
   }
-  clearSelection() { this.selectTurbine(null); }
+  clearSelection() { this.selectTurbine(null); this.frameGeneral(); }
+
+  // ── Encuadre / animación de entrada ───────────────────────────────────────
+  setPaused(p) { this.paused = !!p; }
+
+  // Extensión de la flota (centro y radio en planta).
+  _extent() {
+    const box = new THREE.Box3();
+    if (this.turbines.length) for (const t of this.turbines) box.expandByPoint(t.group.position);
+    else box.expandByPoint(new THREE.Vector3());
+    const c = box.getCenter(new THREE.Vector3()), s = box.getSize(new THREE.Vector3());
+    return { center: c, radius: Math.max(s.x, s.z) / 2 + SPACING };
+  }
+
+  // Posición de cámara que encuadra toda la flota, centrada.
+  frame() {
+    const { center, radius } = this._extent();
+    const tgt = new THREE.Vector3(center.x, TOWER_H * 0.45, center.z);
+    const dist = Math.max(radius * 2.0, 280);
+    const pos = new THREE.Vector3(center.x + dist * 0.45, TOWER_H * 1.15 + radius * 0.4, center.z + dist);
+    return { pos, tgt };
+  }
+
+  // Vuela suavemente desde la cámara actual hacia (pos, tgt).
+  flyTo(pos, tgt, dur = 1400) {
+    this._focusing = false;
+    this._intro = { t0: performance.now(), dur,
+      from: { pos: this.camera.position.clone(), tgt: this.controls.target.clone() },
+      to:   { pos: pos.clone(), tgt: tgt.clone() } };
+  }
+  frameGeneral() { const f = this.frame(); this.flyTo(f.pos, f.tgt, 1300); }
+
+  // Animación de entrada: barrido aéreo que desciende sobre el parque.
+  playIntro() {
+    const f = this.frame();
+    this.camera.position.set(f.tgt.x, f.pos.y * 2.2 + 520, f.pos.z + 620);
+    this.controls.target.copy(f.tgt);
+    this.flyTo(f.pos, f.tgt, 3000);
+  }
 
   _bind() {
     addEventListener('resize', () => {
@@ -137,7 +180,7 @@ export class FleetView {
     const dt = Math.min(this.clock.getDelta(), 0.05), tt = this.clock.elapsedTime;
 
     for (const t of this.turbines) {
-      t.rotor.rotation.z += t.spin * dt;
+      if (!this.paused) t.rotor.rotation.z += t.spin * dt;
       // Atenuación suave de las no seleccionadas
       const target = (this.selected && t !== this.selected) ? 1 : 0;
       t.dim += (target - t.dim) * Math.min(dt * 4, 1);
@@ -149,8 +192,16 @@ export class FleetView {
       t.gateway.mat.emissiveIntensity = (0.35 + 0.65 * (0.5 + 0.5 * Math.sin(tt * 1.6 + t.gateway.phase))) * live;
     }
 
+    // Animación de entrada / vuelo general (con easing)
+    if (this._intro) {
+      const s = Math.min((performance.now() - this._intro.t0) / this._intro.dur, 1);
+      const e = s < 0.5 ? 4 * s * s * s : 1 - Math.pow(-2 * s + 2, 3) / 2;   // easeInOutCubic
+      this.camera.position.lerpVectors(this._intro.from.pos, this._intro.to.pos, e);
+      this.controls.target.lerpVectors(this._intro.from.tgt, this._intro.to.tgt, e);
+      if (s >= 1) this._intro = null;
+    }
     // Zoom cinematográfico hacia la torre seleccionada
-    if (this._focusing && this.selected) {
+    else if (this._focusing && this.selected) {
       const p = this.selected.group.position;
       const tgt = new THREE.Vector3(p.x, TOWER_H * 0.55, p.z);
       const desired = new THREE.Vector3(p.x + 70, TOWER_H * 0.8, p.z + 110);

@@ -1,7 +1,7 @@
 {
-  "name": "PÓRTICO — Análisis Estructural 3D",
-  "short_name": "PÓRTICO",
-  "description": "Laboratorio virtual de análisis estructural 3D. Material docente del Instituto de Obras Civiles, Universidad Austral de Chile.",
+  "name": "ReWind — SHM de torres eólicas",
+  "short_name": "ReWind",
+  "description": "Monitoreo de salud estructural (SHM) de aerogeneradores: flota 3D, sensores en tiempo real y gemelo digital.",
   "lang": "es-CL",
   "dir": "ltr",
   "start_url": "./index.html",

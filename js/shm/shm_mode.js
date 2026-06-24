@@ -37,7 +37,19 @@ function boot() {
         <line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>
       </svg><span>Torre</span>`;
     btn.addEventListener('click', () => fleet.addTurbine());
-    toolbar.append(sep, btn);
+
+    // Toggle: detener / reanudar la animación de las aspas
+    const pauseBtn = document.createElement('button');
+    pauseBtn.id = 'shm-pause-tool'; pauseBtn.className = 'tool tool-action';
+    const paintPause = () => {
+      pauseBtn.title = fleet.paused ? 'Reanudar animación de aspas' : 'Detener animación de aspas';
+      pauseBtn.innerHTML = fleet.paused
+        ? `<svg viewBox="0 0 24 24" fill="currentColor"><polygon points="6,4 20,12 6,20"/></svg><span>Animar</span>`
+        : `<svg viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="5" width="4" height="14" rx="1"/><rect x="14" y="5" width="4" height="14" rx="1"/></svg><span>Detener</span>`;
+    };
+    pauseBtn.addEventListener('click', () => { fleet.setPaused(!fleet.paused); paintPause(); });
+    paintPause();
+    toolbar.append(sep, btn, pauseBtn);
   }
 
   // Zoom-extensión existente → vista general de la flota
@@ -51,6 +63,9 @@ function boot() {
   // ── 10 torres por defecto para probar todo ────────────────────────────────
   for (let i = 0; i < 10; i++) fleet.addTurbine();
   dash.setCount(fleet.turbines.length);
+
+  // Animación de entrada: barrido aéreo que desciende sobre el parque.
+  fleet.playIntro();
 }
 
 // ── Construcción del dashboard (DOM con tema de PÓRTICO vía variables CSS) ────

@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>PÓRTICO · Análisis Estructural 3D — IOC · UACh</title>
+  <title>ReWind · SHM de torres eólicas</title>
   <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M4 21 V8 Q4 5 7 5 H17 Q20 5 20 8 V21' fill='none' stroke='%2338bdf8' stroke-width='2.5' stroke-linecap='round'/%3E%3C/svg%3E">
   <!-- PWA -->
   <link rel="manifest" href="manifest.webmanifest">
@@ -11,7 +11,7 @@
   <meta name="mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-  <meta name="apple-mobile-web-app-title" content="PÓRTICO">
+  <meta name="apple-mobile-web-app-title" content="ReWind">
   <link rel="apple-touch-icon" href="icons/icon-192.png">
   <!-- Captura temprana del evento de instalación PWA (puede dispararse antes
        de que el resto de scripts se ejecute). -->
@@ -48,11 +48,15 @@
   <header id="menubar">
     <div class="brand">
       <svg class="brand-mark" viewBox="0 0 24 24" aria-hidden="true">
-        <path d="M4 21 V8 Q4 5 7 5 H17 Q20 5 20 8 V21" fill="none" stroke="var(--accent)" stroke-width="2.5" stroke-linecap="round"/>
-        <circle cx="4" cy="21" r="2" fill="var(--teal)"/>
-        <circle cx="20" cy="21" r="2" fill="var(--teal)"/>
+        <line x1="12" y1="22" x2="12" y2="12" stroke="var(--accent)" stroke-width="2" stroke-linecap="round"/>
+        <g stroke="var(--accent)" stroke-width="2" stroke-linecap="round" fill="none">
+          <line x1="12" y1="11" x2="12" y2="3"/>
+          <line x1="12" y1="11" x2="19" y2="15"/>
+          <line x1="12" y1="11" x2="5" y2="15"/>
+        </g>
+        <circle cx="12" cy="11" r="1.7" fill="var(--teal)"/>
       </svg>
-      PÓRTICO <span class="brand-sub">IOC · UACh</span>
+      ReWind
     </div>
 
     <nav id="menu-nav">
@@ -193,7 +197,7 @@
           <li data-action="help-signos">Convenciones de Signos y Ejes</li>
           <li data-action="help-ejemplos">Ejemplos Guiados</li>
           <li class="sep"></li>
-          <li data-action="help-acerca">Acerca de PÓRTICO</li>
+          <li data-action="help-acerca">Acerca de ReWind</li>
         </ul>
       </div>
 
@@ -694,7 +698,7 @@
 <div id="help-overlay" class="hidden">
   <div id="help-box">
     <header id="help-header">
-      <span class="help-brand">PÓRTICO — Ayuda</span>
+      <span class="help-brand">ReWind — Ayuda</span>
       <nav id="help-nav">
         <button class="help-tab active" data-hsec="guia">Guía Rápida</button>
         <button class="help-tab" data-hsec="signos">Convenciones</button>
@@ -852,27 +856,21 @@
       <section id="hsec-acerca" class="help-sec">
         <div class="help-about-hero">
           <svg viewBox="0 0 24 24" width="56" height="56" aria-hidden="true">
-            <path d="M4 21 V8 Q4 5 7 5 H17 Q20 5 20 8 V21" fill="none" stroke="var(--accent)" stroke-width="2.5" stroke-linecap="round"/>
-            <circle cx="4" cy="21" r="2" fill="var(--teal)"/><circle cx="20" cy="21" r="2" fill="var(--teal)"/>
+            <line x1="12" y1="22" x2="12" y2="12" stroke="var(--accent)" stroke-width="2" stroke-linecap="round"/>
+            <g stroke="var(--accent)" stroke-width="2" stroke-linecap="round" fill="none">
+              <line x1="12" y1="11" x2="12" y2="3"/><line x1="12" y1="11" x2="19" y2="15"/><line x1="12" y1="11" x2="5" y2="15"/>
+            </g>
+            <circle cx="12" cy="11" r="1.7" fill="var(--teal)"/>
           </svg>
           <div>
-            <h2 style="margin:0">PÓRTICO</h2>
-            <p style="margin:2px 0 0;color:var(--text-muted)">Laboratorio virtual de análisis estructural 3D
-              · <b id="help-version">versión 87</b> · junio 2026</p>
+            <h2 style="margin:0">ReWind</h2>
+            <p style="margin:2px 0 0;color:var(--text-muted)">Monitoreo de salud estructural (SHM) de torres eólicas
+              · <b id="help-version">versión 87</b> · 2026</p>
           </div>
         </div>
-        <p><b>Material docente</b> desarrollado por el <b>Dr. Juan Patricio Reyes C.</b> —
-           Instituto de Obras Civiles, Facultad de Ciencias de la Ingeniería,
-           <b>Universidad Austral de Chile</b>.</p>
-        <p>Dirigido a estudiantes de <b>Arquitectura</b>, <b>Construcción</b> e
-           <b>Ingeniería Civil en Obras Civiles</b>: una herramienta para <i>ver por dentro</i>
-           lo que el software comercial esconde — matrices, transformaciones, equilibrio,
-           formas modales — y conectarlo con el cálculo manual del curso.</p>
-        <div class="help-logos">
-          <img src="icons/UACh-color-negro.svg" alt="Universidad Austral de Chile">
-          <img src="icons/Facultad-color-negro.svg" alt="Facultad de Ciencias de la Ingeniería">
-          <img class="logo-chip" src="icons/IOC-color.svg" alt="Instituto de Obras Civiles">
-        </div>
+        <p><b>ReWind</b> visualiza una flota de aerogeneradores instrumentados con acelerómetros MEMS
+           y un gateway en la nube, y estima su <b>estado estructural en tiempo real</b> a partir de un
+           <b>gemelo digital</b> (análisis modal, time-history, P-Δ) y aprendizaje sobre la flota.</p>
         <h2>Capacidades</h2>
         <ul class="help-list">
           <li>Elementos barra 3D tipo Timoshenko (12 GDL), liberaciones por condensación estática.</li>
@@ -904,64 +902,54 @@
   <button id="landing-theme" type="button" title="Cambiar tema claro/oscuro"
     style="position:fixed;top:14px;right:16px;z-index:9100;background:var(--bg4,#e2e8f1);border:1px solid var(--border2,#bcc8d8);color:var(--text,#1b2533);border-radius:8px;cursor:pointer;font-size:17px;line-height:1;padding:6px 10px">🌙</button>
   <div class="landing-card">
-  <header class="landing-inst">
-    <img class="inst-logo" src="icons/UACh-color-negro.svg" alt="Universidad Austral de Chile">
-    <div class="inst-names">
-      <strong>Universidad Austral de Chile</strong>
-      <span>Facultad de Ciencias de la Ingeniería · Instituto de Obras Civiles</span>
-    </div>
-  </header>
-
   <main class="landing-hero">
     <svg id="hero-frame" viewBox="0 0 360 240" aria-hidden="true">
-      <!-- pórtico sin deformar -->
-      <path class="frame-line" d="M70 210 V60 H290 V210"/>
-      <!-- deformada por sismo/viento (sway). Base articulada: curvatura nula en
-           los apoyos; nudos rígidos viga-pilar (90° conservados) → pilares en
-           curvatura simple y viga en doble curvatura antisimétrica. -->
-      <path class="frame-deformed" d="M70 210 C 82 158, 104 110, 104 60 C 165 66, 261 54, 322 60 C 322 110, 300 158, 290 210"/>
-      <!-- apoyos ARTICULADOS (rótula): triángulo sobre suelo achurado, sin rodillo -->
-      <path class="frame-support" d="M56 226 L84 226 L70 210 Z"/>
-      <path class="frame-support" d="M54 226 H86"/>
-      <path class="frame-support" d="M58 226 L52 233 M66 226 L60 233 M74 226 L68 233 M82 226 L76 233"/>
-      <path class="frame-support" d="M276 226 L304 226 L290 210 Z"/>
-      <path class="frame-support" d="M274 226 H306"/>
-      <path class="frame-support" d="M278 226 L272 233 M286 226 L280 233 M294 226 L288 233 M302 226 L296 233"/>
-      <!-- nudos rígidos (esquinas) ubicados sobre el pórtico DEFORMADO -->
-      <circle class="frame-node" cx="104" cy="60" r="6"/>
-      <circle class="frame-node" cx="322" cy="60" r="6"/>
+      <!-- terreno -->
+      <line x1="30" y1="212" x2="330" y2="212" stroke="var(--border2)" stroke-width="1.5"/>
+      <!-- líneas de viento -->
+      <g stroke="var(--teal)" stroke-width="2.5" stroke-linecap="round" opacity="0.55">
+        <line x1="40" y1="78" x2="92" y2="78"><animate attributeName="x1" values="40;120" dur="2.4s" repeatCount="indefinite"/><animate attributeName="x2" values="92;160" dur="2.4s" repeatCount="indefinite"/><animate attributeName="opacity" values="0;0.6;0" dur="2.4s" repeatCount="indefinite"/></line>
+        <line x1="36" y1="120" x2="100" y2="120"><animate attributeName="x1" values="36;130" dur="3.1s" repeatCount="indefinite"/><animate attributeName="x2" values="100;180" dur="3.1s" repeatCount="indefinite"/><animate attributeName="opacity" values="0;0.6;0" dur="3.1s" repeatCount="indefinite"/></line>
+      </g>
+      <!-- torre eólica -->
+      <path d="M177 212 L173.5 100 H186.5 L183 212 Z" fill="var(--accent)" fill-opacity="0.16"
+            stroke="var(--accent)" stroke-width="2" stroke-linejoin="round"/>
+      <!-- góndola + rotor girando -->
+      <g transform="translate(180,96)">
+        <rect x="-6" y="-5" width="20" height="10" rx="3" fill="var(--accent)" fill-opacity="0.5" stroke="var(--accent)" stroke-width="1.5"/>
+        <g>
+          <g stroke="var(--accent)" stroke-width="4.5" stroke-linecap="round">
+            <line x1="0" y1="0" x2="0" y2="-62"/>
+            <line x1="0" y1="0" x2="54" y2="31"/>
+            <line x1="0" y1="0" x2="-54" y2="31"/>
+          </g>
+          <animateTransform attributeName="transform" type="rotate" from="0 0 0" to="360 0 0" dur="7s" repeatCount="indefinite"/>
+        </g>
+        <circle cx="0" cy="0" r="6" fill="var(--teal)"/>
+      </g>
     </svg>
 
-    <h1 class="hero-title">PÓRTICO</h1>
-    <p class="hero-tag">Laboratorio virtual de análisis estructural 3D</p>
+    <h1 class="hero-title">ReWind</h1>
+    <p class="hero-tag">Monitoreo de salud estructural de torres eólicas</p>
     <p class="hero-desc">
-      Modele estructuras tridimensionales, ejecute análisis estático, modal y de
-      espectro de respuesta, y visualice esfuerzos internos, deformadas y formas
-      modales — directamente en su navegador, sin instalar nada.
+      Visualiza tu parque eólico, sigue los sensores en tiempo real y conoce el
+      estado estructural de cada torre mediante un gemelo digital — directamente
+      en tu navegador.
     </p>
     <div class="hero-chips">
-      <span>Modelado 3D</span><span>Análisis estático</span><span>Formas modales</span>
-      <span>Espectro de respuesta</span><span>Combinaciones</span><span>Diafragmas rígidos</span>
+      <span>Flota 3D</span><span>Sensores MEMS</span><span>Frecuencias naturales</span>
+      <span>Gemelo digital</span><span>Estado en tiempo real</span>
     </div>
     <div class="hero-actions">
-      <button id="btn-enter">Entrar al laboratorio (vacío) <span class="arrow">→</span></button>
-      <button id="btn-asistente" type="button">✦ Generar modelo con el asistente <span class="arrow">→</span></button>
-      <button id="btn-manual" type="button">📖 Manual de uso</button>
+      <button id="btn-enter">Entrar al monitor <span class="arrow">→</span></button>
       <button id="btn-install" type="button">⤓ Instalar app</button>
     </div>
-    <div class="hero-kbd">o presione <kbd>Enter</kbd></div>
+    <div class="hero-kbd">o presiona <kbd>Enter</kbd></div>
     <div id="install-hint" class="install-hint" hidden></div>
   </main>
 
   <footer class="landing-credit">
-    <div class="landing-logos">
-      <img src="icons/Facultad-color-negro.svg" alt="Facultad de Ciencias de la Ingeniería">
-      <img class="logo-chip" src="icons/IOC-color.svg" alt="Instituto de Obras Civiles">
-    </div>
-    Material docente desarrollado por <strong>Dr. Juan Patricio Reyes C.</strong> —
-    Instituto de Obras Civiles, Universidad Austral de Chile.<br>
-    Para estudiantes de <strong>Arquitectura</strong>, <strong>Construcción</strong> e
-    <strong>Ingeniería Civil en Obras Civiles</strong>.
+    ReWind · Plataforma de monitoreo de salud estructural (SHM) para aerogeneradores.
   </footer>
   </div><!-- /.landing-card -->
 

@@ -13,12 +13,14 @@ import * as THREE from 'three';
 export const TOWER_H = 90;          // altura de buje (m), coherente con el macromodelo
 
 // ── Geometrías compartidas ───────────────────────────────────────────────────
-const mastGeo    = new THREE.CylinderGeometry(1.5, 2.2, TOWER_H, 28, 1, false);
-const nacelleGeo = new THREE.BoxGeometry(3.2, 3.0, 7.5);
-const hubGeo     = new THREE.SphereGeometry(1.5, 20, 16);
-const noseGeo    = new THREE.ConeGeometry(1.45, 2.6, 22);
-const sensorGeo  = new THREE.SphereGeometry(0.95, 16, 12);
-const gatewayGeo = new THREE.BoxGeometry(2.4, 2.0, 2.4);
+// Fuste marcadamente cónico: más ancho abajo, más angosto arriba.
+const mastGeo    = new THREE.CylinderGeometry(1.05, 2.7, TOWER_H, 32, 1, false);
+const nacelleGeo = new THREE.BoxGeometry(3.4, 3.2, 9.0);   // góndola (cuerpo del generador)
+const nacelleNose= new THREE.CylinderGeometry(1.7, 1.7, 1.2, 20);  // cuello buje–góndola
+const hubGeo     = new THREE.SphereGeometry(1.7, 22, 16);
+const noseGeo    = new THREE.ConeGeometry(1.55, 3.0, 24);
+const sensorGeo  = new THREE.SphereGeometry(0.8, 16, 12);
+const gatewayGeo = new THREE.BoxGeometry(2.2, 1.8, 2.2);
 
 // Aspa: perfil cónico con punta redondeada, extruido fino.
 function makeBladeGeometry() {
@@ -37,10 +39,11 @@ const bladeGeo = makeBladeGeometry();
 
 // ── Materiales base (se clonan por torre para el cuerpo) ──────────────────────
 const baseMats = {
-  tower:   new THREE.MeshStandardMaterial({ color: 0xf3f4f6, metalness: 0.15, roughness: 0.55 }),
-  nacelle: new THREE.MeshStandardMaterial({ color: 0xdde3ea, metalness: 0.25, roughness: 0.5 }),
-  hub:     new THREE.MeshStandardMaterial({ color: 0xc2c8cf, metalness: 0.3,  roughness: 0.5 }),
-  blade:   new THREE.MeshStandardMaterial({ color: 0xf8fafc, metalness: 0.05, roughness: 0.6 }),
+  // Torre celeste y clara (metalness 0 → el color difuso se lee tal cual, sin oscurecer)
+  tower:   new THREE.MeshStandardMaterial({ color: 0x9cd2f7, metalness: 0, roughness: 0.6 }),
+  nacelle: new THREE.MeshStandardMaterial({ color: 0xdaeefc, metalness: 0, roughness: 0.55 }),
+  hub:     new THREE.MeshStandardMaterial({ color: 0xbfddf3, metalness: 0, roughness: 0.55 }),
+  blade:   new THREE.MeshStandardMaterial({ color: 0xeaf6ff, metalness: 0, roughness: 0.6 }),
 };
 
 let _uid = 0;
@@ -53,7 +56,7 @@ let _uid = 0;
 export function createTurbine(o = {}) {
   const id = o.id ?? `WT-${String(++_uid).padStart(2, '0')}`;
   const yaw = o.yaw ?? (Math.random() * Math.PI * 2);
-  const spin = o.spin ?? (1.1 + Math.random() * 0.6);    // rad/s, leve variación por torre
+  const spin = o.spin ?? (0.30 + Math.random() * 0.12);  // rad/s, giro lento + leve variación
 
   const group = new THREE.Group();
   group.userData.turbineId = id;
@@ -71,18 +74,22 @@ export function createTurbine(o = {}) {
   top.position.y = TOWER_H; top.rotation.y = yaw;
   group.add(top);
 
+  // Góndola: cuerpo del generador (caja) + cuello cónico hacia el buje → lee como turbina
   const nacelle = new THREE.Mesh(nacelleGeo, mNacelle);
-  nacelle.position.set(0, 1.4, -1.0); nacelle.castShadow = true;
+  nacelle.position.set(0, 1.6, -1.2); nacelle.castShadow = true;
   top.add(nacelle);
+  const neck = new THREE.Mesh(nacelleNose, mNacelle);
+  neck.rotation.x = Math.PI / 2; neck.position.set(0, 1.6, 3.3); neck.castShadow = true;
+  top.add(neck);
 
   // Rotor (buje + nariz + 3 aspas) — gira sobre su eje Z local
   const rotor = new THREE.Group();
-  rotor.position.set(0, 1.4, 3.4);
+  rotor.position.set(0, 1.6, 4.0);
   top.add(rotor);
 
   const hub = new THREE.Mesh(hubGeo, mHub); hub.castShadow = true; rotor.add(hub);
   const nose = new THREE.Mesh(noseGeo, mHub);
-  nose.rotation.x = Math.PI / 2; nose.position.z = 1.6; rotor.add(nose);
+  nose.rotation.x = Math.PI / 2; nose.position.z = 1.7; rotor.add(nose);
 
   for (let i = 0; i < 3; i++) {
     const blade = new THREE.Mesh(bladeGeo, mBlade);
@@ -91,18 +98,21 @@ export function createTurbine(o = {}) {
     rotor.add(blade);
   }
 
-  // ── Capa de vida: 2 sensores MEMS + gateway (materiales propios, parpadean) ──
-  const mkLive = (color) => new THREE.MeshStandardMaterial({ color: 0x0a0a0a, emissive: color, emissiveIntensity: 1, roughness: 0.4 });
+  // ── Capa de vida: 2 sensores MEMS + gateway (tenues, semi-transparentes) ──
+  const mkLive = (color) => new THREE.MeshStandardMaterial({
+    color: 0x0a0a0a, emissive: color, emissiveIntensity: 0.8, roughness: 0.4,
+    transparent: true, opacity: 0.8,
+  });
   const sensors = [];
   for (const [tag, hy] of [['acc-top', 0.93], ['acc-mid', 0.5]]) {
-    const m = mkLive(0x33ff88);
+    const m = mkLive(0x4fd99a);                        // verde un poco más suave
     const s = new THREE.Mesh(sensorGeo, m);
-    const r = THREE.MathUtils.lerp(2.2, 1.5, hy);     // radio del fuste a esa altura
-    s.position.set(r + 0.3, TOWER_H * hy, 0);
+    const r = THREE.MathUtils.lerp(2.7, 1.05, hy);    // radio del fuste cónico a esa altura
+    s.position.set(r + 0.25, TOWER_H * hy, 0);
     s.userData = { turbineId: id, sensor: tag };
     group.add(s); sensors.push({ mesh: s, mat: m, tag, phase: Math.random() * 6.28 });
   }
-  const gMat = mkLive(0x35a7ff);
+  const gMat = mkLive(0x5ab4ff);
   const gw = new THREE.Mesh(gatewayGeo, gMat);
   gw.position.set(4.5, 1.0, 4.5); gw.castShadow = true; gw.userData = { turbineId: id, gateway: true };
   group.add(gw);

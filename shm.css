@@ -47,9 +47,9 @@ body.shm li[data-action="template"] { display: none; }
 body.shm #viewport-container > canvas:not(.shm-canvas) { display: none !important; }
 body.shm #viewport-container > canvas.shm-canvas { display: block; }
 
-/* ── Toolbar: botón «Agregar torre» (estilo .tool de PÓRTICO) ──────────────── */
-#shm-add-tool { display: none; }
-body.shm #shm-add-tool { display: flex; }
+/* ── Toolbar: botones SHM (estilo .tool de PÓRTICO) ────────────────────────── */
+#shm-add-tool, #shm-pause-tool { display: none; }
+body.shm #shm-add-tool, body.shm #shm-pause-tool { display: flex; }
 
 /* ── Panel derecho: ocultar el panel FE, mostrar el dashboard SHM ──────────── */
 body.shm #panel-vtabs,
