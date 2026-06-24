@@ -37,6 +37,7 @@ export class FleetView {
     this.editMode = false;           // modo edición: arrastrar estructuras
     this._drag = null;
     this.onChange = null;            // callback(count) para la UI
+    this.onLayoutChange = null;      // callback() al mover/agregar (persistir orden)
 
     const w = container.clientWidth, h = container.clientHeight;
     this.scene = new THREE.Scene();
@@ -97,12 +98,12 @@ export class FleetView {
   addTurbine(opts = {}) {
     const t = createTurbine(opts);
     t.dim = 0;                       // 0 = nítida, 1 = atenuada
-    t.group.position.copy(this._slot(this.turbines.length));
+    t.group.position.copy(opts.pos ? new THREE.Vector3(opts.pos.x, 0, opts.pos.z) : this._slot(this.turbines.length));
     this.turbines.push(t);
     this.structures.push(t);
     this.scene.add(t.group);
-    this._relayout();
     this.onChange?.(this.turbines.length);
+    this.onLayoutChange?.();
     return t;
   }
 
@@ -191,6 +192,7 @@ export class FleetView {
     tw.push(hv); this.substation.sensors.push(...hv.sensors); this.structures.push(hv);
     this.rebuildCables();
     this.onChange?.();
+    this.onLayoutChange?.();
     return hv;
   }
 
@@ -255,7 +257,7 @@ export class FleetView {
       if (this._drag) { const p = this._groundPoint(e); if (p) { this._drag.o.group.position.x = p.x; this._drag.o.group.position.z = p.z; this.rebuildCables(); } }
     });
     dom.addEventListener('pointerup', e => {
-      if (this._drag) { this._drag = null; this.controls.enabled = true; this.rebuildCables(); downXY = null; return; }
+      if (this._drag) { this._drag = null; this.controls.enabled = true; this.rebuildCables(); this.onLayoutChange?.(); downXY = null; return; }
       if (!downXY) return;
       const moved = Math.hypot(e.clientX - downXY[0], e.clientY - downXY[1]);
       downXY = null;

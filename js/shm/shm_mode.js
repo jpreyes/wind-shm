@@ -10,8 +10,11 @@
 // ─────────────────────────────────────────────────────────────────────────────
 import { FleetView } from './fleet_view.js?v=199';
 import { DataSource } from './data_source.js?v=199';
+import { computeTwin } from './digital_twin.js?v=199';
 
 const F1_BASE = { turbine: 0.283, hv: 1.6 };
+const LAYOUT_KEY = 'rewind-layout';
+const loadLayout = () => { try { return JSON.parse(localStorage.getItem(LAYOUT_KEY)); } catch { return null; } };
 
 function boot() {
   const container = document.getElementById('viewport-container');
@@ -33,8 +36,9 @@ function boot() {
   document.getElementById('btn-zoomext')?.addEventListener('click', () => fleet.clearSelection());
   document.title = 'ReWind — SHM de torres eólicas';
 
-  // ── DataSource (Web Worker sintético; intercambiable por la nube) ──────────
-  const ds = new DataSource();
+  // ── DataSource: simulación (Web Worker) o nube (?live=wss://…) ─────────────
+  const liveUrl = new URLSearchParams(location.search).get('live');
+  const ds = new DataSource(liveUrl ? { liveUrl } : {});
   window.shmData = ds;
   ds.onTick = (msg) => {
     for (const id in msg.summaries)
@@ -42,9 +46,18 @@ function boot() {
     dash.onTick(msg);
   };
 
-  // Flota + subestación
-  for (let i = 0; i < 10; i++) fleet.addTurbine();
-  fleet.buildSubstation();
+  // ── Flota + subestación: restaurar el orden guardado o sembrar por defecto ──
+  const saved = loadLayout();
+  if (saved && saved.turbines?.length) {
+    for (const p of saved.turbines) fleet.addTurbine({ pos: p });
+    fleet.buildSubstation();
+    while (fleet.substation.towers.length < (saved.hv?.length || 2)) fleet.addHVTower();
+    fleet.substation.towers.forEach((h, i) => { const p = saved.hv?.[i]; if (p) h.group.position.set(p.x, 0, p.z); });
+    fleet.rebuildCables();
+  } else {
+    for (let i = 0; i < 10; i++) fleet.addTurbine();
+    fleet.buildSubstation();
+  }
 
   // Fallas y daño de demostración (mientras se conectan los sensores reales)
   const dmgMap = {};
@@ -58,12 +71,30 @@ function boot() {
     sensors: s.sensors.map(se => ({ id: se.id, status: se.status || 'ok' })),
   }));
   const syncData = () => { ds.init(buildManifest()); dash.setStructures(fleet.getStructures()); };
+  const saveLayout = () => {
+    try {
+      const t = fleet.turbines.map(x => ({ x: +x.group.position.x.toFixed(1), z: +x.group.position.z.toFixed(1) }));
+      const hv = (fleet.substation?.towers || []).map(x => ({ x: +x.group.position.x.toFixed(1), z: +x.group.position.z.toFixed(1) }));
+      localStorage.setItem(LAYOUT_KEY, JSON.stringify({ turbines: t, hv }));
+    } catch {}
+  };
 
-  fleet.onChange = syncData;     // re-sincroniza al agregar torres/torres AT
+  fleet.onChange = syncData;        // re-sincroniza telemetría al agregar
+  fleet.onLayoutChange = saveLayout; // persiste el orden al mover/agregar
   fleet.onSelect = (obj) => { dash.select(obj); nameplate.show(obj); ds.focus(obj ? obj.id : null); };
 
   syncData();
   fleet.playIntro();
+
+  // ── Gemelo digital: f₁ real por el solver modal de PÓRTICO (async) ─────────
+  setTimeout(() => {
+    const tw = computeTwin();
+    window.shmTwin = tw;
+    if (tw.turbine) F1_BASE.turbine = tw.turbine;
+    if (tw.hv) F1_BASE.hv = tw.hv;
+    syncData();           // re-init worker con las f₁ del gemelo
+    dash.refresh();
+  }, 1400);
 }
 
 // ── Toolbar: Torre · Torre AT · Detener · Editar ─────────────────────────────
@@ -189,6 +220,7 @@ function buildDashboard(panel, fleet) {
         <div class="row"><span>Altura</span><b>${o.height} m</b></div>
         ${o.type === 'turbine' ? `<div class="row"><span>Potencia</span><b>~3 MW</b></div>` : ''}
         <div class="row"><span>Sensores</span><b id="d-ns">—</b></div>
+        <div class="row"><span>f₁ gemelo digital</span><b>${window.shmTwin?.[o.type] ? window.shmTwin[o.type].toFixed(3) + ' Hz' : '… calculando'}</b></div>
         <div class="row"><span>f₁ actual</span><b id="d-f1">—</b></div>
         <div class="row"><span>Temperatura</span><b id="d-temp">—</b></div>
         <div class="row"><span>Estado</span><b><span class="light ${light}" id="d-light"></span><span id="d-state">${light === 'ok' ? 'Sano' : light === 'warn' ? 'Vigilar' : 'Alerta'}</span></b></div>
@@ -288,7 +320,7 @@ function buildDashboard(panel, fleet) {
   }
   function stopSig() { if (sigRAF) { cancelAnimationFrame(sigRAF); sigRAF = null; } }
 
-  return { setStructures, select, onTick };
+  return { setStructures, select, onTick, refresh: () => { if (current) renderPane(); } };
 }
 
 if (document.readyState === 'complete') boot();

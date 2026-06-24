@@ -34,11 +34,14 @@ Marcar ✅ al resolver. Severidad: 🔴 bloquea · 🟡 limita fidelidad · 🟢
 
 No son bugs: es lo nuevo que falta construir sobre el gemelo digital ya verificado.
 
-- ⬜ 🔴 **Capa `DataSource`** (abstracción) con `SimulatedSource` (señal sintética desde los modos reales) y `LiveSource` (nube). El dashboard/ML no deben saber cuál usan.
-- ⬜ 🔴 **Visual Three.js de la torre** sobre el macro `turbine`: fuste cónico, góndola, aspas girando, viento.
-- ⬜ 🔴 **Flota multi-torre** con `InstancedMesh` + LOD + frustum culling (~100 torres) y selección con zoom cinematográfico (las demás atenuadas).
-- ⬜ 🔴 **Capa de vida** (sensores MEMS + gateway): puntos parpadeantes vía shader (uniform de tiempo + fase por instancia), color = activo/intermitente/caído. Debe verse en **todas** las torres en cámara.
-- ⬜ 🟡 **Dashboard SHM** en el panel derecho: Señal · Datos · Estado estructural · Movimiento · **Avanzado** (diagramas N/V/M + análisis no lineal de daño escondidos aquí).
+- ✅ **Capa `DataSource`** (`js/shm/data_source.js`): `SimulatedSource` (Web Worker `shm_worker.js`) y `LiveSource` (WebSocket, `?live=wss://…`, con fallback a sim). Mismo `onTick`.
+- ✅ **Gemelo digital** (`js/shm/digital_twin.js`): f₁ real por el SOLVER MODAL de PÓRTICO (turbina≈0.283 Hz, torre AT≈2.59 Hz). Alimenta la línea base de telemetría y el panel.
+- ✅ **Scaffold backend** `worker/shm_ingest.js` (Cloudflare Worker + Durable Object): gateway POST /ingest → fan-out WebSocket /ws en el formato de tick. Falta desplegar (binding DO + wrangler).
+- ✅ **Persistir orden** del parque (localStorage) + **modo edición** (arrastrar estructuras).
+- ✅ **Visual Three.js de la torre** sobre el macro `turbine`: fuste cónico, góndola, aspas girando. (viento: pendiente partículas)
+- ✅ **Flota multi-torre** + selección con zoom y atenuación de las demás. (InstancedMesh/LOD: pendiente para escalar a ~100)
+- ✅ **Capa de vida** (sensores MEMS + gateway): todos parpadean siempre, verde=OK / rojo=falla.
+- ✅ **Dashboard SHM** en el panel: lista de estructuras, Datos · Señal (en vivo) · Sensores · Inspección + nameplate en la vista. (pestaña Avanzado con N/V/M: pendiente)
 - ⬜ 🟡 **Enganche acelerogramas medidos → time-history modal** del gemelo (model updating / detección de daño por caída de frecuencia).
 - ⬜ 🟡 **ML / Population-Based SHM**: línea base por torre + aprendizaje entre torres de la flota.
 - ⬜ 🟢 **Reorientar el Cloudflare Worker** (hoy asistente LLM) a **ingesta de telemetría** (gateway → Worker → Durable Object → WebSocket) y a **Asistente SHM** en lenguaje natural.
