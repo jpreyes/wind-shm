@@ -5,13 +5,13 @@
 // API del registro.  Para agregar un motor nuevo: crear `formats/<motor>.js` que llame
 // a `registerFormat({ id, name, ext, write, read })` y añadirlo a la lista de imports.
 // ──────────────────────────────────────────────────────────────────────────────
-export { registerFormat, getFormat, listFormats, exportModel, importModel } from './registry.js?v=193';
-export { modelToNeutral, neutralToModel } from './neutral.js?v=193';
+export { registerFormat, getFormat, listFormats, exportModel, importModel } from './registry.js?v=194';
+export { modelToNeutral, neutralToModel } from './neutral.js?v=194';
 
 // Adaptadores de formato (auto-registro):
-import './formats/vector.js?v=193';
-import './formats/abaqus.js?v=193';
-import './formats/sap2000.js?v=193';
-import './formats/etabs.js?v=193';
-import './formats/opensees.js?v=193';
-import './formats/sofistik.js?v=193';
+import './formats/vector.js?v=194';
+import './formats/abaqus.js?v=194';
+import './formats/sap2000.js?v=194';
+import './formats/etabs.js?v=194';
+import './formats/opensees.js?v=194';
+import './formats/sofistik.js?v=194';
