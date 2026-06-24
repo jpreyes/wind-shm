@@ -41,7 +41,7 @@ No son bugs: es lo nuevo que falta construir sobre el gemelo digital ya verifica
 - ✅ **Visual Three.js de la torre** sobre el macro `turbine`: fuste cónico, góndola, aspas girando. (viento: pendiente partículas)
 - ✅ **Flota multi-torre** + selección con zoom y atenuación de las demás. (InstancedMesh/LOD: pendiente para escalar a ~100)
 - ✅ **Capa de vida** (sensores MEMS + gateway): todos parpadean siempre, verde=OK / rojo=falla.
-- ✅ **Dashboard SHM** en el panel: lista de estructuras, Datos · Señal (en vivo) · Sensores · Inspección + nameplate en la vista. (pestaña Avanzado con N/V/M: pendiente)
+- ✅ **Dashboard SHM** en el panel: lista de estructuras, Datos · Señal (en vivo) · Sensores · **Avanzado** (FFT/PSD + seguimiento de f₁) · Inspección + nameplate en la vista. (diagramas N/V/M del gemelo en Avanzado: pendiente)
 - ⬜ 🟡 **Enganche acelerogramas medidos → time-history modal** del gemelo (model updating / detección de daño por caída de frecuencia).
 - ⬜ 🟡 **ML / Population-Based SHM**: línea base por torre + aprendizaje entre torres de la flota.
 - ⬜ 🟢 **Reorientar el Cloudflare Worker** (hoy asistente LLM) a **ingesta de telemetría** (gateway → Worker → Durable Object → WebSocket) y a **Asistente SHM** en lenguaje natural.

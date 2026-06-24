@@ -15,6 +15,34 @@ import { computeTwin } from './digital_twin.js?v=199';
 const F1_BASE = { turbine: 0.283, hv: 1.6 };
 const LAYOUT_KEY = 'rewind-layout';
 const loadLayout = () => { try { return JSON.parse(localStorage.getItem(LAYOUT_KEY)); } catch { return null; } };
+const FS = 62.5;   // frecuencia de muestreo de la señal (Hz), igual que shm_worker.js
+
+// FFT radix-2 (Cooley-Tukey) de la mayor potencia de 2 ≤ buffer; ventana de Hann.
+// Devuelve { mag: amplitud por bin, df: Hz por bin }.
+function fftMag(buf) {
+  let n = 1; while (n * 2 <= buf.length) n *= 2;
+  if (n < 8) return { mag: [], df: FS / Math.max(n, 1) };
+  const re = buf.slice(buf.length - n);
+  const mean = re.reduce((a, b) => a + b, 0) / n;
+  for (let i = 0; i < n; i++) re[i] = (re[i] - mean) * (0.5 - 0.5 * Math.cos((2 * Math.PI * i) / (n - 1)));
+  const im = new Array(n).fill(0);
+  for (let i = 1, j = 0; i < n; i++) { let bit = n >> 1; for (; j & bit; bit >>= 1) j ^= bit; j ^= bit; if (i < j) { [re[i], re[j]] = [re[j], re[i]]; } }
+  for (let len = 2; len <= n; len <<= 1) {
+    const ang = -2 * Math.PI / len, wr = Math.cos(ang), wi = Math.sin(ang);
+    for (let i = 0; i < n; i += len) {
+      let cr = 1, ci = 0;
+      for (let k = 0; k < len / 2; k++) {
+        const a = i + k, b = i + k + len / 2;
+        const vr = re[b] * cr - im[b] * ci, vi = re[b] * ci + im[b] * cr;
+        re[b] = re[a] - vr; im[b] = im[a] - vi; re[a] += vr; im[a] += vi;
+        const ncr = cr * wr - ci * wi; ci = cr * wi + ci * wr; cr = ncr;
+      }
+    }
+  }
+  const mag = new Array(n / 2);
+  for (let i = 0; i < n / 2; i++) mag[i] = Math.hypot(re[i], im[i]) / n;
+  return { mag, df: FS / n };
+}
 
 function boot() {
   const container = document.getElementById('viewport-container');
@@ -166,7 +194,7 @@ function buildDashboard(panel, fleet) {
   panel.appendChild(el);
   const $ = (s) => el.querySelector(s);
 
-  let list = [], current = null, pane = 'datos', sigBuf = {}, sigRAF = null;
+  let list = [], current = null, pane = 'datos', sigBuf = {}, sigRAF = null, freqHist = {};
 
   function setStructures(structs) {
     list = structs;
@@ -187,7 +215,7 @@ function buildDashboard(panel, fleet) {
 
   function select(obj) {
     current = obj; highlight();
-    sigBuf = {};
+    sigBuf = {}; freqHist = {};
     if (!obj) { stopSig(); $('#shm-detail').innerHTML = '<div class="empty">Selecciona una estructura<br>(en la lista o en la vista).</div>'; return; }
     renderDetail();
   }
@@ -199,6 +227,7 @@ function buildDashboard(panel, fleet) {
         <button class="shm-tab" data-p="datos">Datos</button>
         <button class="shm-tab" data-p="senal">Señal</button>
         <button class="shm-tab" data-p="sensores">Sensores</button>
+        <button class="shm-tab" data-p="avz">Avanzado</button>
         <button class="shm-tab" data-p="insp">Inspección</button>
       </div>
       <div class="shm-body" id="shm-pane"></div>`;
@@ -239,6 +268,15 @@ function buildDashboard(panel, fleet) {
       body.innerHTML = o.sensors.map(se =>
         `<div class="shm-sensor"><span class="dot ${se.status}"></span><span style="flex:1">${se.id}</span><b class="s-rms" data-sid="${se.id}">—</b></div>`
       ).join('') + `<div class="note">Verde = operativo · Rojo = en falla. Estado y RMS en vivo desde el gateway (sim).</div>`;
+    } else if (pane === 'avz') {
+      body.innerHTML = `
+        <div class="note" style="margin-top:0">Espectro de frecuencias (FFT) del acelerómetro superior:</div>
+        <canvas class="sig" id="fft-canvas" style="height:110px"></canvas>
+        <div class="row" style="border:0"><span>Pico dominante</span><b id="fft-peak">—</b></div>
+        <div class="note">Seguimiento de la frecuencia natural f₁ (vs. línea base del gemelo):</div>
+        <canvas class="sig" id="freq-canvas" style="height:80px"></canvas>
+        <div class="note">El descenso sostenido de f₁ indica pérdida de rigidez (daño). N/V/M del gemelo: próximo.</div>`;
+      startAvz();
     } else {
       const seed = o.id.split('').reduce((a, c) => a + c.charCodeAt(0), 0);
       const days = 30 + (seed % 120);
@@ -293,6 +331,11 @@ function buildDashboard(panel, fleet) {
         const buf = sigBuf[w.id]; if (buf.length > 700) buf.splice(0, buf.length - 700);
       }
     }
+    // historial de f₁ para el seguimiento (pestaña Avanzado)
+    if (current && msg.summaries[current.id]) {
+      const h = (freqHist[current.id] || (freqHist[current.id] = []));
+      h.push(msg.summaries[current.id].f1); if (h.length > 160) h.shift();
+    }
     if (current) updateDynamic(msg.summaries[current.id]);
   }
 
@@ -319,6 +362,51 @@ function buildDashboard(panel, fleet) {
     draw();
   }
   function stopSig() { if (sigRAF) { cancelAnimationFrame(sigRAF); sigRAF = null; } }
+
+  // Pestaña Avanzado: espectro FFT + seguimiento de f₁.
+  function startAvz() {
+    const draw = () => {
+      const o = current;
+      const fc = el.querySelector('#fft-canvas'), qc = el.querySelector('#freq-canvas');
+      if (o && fc) {
+        // FFT del acelerómetro superior (o el primero disponible)
+        const sid = (o.sensors.find(s => /top|s1/.test(s.id)) || o.sensors[0])?.id;
+        const { mag, df } = fftMag(sigBuf[sid] || []);
+        const dpr = Math.min(devicePixelRatio, 2), w = fc.clientWidth, h = fc.clientHeight || 110;
+        fc.width = w * dpr; fc.height = h * dpr; const g = fc.getContext('2d'); g.scale(dpr, dpr);
+        g.clearRect(0, 0, w, h);
+        const fMax = 6;                               // Hz mostrados (modos de torre, bajos)
+        const bins = Math.max(1, Math.min(mag.length, Math.floor(fMax / (df || 1))));
+        let mx = 1e-9, peak = 0;
+        for (let i = 1; i < bins; i++) if (mag[i] > mx) { mx = mag[i]; peak = i; }
+        g.fillStyle = '#38bdf8';
+        for (let i = 1; i < bins; i++) {
+          const x = (i / bins) * w, bh = (mag[i] / mx) * (h - 14);
+          g.fillRect(x, h - bh, Math.max(1, w / bins - 1), bh);
+        }
+        g.fillStyle = '#2dd4bf';                      // marca del pico
+        const px = (peak / bins) * w; g.fillRect(px - 1, 0, 2, h);
+        const pk = el.querySelector('#fft-peak'); if (pk) pk.textContent = `${(peak * df).toFixed(3)} Hz`;
+      }
+      if (o && qc) {
+        const hist = freqHist[o.id] || [], base = window.shmTwin?.[o.type];
+        const dpr = Math.min(devicePixelRatio, 2), w = qc.clientWidth, h = qc.clientHeight || 80;
+        qc.width = w * dpr; qc.height = h * dpr; const g = qc.getContext('2d'); g.scale(dpr, dpr);
+        g.clearRect(0, 0, w, h);
+        const vals = base ? [base, ...hist] : hist;
+        if (vals.length) {
+          const lo = Math.min(...vals) * 0.999, hi = Math.max(...vals) * 1.001, rng = (hi - lo) || 1;
+          const Y = (v) => h - 6 - ((v - lo) / rng) * (h - 12);
+          if (base != null) { g.strokeStyle = 'rgba(150,160,170,0.6)'; g.setLineDash([4, 3]); g.beginPath(); g.moveTo(0, Y(base)); g.lineTo(w, Y(base)); g.stroke(); g.setLineDash([]); }
+          g.strokeStyle = '#38bdf8'; g.lineWidth = 1.5; g.beginPath();
+          hist.forEach((v, i) => { const x = (i / Math.max(hist.length - 1, 1)) * w; i ? g.lineTo(x, Y(v)) : g.moveTo(x, Y(v)); });
+          g.stroke();
+        }
+      }
+      sigRAF = requestAnimationFrame(draw);
+    };
+    draw();
+  }
 
   return { setStructures, select, onTick, refresh: () => { if (current) renderPane(); } };
 }
