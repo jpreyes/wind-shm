@@ -15,7 +15,7 @@
 // código usa z = eje fuerte (mayor EC3) e y = eje débil (menor EC3).
 // ──────────────────────────────────────────────────────────────────────────────
 
-import { finalize } from './aisc360.js?v=192';
+import { finalize } from './aisc360.js?v=193';
 
 const ALPHA = { a0: 0.13, a: 0.21, b: 0.34, c: 0.49, d: 0.76 };   // factores de imperfección
 const ratObj = (D, C, extra = {}) => ({
