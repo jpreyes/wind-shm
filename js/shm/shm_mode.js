@@ -19,6 +19,7 @@ const FS = 62.5;   // frecuencia de muestreo de la señal (Hz), igual que shm_wo
 // Clasificador ML de daño (0..4)
 const CLS = ['Sin daño', 'Leve', 'Moderado', 'Alto', 'Muy alto'];
 const CLS_COL = ['var(--success)', '#9bbb3a', 'var(--warn)', '#fb7185', 'var(--danger)'];
+const CLS_HEX = ['#4ade80', '#9bbb3a', '#fbbf24', '#fb7185', '#f87171'];   // para canvas (sin var())
 
 // FFT radix-2 (Cooley-Tukey) de la mayor potencia de 2 ≤ buffer; ventana de Hann.
 // Devuelve { mag: amplitud por bin, df: Hz por bin }.
@@ -277,6 +278,7 @@ function buildDashboard(panel, fleet, actions) {
 
   let list = [], current = null, pane = 'datos', sigBuf = {}, sigRAF = null, freqHist = {};
   let specOff = null, specLast = 0;                 // espectrograma (offscreen + scroll)
+  const clsHist = {}, clsEvents = {}; let lastHistT = 0;   // histórico de clasificación ML
   const SPEC_W = 170, SPEC_BINS = 48, SPEC_FMAX = 6;
   const heat = (t) => {
     t = Math.max(0, Math.min(1, t));
@@ -337,6 +339,7 @@ function buildDashboard(panel, fleet, actions) {
         <button class="shm-tab" data-p="datos">Datos</button>
         <button class="shm-tab" data-p="senal">Señal</button>
         <button class="shm-tab" data-p="sensores">Sensores</button>
+        <button class="shm-tab" data-p="hist">Histórico</button>
         <button class="shm-tab" data-p="avz">Avanzado</button>
         <button class="shm-tab" data-p="insp">Inspección</button>
       </div>
@@ -380,6 +383,16 @@ function buildDashboard(panel, fleet, actions) {
       body.innerHTML = o.sensors.map(se =>
         `<div class="shm-sensor"><span class="dot ${se.status}"></span><span style="flex:1">${se.id}</span><b class="s-rms" data-sid="${se.id}">—</b></div>`
       ).join('') + `<div class="note">Verde = operativo · Rojo = en falla. Estado y RMS en vivo desde el gateway (sim).</div>`;
+    } else if (pane === 'hist') {
+      body.innerHTML = `
+        <div class="note" style="margin-top:0">Histórico de clasificación ML (línea de tiempo):</div>
+        <canvas class="sig" id="cls-band" style="height:34px"></canvas>
+        <div id="cls-legend" style="display:flex;gap:10px;flex-wrap:wrap;margin:6px 0 10px;font-size:10px;color:var(--text-muted)">
+          ${CLS.map((n, i) => `<span><span style="display:inline-block;width:9px;height:9px;border-radius:2px;background:${CLS_COL[i]};margin-right:4px"></span>${n}</span>`).join('')}
+        </div>
+        <div class="note">Cambios de nivel:</div>
+        <div id="cls-events"></div>`;
+      drawHist();
     } else if (pane === 'avz') {
       const nvm = o.type === 'turbine'
         ? `<div class="note">Diagramas del gemelo digital — fuste bajo viento + peso propio:</div>
@@ -471,6 +484,23 @@ function buildDashboard(panel, fleet, actions) {
       const h = (freqHist[current.id] || (freqHist[current.id] = []));
       h.push(msg.summaries[current.id].f1); if (h.length > 160) h.shift();
     }
+    // Histórico de clasificación ML (muestreo ~1 s, todas las estructuras)
+    const now = Date.now();
+    if (now - lastHistT > 1000) {
+      lastHistT = now;
+      for (const id in msg.summaries) {
+        const cls = msg.summaries[id].cls || 0;
+        const h = (clsHist[id] || (clsHist[id] = []));
+        const prev = h.length ? h[h.length - 1].cls : null;
+        h.push({ t: now, cls }); if (h.length > 240) h.shift();
+        if (prev !== null && prev !== cls) {
+          const ev = (clsEvents[id] || (clsEvents[id] = []));
+          ev.push({ t: now, from: prev, to: cls }); if (ev.length > 40) ev.shift();
+        }
+      }
+      if (current && pane === 'hist') drawHist();
+    }
+
     if (current) { updateDynamic(msg.summaries[current.id]); updateAlarmBar(); }
   }
 
@@ -572,6 +602,30 @@ function buildDashboard(panel, fleet, actions) {
       sigRAF = requestAnimationFrame(draw);
     };
     draw();
+  }
+
+  // Histórico de clasificación: franja temporal coloreada + lista de cambios.
+  function drawHist() {
+    const o = current; if (!o) return;
+    const cv = el.querySelector('#cls-band');
+    if (cv) {
+      const hist = clsHist[o.id] || [];
+      const dpr = Math.min(devicePixelRatio, 2), w = cv.clientWidth, h = cv.clientHeight || 34;
+      cv.width = w * dpr; cv.height = h * dpr; const g = cv.getContext('2d'); g.scale(dpr, dpr);
+      g.clearRect(0, 0, w, h);
+      if (hist.length) {
+        const n = hist.length, cw = w / n;
+        for (let i = 0; i < n; i++) { g.fillStyle = CLS_HEX[hist[i].cls] || '#888'; g.fillRect(i * cw, 0, Math.ceil(cw), h); }
+      } else { g.fillStyle = '#7e8da0'; g.font = '11px Inter, sans-serif'; g.fillText('Acumulando histórico…', 6, h / 2 + 4); }
+    }
+    const evEl = el.querySelector('#cls-events');
+    if (evEl) {
+      const events = (clsEvents[o.id] || []).slice(-8).reverse();
+      evEl.innerHTML = events.length ? events.map(e => {
+        const tm = new Date(e.t).toLocaleTimeString('es-CL');
+        return `<div class="row" style="font-size:12px"><span>${tm}</span><b><span style="color:${CLS_COL[e.from]}">${CLS[e.from]}</span> → <span style="color:${CLS_COL[e.to]}">${CLS[e.to]}</span></b></div>`;
+      }).join('') : `<div class="note">Sin cambios registrados en esta sesión.</div>`;
+    }
   }
 
   // Dibuja un diagrama (N|V|M) vs altura del fuste.
