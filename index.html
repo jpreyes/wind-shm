@@ -29,8 +29,8 @@
       window.dispatchEvent(new Event('pwa-installed'));
     });
   </script>
-  <link rel="stylesheet" href="style.css?v=177">
-  <link rel="stylesheet" href="ui-v2.css?v=177">
+  <link rel="stylesheet" href="style.css?v=178">
+  <link rel="stylesheet" href="ui-v2.css?v=178">
   <script type="importmap">
   {
     "imports": {
@@ -148,6 +148,7 @@
             <span>Análisis NL-lite</span><span class="sub-arrow">▸</span>
             <ul class="menu-flyout">
               <li data-action="run-nonlinear">▶ No Lineal — cables…</li>
+              <li data-action="run-corotbeam">▶ Gran rotación — viga corotacional 2D…</li>
               <li data-action="run-pdelta">▶ P-Delta…</li>
               <li data-action="run-buckling">▶ Pandeo Lineal — factor crítico…</li>
               <li data-action="run-formfind">▶ Form-finding — densidades de fuerza…</li>
@@ -1068,7 +1069,7 @@
 
 <!-- numeric.js para solver (Fase 2+) -->
 <script src="lib/numeric.js"></script>
-<script type="module" src="js/app.js?v=177"></script>
+<script type="module" src="js/app.js?v=178"></script>
 
 <!-- PWA: registrar el service worker (offline). Solo en contexto seguro
      (https o localhost); el navegador deja navigator.serviceWorker undefined
