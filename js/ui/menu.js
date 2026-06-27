@@ -46,10 +46,10 @@ export class MenuBar {
       this.app.viewport.zoomExtents();
     });
 
-    // ── Unit selector ─────────────────────────────────────────────────────────
-    document.getElementById('unit-select').addEventListener('change', e => {
+    // ── Unit selector (ausente en ReWind) ─────────────────────────────────────
+    document.getElementById('unit-select')?.addEventListener('change', e => {
       this.app.model.units = e.target.value;
-      document.getElementById('sb-units').textContent = e.target.value.replace('-', ' — ');
+      const sb = document.getElementById('sb-units'); if (sb) sb.textContent = e.target.value.replace('-', ' — ');
       this.app.markDirty();
     });
   }

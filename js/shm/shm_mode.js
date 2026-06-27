@@ -8,12 +8,13 @@
 //   inspecciones y señal temporal EN VIVO desde un Web Worker (DataSource).
 // Recortes (modelado) los hace shm.css ocultando, no borrando.
 // ─────────────────────────────────────────────────────────────────────────────
-import { FleetView } from './fleet_view.js?v=206';
-import { DataSource } from './data_source.js?v=206';
-import { computeTwin } from './digital_twin.js?v=206';
+import { FleetView } from './fleet_view.js?v=208';
+import { DataSource } from './data_source.js?v=208';
+import { computeTwin } from './digital_twin.js?v=208';
+import { ParkManager, loadParksStore } from './parks.js?v=208';
 
 const F1_BASE = { turbine: 0.283, hv: 1.6 };
-const REWIND_VER = 'v206';   // versión visible del build (subir junto al cache-bust)
+const REWIND_VER = 'v208';   // versión visible del build (subir junto al cache-bust)
 const LAYOUT_KEY = 'rewind-layout';
 const loadLayout = () => { try { return JSON.parse(localStorage.getItem(LAYOUT_KEY)); } catch { return null; } };
 const FS = 62.5;   // frecuencia de muestreo de la señal (Hz), igual que shm_worker.js
@@ -56,7 +57,7 @@ async function boot() {
   const vpwrap = document.getElementById('viewport-wrap');
   if (!container || !panel) { console.warn('[shm] shell de PÓRTICO no encontrado'); window.__rewindCloseLanding?.(); return; }
 
-  document.body.classList.add('shm');
+  document.body.classList.add('shm', 'tree-open');
 
   const fleet = new FleetView(container);
   fleet.renderer.domElement.classList.add('shm-canvas');
@@ -73,7 +74,8 @@ async function boot() {
     report: (obj) => { informed.add(obj.id); maintLog.push({ t: Date.now(), id: obj.id, action: 'Informe de falla emitido' }); downloadReport(obj); },
   };
 
-  buildToolbar(toolbar, fleet);
+  let pm = null;                       // ParkManager (árbol lateral) — se crea más abajo
+  buildToolbar(toolbar, fleet, () => pm);
   const nameplate = buildNameplate(vpwrap);
   const banner = buildBanner(vpwrap);
   const dash = buildDashboard(panel, fleet, actions);
@@ -112,22 +114,22 @@ async function boot() {
     if (pc) pc.textContent = Math.round(pct) + '%';
     if (st && status) st.textContent = status;
   };
-  const saved = loadLayout();
-  const NT = saved?.turbines?.length || 10;
-  const NHV = Math.max(2, saved?.hv?.length || 2);
-
-  for (let i = 0; i < NT; i++) {
-    fleet.addTurbine(saved ? { pos: saved.turbines[i] } : {});
-    setLoad((i + 1) / NT * 70, `Cargando torres eólicas ${i + 1}/${NT}`);
-    await delay(30);
+  // ── Multiparque: store de parques (migra el layout antiguo a «Parque 1») ─────
+  const store = loadParksStore(loadLayout());
+  const activePark = store.parks.find(p => p.id === store.activeId) || store.parks[0];
+  const fresh = !(activePark.turbines?.length) && !(activePark.hv?.length);
+  if (fresh) {
+    const NT = 10;                                       // parque por defecto (primera vez)
+    for (let i = 0; i < NT; i++) { fleet.addTurbine(); setLoad((i + 1) / NT * 70, `Cargando torres eólicas ${i + 1}/${NT}`); await delay(30); }
+    setLoad(72, 'Cargando torres de alta tensión…'); await delay(60);
+    fleet.buildSubstation();                             // 2 torres AT
+    for (const st of fleet.structures) st.zone = activePark.zones[0].id;   // todo a la zona por defecto
+    setLoad(84, 'Subestación lista'); await delay(120);
+  } else {
+    setLoad(40, `Cargando ${activePark.name}…`); await delay(60);
+    fleet.loadPark(activePark);
+    setLoad(84, `${activePark.name} cargado`); await delay(120);
   }
-  if (saved) fleet.turbines.forEach((t, i) => { const y = saved.turbines[i]?.yaw; if (y != null) fleet.setYaw(t.id, y); });
-  setLoad(72, `Cargando torres de alta tensión 0/${NHV}`); await delay(60);
-  fleet.buildSubstation();                               // 2 torres AT
-  for (let k = 2; k < NHV; k++) fleet.addHVTower();
-  if (saved) fleet.substation.towers.forEach((h, i) => { const p = saved.hv?.[i]; if (p) { h.group.position.set(p.x, 0, p.z); if (p.yaw != null) fleet.setYaw(h.id, p.yaw); } });
-  fleet.rebuildCables();
-  setLoad(84, `Cargando torres de alta tensión ${NHV}/${NHV}`); await delay(120);
 
   // Fallas y daño de demostración (mientras se conectan los sensores reales)
   const dmgMap = {};
@@ -141,14 +143,14 @@ async function boot() {
     sensors: s.sensors.map(se => ({ id: se.id, status: se.status || 'ok' })),
   }));
   const syncData = () => { ds.init(buildManifest()); dash.setStructures(fleet.getStructures()); };
-  const saveLayout = () => {
-    try {
-      const t = fleet.turbines.map(x => ({ x: +x.group.position.x.toFixed(1), z: +x.group.position.z.toFixed(1), yaw: +fleet.getYaw(x.id).toFixed(4) }));
-      const hv = (fleet.substation?.towers || []).map(x => ({ x: +x.group.position.x.toFixed(1), z: +x.group.position.z.toFixed(1), yaw: +fleet.getYaw(x.id).toFixed(4) }));
-      localStorage.setItem(LAYOUT_KEY, JSON.stringify({ turbines: t, hv }));
-    } catch {}
-  };
 
+  // Árbol lateral Parque ▸ Zona ▸ Torre
+  pm = new ParkManager({ el: document.getElementById('park-tree'), fleet, store, onSync: syncData });
+  window.shmParks = pm;
+  pm.syncFleetToActive(); pm.save();     // captura el layout fresco/cargado en el store
+  pm.bind(); pm.render();
+
+  const saveLayout = () => { pm.syncFleetToActive(); pm.save(); };
   fleet.onChange = syncData;        // re-sincroniza telemetría al agregar
   fleet.onLayoutChange = saveLayout; // persiste el orden al mover/agregar
   fleet.onSelect = (obj) => { dash.select(obj); nameplate.show(obj); ds.focus(obj ? obj.id : null); };
@@ -169,8 +171,8 @@ async function boot() {
   window.__rewindCloseLanding?.();
 }
 
-// ── Toolbar: Torre · Torre AT · Detener · Editar ─────────────────────────────
-function buildToolbar(toolbar, fleet) {
+// ── Toolbar: Árbol · Torre · Torre AT · Detener · Editar ─────────────────────
+function buildToolbar(toolbar, fleet, getPM = () => null) {
   if (!toolbar) return;
   const mk = (id, title, svg, label, onclick) => {
     const b = document.createElement('button');
@@ -180,12 +182,16 @@ function buildToolbar(toolbar, fleet) {
     return b;
   };
   const sep = document.createElement('div'); sep.className = 'tool-sep';
+  // Interruptor del árbol lateral (Parque ▸ Zona ▸ Torre).
+  const tree = mk('shm-tree-tool', 'Mostrar/ocultar el árbol de parques y zonas',
+    `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M5 4 v16 M5 8 h6 M5 14 h6"/><rect x="11" y="5" width="8" height="6" rx="1"/><rect x="11" y="13" width="8" height="6" rx="1"/></svg>`,
+    'Árbol', () => { const on = document.body.classList.toggle('tree-open'); tree.classList.toggle('active', on); });
   const add = mk('shm-add-tool', 'Agregar aerogenerador',
     `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>`,
-    'Torre', () => fleet.addTurbine());
+    'Torre', () => { const o = fleet.addTurbine(); getPM()?.onAddStructure(o); });
   const hv = mk('shm-hv-tool', 'Agregar torre de alta tensión',
     `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M12 3 L5 21 M12 3 L19 21 M7 9 H17 M6 13 H18 M5.5 17 H18.5"/></svg>`,
-    'Torre AT', () => fleet.addHVTower());
+    'Torre AT', () => { const o = fleet.addHVTower(); getPM()?.onAddStructure(o); });
   const pause = mk('shm-pause-tool', '', '', '', () => { fleet.setPaused(!fleet.paused); paint(); });
   const paint = () => {
     pause.title = fleet.paused ? 'Reanudar animación de aspas' : 'Detener animación de aspas';
@@ -194,10 +200,31 @@ function buildToolbar(toolbar, fleet) {
       : `<svg viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="5" width="4" height="14" rx="1"/><rect x="14" y="5" width="4" height="14" rx="1"/></svg><span>Detener</span>`;
   };
   paint();
-  const edit = mk('shm-edit-tool', 'Modo edición: arrastra las estructuras para reubicarlas',
+  const del = mk('shm-del-tool', 'Borrar la estructura seleccionada (Supr)',
+    `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M5 7h14M10 7V5h4v2M6 7l1 13h10l1-13"/></svg>`,
+    'Borrar', () => { if (fleet.selected) fleet.removeStructure(fleet.selected.id); });
+  // El botón «Editar» es el interruptor maestro del modo edición: con él activo se
+  // pueden crear, borrar y mover estructuras; apagado, sólo se monitorea.
+  // TODO(perfiles): condicionar la visibilidad de «Editar» al rol del usuario.
+  const setEditing = (on) => {
+    fleet.setEditMode(on);
+    edit.classList.toggle('active', on);
+    document.body.classList.toggle('shm-editing', on);
+  };
+  const edit = mk('shm-edit-tool', 'Activar/desactivar el modo edición (crear · borrar · mover)',
     `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 20 L4 16 L15 5 L19 9 L8 20 Z"/><line x1="13" y1="7" x2="17" y2="11"/></svg>`,
-    'Editar', (b) => { fleet.setEditMode(!fleet.editMode); b.classList.toggle('active', fleet.editMode); });
-  toolbar.append(sep, add, hv, pause, edit);
+    'Editar', () => setEditing(!fleet.editMode));
+  toolbar.append(sep, tree, pause, edit, add, hv, del);
+  if (document.body.classList.contains('tree-open')) tree.classList.add('active');
+
+  // Supr/Delete borra la estructura seleccionada (sólo en modo edición).
+  addEventListener('keydown', (e) => {
+    if (!fleet.editMode || !fleet.selected) return;
+    if (e.key !== 'Delete' && e.key !== 'Backspace') return;
+    if (/^(INPUT|TEXTAREA|SELECT)$/.test(document.activeElement?.tagName || '')) return;
+    e.preventDefault();
+    fleet.removeStructure(fleet.selected.id);
+  });
 }
 
 // ── Nameplate (cuadro con el nombre sobre la vista) ──────────────────────────
@@ -707,54 +734,143 @@ function buildDashboard(panel, fleet, actions) {
       return c.toDataURL('image/png');
     };
 
-    // — deformada EXTRUIDA (silueta de la estructura) + barra de color (mm) —
-    const imgDeformed = (prof, type) => {
-      const W = 280, H = 330, { c, g } = mk(W, H);
+    // — deformada de la torre (silueta suave coloreada por desplazamiento) + barra mm —
+    // `marks` = puntos de medición de los sensores {z, disp} (opcional) para señalarlos.
+    const imgDeformed = (prof, type, marks = []) => {
+      const W = 300, H = 350, { c, g } = mk(W, H);
       if (!prof || !prof.length) return c.toDataURL('image/png');
+      g.textBaseline = 'alphabetic';
       const zMax = prof[prof.length - 1].z || 1, dMax = Math.max(...prof.map(p => p.disp), 1e-9);
-      const towerW = 188, cx = towerW * 0.34, amp = towerW * 0.36, baseY = H - 22, topY = 26;
+      const plotW = 196, cx = 60, amp = 58, baseY = H - 30, topY = 34;       // exagera la deformada (moderado)
       const Y = (z) => baseY - (z / zMax) * (baseY - topY), Xc = (d) => cx + (d / dMax) * amp;
-      const hw0 = type === 'hv' ? 22 : 13, hw1 = type === 'hv' ? 6 : 4.5;
+      const hw0 = type === 'hv' ? 20 : 11, hw1 = type === 'hv' ? 5 : 4;       // semiancho base/punta
       const hwAt = (z) => hw0 + (hw1 - hw0) * (z / zMax);
-      g.strokeStyle = '#cbd2da'; g.setLineDash([4, 4]); g.beginPath(); g.moveTo(cx, baseY); g.lineTo(cx, topY); g.stroke(); g.setLineDash([]);
-      g.lineWidth = 0.6; g.strokeStyle = 'rgba(0,0,0,.12)';
-      for (let i = 1; i < prof.length; i++) {
-        const a = prof[i - 1], b = prof[i], xa = Xc(a.disp), ya = Y(a.z), xb = Xc(b.disp), yb = Y(b.z), wa = hwAt(a.z), wb = hwAt(b.z);
-        g.fillStyle = heat(b.disp / dMax);
-        g.beginPath(); g.moveTo(xa - wa, ya); g.lineTo(xa + wa, ya); g.lineTo(xb + wb, yb); g.lineTo(xb - wb, yb); g.closePath(); g.fill(); g.stroke();
-      }
+
+      // rejilla horizontal tenue por altura
+      g.strokeStyle = '#eef1f5'; g.lineWidth = 1;
+      for (let k = 0; k <= 4; k++) { const yy = baseY - k / 4 * (baseY - topY); g.beginPath(); g.moveTo(20, yy); g.lineTo(cx + amp + hw1 + 8, yy); g.stroke(); }
+      // ejes de altura (m) a la izquierda
+      g.fillStyle = '#94a0ad'; g.font = '9px Inter, sans-serif'; g.textAlign = 'right';
+      for (let k = 0; k <= 4; k++) { const z = zMax * k / 4; g.fillText(z.toFixed(0), 17, Y(z) + 3); }
+      g.save(); g.translate(9, (topY + baseY) / 2); g.rotate(-Math.PI / 2); g.textAlign = 'center'; g.fillStyle = '#aab3bd'; g.fillText('altura (m)', 0, 0); g.restore();
+
+      // silueta SIN deformar (referencia): tronco gris claro centrado en cx
+      g.fillStyle = 'rgba(150,160,172,.16)';
+      g.beginPath(); g.moveTo(cx - hw0, baseY); g.lineTo(cx - hw1, topY); g.lineTo(cx + hw1, topY); g.lineTo(cx + hw0, baseY); g.closePath(); g.fill();
+      g.strokeStyle = '#cdd4dc'; g.setLineDash([3, 4]); g.lineWidth = 1; g.beginPath(); g.moveTo(cx, baseY); g.lineTo(cx, topY); g.stroke(); g.setLineDash([]);
+
+      // silueta DEFORMADA: relleno con degradado vertical mapeado por desplazamiento
+      const grad = g.createLinearGradient(0, baseY, 0, topY);
+      for (let i = 0; i < prof.length; i++) grad.addColorStop(i / (prof.length - 1), heat(prof[i].disp / dMax));
+      const left = prof.map(p => [Xc(p.disp) - hwAt(p.z), Y(p.z)]);
+      const right = prof.map(p => [Xc(p.disp) + hwAt(p.z), Y(p.z)]);
+      g.beginPath(); g.moveTo(left[0][0], left[0][1]);
+      for (let i = 1; i < left.length; i++) g.lineTo(left[i][0], left[i][1]);
+      for (let i = right.length - 1; i >= 0; i--) g.lineTo(right[i][0], right[i][1]);
+      g.closePath(); g.fillStyle = grad; g.fill();
+      g.strokeStyle = 'rgba(40,52,66,.55)'; g.lineWidth = 1.1; g.stroke();
+
       const tip = prof[prof.length - 1], xt = Xc(tip.disp), yt = Y(zMax);
-      if (type === 'hv') {
-        g.strokeStyle = 'rgba(40,55,70,.55)'; g.lineWidth = 1;
-        for (let i = 1; i < prof.length; i += 2) {
-          const a = prof[i - 1], b = prof[Math.min(i, prof.length - 1)], xa = Xc(a.disp), ya = Y(a.z), xb = Xc(b.disp), yb = Y(b.z), wa = hwAt(a.z), wb = hwAt(b.z);
-          g.beginPath(); g.moveTo(xa - wa, ya); g.lineTo(xb + wb, yb); g.moveTo(xa + wa, ya); g.lineTo(xb - wb, yb); g.stroke();
-        }
-        g.beginPath(); g.moveTo(xt - 26, yt + 8); g.lineTo(xt + 26, yt + 8); g.stroke();
-      } else {
-        g.fillStyle = '#9bb4c9'; g.fillRect(xt - 6, yt - 4, 16, 8);
-        g.strokeStyle = '#7f93a6'; g.lineWidth = 2.5; g.lineCap = 'round';
-        for (const ang of [-Math.PI / 2, Math.PI / 6, 5 * Math.PI / 6]) { g.beginPath(); g.moveTo(xt + 4, yt); g.lineTo(xt + 4 + 26 * Math.cos(ang), yt + 26 * Math.sin(ang)); g.stroke(); }
-        g.fillStyle = '#5b6b7a'; g.beginPath(); g.arc(xt + 4, yt, 3, 0, 7); g.fill();
+      const slope = Math.atan2((xt - Xc(prof[Math.max(0, prof.length - 4)].disp)), -(yt - Y(prof[Math.max(0, prof.length - 4)].z))) || 0;
+      if (type === 'hv') {                                   // crucetas (torre AT)
+        g.strokeStyle = '#5b6b7a'; g.lineWidth = 2; g.lineCap = 'round';
+        for (const yy of [yt + 8, yt + 22]) { g.beginPath(); g.moveTo(xt - 22, yy); g.lineTo(xt + 22, yy); g.stroke(); }
+      } else {                                               // góndola + rotor (aerogenerador)
+        g.save(); g.translate(xt, yt); g.rotate(slope);
+        g.fillStyle = '#aebfce'; if (g.roundRect) { g.beginPath(); g.roundRect(-7, -5, 18, 9, 2); g.fill(); } else g.fillRect(-7, -5, 18, 9);
+        g.strokeStyle = '#7f93a6'; g.lineWidth = 2.4; g.lineCap = 'round';
+        for (const ang of [-Math.PI / 2, Math.PI / 6, 5 * Math.PI / 6]) { g.beginPath(); g.moveTo(5, 0); g.lineTo(5 + 24 * Math.cos(ang), 24 * Math.sin(ang)); g.stroke(); }
+        g.fillStyle = '#5b6b7a'; g.beginPath(); g.arc(5, 0, 2.6, 0, 7); g.fill();
+        g.restore();
       }
-      g.fillStyle = '#9aa6b3'; g.fillRect(cx - 18, baseY, 36, 4);
-      g.fillStyle = '#555'; g.font = '10px sans-serif'; g.textAlign = 'left'; g.fillText('base', 6, baseY - 2);
-      // barra de color (mm)
-      const bx = towerW + 30, bw = 16, bTop = 34, bBot = H - 34;
+
+      // puntos de medición (sensores)
+      for (const m of marks) {
+        const mx = Xc(m.disp), my = Y(m.z);
+        g.fillStyle = '#16a34a'; g.strokeStyle = '#fff'; g.lineWidth = 1.4;
+        g.beginPath(); g.arc(mx, my, 3.4, 0, 7); g.fill(); g.stroke();
+      }
+      // base empotrada (rayado)
+      g.fillStyle = '#9aa6b3'; g.fillRect(cx - hw0 - 4, baseY, hw0 * 2 + 8, 3);
+      g.strokeStyle = '#b6bfc9'; g.lineWidth = 1;
+      for (let x = cx - hw0 - 4; x <= cx + hw0 + 4; x += 5) { g.beginPath(); g.moveTo(x, baseY + 3); g.lineTo(x - 4, baseY + 8); g.stroke(); }
+
+      // barra de color (desplazamiento, mm)
+      const bx = W - 46, bw = 13, bTop = topY, bBot = baseY;
       for (let py = bTop; py <= bBot; py++) { g.fillStyle = heat((bBot - py) / (bBot - bTop)); g.fillRect(bx, py, bw, 1); }
-      g.strokeStyle = '#bbb'; g.lineWidth = 0.6; g.strokeRect(bx, bTop, bw, bBot - bTop);
-      const mm = dMax * 1000; g.fillStyle = '#333'; g.font = '10px sans-serif';
-      g.fillText(mm.toFixed(0) + ' mm', bx + bw + 5, bTop + 4);
-      g.fillText((mm / 2).toFixed(0), bx + bw + 5, (bTop + bBot) / 2 + 3);
-      g.fillText('0', bx + bw + 5, bBot + 3);
-      g.fillStyle = '#666'; g.fillText('desplaz.', bx - 4, bTop - 8);
+      g.strokeStyle = '#cbd2da'; g.lineWidth = 0.8; g.strokeRect(bx, bTop, bw, bBot - bTop);
+      const mm = dMax * 1000; g.fillStyle = '#5a6470'; g.font = '9px Inter, sans-serif'; g.textAlign = 'left';
+      for (let k = 0; k <= 4; k++) { const yy = bBot - k / 4 * (bBot - bTop); g.fillText((mm * k / 4).toFixed(mm < 5 ? 1 : 0), bx + bw + 4, yy + 3); }
+      g.fillStyle = '#8b95a1'; g.textAlign = 'center'; g.fillText('mm', bx + bw / 2, bTop - 8);
       return c.toDataURL('image/png');
     };
 
-    // — dibujo esquemático de la estructura —
+    // — dibujo esquemático de la estructura (SVG limpio, con sensores resaltados) —
     const schematic = (st) => {
-      if (st.type === 'hv') return `<svg viewBox="0 0 120 200" width="120" height="200"><g fill="none" stroke="#0d9488" stroke-width="1.5"><path d="M40 190 L58 20 L62 20 L80 190"/><path d="M44 150 H76 M48 110 H72 M52 70 H68"/><path d="M40 190 L72 150 M80 190 L48 150 M44 150 L68 110 M76 150 L52 110"/><path d="M30 70 H90 M34 50 H86"/></g><circle cx="60" cy="22" r="3" fill="#16a34a"/><circle cx="58" cy="110" r="3" fill="#16a34a"/><circle cx="32" cy="70" r="3" fill="#16a34a"/><circle cx="60" cy="150" r="3" fill="#16a34a"/></svg>`;
-      return `<svg viewBox="0 0 120 200" width="120" height="200"><line x1="60" y1="195" x2="60" y2="50" stroke="#5aa9e6" stroke-width="6" stroke-linecap="round"/><ellipse cx="60" cy="195" rx="22" ry="4" fill="#d6dde5"/><rect x="52" y="40" width="22" height="10" rx="3" fill="#9bc6ea"/><g stroke="#5aa9e6" stroke-width="4" stroke-linecap="round"><line x1="58" y1="44" x2="58" y2="14"/><line x1="58" y1="44" x2="84" y2="58"/><line x1="58" y1="44" x2="32" y2="58"/></g><circle cx="58" cy="44" r="3.5" fill="#2dd4bf"/><circle cx="63" cy="60" r="3.5" fill="#16a34a"/><circle cx="63" cy="125" r="3.5" fill="#16a34a"/></svg>`;
+      // marcador de sensor: punto verde con halo (capa de vida)
+      const sensor = (x, y) => `<circle cx="${x}" cy="${y}" r="6" fill="#16a34a" opacity=".18"/><circle cx="${x}" cy="${y}" r="3" fill="#16a34a" stroke="#fff" stroke-width="1"/>`;
+      if (st.type === 'hv') {
+        return `<svg viewBox="0 0 140 220" width="140" height="220" font-family="Inter,sans-serif">
+  <defs><linearGradient id="hvg" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#14b8a6"/><stop offset="1" stop-color="#0d9488"/></linearGradient></defs>
+  <ellipse cx="70" cy="206" rx="40" ry="5" fill="#000" opacity=".06"/>
+  <g fill="none" stroke="url(#hvg)" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M44 204 L62 26 M96 204 L78 26"/>
+    <path d="M50 165 H90 M54 124 H86 M58 86 H82 M62 52 H78"/>
+    <path d="M44 204 L86 165 M96 204 L54 165 M50 165 L82 124 M90 165 L58 124 M54 124 L78 86 M86 124 L62 86 M58 86 L74 52 M82 86 L66 52"/>
+  </g>
+  <g fill="none" stroke="#5b6b7a" stroke-width="2.6" stroke-linecap="round"><path d="M26 60 H114 M32 40 H108"/></g>
+  <g stroke="#94a3b2" stroke-width="1.4"><line x1="34" y1="60" x2="34" y2="70"/><line x1="106" y1="60" x2="106" y2="70"/><line x1="44" y1="40" x2="44" y2="50"/><line x1="96" y1="40" x2="96" y2="50"/></g>
+  ${sensor(70, 30)}${sensor(34, 60)}${sensor(70, 124)}${sensor(70, 204)}
+</svg>`;
+      }
+      return `<svg viewBox="0 0 140 220" width="140" height="220" font-family="Inter,sans-serif">
+  <defs>
+    <linearGradient id="twg" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#7fb8e6"/><stop offset=".5" stop-color="#bfe0f7"/><stop offset="1" stop-color="#7fb8e6"/></linearGradient>
+    <linearGradient id="blg" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#f4fbff"/><stop offset="1" stop-color="#d6ebfb"/></linearGradient>
+  </defs>
+  <ellipse cx="66" cy="206" rx="40" ry="5" fill="#000" opacity=".06"/>
+  <ellipse cx="66" cy="202" rx="26" ry="6" fill="#d6dde5"/>
+  <polygon points="60,200 72,200 69,52 63,52" fill="url(#twg)"/>
+  <g transform="translate(66,50)">
+    <g fill="url(#blg)" stroke="#9cc6ea" stroke-width=".8">
+      <path d="M0 0 Q4 -34 1.6 -64 Q-1.4 -36 0 0Z" transform="rotate(0)"/>
+      <path d="M0 0 Q4 -34 1.6 -64 Q-1.4 -36 0 0Z" transform="rotate(120)"/>
+      <path d="M0 0 Q4 -34 1.6 -64 Q-1.4 -36 0 0Z" transform="rotate(240)"/>
+    </g>
+    <rect x="-4" y="-6" width="20" height="11" rx="4" fill="#aecbe6"/>
+    <circle cx="0" cy="0" r="4.5" fill="#7fa6c7"/>
+  </g>
+  ${sensor(69, 60)}${sensor(69, 126)}
+  <rect x="78" y="190" width="9" height="7" rx="2" fill="#0a0a0a"/><circle cx="82.5" cy="193.5" r="2" fill="#47b6ff"/>
+</svg>`;
+    };
+
+    // — velocímetro del estado estructural (arco verde→rojo + aguja) —
+    // cls 0..4 (Sin daño … Muy alto). La aguja apunta de «sano» (izq) a «dañado» (der).
+    const imgGauge = (cls, dmg) => {
+      const cx = 130, cy = 132, R = 96, sw = 22;
+      const seg = ['#22c55e', '#84cc16', '#f59e0b', '#f97316', '#ef4444'];   // 5 zonas, verde→rojo
+      const pol = (deg, r) => [cx + r * Math.cos(deg * Math.PI / 180), cy - r * Math.sin(deg * Math.PI / 180)];
+      const ang = (f) => 180 - 180 * f;                                       // f∈[0,1] → 180°(izq)…0°(der)
+      let arcs = '';
+      for (let i = 0; i < 5; i++) {
+        const [x1, y1] = pol(ang(i / 5), R), [x2, y2] = pol(ang((i + 1) / 5), R);
+        arcs += `<path d="M${x1.toFixed(1)} ${y1.toFixed(1)} A${R} ${R} 0 0 1 ${x2.toFixed(1)} ${y2.toFixed(1)}" fill="none" stroke="${seg[i]}" stroke-width="${sw}"/>`;
+      }
+      let ticks = '';
+      for (let i = 0; i <= 5; i++) { const [x1, y1] = pol(ang(i / 5), R - sw / 2 - 2), [x2, y2] = pol(ang(i / 5), R + sw / 2 + 2); ticks += `<line x1="${x1.toFixed(1)}" y1="${y1.toFixed(1)}" x2="${x2.toFixed(1)}" y2="${y2.toFixed(1)}" stroke="#fff" stroke-width="2"/>`; }
+      const v = Math.max(0, Math.min(1, (cls + 0.5) / 5));                    // aguja al centro de la zona
+      const [nx, ny] = pol(ang(v), R - 6), [bx1, by1] = pol(ang(v) + 90, 7), [bx2, by2] = pol(ang(v) - 90, 7);
+      const col = seg[Math.max(0, Math.min(4, cls))];
+      return `<svg viewBox="0 0 260 188" width="260" height="188" font-family="Inter,sans-serif">
+  ${arcs}${ticks}
+  <polygon points="${bx1.toFixed(1)},${by1.toFixed(1)} ${nx.toFixed(1)},${ny.toFixed(1)} ${bx2.toFixed(1)},${by2.toFixed(1)}" fill="#243040"/>
+  <circle cx="${cx}" cy="${cy}" r="9" fill="#243040"/><circle cx="${cx}" cy="${cy}" r="4" fill="#fff"/>
+  <text x="${cx - R}" y="${cy + 18}" font-size="11" fill="#16a34a" text-anchor="middle">sano</text>
+  <text x="${cx + R}" y="${cy + 18}" font-size="11" fill="#dc2626" text-anchor="middle">crítico</text>
+  <text x="${cx}" y="${cy + 30}" font-size="20" font-weight="700" fill="${col}" text-anchor="middle">${CLS[cls]}</text>
+  <text x="${cx}" y="${cy + 48}" font-size="11" fill="#6b7785" text-anchor="middle">Índice de daño ${Math.round((dmg || 0) * 100)} %</text>
+</svg>`;
     };
 
     // — tabla resumen de la flota —
@@ -793,12 +909,18 @@ function buildDashboard(panel, fleet, actions) {
         ctrl.push({ z: se.mesh?.position?.y ?? 0, disp: (tel.rms || 0) * 9.81 / w2 });
       }
       ctrl.sort((a, b) => a.z - b.z);
+      const sensMarks = ctrl.filter(p => p.z > 0).map(p => ({ z: p.z, disp: p.disp }));   // sensores (antes de extrapolar)
       const measProf = [];
       if (ctrl.length >= 2) {
         const top = ctrl[ctrl.length - 1];
         if (top.z < o.height - 1) ctrl.push({ z: o.height, disp: top.disp * (o.height / Math.max(top.z, 1)) });  // extrapola a la punta
-        const zMax = ctrl[ctrl.length - 1].z, N = 40;
-        for (let i = 0; i <= N; i++) { const z = zMax * i / N; let k = 0; while (k < ctrl.length - 1 && ctrl[k + 1].z < z) k++; const a = ctrl[k], b = ctrl[Math.min(k + 1, ctrl.length - 1)], t = b.z > a.z ? (z - a.z) / (b.z - a.z) : 0; measProf.push({ z, disp: a.disp + (b.disp - a.disp) * t }); }
+        const zMax = ctrl[ctrl.length - 1].z, N = 48;
+        // Deformada CÚBICA de voladizo (empotrada en la base: w(0)=0, w'(0)=0):
+        //   w(ζ) = c₂·ζ² + c₃·ζ³ ,  ζ = z/zMax — ajustada por mínimos cuadrados a lo MEDIDO.
+        let s4 = 0, s5 = 0, s6 = 0, b2 = 0, b3 = 0;
+        for (const p of ctrl) { if (p.z <= 0) continue; const z = p.z / zMax, z2 = z * z, z3 = z2 * z; s4 += z2 * z2; s5 += z2 * z3; s6 += z3 * z3; b2 += z2 * p.disp; b3 += z3 * p.disp; }
+        const det = s4 * s6 - s5 * s5 || 1, c2 = (b2 * s6 - b3 * s5) / det, c3 = (s4 * b3 - s5 * b2) / det;
+        for (let i = 0; i <= N; i++) { const z = zMax * i / N, zr = z / zMax; measProf.push({ z, disp: Math.max(0, c2 * zr * zr + c3 * zr * zr * zr) }); }
       }
       let estado = '';
       if (measProf.length) {
@@ -806,7 +928,7 @@ function buildDashboard(panel, fleet, actions) {
         estado = `
           <h3>Estado estructural — deformada (desplazamientos medidos por los sensores)</h3>
           <div class="cols">
-            <div class="draw"><img src="${imgDeformed(measProf, o.type)}" style="width:210px;border:1px solid #e2e2e2;border-radius:6px"></div>
+            <div class="draw"><img src="${imgDeformed(measProf, o.type, sensMarks)}" style="width:230px;border:1px solid #e8ebef;border-radius:8px"></div>
             <table class="ficha">
               <tr><th>Fecha y hora</th><td>${fmtT(Date.now())}</td></tr>
               <tr><th>Desplazamiento máx (punta)</th><td>${(maxD * 1000).toFixed(1)} mm</td></tr>
@@ -819,7 +941,7 @@ function buildDashboard(panel, fleet, actions) {
       }
       detalle = `
         <h2>2 · Estructura ${esc(o.label)}</h2>
-        <div class="cls-big">Estado: <b style="color:${cls >= 3 ? '#c0271f' : '#1a7f37'}">${CLS[cls]}</b></div>
+        <div style="text-align:center;margin:6px 0 14px">${imgGauge(cls, d.dmg)}</div>
         <div class="cols">
           <div class="draw">${schematic(o)}</div>
           <table class="ficha">

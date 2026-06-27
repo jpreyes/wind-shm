@@ -7,8 +7,8 @@
 // ─────────────────────────────────────────────────────────────────────────────
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
-import { createTurbine, TOWER_H } from './turbine_mesh.js?v=206';
-import { createSubstationTower, groundCable, overheadLine } from './structures.js?v=206';
+import { createTurbine, TOWER_H } from './turbine_mesh.js?v=208';
+import { createSubstationTower, groundCable, overheadLine } from './structures.js?v=208';
 
 const SPACING = 235;
 
@@ -54,6 +54,7 @@ export class FleetView {
     this.cables = [];                 // mallas de cable (recomponibles)
     this.editMode = false;           // modo edición: arrastrar estructuras
     this._drag = null;
+    this.zoneFilterIds = null;       // Set<id> de la zona enfocada (null = todo el parque)
     this.onChange = null;            // callback(count) para la UI
     this.onLayoutChange = null;      // callback() al mover/agregar (persistir orden)
 
@@ -254,6 +255,95 @@ export class FleetView {
     return hv;
   }
 
+  // Libera SÓLO los materiales clonados por estructura (las geometrías se comparten).
+  _disposeStructure(st) {
+    this.scene.remove(st.group);
+    const mats = [...(st.dimMats || st.bodyMats || []), ...st.sensors.map(s => s.mat)];
+    if (st.gateway?.mat) mats.push(st.gateway.mat);
+    if (st._beacon?.mat) mats.push(st._beacon.mat);
+    for (const m of mats) m?.dispose?.();
+    if (st._label) { st._label.material.map?.dispose?.(); st._label.material.dispose?.(); }
+  }
+
+  /** Elimina una estructura (torre eólica o torre AT) de la flota. */
+  removeStructure(id) {
+    const st = this.getStructure(id);
+    if (!st) return false;
+    if (this.selected === st) this.clearSelection();
+    this._disposeStructure(st);
+    // Saca de los índices.
+    this.structures = this.structures.filter(s => s !== st);
+    this.turbines = this.turbines.filter(t => t !== st);
+    if (this.substation) {
+      this.substation.towers = this.substation.towers.filter(t => t !== st);
+      this.substation.sensors = this.substation.sensors.filter(se => !st.sensors.includes(se));
+    }
+    this.rebuildCables();
+    this.onChange?.(this.turbines.length);
+    this.onLayoutChange?.();
+    return true;
+  }
+
+  // ── Parques (multiparque): vaciar y reconstruir la flota desde un layout ──────
+  // Quita TODAS las estructuras y cables (para cambiar de parque sin fugas de GPU).
+  clearAll() {
+    this.clearSelection();
+    this.zoneFilterIds = null;
+    for (const st of this.structures) this._disposeStructure(st);
+    for (const c of this.cables) { this.scene.remove(c); c.geometry?.dispose?.(); }
+    this.structures = []; this.turbines = []; this.cables = []; this.substation = null;
+  }
+
+  // Carga un parque: { turbines:[{x,z,yaw,zone}], hv:[{x,z,yaw,zone}] }. Cada
+  // estructura conserva su `zone` (etiqueta de zona) para el árbol lateral.
+  loadPark(p) {
+    const oc = this.onChange, ol = this.onLayoutChange;   // silencia persistencia durante la reconstrucción
+    this.onChange = null; this.onLayoutChange = null;
+    this.clearAll();
+    for (const t of (p?.turbines || [])) {
+      const o = this.addTurbine({ pos: { x: t.x, z: t.z } });
+      if (t.yaw != null) this.setYaw(o.id, t.yaw);
+      o.zone = t.zone || null;
+    }
+    if ((p?.hv || []).length) {
+      this.substation = { towers: [], sensors: [] };
+      for (const h of p.hv) {
+        const hv = createSubstationTower({});
+        hv.group.position.set(h.x, 0, h.z); hv.dim = 0;
+        if (h.yaw != null) this.setYaw(hv.id, h.yaw);
+        hv.zone = h.zone || null;
+        this.scene.add(hv.group);
+        this.substation.towers.push(hv); this.substation.sensors.push(...hv.sensors);
+        this.structures.push(hv); this._addLabel(hv);
+      }
+      this.rebuildCables();
+    }
+    this.onChange = oc; this.onLayoutChange = ol;
+    this.onChange?.(this.turbines.length);
+    this.frameGeneral();
+  }
+
+  // Enfoca una zona: atenúa lo demás y encuadra sus estructuras (ids = Set | null).
+  focusZone(ids) {
+    this.zoneFilterIds = (ids && ids.size) ? ids : null;
+    if (this.selected) this.clearSelection();
+    if (this.zoneFilterIds) this.frameStructs(this.structures.filter(s => this.zoneFilterIds.has(s.id)));
+    else this.frameGeneral();
+  }
+
+  // Encuadra la cámara sobre un subconjunto de estructuras.
+  frameStructs(list) {
+    if (!list || !list.length) { this.frameGeneral(); return; }
+    const box = new THREE.Box3();
+    for (const s of list) box.expandByPoint(s.group.position);
+    const c = box.getCenter(new THREE.Vector3()), sz = box.getSize(new THREE.Vector3());
+    const radius = Math.max(sz.x, sz.z) / 2 + SPACING;
+    const tgt = new THREE.Vector3(c.x, TOWER_H * 0.45, c.z);
+    const dist = Math.max(radius * 2.0, 280);
+    const pos = new THREE.Vector3(c.x + dist * 0.45, TOWER_H * 1.15 + radius * 0.4, c.z + dist);
+    this.flyTo(pos, tgt, 1100);
+  }
+
   // (Re)construye cables: conductores aéreos entre torres HV + cadena colectora
   // de turbinas con un ÚNICO alimentador a la subestación.
   rebuildCables() {
@@ -270,7 +360,7 @@ export class FleetView {
     }
     // cadena colectora + alimentador único
     const pts = this.turbines.map(t => t.group.position.clone());
-    if (pts.length) {
+    if (pts.length && hubs.length) {
       const dHub = (i) => Math.min(...hubs.map(h => pts[i].distanceTo(h)));
       const rest = pts.map((_, i) => i);
       let start = rest.reduce((b, i) => dHub(i) < dHub(b) ? i : b, rest[0]);
@@ -331,7 +421,14 @@ export class FleetView {
   _pickStructure(e) {
     this.raycaster.setFromCamera(this._ndc(e), this.camera);
     const hits = this.raycaster.intersectObjects(this.structures.map(s => s.group), true);
-    return hits.length ? this.getStructure(hits[0].object.userData.turbineId) : null;
+    // El mesh impactado puede ser una barra de celosía o una pieza interna sin
+    // `turbineId`; sube por el árbol hasta el grupo de la estructura (así las torres
+    // AT — y cualquier sub-malla — quedan seleccionables, movibles y borrables).
+    for (let o = hits[0]?.object; o; o = o.parent) {
+      const st = o.userData?.turbineId && this.getStructure(o.userData.turbineId);
+      if (st) return st;
+    }
+    return null;
   }
   _groundPoint(e) {
     this.raycaster.setFromCamera(this._ndc(e), this.camera);
@@ -364,7 +461,10 @@ export class FleetView {
     // Resalte: la seleccionada queda nítida, TODAS las demás se atenúan (cuerpo, no sensores)
     const alarmPulse = 0.5 + 0.5 * Math.sin(tt * 8);
     for (const st of this.structures) {
-      const target = (this.selected && st !== this.selected) ? 1 : 0;
+      // atenuación: si hay selección manda la selección; si no, manda la zona enfocada
+      let target = 0;
+      if (this.selected) target = st === this.selected ? 0 : 1;
+      else if (this.zoneFilterIds) target = this.zoneFilterIds.has(st.id) ? 0 : 1;
       st.dim = (st.dim || 0) + (target - (st.dim || 0)) * Math.min(dt * 4, 1);
       const op = 1 - 0.82 * st.dim;
       const rp = st.alarm ? 0.6 * alarmPulse : 0;   // titileo rojo en alarma

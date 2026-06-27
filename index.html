@@ -29,9 +29,9 @@
       window.dispatchEvent(new Event('pwa-installed'));
     });
   </script>
-  <link rel="stylesheet" href="style.css?v=206">
-  <link rel="stylesheet" href="ui-v2.css?v=206">
-  <link rel="stylesheet" href="shm.css?v=206">
+  <link rel="stylesheet" href="style.css?v=208">
+  <link rel="stylesheet" href="ui-v2.css?v=208">
+  <link rel="stylesheet" href="shm.css?v=208">
   <script type="importmap">
   {
     "imports": {
@@ -204,31 +204,19 @@
     </nav>
 
     <div class="menubar-right">
-      <!-- G7: modelos del proyecto (se integran en una sola memoria, sin vínculo geométrico) -->
-      <div id="project-bar" style="display:flex;align-items:center;gap:4px;margin-right:10px">
-        <label class="unit-label" for="project-select" title="Modelos del proyecto (se integran en una sola memoria de cálculo)">Modelo</label>
-        <select id="project-select" title="Modelo activo del proyecto"></select>
-        <button id="btn-project" type="button" title="Gestionar modelos del proyecto (nuevo, duplicar, renombrar, eliminar)"
-          style="background:var(--bg4);border:1px solid var(--border2);color:var(--text);border-radius:6px;cursor:pointer;font-size:13px;line-height:1;padding:4px 7px">🗂</button>
-      </div>
       <span id="pro-badge" title="Modo profesional activo" style="display:none;background:#0d9488;color:#fff;border-radius:6px;font-size:10px;font-weight:700;padding:3px 7px;margin-right:8px;letter-spacing:.5px">PRO</span>
       <button id="btn-config" type="button" title="Configuración (memoria, visualización, modificadores de sección)"
         style="background:var(--bg4);border:1px solid var(--border2);color:var(--text);border-radius:6px;cursor:pointer;font-size:14px;line-height:1;padding:4px 8px;margin-right:6px">⚙</button>
       <button id="btn-theme" type="button" title="Cambiar tema claro/oscuro"
         style="background:var(--bg4);border:1px solid var(--border2);color:var(--text);border-radius:6px;cursor:pointer;font-size:14px;line-height:1;padding:4px 8px;margin-right:10px">🌙</button>
-      <label class="unit-label" for="unit-select">Unidades</label>
-      <!-- Sistema fijo kN · m · ton · rad. Las otras opciones están deshabilitadas
-           porque la app NO convierte valores (ver Ayuda → Convenciones). -->
-      <select id="unit-select" title="Sistema de unidades fijo: kN, m, ton, rad. Todo el cálculo se hace en estas unidades.">
-        <option value="kN-m">kN – m</option>
-        <option value="ton-m" disabled>ton – m (no disponible)</option>
-        <option value="kip-ft" disabled>kip – ft (no disponible)</option>
-      </select>
     </div>
   </header>
 
   <!-- �?�? MAIN CONTENT �?�? -->
   <div id="main">
+
+    <!-- ReWind: árbol lateral Parque ▸ Zona ▸ Torre (1.ª columna; sólo en body.shm) -->
+    <aside id="park-tree" aria-label="Parques y zonas"></aside>
 
     <!-- LEFT TOOLBAR -->
     <aside id="toolbar">
@@ -975,9 +963,9 @@ setTimeout(function () { window.__rewindCloseLanding(); }, 25000);   // fallback
 
 <!-- numeric.js para solver (Fase 2+) -->
 <script src="lib/numeric.js"></script>
-<script type="module" src="js/app.js?v=206"></script>
+<script type="module" src="js/app.js?v=208"></script>
 <!-- wind-shm: modo SHM (flota de torres) sobre el shell de PÓRTICO -->
-<script type="module" src="js/shm/shm_mode.js?v=206"></script>
+<script type="module" src="js/shm/shm_mode.js?v=208"></script>
 
 <!-- PWA: registrar el service worker (offline). Solo en contexto seguro
      (https o localhost); el navegador deja navigator.serviceWorker undefined

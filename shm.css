@@ -21,8 +21,49 @@ body.shm #viewport-wrap { min-width: 0; }
 body.shm #viewport-container { min-width: 0; }
 body.shm #viewport-container > canvas { max-width: 100%; }
 body.shm #menubar { min-width: 0; overflow-x: auto; }
-@media (max-width: 1024px) { body.shm #main { grid-template-columns: var(--toolbar-w) 1fr 5px min(var(--panel-w), 50vw); } }
-@media (max-width: 680px)  { body.shm #main { grid-template-columns: var(--toolbar-w) 1fr 5px min(var(--panel-w), 62vw); } }
+@media (max-width: 1024px) { body.shm #main { grid-template-columns: var(--tree-w) var(--toolbar-w) 1fr 5px min(var(--panel-w), 50vw); } }
+@media (max-width: 680px)  { body.shm #main { grid-template-columns: var(--tree-w) var(--toolbar-w) 1fr 5px min(var(--panel-w), 62vw); } }
+
+/* ── Árbol lateral Parque ▸ Zona ▸ Torre (ReWind) ──────────────────────────── */
+/* En PÓRTICO clásico el árbol no existe en el grid (display:none → el grid de 4
+   columnas calza con sus 4 hijos). En ReWind es la 1.ª columna: colapsada mide 0
+   (sin sacarla del grid, para no correr el resto) y abierta mide --tree-w. */
+#park-tree { display: none; }
+body.shm { --tree-w: 0px; }
+body.shm.tree-open { --tree-w: 246px; }
+body.shm #main { grid-template-columns: var(--tree-w) var(--toolbar-w) 1fr 5px var(--panel-w); }
+body.shm #park-tree {
+  display: flex; flex-direction: column; min-width: 0; overflow: hidden auto;
+  background: var(--bg2); color: var(--text); border-right: 0 solid var(--border2);
+  font-size: 12.5px;
+}
+body.shm.tree-open #park-tree { border-right-width: 1px; }
+
+#park-tree .pt-head { display: flex; align-items: center; justify-content: space-between;
+  padding: 9px 10px; font-weight: 700; letter-spacing: .3px; color: var(--text);
+  border-bottom: 1px solid var(--border2); position: sticky; top: 0; background: var(--bg2); z-index: 1; }
+#park-tree .pt-park, #park-tree .pt-zone, #park-tree .pt-tower {
+  display: flex; align-items: center; gap: 5px; padding: 4px 8px; white-space: nowrap; }
+#park-tree .pt-park { font-weight: 600; border-bottom: 1px solid color-mix(in srgb, var(--border2) 55%, transparent); }
+#park-tree .pt-park.active { background: var(--accent-soft, rgba(56,139,253,.14)); }
+#park-tree .pt-tw { width: 14px; cursor: pointer; color: var(--text-muted); text-align: center; user-select: none; }
+#park-tree .pt-name { flex: 1; overflow: hidden; text-overflow: ellipsis; cursor: pointer; }
+#park-tree .pt-park > .pt-name:hover, #park-tree .pt-zone > .pt-name:hover, #park-tree .pt-tower > .pt-name:hover { color: var(--accent); }
+#park-tree .pt-zone { padding-left: 22px; color: var(--text); }
+#park-tree .pt-zone.on { background: color-mix(in srgb, var(--teal,#2dd4bf) 16%, transparent); border-radius: 5px; }
+#park-tree .pt-zone .pt-n { color: var(--text-muted); font-size: 11px; font-weight: 400; }
+#park-tree .pt-tower { padding-left: 34px; color: var(--text-muted); }
+#park-tree .pt-dot { width: 7px; height: 7px; border-radius: 50%; flex: 0 0 auto; background: #5aa9e6; }
+#park-tree .pt-dot.hv { background: #2dd4bf; }
+#park-tree .pt-zsel { font-size: 10px; max-width: 78px; background: var(--bg4); color: var(--text);
+  border: 1px solid var(--border2); border-radius: 4px; padding: 1px 2px; }
+#park-tree .pt-acts { display: flex; gap: 2px; opacity: 0; transition: opacity .12s; }
+#park-tree .pt-park:hover .pt-acts, #park-tree .pt-zone:hover .pt-acts { opacity: 1; }
+#park-tree .pt-icon { background: none; border: 0; color: var(--text-muted); cursor: pointer;
+  font-size: 12px; line-height: 1; padding: 2px 4px; border-radius: 4px; }
+#park-tree .pt-icon:hover { color: var(--text); background: var(--bg4); }
+#park-tree .pt-zone-add { padding: 4px 8px 10px 22px; }
+#park-tree .pt-zone-add .pt-icon { color: var(--accent); font-size: 11px; }
 
 /* ── Recorte: herramientas de modelado del toolbar izquierdo ───────────────── */
 body.shm #toolbar [data-mode="boxselect"],
@@ -65,9 +106,15 @@ body.shm #viewport-container > canvas:not(.shm-canvas) { display: none !importan
 body.shm #viewport-container > canvas.shm-canvas { display: block; }
 
 /* ── Toolbar: botones SHM (estilo .tool de PÓRTICO) ────────────────────────── */
-#shm-add-tool, #shm-pause-tool, #shm-hv-tool, #shm-edit-tool { display: none; }
-body.shm #shm-add-tool, body.shm #shm-pause-tool, body.shm #shm-hv-tool, body.shm #shm-edit-tool { display: flex; }
+#shm-add-tool, #shm-pause-tool, #shm-hv-tool, #shm-edit-tool, #shm-del-tool { display: none; }
+/* Siempre visibles en modo SHM: animación + interruptor de edición */
+body.shm #shm-pause-tool, body.shm #shm-edit-tool { display: flex; }
 body.shm #shm-edit-tool.active { color: var(--accent); background: var(--accent-soft); }
+/* Herramientas de edición (crear/borrar): sólo con el modo edición activo */
+body.shm.shm-editing #shm-add-tool,
+body.shm.shm-editing #shm-hv-tool,
+body.shm.shm-editing #shm-del-tool { display: flex; }
+body.shm.shm-editing #shm-del-tool { color: var(--danger); }
 
 /* ── Panel derecho: ocultar el panel FE, mostrar el dashboard SHM ──────────── */
 body.shm #panel-vtabs,

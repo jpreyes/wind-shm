@@ -7,7 +7,7 @@
 // ambos sólo hablan MODELO NEUTRO.  Cubre el subconjunto de PÓRTICO: barras (B31),
 // secciones generales (A, I11=Iz, I22=Iy, J + E, G), apoyos y cargas nodales por step.
 // ──────────────────────────────────────────────────────────────────────────────
-import { registerFormat } from '../registry.js?v=206';
+import { registerFormat } from '../registry.js?v=208';
 
 const fmt = (v) => { v = +v || 0; if (v === 0) return '0.'; const a = Math.abs(v); return (a < 1e-3 || a >= 1e7) ? v.toExponential(6) : (+v.toPrecision(8)).toString(); };
 const DOF = ['ux', 'uy', 'uz', 'rx', 'ry', 'rz'];   // Abaqus dof 1..6 == orden de PÓRTICO
