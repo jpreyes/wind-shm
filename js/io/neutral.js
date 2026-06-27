@@ -10,7 +10,7 @@
 // El modelo neutro usa ids 1..N CONSECUTIVOS (los formatos externos suelen exigirlo);
 // la conversión guarda el remapeo para no perder la conectividad.  AUTÓNOMO (Node+browser).
 // ──────────────────────────────────────────────────────────────────────────────
-import { Model } from '../model/model.js?v=209';
+import { Model } from '../model/model.js?v=210';
 
 /** `Model` de PÓRTICO → modelo neutro (ids renumerados 1..N). */
 export function modelToNeutral(model) {

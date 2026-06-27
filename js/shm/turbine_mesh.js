@@ -9,7 +9,7 @@
 // migraremos a InstancedMesh + atenuación por shader (ver docs/wind-shm-issues.md).
 // ─────────────────────────────────────────────────────────────────────────────
 import * as THREE from 'three';
-import { circularFoundation } from './structures.js?v=209';
+import { circularFoundation } from './structures.js?v=210';
 
 export const TOWER_H = 90;          // altura de buje (m), coherente con el macromodelo
 
@@ -46,6 +46,11 @@ const baseMats = {
   hub:     new THREE.MeshStandardMaterial({ color: 0xbfddf3, metalness: 0, roughness: 0.55 }),
   blade:   new THREE.MeshStandardMaterial({ color: 0xeaf6ff, metalness: 0, roughness: 0.6 }),
 };
+
+// Hitbox INVISIBLE (no escribe color ni profundidad, pero sí intercepta el raycast)
+// → blanco de selección mucho más grande que el fuste, fácil de pinchar desde lejos.
+const hitboxGeo = new THREE.CylinderGeometry(15, 15, TOWER_H + 24, 10);
+const hitboxMat = new THREE.MeshBasicMaterial({ colorWrite: false, depthWrite: false });
 
 let _uid = 0;
 
@@ -120,6 +125,11 @@ export function createTurbine(o = {}) {
   gw.position.set(4.5, 1.0, 4.5); gw.castShadow = true; gw.userData = { turbineId: id, gateway: true };
   group.add(gw);
   const gateway = { mesh: gw, mat: gMat, phase: Math.random() * 6.28 };
+
+  // Hitbox invisible (radio generoso) para seleccionar la torre fácilmente desde lejos.
+  const hit = new THREE.Mesh(hitboxGeo, hitboxMat);
+  hit.position.y = (TOWER_H + 24) / 2; hit.userData = { turbineId: id, hitbox: true };
+  group.add(hit);
 
   return { id, type: 'turbine', label: `Torre ${id}`, height: TOWER_H, power: '~3 MW',
            group, top, rotor, sensors, gateway, bodyMats, dimMats: bodyMats, spin, yaw };

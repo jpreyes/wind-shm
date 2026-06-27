@@ -7,10 +7,14 @@
 // Los miembros se dibujan con un cilindro unitario reescalado (1 geometría).
 // ─────────────────────────────────────────────────────────────────────────────
 import * as THREE from 'three';
-import { generarTorre } from '../../asistente/generador.js?v=209';
+import { generarTorre } from '../../asistente/generador.js?v=210';
 
 const UNIT_CYL = new THREE.CylinderGeometry(1, 1, 1, 6);
 const _up = new THREE.Vector3(0, 1, 0);
+
+// Hitbox INVISIBLE (no escribe color ni profundidad, pero sí intercepta el raycast)
+// → blanco de selección mucho más ancho que la celosía, fácil de pinchar desde lejos.
+const hitboxMat = new THREE.MeshBasicMaterial({ colorWrite: false, depthWrite: false });
 
 // Un miembro estructural entre dos puntos (cilindro reescalado).
 export function member(a, b, r, mat) {
@@ -83,6 +87,12 @@ export function createSubstationTower(o = {}) {
     group.add(s.mesh);
     sensors.push({ id: `s${sensors.length + 1}`, ...s, phase: Math.random() * 6.28, status: 'ok' });
   }
+
+  // Hitbox invisible (radio generoso) para seleccionar la torre fácilmente desde lejos.
+  const hbR = Math.max(base, 6) * 1.6;
+  const hit = new THREE.Mesh(new THREE.CylinderGeometry(hbR, hbR, H + 10, 10), hitboxMat);
+  hit.position.y = (H + 10) / 2; hit.userData = { turbineId: id, hitbox: true };
+  group.add(hit);
 
   return { id, type: 'hv', label: `Torre AT ${id}`, height: H, group, sensors, dimMats: [mat], topY: H };
 }

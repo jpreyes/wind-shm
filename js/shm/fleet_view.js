@@ -7,8 +7,8 @@
 // ─────────────────────────────────────────────────────────────────────────────
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
-import { createTurbine, TOWER_H } from './turbine_mesh.js?v=209';
-import { createSubstationTower, groundCable, overheadLine } from './structures.js?v=209';
+import { createTurbine, TOWER_H } from './turbine_mesh.js?v=210';
+import { createSubstationTower, groundCable, overheadLine } from './structures.js?v=210';
 
 const SPACING = 235;
 
@@ -153,6 +153,17 @@ export class FleetView {
     this.onSelect?.(t || null);
   }
   clearSelection() { this.selectTurbine(null); this.frameGeneral(); }
+
+  // Anillo de selección en el suelo (se crea una vez y se reposiciona bajo la seleccionada).
+  _ensureSelRing() {
+    if (this._selRing) return this._selRing;
+    const geo = new THREE.RingGeometry(11, 14.5, 56); geo.rotateX(-Math.PI / 2);
+    const mat = new THREE.MeshBasicMaterial({ color: 0x35e0ff, transparent: true, opacity: 0.9, side: THREE.DoubleSide, depthWrite: false });
+    const ring = new THREE.Mesh(geo, mat);
+    ring.renderOrder = 15; ring.visible = false; ring.frustumCulled = false;
+    this.scene.add(ring);
+    return (this._selRing = ring);
+  }
 
   // Catálogo de estructuras (para la lista de la barra lateral).
   getStructures() { return this.structures.map(s => ({ id: s.id, type: s.type, label: s.label, height: s.height })); }
@@ -468,9 +479,10 @@ export class FleetView {
       st.dim = (st.dim || 0) + (target - (st.dim || 0)) * Math.min(dt * 4, 1);
       const op = 1 - 0.82 * st.dim;
       const rp = st.alarm ? 0.6 * alarmPulse : 0;   // titileo rojo en alarma
+      const selGlow = (st === this.selected && !st.alarm) ? (0.55 + 0.25 * Math.sin(tt * 4)) : 0;  // realce azul de la seleccionada
       for (const mat of (st.dimMats || st.bodyMats || [])) {
         mat.transparent = st.dim > 0.01; mat.opacity = op;
-        if (mat.emissive) mat.emissive.setRGB(rp, 0, 0);
+        if (mat.emissive) mat.emissive.setRGB(rp, selGlow * 0.45, selGlow);
       }
       // Oscilación leve de la punta por el viento (sway sobre la base, ejes X/Z)
       if (!this.paused) {
@@ -495,6 +507,16 @@ export class FleetView {
       st._beacon.mat.emissiveIntensity = 0.5 + 2.2 * p;
       st._beacon.mesh.scale.setScalar(0.75 + 0.55 * p);
     }
+
+    // Anillo de selección: lo posiciona y pulsa bajo la estructura seleccionada.
+    const ring = this._ensureSelRing();
+    if (this.selected) {
+      const p = this.selected.group.position, pulse = 0.5 + 0.5 * Math.sin(tt * 4);
+      ring.visible = true;
+      ring.position.set(p.x, 1.2, p.z);
+      ring.scale.setScalar((this.selected.type === 'hv' ? 1.15 : 1.3) * (1 + 0.08 * Math.sin(tt * 4)));
+      ring.material.opacity = 0.6 + 0.35 * pulse;
+    } else ring.visible = false;
 
     // Animación de entrada / vuelo general (con easing)
     if (this._intro) {
