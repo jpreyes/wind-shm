@@ -250,6 +250,24 @@ similaridad. `[#]` referencia el pedido original. Estado: ⬜ pendiente · 🟡 
 - ✅ **Centro de análisis: «Avanzadas» con selección de casos a correr** `[#105]` (v194): fila Estático → botón **«⚙ Elegir casos a correr…»** con TODOS los casos en checkboxes (+ Todos/Ninguno y la categoría de cada uno). `runAnalysis(force, only)` resuelve sólo los marcados; las combinaciones se recalculan de los casos corridos; las corridas parciales no se cachean.
 - ✅ **Tipo/rol de carga por caso (muerta/viva/viento/sismo/nieve…) para combos y diseño automáticos** `[#106]` (v192): campo `lc.loadType` (dead/live/wind/seismic/snow/temperature/other) con selector en los diálogos de caso, badge en la lista, round-trip `.s3d`, y `crearCasosYCombosNorma` identifica D/L por categoría (robusto). Análogo al `DesignType` de SAP2000.
 
+## G24 · ReWind — SHM de torres eólicas (fork wind-shm) 🟡 *(monitoreo de salud estructural de un parque)*
+*El fork `jpreyes/wind-shm` repurposa PÓRTICO como herramienta de **Structural Health Monitoring** de aerogeneradores y torres de alta tensión: la flota viva en el viewport (`js/shm/`), capa de sensores/gateways, dashboard SHM e informe. El motor de PÓRTICO queda como **gemelo digital** (modal/estático para f₁ y deformadas).*
+
+**✅ Hechos (v206–v208)**
+- ✅ **Figuras del informe (estado estructural)** `[R-1]` (v208): la **deformada** del informe pasó de una silueta extruida con quiebres a (a) un **dibujo limpio** con eje de altura, referencia sin deformar, silueta con degradado por desplazamiento, marcas de sensores y barra de color en mm; y (b) una **deformada CÚBICA de voladizo** ajustada por mínimos cuadrados a lo MEDIDO (`w(ζ)=c₂ζ²+c₃ζ³`, empotrada: `w(0)=0,w'(0)=0`) → curva suave, sin parecer «cualquier cosa». Esquemas (turbina/torre AT) redibujados como SVG nítidos.
+- ✅ **Velocímetro de estado en el informe** `[R-2]` (v208): el «Estado» pasa de texto a un **medidor tipo manómetro** (arco verde→rojo + aguja) que apunta de **más sano a más dañado** (clase ML 0–4) con el índice de daño %.
+- ✅ **Quitar el selector de Unidades de la web** `[R-3]` (v208): no tiene sentido en ReWind; se eliminó `#unit-select` del `index.html` y se blindaron sus accesos (`menu.js`/`app.js`) para PÓRTICO clásico.
+- ✅ **Árbol lateral multiparque Parque ▸ Zona ▸ Torre** `[R-4]` (v208): `js/shm/parks.js` (store + UI) — varios parques (cada uno con su flota y layout), zonas dentro de cada parque (enfoque con atenuación + encuadre), asignación de torres a zonas, CRUD, persistencia en `localStorage` (migra el layout antiguo). Reemplaza el selector «Modelo» de arriba (que se quitó).
+- ✅ **Torres AT seleccionables, movibles y borrables** `[R-5]` (v208): el picking sube por el árbol de la escena (las barras de celosía no llevaban `turbineId`) → ahora se seleccionan, arrastran y borran como las turbinas.
+
+**⬜ Pendientes (industrialización de ReWind)**
+- ⬜ **Internacionalización ES/EN (multilingüe)** `[R-6]`: extraer los textos de la UI/informe a un diccionario y un conmutador de idioma (español/inglés). *(Base: el CSV `docs/textos_ui.csv` de `[#95]` puede servir de inventario de strings.)*
+- ⬜ **Adecuar el menú superior a ReWind** `[R-7]`: reescribir/recortar el menú heredado de PÓRTICO (Archivo/Editar/Vista/Análisis/Asistente/Ayuda) a acciones propias de SHM (parque, informe, fuentes de datos, exportar telemetría…). Hoy se ocultan ítems vía `shm.css`; falta un menú nativo de ReWind.
+- ⬜ **Quitar toda referencia a «PÓRTICO»** `[R-8]`: marca, textos, títulos, memoria, comentarios visibles y `console` → todo «ReWind». *(El núcleo de cálculo puede seguir internamente; lo visible no debe nombrar PÓRTICO.)*
+- ✅ **Desactivar (por ahora) la Configuración** `[R-9]` (v209): el botón ⚙ se oculta en ReWind (`body.shm #btn-config{display:none}`) hasta rehacerlo específico para SHM. *(También se movió el botón «Árbol» al tope del toolbar, sobre la flecha de selección.)*
+- ⬜ **Persistencia/`DataSource` industrial + API publicada** `[R-10]`: que la herramienta sirva a la industria conectándose a una **base de datos de torres del parque** o funcionando de forma **autónoma**. Capas: `localStorage` (demo) → IndexedDB/SQLite local (autónomo, garantiza operación sin red) → base de datos del parque. **Publicar una API** (esquema común `DataSource` simulado ↔ en vivo) para que terceros consuman la misma telemetría.
+- ⬜ **Empaquetado Electron + serie temporal InfluxDB + estándares eólicos** `[R-11]`: llevar ReWind a **Electron** (app de escritorio para el centro de control del parque). Decidir el **stack de ingesta de InfluxDB** (cliente desde **Python / C++ / Rust** — definir el lenguaje base del backend) y alinear el modelo de datos con los **estándares internacionales de torres eólicas** (p.ej. IEC 61400, OPC-UA/IEC 61850 para la subestación). *(Decisión de arquitectura pendiente: Electron + servicio de ingesta + InfluxDB + API `[R-10]`.)*
+
 ---
 
 ## Secuencia sugerida — qué sigue, de lo MÁS FÁCIL a lo más difícil

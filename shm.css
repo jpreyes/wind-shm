@@ -65,6 +65,9 @@ body.shm.tree-open #park-tree { border-right-width: 1px; }
 #park-tree .pt-zone-add { padding: 4px 8px 10px 22px; }
 #park-tree .pt-zone-add .pt-icon { color: var(--accent); font-size: 11px; }
 
+/* ── Configuración: oculta en ReWind (se rehará específica para SHM) ────────── */
+body.shm #btn-config { display: none; }
+
 /* ── Recorte: herramientas de modelado del toolbar izquierdo ───────────────── */
 body.shm #toolbar [data-mode="boxselect"],
 body.shm #toolbar [data-mode="addnode"],

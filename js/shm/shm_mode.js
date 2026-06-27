@@ -8,13 +8,13 @@
 //   inspecciones y señal temporal EN VIVO desde un Web Worker (DataSource).
 // Recortes (modelado) los hace shm.css ocultando, no borrando.
 // ─────────────────────────────────────────────────────────────────────────────
-import { FleetView } from './fleet_view.js?v=208';
-import { DataSource } from './data_source.js?v=208';
-import { computeTwin } from './digital_twin.js?v=208';
-import { ParkManager, loadParksStore } from './parks.js?v=208';
+import { FleetView } from './fleet_view.js?v=209';
+import { DataSource } from './data_source.js?v=209';
+import { computeTwin } from './digital_twin.js?v=209';
+import { ParkManager, loadParksStore } from './parks.js?v=209';
 
 const F1_BASE = { turbine: 0.283, hv: 1.6 };
-const REWIND_VER = 'v208';   // versión visible del build (subir junto al cache-bust)
+const REWIND_VER = 'v209';   // versión visible del build (subir junto al cache-bust)
 const LAYOUT_KEY = 'rewind-layout';
 const loadLayout = () => { try { return JSON.parse(localStorage.getItem(LAYOUT_KEY)); } catch { return null; } };
 const FS = 62.5;   // frecuencia de muestreo de la señal (Hz), igual que shm_worker.js
@@ -214,7 +214,10 @@ function buildToolbar(toolbar, fleet, getPM = () => null) {
   const edit = mk('shm-edit-tool', 'Activar/desactivar el modo edición (crear · borrar · mover)',
     `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 20 L4 16 L15 5 L19 9 L8 20 Z"/><line x1="13" y1="7" x2="17" y2="11"/></svg>`,
     'Editar', () => setEditing(!fleet.editMode));
-  toolbar.append(sep, tree, pause, edit, add, hv, del);
+  toolbar.append(sep, pause, edit, add, hv, del);
+  // «Árbol» va ARRIBA DE TODO, sobre la flecha de selección (1.er control de la barra).
+  const topSep = document.createElement('div'); topSep.className = 'tool-sep';
+  toolbar.prepend(tree, topSep);
   if (document.body.classList.contains('tree-open')) tree.classList.add('active');
 
   // Supr/Delete borra la estructura seleccionada (sólo en modo edición).
