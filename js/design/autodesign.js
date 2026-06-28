@@ -14,9 +14,9 @@
 //    peso, preferir secciones repetidas (continuidad).
 // ──────────────────────────────────────────────────────────────────────────────
 
-import { verificarElemento } from './diseno.js?v=210';
-import { profileToSection, catalogNames } from './profiles.js?v=210';
-import { fromShape } from './section_props.js?v=210';
+import { verificarElemento } from './diseno.js?v=211';
+import { profileToSection, catalogNames } from './profiles.js?v=211';
+import { fromShape } from './section_props.js?v=211';
 
 // Peso por metro (kg/m) = A·ρ. ρ puede venir en t/m³ (convención del modelo, p.ej.
 // acero 7.85) o en kg/m³ (7850); se normaliza a kg/m³. Sin ρ → 7850 (acero).

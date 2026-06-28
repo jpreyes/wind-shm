@@ -8,13 +8,13 @@
 //   inspecciones y señal temporal EN VIVO desde un Web Worker (DataSource).
 // Recortes (modelado) los hace shm.css ocultando, no borrando.
 // ─────────────────────────────────────────────────────────────────────────────
-import { FleetView } from './fleet_view.js?v=210';
-import { DataSource } from './data_source.js?v=210';
-import { computeTwin } from './digital_twin.js?v=210';
-import { ParkManager, loadParksStore } from './parks.js?v=210';
+import { FleetView } from './fleet_view.js?v=211';
+import { DataSource } from './data_source.js?v=211';
+import { computeTwin } from './digital_twin.js?v=211';
+import { ParkManager, loadParksStore } from './parks.js?v=211';
 
 const F1_BASE = { turbine: 0.283, hv: 1.6 };
-const REWIND_VER = 'v210';   // versión visible del build (subir junto al cache-bust)
+const REWIND_VER = 'v211';   // versión visible del build (subir junto al cache-bust)
 const LAYOUT_KEY = 'rewind-layout';
 const loadLayout = () => { try { return JSON.parse(localStorage.getItem(LAYOUT_KEY)); } catch { return null; } };
 const FS = 62.5;   // frecuencia de muestreo de la señal (Hz), igual que shm_worker.js

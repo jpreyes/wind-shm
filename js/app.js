@@ -1,47 +1,47 @@
 // ──────────────────────────────────────────────────────────────────────────────
 // App — main orchestrator
 // ──────────────────────────────────────────────────────────────────────────────
-import { Model }           from './model/model.js?v=210';
-import { Serializer }      from './model/serializer.js?v=210';
-import { Viewport }        from './ui/viewport.js?v=210';
-import { PropertiesPanel } from './ui/properties.js?v=210';
-import { MenuBar }         from './ui/menu.js?v=210';
-import { UndoStack }       from './utils/undo.js?v=210';
-import { StaticSolver, ensureDefaultLC }   from './solver/static_solver.js?v=210';
-import { Results }                         from './solver/postprocess.js?v=210';
-import { areaStress, areaBendingStress, vonMises } from './solver/membrane.js?v=210';
-import { ModalSolver }                     from './solver/modal_solver.js?v=210';
-import { buildNodeIndex, assembleK, assembleF, getNodeDOFs } from './solver/assembler.js?v=210';
-import { assembleSparseGlobal, extractFreeCSR } from './solver/sparse.js?v=210';
-import { solveNonlinear, solveNonlinearDC } from './solver/nl_lite.js?v=210';
-import { solveCorotBeam, corotBeamForceTangent } from './solver/corotbeam.js?v=210';
-import { insertInfill } from './model/macromodel.js?v=210';
-import './model/macros/turbine.js?v=210';   // registra el macromodelo «Torre eólica» (wind-shm)
-import { listMacros, getMacro, insertMacro } from './model/macro_registry.js?v=210';
-import { assembleKg } from './solver/geometric.js?v=210';
-import { makeFactor } from './solver/linsolve.js?v=210';
-import { formFind } from './solver/formfind.js?v=210';
-import { ModalResults }                    from './solver/modal_results.js?v=210';
-import { modalTimeHistory }                from './solver/timehistory.js?v=210';
-import { parseAccelerogram, accStats, scaleToPGA, DEMO_PRESETS, G as GACC } from './solver/accelerograms.js?v=210';
-import { SpectrumSolver }                  from './solver/spectrum_solver.js?v=210';
-import { StagedSolver }                    from './solver/staged.js?v=210';
-import { tendonEquivalentLoads, applyTendon, tendonEcc } from './solver/tendon.js?v=210';
-import { buildLane, influenceLine, movingLoadEnvelope, responseReaction, responseSection } from './solver/moving_load.js?v=210';
-import { newmarkNonlinear, shearBuilding, rayleighDamping } from './solver/nl_timehistory.js?v=210';
-import { checkDrift } from './design/serviceability.js?v=210';
-import { seleccionarPerfil, steelCandidates, predimensionar, candidatesForFamily } from './design/autodesign.js?v=210';
-import { jointSCWB } from './design/seismic.js?v=210';
-import { resolveMaterial } from './design/material_props.js?v=210';
-import { resolveSectionProps } from './design/section_props.js?v=210';
-import { autoDetectDiaphragms, computeFloorCR, applyDiaphragmConstraints } from './solver/diaphragm.js?v=210';
-import { splitElement, splitByLength, discretizeAll, joinElements, intersectarElementos } from './model/discretize.js?v=210';
-import { localAxes, stiffnessMatrix, massMatrix, transformMatrix, globalStiffness, applyReleases } from './solver/timoshenko.js?v=210';
-import { blockCells, cornerGridIndices } from './model/mesher.js?v=210';
-import { coonsGridFromCorners } from './model/mesh_map.js?v=210';
-import { meshPolygonIntoModel } from './model/mesh_free.js?v=210';
-import { smoothAreasInModel } from './model/mesh_quality.js?v=210';
-import { listFormats, exportModel, importModel } from './io/index.js?v=210';
+import { Model }           from './model/model.js?v=211';
+import { Serializer }      from './model/serializer.js?v=211';
+import { Viewport }        from './ui/viewport.js?v=211';
+import { PropertiesPanel } from './ui/properties.js?v=211';
+import { MenuBar }         from './ui/menu.js?v=211';
+import { UndoStack }       from './utils/undo.js?v=211';
+import { StaticSolver, ensureDefaultLC }   from './solver/static_solver.js?v=211';
+import { Results }                         from './solver/postprocess.js?v=211';
+import { areaStress, areaBendingStress, vonMises } from './solver/membrane.js?v=211';
+import { ModalSolver }                     from './solver/modal_solver.js?v=211';
+import { buildNodeIndex, assembleK, assembleF, getNodeDOFs } from './solver/assembler.js?v=211';
+import { assembleSparseGlobal, extractFreeCSR } from './solver/sparse.js?v=211';
+import { solveNonlinear, solveNonlinearDC } from './solver/nl_lite.js?v=211';
+import { solveCorotBeam, corotBeamForceTangent } from './solver/corotbeam.js?v=211';
+import { insertInfill } from './model/macromodel.js?v=211';
+import './model/macros/turbine.js?v=211';   // registra el macromodelo «Torre eólica» (wind-shm)
+import { listMacros, getMacro, insertMacro } from './model/macro_registry.js?v=211';
+import { assembleKg } from './solver/geometric.js?v=211';
+import { makeFactor } from './solver/linsolve.js?v=211';
+import { formFind } from './solver/formfind.js?v=211';
+import { ModalResults }                    from './solver/modal_results.js?v=211';
+import { modalTimeHistory }                from './solver/timehistory.js?v=211';
+import { parseAccelerogram, accStats, scaleToPGA, DEMO_PRESETS, G as GACC } from './solver/accelerograms.js?v=211';
+import { SpectrumSolver }                  from './solver/spectrum_solver.js?v=211';
+import { StagedSolver }                    from './solver/staged.js?v=211';
+import { tendonEquivalentLoads, applyTendon, tendonEcc } from './solver/tendon.js?v=211';
+import { buildLane, influenceLine, movingLoadEnvelope, responseReaction, responseSection } from './solver/moving_load.js?v=211';
+import { newmarkNonlinear, shearBuilding, rayleighDamping } from './solver/nl_timehistory.js?v=211';
+import { checkDrift } from './design/serviceability.js?v=211';
+import { seleccionarPerfil, steelCandidates, predimensionar, candidatesForFamily } from './design/autodesign.js?v=211';
+import { jointSCWB } from './design/seismic.js?v=211';
+import { resolveMaterial } from './design/material_props.js?v=211';
+import { resolveSectionProps } from './design/section_props.js?v=211';
+import { autoDetectDiaphragms, computeFloorCR, applyDiaphragmConstraints } from './solver/diaphragm.js?v=211';
+import { splitElement, splitByLength, discretizeAll, joinElements, intersectarElementos } from './model/discretize.js?v=211';
+import { localAxes, stiffnessMatrix, massMatrix, transformMatrix, globalStiffness, applyReleases } from './solver/timoshenko.js?v=211';
+import { blockCells, cornerGridIndices } from './model/mesher.js?v=211';
+import { coonsGridFromCorners } from './model/mesh_map.js?v=211';
+import { meshPolygonIntoModel } from './model/mesh_free.js?v=211';
+import { smoothAreasInModel } from './model/mesh_quality.js?v=211';
+import { listFormats, exportModel, importModel } from './io/index.js?v=211';
 
 // Categorías de carga (#106) — para combinaciones y diseño automáticos.
 const LOAD_TYPES = [
@@ -1956,7 +1956,7 @@ class App {
   _staticWorkerSolve(K, nDOF, freeDOF, Flist, dense = false) {
     return new Promise((resolve, reject) => {
       let worker;
-      try { worker = new Worker(new URL('./solver/static_worker.js?v=210', import.meta.url), { type: 'module' }); }
+      try { worker = new Worker(new URL('./solver/static_worker.js?v=211', import.meta.url), { type: 'module' }); }
       catch (e) { reject(e); return; }
       this._staticWorker = worker;
       const cancelar = () => { try { worker.terminate(); } catch (e) {} this._staticWorker = null; this._hideProgress(); reject(new Error('cancelado')); };
@@ -1985,7 +1985,7 @@ class App {
   _staticWorkerSolveSparse(csr, cf, nDOF, freeDOF, Flist) {
     return new Promise((resolve, reject) => {
       let worker;
-      try { worker = new Worker(new URL('./solver/static_worker.js?v=210', import.meta.url), { type: 'module' }); }
+      try { worker = new Worker(new URL('./solver/static_worker.js?v=211', import.meta.url), { type: 'module' }); }
       catch (e) { reject(e); return; }
       this._staticWorker = worker;
       const cancelar = () => { try { worker.terminate(); } catch (e) {} this._staticWorker = null; this._hideProgress(); reject(new Error('cancelado')); };
@@ -2401,7 +2401,7 @@ class App {
       // ── Run Stodola in a Web Worker (non-blocking) ───────────────────────────
       const denseModal = !!this._config?.analisis?.matrizDensa;
       const modes = await new Promise((resolve, reject) => {
-        const worker = new Worker(new URL('./solver/modal_worker.js?v=210', import.meta.url), { type: 'module' });
+        const worker = new Worker(new URL('./solver/modal_worker.js?v=211', import.meta.url), { type: 'module' });
         worker.postMessage({ Kff_flat, Mff_flat, nF, nModes, dense: denseModal, method: modalMethod },
           [Kff_flat.buffer, Mff_flat.buffer]); // transfer — zero copy
         worker.onmessage = (ev) => {
@@ -2814,7 +2814,7 @@ class App {
       // Modal por iteración de subespacio en worker (no bloquea la UI).
       const dense = !!this._config?.analisis?.matrizDensa;
       const rawModes = await new Promise((resolve, reject) => {
-        const w = new Worker(new URL('./solver/modal_worker.js?v=210', import.meta.url), { type: 'module' });
+        const w = new Worker(new URL('./solver/modal_worker.js?v=211', import.meta.url), { type: 'module' });
         w.postMessage({ Kff_flat: Kff, Mff_flat: Mff, nF, nModes, dense, method: 'subspace' }, [Kff.buffer, Mff.buffer]);
         w.onmessage = ev => { w.terminate(); ev.data.error ? reject(new Error(ev.data.error)) : resolve(ev.data.modes); };
         w.onerror = ev => { w.terminate(); reject(new Error(ev.message || 'Error en worker modal')); };
@@ -2887,7 +2887,7 @@ class App {
   _thSolveInWorker(modes, ag, dt, zeta) {
     return new Promise((resolve, reject) => {
       let w;
-      try { w = new Worker(new URL('./solver/timehistory_worker.js?v=210', import.meta.url), { type: 'module' }); }
+      try { w = new Worker(new URL('./solver/timehistory_worker.js?v=211', import.meta.url), { type: 'module' }); }
       catch (e) {
         try { const r = modalTimeHistory({ modes: modes.map(m => ({ ...m, phi: new Float64Array(0) })), ag, dt, zeta }); resolve({ q: r.q, peakModal: r.peakModal }); }
         catch (err) { reject(err); }
@@ -4331,12 +4331,12 @@ class App {
     if (!ok) return;
     const p = this._predim; if (!p) return;
     if (document.getElementById('pd-assign').checked) {
-      const { profileToSection } = await import('./design/profiles.js?v=210');
+      const { profileToSection } = await import('./design/profiles.js?v=211');
       this.snapshot();
       // Perfil del catálogo → props directas; forma libre (H.A./madera) → calcular A,I,J.
       let secProps = p.profile ? profileToSection(p.profile) : { design: { shape: p.shape, dims: p.dims } };
       if (!p.profile) {
-        const { fromShape } = await import('./design/section_props.js?v=210');
+        const { fromShape } = await import('./design/section_props.js?v=211');
         const g = fromShape(p.shape, p.dims);
         if (g) secProps = { A: g.A, Iz: g.Iz, Iy: g.Iy, J: g.J, Avy: g.Avz_web, Avz: g.Avy_flange, design: { shape: p.shape, dims: p.dims } };
       }
@@ -4360,7 +4360,7 @@ class App {
     return new Promise((resolve, reject) => {
       let worker;
       try {
-        worker = new Worker(new URL('./solver/nl_worker.js?v=210', import.meta.url), { type: 'module' });
+        worker = new Worker(new URL('./solver/nl_worker.js?v=211', import.meta.url), { type: 'module' });
       } catch (e) {
         try { resolve(kind === 'dc' ? solveNonlinearDC(opts) : solveNonlinear(opts)); }
         catch (err) { reject(err); }
@@ -4722,7 +4722,7 @@ class App {
 
       // Iteración de subespacio en el Worker (no bloquea la UI)
       const rawModes = await new Promise((resolve, reject) => {
-        const worker = new Worker(new URL('./solver/buckling_worker.js?v=210', import.meta.url), { type: 'module' });
+        const worker = new Worker(new URL('./solver/buckling_worker.js?v=211', import.meta.url), { type: 'module' });
         worker.postMessage({ Kff_flat, Kgff_flat, nF, nModes, dense },
           [Kff_flat.buffer, Kgff_flat.buffer]);   // transfer — zero copy
         worker.onmessage = (ev) => { worker.terminate(); ev.data.error ? reject(new Error(ev.data.error)) : resolve(ev.data.modes); };
@@ -6412,7 +6412,10 @@ class App {
     document.addEventListener('mousemove', e => {
       if (!dragging) return;
       const newW = Math.max(220, Math.min(700, startW + (startX - e.clientX)));
-      main.style.gridTemplateColumns = `var(--toolbar-w) 1fr 5px ${newW}px`;
+      // Sólo cambia el ANCHO del panel vía la variable CSS; el grid (4 columnas en
+      // PÓRTICO clásico, 5 en ReWind con el árbol) lo arma el CSS. Sobrescribir aquí
+      // `grid-template-columns` con 4 columnas rompía el layout de 5 (ReWind).
+      main.style.setProperty('--panel-w', newW + 'px');
     });
     document.addEventListener('mouseup', () => {
       if (!dragging) return;
@@ -6869,7 +6872,7 @@ class App {
               selectedNodes: sel.filter(s => s.type === 'node').map(s => s.id) };
     }
     this.snapshot();
-    const { aplicarOperaciones } = await import('./model/model_ops.js?v=210');
+    const { aplicarOperaciones } = await import('./model/model_ops.js?v=211');
     const res = aplicarOperaciones(this.model, ops, ctx);
     // los resultados previos dejan de ser válidos tras modificar la geometría/cargas
     this.viewport.clearResults?.();
@@ -6917,7 +6920,7 @@ class App {
     this._showProgress('Generando el modelo…', 'Aplicando reglas y cargas normativas');
     try {
       const libs = await this._cargarBibliotecasAsistente();
-      const { generarModelo } = await import('../asistente/generador.js?v=210');
+      const { generarModelo } = await import('../asistente/generador.js?v=211');
       const modelo = generarModelo(ficha, libs);
 
       if (modo === 'sobreponer') {
@@ -8338,7 +8341,7 @@ class App {
     const deflex = this._calcularDeflexionesVigas(diseno?.params);
     const drift  = this._calcularDrift();
     try {
-      const { Docx } = await import('./io/docx.js?v=210');
+      const { Docx } = await import('./io/docx.js?v=211');
       const blob = this._memoriaDocx(Docx, imgs, diseno, deflex, drift).blob();
       this._downloadBlob(blob, 'memoria_calculo.docx');
       this.toast('Memoria Word (.docx) descargada', 'ok');
@@ -8509,7 +8512,7 @@ class App {
   // Verificación de diseño (flexión/corte/axial) por elemento, usando los
   // resultados actuales y los parámetros editables de asistente/diseno_params.json.
   async _calcularDiseno() {
-    const ver = '?v=210';
+    const ver = '?v=211';
     let params = null;
     try { params = await fetch('asistente/diseno_params.json' + ver).then(r => r.json()); }
     catch (e) { console.error('No se pudo cargar diseno_params.json:', e); return null; }
