@@ -965,12 +965,25 @@ setTimeout(function () { window.__rewindCloseLanding(); }, 25000);   // fallback
   <button type="button" class="rotate-close" onclick="this.parentElement.style.display='none'" aria-label="Cerrar aviso">✕</button>
 </div>
 
-<!-- numeric.js para solver (Fase 2+) -->
+<!-- numeric.js para el gemelo digital (solver modal/estático) -->
 <script src="lib/numeric.js"></script>
 <!-- Leaflet (vista 2D del parque en ReWind) — global window.L, antes de los módulos -->
 <script src="lib/leaflet/leaflet.js?v=212"></script>
-<script type="module" src="js/app.js?v=212"></script>
-<!-- wind-shm: modo SHM (flota de torres) sobre el shell de PÓRTICO -->
+<!-- Toggle de tema (claro/oscuro). Antes lo cableaba app.js (PÓRTICO); ReWind lo hace aquí. -->
+<script>
+  (function () {
+    function toggle() {
+      var d = document.documentElement, next = d.dataset.theme === 'dark' ? 'light' : 'dark';
+      d.dataset.theme = next; try { localStorage.setItem('portico_theme', next); } catch (e) {}
+    }
+    addEventListener('DOMContentLoaded', function () {
+      ['btn-theme', 'landing-theme'].forEach(function (id) {
+        var b = document.getElementById(id); if (b) b.addEventListener('click', toggle);
+      });
+    });
+  })();
+</script>
+<!-- ReWind: SHM de torres eólicas (se auto-bootea sobre el shell) -->
 <script type="module" src="js/shm/shm_mode.js?v=212"></script>
 
 <!-- PWA: registrar el service worker (offline). Solo en contexto seguro
