@@ -17,14 +17,14 @@ Each turbine carries **2 MEMS accelerometers** (top + mid mast) + a gateway → 
 
 **PÓRTICO** — a browser-based 3D structural analysis (FEM) + teaching app for the Instituto de Obras Civiles, Universidad Austral de Chile (Dr. Juan Patricio Reyes). Vanilla JS ES modules + Three.js + a small `numeric.js`. **No build step, no bundler, no framework, no `package.json`** — `index.html` loads `js/app.js` directly via an importmap. UI text, code comments, and git commit messages are in **Spanish**; match that.
 
-The app must run from a static server with no install. It is also a PWA (installable/offline) and is deployed as a Cloudflare Worker that serves the static assets *and* an LLM-backed assistant API.
+The app must run from a static server with no install, and is a PWA (installable/offline). **This fork (`wind-shm`) is published on GitHub Pages** (static hosting) from `main` — it is a purely static site, so there is **no Cloudflare Worker** in this deploy and the server-side LLM assistant API is not available on Pages. *(Upstream `structweb3d`/PÓRTICO does deploy as a Cloudflare Worker that serves the assets + assistant API; the `wrangler.jsonc` and `worker/` in this repo are inherited base and are not part of the GitHub Pages deploy.)*
 
 ## Commands
 
 - **Run locally:** `python serve.py [port]` (default 8765) — a no-cache static server that sets correct UTF-8 / `.webmanifest` MIME types. `python -m http.server 8765` also works but lacks those headers.
 - **Syntax-check an ES module:** `node --input-type=module --check < js/path/file.js`. **Do NOT use plain `node --check file.js`** — it treats `.js` as CommonJS and silently passes invalid ESM (e.g. bad `import`s).
 - **Run a verification test:** tests are standalone Node scripts, e.g. `node test_plate.mjs`, `node test_shell.mjs`, `node test_buckling.mjs` (subespacio vs Euler), `node test_formfind.mjs` (FDM acotado), `node asistente/test_generador.mjs`. They import solver/generator modules directly and assert against **analytical solutions / global equilibrium** (ΣReactions = ΣLoads). There is no test runner — each file is its own entry point. (Los `test_*.mjs` de la raíz no están versionados en git, sólo los de `asistente/`.)
-- **Deploy (Cloudflare):** `npx wrangler deploy` (config in `wrangler.jsonc`, entry `worker/asistente.js`). Production auto-deploys from GitHub `main`. Worker secrets (`OPENAI_API_KEY` / `OPENROUTER_API_KEY`, etc.) are set in the Cloudflare dashboard, never in code.
+- **Deploy (GitHub Pages):** `wind-shm` se publica en **GitHub Pages** desde `main` (sitio estático, sin build): al hacer `git push` a `main`, GitHub Pages republica el sitio automáticamente. No usa Cloudflare ni `wrangler` (eso es de upstream `structweb3d`). Como es estático puro, la API del asistente LLM (`worker/asistente.js`) **no** se sirve en Pages. *(Cuidado con rutas absolutas: bajo Pages el sitio puede colgar de un subpath `…github.io/wind-shm/`, por eso los imports usan rutas relativas `./…`.)*
 
 ## Versioned imports — the cache-busting convention (important)
 
