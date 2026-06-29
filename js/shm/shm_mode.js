@@ -8,15 +8,15 @@
 //   inspecciones y señal temporal EN VIVO desde un Web Worker (DataSource).
 // Recortes (modelado) los hace shm.css ocultando, no borrando.
 // ─────────────────────────────────────────────────────────────────────────────
-import { FleetView } from './fleet_view.js?v=213';
-import { DataSource } from './data_source.js?v=213';
-import { computeTwin } from './digital_twin.js?v=213';
-import { ParkManager, loadParksStore } from './parks.js?v=213';
-import { MapView } from './map_view.js?v=213';
-import { defaultStages, builtFromStages } from './parks_data_caman.js?v=213';
+import { FleetView } from './fleet_view.js?v=214';
+import { DataSource } from './data_source.js?v=214';
+import { computeTwin } from './digital_twin.js?v=214';
+import { ParkManager, loadParksStore } from './parks.js?v=214';
+import { MapView } from './map_view.js?v=214';
+import { defaultStages, builtFromStages } from './parks_data_caman.js?v=214';
 
 const F1_BASE = { turbine: 0.283, hv: 1.6 };
-const REWIND_VER = 'v213';   // versión visible del build (subir junto al cache-bust)
+const REWIND_VER = 'v214';   // versión visible del build (subir junto al cache-bust)
 const FS = 62.5;   // frecuencia de muestreo de la señal (Hz), igual que shm_worker.js
 // Clasificador ML de daño (0..4)
 const CLS = ['Sin daño', 'Leve', 'Moderado', 'Alto', 'Muy alto'];
@@ -79,6 +79,7 @@ async function boot() {
   const nameplate = buildNameplate(vpwrap);
   const banner = buildBanner(vpwrap);
   const dash = buildDashboard(panel, fleet, actions);
+  initPanelResize();   // redimensionar el panel derecho (antes lo cableaba app.js)
 
   document.getElementById('btn-zoomext')?.addEventListener('click', () => fleet.clearSelection());
   document.title = 'ReWind — SHM de torres eólicas';
@@ -184,7 +185,7 @@ async function boot() {
   // ── Relieve conceptual del terreno (DEM vendorizado) — encendido por defecto ─
   setLoad(88, 'Cargando relieve…'); await delay(40);
   try {
-    await fleet.loadTerrain('data/caman_dem.json?v=213');
+    await fleet.loadTerrain('data/caman_dem.json?v=214');
     fleet.setTerrainVisible(true);
     document.getElementById('shm-relieve-tool')?.classList.add('active');
   } catch (e) { console.warn('[shm] relieve no disponible', e); }
@@ -311,6 +312,28 @@ function buildBanner(vpwrap) {
       el.classList.add('show');
     },
   };
+}
+
+// Redimensiona el panel derecho arrastrando el divisor (#panel-resize-handle).
+// Ajusta la variable CSS --panel-w del grid (#main); antes lo hacía app.js.
+function initPanelResize() {
+  const handle = document.getElementById('panel-resize-handle');
+  const main = document.getElementById('main');
+  if (!handle || !main) return;
+  let drag = null;
+  handle.addEventListener('pointerdown', (e) => {
+    const w = parseInt(getComputedStyle(main).getPropertyValue('--panel-w')) || document.getElementById('panel')?.offsetWidth || 300;
+    drag = { x: e.clientX, w }; handle.classList.add('dragging');
+    handle.setPointerCapture?.(e.pointerId); e.preventDefault();
+  });
+  handle.addEventListener('pointermove', (e) => {
+    if (!drag) return;
+    const nw = Math.max(240, Math.min(640, drag.w + (drag.x - e.clientX)));   // el panel está a la derecha → arrastrar a la izq agranda
+    main.style.setProperty('--panel-w', nw + 'px');
+  });
+  const end = () => { if (drag) { drag = null; handle.classList.remove('dragging'); } };
+  handle.addEventListener('pointerup', end);
+  handle.addEventListener('pointercancel', end);
 }
 
 // Barra de estado inferior propia de ReWind (reemplaza la de modelado FEM).
