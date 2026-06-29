@@ -29,10 +29,10 @@
       window.dispatchEvent(new Event('pwa-installed'));
     });
   </script>
-  <link rel="stylesheet" href="lib/leaflet/leaflet.css?v=212">
-  <link rel="stylesheet" href="style.css?v=212">
-  <link rel="stylesheet" href="ui-v2.css?v=212">
-  <link rel="stylesheet" href="shm.css?v=212">
+  <link rel="stylesheet" href="lib/leaflet/leaflet.css?v=213">
+  <link rel="stylesheet" href="style.css?v=213">
+  <link rel="stylesheet" href="ui-v2.css?v=213">
+  <link rel="stylesheet" href="shm.css?v=213">
   <script type="importmap">
   {
     "imports": {
@@ -60,154 +60,8 @@
       ReWind <span class="brand-park">Camán</span>
     </div>
 
-    <nav id="menu-nav">
-
-      <div class="menu-root">
-        <span class="menu-label">Archivo</span>
-        <ul class="menu-drop">
-          <li data-action="new">Nuevo <kbd>Ctrl+N</kbd></li>
-          <li data-action="open">Abrir… <kbd>Ctrl+O</kbd></li>
-          <li data-action="save">Guardar <kbd>Ctrl+S</kbd></li>
-          <li data-action="saveas">Guardar Como…</li>
-          <li data-action="manage-autosaves">🧹 Autoguardados temporales…</li>
-          <li class="sep"></li>
-          <li data-action="importcsv">Importar CSV…</li>
-          <li data-action="exportcsv">Exportar CSV</li>
-          <li data-action="template">Descargar Plantilla CSV</li>
-          <li class="sep"></li>
-          <li data-action="import-interop">🔄 Importar de otro motor…</li>
-          <li data-action="export-interop">🔄 Exportar a otro motor…</li>
-          <li class="sep"></li>
-          <li data-action="export-results">Exportar Resultados Estáticos</li>
-          <li data-action="export-modal">Exportar Resultados Modales</li>
-          <li data-action="export-spectrum">Exportar Resultados Espectrales</li>
-          <li class="sep"></li>
-          <li data-action="bases-calculo">📄 Memoria / Bases de Cálculo (PDF)…</li>
-          <li data-action="memoria-docx">📝 Memoria de Cálculo (Word .docx)…</li>
-        </ul>
-      </div>
-
-      <div class="menu-root">
-        <span class="menu-label">Editar</span>
-        <ul class="menu-drop">
-          <li data-action="undo">Deshacer <kbd>Ctrl+Z</kbd></li>
-          <li data-action="redo">Rehacer <kbd>Ctrl+Y</kbd></li>
-          <li class="sep"></li>
-          <li data-action="selectall">Selec. Todo <kbd>Ctrl+A</kbd></li>
-          <li data-action="delete">Eliminar <kbd>Del</kbd></li>
-          <li class="sep"></li>
-          <li data-action="disc-all">Discretizar Todo…</li>
-          <li data-action="join-elems">Unir Elementos Seleccionados</li>
-          <li data-action="inter-elems">Unir en Intersección (crear nodo)…</li>
-          <li data-action="crear-area">Crear elemento de área (membrana 3/4 nodos)…</li>
-          <li data-action="mallar-panel">Mallar panel (4 esquinas) — clic en nodos…</li>
-          <li data-action="mallar-region">Mallar región libre — clic en nodos…</li>
-          <li data-action="suavizar-malla">Suavizar malla (calidad)…</li>
-          <li data-action="crear-link">Crear link / coupling (2 nodos)…</li>
-          <li data-action="muro-relleno">Muro de relleno — puntal diagonal (4 nodos)…</li>
-          <li data-action="macro-turbine">🌬️ Torre eólica — gemelo digital (1 nodo base)…</li>
-          <li class="sep"></li>
-          <li data-action="grids">Definir Ejes de Grilla…</li>
-          <li data-action="combos">Combinaciones de Carga… <kbd>F8</kbd></li>
-          <li data-action="combos-norma">Crear casos y combos de norma (NCh3171)…</li>
-        </ul>
-      </div>
-
-      <div class="menu-root">
-        <span class="menu-label">Vista</span>
-        <ul class="menu-drop">
-          <li data-action="view-iso">Isométrica <kbd>I</kbd></li>
-          <li data-action="view-top">Planta XY <kbd>T</kbd></li>
-          <li data-action="view-front">Frente XZ <kbd>F</kbd></li>
-          <li data-action="view-side">Lateral YZ <kbd>L</kbd></li>
-          <li class="sep"></li>
-          <li data-action="toggle-grid">Grilla <kbd>G</kbd></li>
-          <li data-action="toggle-axes">Ejes XYZ</li>
-          <li data-action="zoom-extents">Zoom Extensión <kbd>Home</kbd></li>
-          <li class="sep"></li>
-          <li data-action="hide-sel">Ocultar selección <kbd>H</kbd></li>
-          <li data-action="show-all">Mostrar todo <kbd>Shift+H</kbd></li>
-          <li data-action="toggle-loads">Mostrar/ocultar cargas</li>
-          <li class="sep"></li>
-          <li data-action="res-deformed">Resultado: Deformada <kbd>1</kbd></li>
-          <li data-action="res-N">Resultado: Axial N <kbd>2</kbd></li>
-          <li data-action="res-Vy">Resultado: Cortante Vy <kbd>3</kbd></li>
-          <li data-action="res-Vz">Resultado: Cortante Vz <kbd>4</kbd></li>
-          <li data-action="res-T">Resultado: Torsión T <kbd>5</kbd></li>
-          <li data-action="res-My">Resultado: Momento My <kbd>6</kbd></li>
-          <li data-action="res-Mz">Resultado: Momento Mz <kbd>7</kbd></li>
-          <li data-action="res-vm">Resultado: Tensiones áreas (von Mises) <kbd>8</kbd></li>
-        </ul>
-      </div>
-
-      <div class="menu-root">
-        <span class="menu-label">Análisis</span>
-        <ul class="menu-drop">
-          <li data-action="run">▶ Análisis Estático <kbd>F5</kbd></li>
-          <li data-action="run-force">↻ Recalcular (forzar, ignora resultados guardados)</li>
-          <li class="sep"></li>
-          <li class="menu-sub">
-            <span>Análisis lineales</span><span class="sub-arrow">▸</span>
-            <ul class="menu-flyout">
-              <li data-action="run">▶ Estático — todos los casos y combos <kbd>F5</kbd></li>
-              <li data-action="run-modal">▶ Modal… <kbd>F6</kbd></li>
-              <li data-action="run-spectrum">▶ Espectro de Respuesta… <kbd>F7</kbd></li>
-              <li data-action="run-timehistory">▶ Time-history modal — acelerograma…</li>
-            </ul>
-          </li>
-          <li class="menu-sub">
-            <span>Análisis NL-lite</span><span class="sub-arrow">▸</span>
-            <ul class="menu-flyout">
-              <li data-action="run-nonlinear">▶ No Lineal — cables…</li>
-              <li data-action="run-corotbeam">▶ Gran rotación — viga corotacional 2D…</li>
-              <li data-action="run-pdelta">▶ P-Delta…</li>
-              <li data-action="run-buckling">▶ Pandeo Lineal — factor crítico…</li>
-              <li data-action="run-formfind">▶ Form-finding — densidades de fuerza…</li>
-              <li data-action="run-plastic">▶ Rótulas Plásticas — colapso…</li>
-              <li data-action="run-pushover-dc">▶ Pushover — control de desplazamiento…</li>
-              <li data-action="run-nlth">▶ Time-history NO LINEAL — rótulas (edificio de corte)…</li>
-            </ul>
-          </li>
-          <li class="menu-sub">
-            <span>Puentes</span><span class="sub-arrow">▸</span>
-            <ul class="menu-flyout">
-              <li data-action="run-staged">▶ Etapas constructivas — staged…</li>
-              <li data-action="run-tendon">▶ Pretensado por tendón — cargas equivalentes…</li>
-              <li data-action="run-moving">▶ Cargas móviles / líneas de influencia…</li>
-            </ul>
-          </li>
-          <li class="sep"></li>
-          <li data-action="global-matrices">Ver Matrices Globales K · M…</li>
-          <li data-action="diag-estabilidad">Diagnosticar estabilidad (nodos sueltos)…</li>
-          <li class="sep"></li>
-          <li data-action="clear-results" style="color:#ef4444" title="DESCARTA todos los resultados calculados (estático, modal, espectro, NL, diseño) y revierte la malla auto-discretizada. Pide confirmación. Para sólo volver a ver el modelo sin borrar nada, usa «Vista modelo» en la barra."><span style="color:#ef4444;font-weight:700">✕</span> Limpiar Resultados (descartar)</li>
-        </ul>
-      </div>
-
-      <div class="menu-root">
-        <span class="menu-label">Asistente</span>
-        <ul class="menu-drop">
-          <li data-action="asistente">Generar modelo desde ficha…</li>
-        </ul>
-      </div>
-
-      <div class="menu-root">
-        <span class="menu-label">Ayuda</span>
-        <ul class="menu-drop">
-          <li data-action="help-guia">Guía Rápida <kbd>F1</kbd></li>
-          <li data-action="help-signos">Convenciones de Signos y Ejes</li>
-          <li data-action="help-ejemplos">Ejemplos Guiados</li>
-          <li class="sep"></li>
-          <li data-action="help-acerca">Acerca de ReWind</li>
-        </ul>
-      </div>
-
-    </nav>
 
     <div class="menubar-right">
-      <span id="pro-badge" title="Modo profesional activo" style="display:none;background:#0d9488;color:#fff;border-radius:6px;font-size:10px;font-weight:700;padding:3px 7px;margin-right:8px;letter-spacing:.5px">PRO</span>
-      <button id="btn-config" type="button" title="Configuración (memoria, visualización, modificadores de sección)"
-        style="background:var(--bg4);border:1px solid var(--border2);color:var(--text);border-radius:6px;cursor:pointer;font-size:14px;line-height:1;padding:4px 8px;margin-right:6px">⚙</button>
       <button id="btn-theme" type="button" title="Cambiar tema claro/oscuro"
         style="background:var(--bg4);border:1px solid var(--border2);color:var(--text);border-radius:6px;cursor:pointer;font-size:14px;line-height:1;padding:4px 8px;margin-right:10px">🌙</button>
     </div>
@@ -968,7 +822,7 @@ setTimeout(function () { window.__rewindCloseLanding(); }, 25000);   // fallback
 <!-- numeric.js para el gemelo digital (solver modal/estático) -->
 <script src="lib/numeric.js"></script>
 <!-- Leaflet (vista 2D del parque en ReWind) — global window.L, antes de los módulos -->
-<script src="lib/leaflet/leaflet.js?v=212"></script>
+<script src="lib/leaflet/leaflet.js?v=213"></script>
 <!-- Toggle de tema (claro/oscuro). Antes lo cableaba app.js (PÓRTICO); ReWind lo hace aquí. -->
 <script>
   (function () {
@@ -984,7 +838,7 @@ setTimeout(function () { window.__rewindCloseLanding(); }, 25000);   // fallback
   })();
 </script>
 <!-- ReWind: SHM de torres eólicas (se auto-bootea sobre el shell) -->
-<script type="module" src="js/shm/shm_mode.js?v=212"></script>
+<script type="module" src="js/shm/shm_mode.js?v=213"></script>
 
 <!-- PWA: registrar el service worker (offline). Solo en contexto seguro
      (https o localhost); el navegador deja navigator.serviceWorker undefined
