@@ -7,7 +7,7 @@
 // Los miembros se dibujan con un cilindro unitario reescalado (1 geometría).
 // ─────────────────────────────────────────────────────────────────────────────
 import * as THREE from 'three';
-import { generarTorre } from '../../asistente/generador.js?v=211';
+import { generarTorre } from '../../asistente/generador.js?v=212';
 
 const UNIT_CYL = new THREE.CylinderGeometry(1, 1, 1, 6);
 const _up = new THREE.Vector3(0, 1, 0);
@@ -26,6 +26,9 @@ export function member(a, b, r, mat) {
   m.scale.set(r, len, r);
   return m;
 }
+
+// Material «fantasma» (silueta de lo que falta) — se CLONA por torre (plano de corte propio).
+const ghostMatBase = new THREE.MeshBasicMaterial({ color: 0x8fb9d6, transparent: true, opacity: 0.14, depthWrite: false, side: THREE.DoubleSide });
 
 const steelMat    = new THREE.MeshStandardMaterial({ color: 0x7f8c99, metalness: 0.3, roughness: 0.6 });
 const concreteMat = new THREE.MeshStandardMaterial({ color: 0xc4c8cd, metalness: 0, roughness: 0.95 });
@@ -54,7 +57,7 @@ function sensorDot(color = 0x2bff77) {
  */
 export function createSubstationTower(o = {}) {
   const H = o.H ?? 42, base = o.base ?? 7, top = o.top ?? 2.5, panels = o.panels ?? 7;
-  const id = `HV-${String(++_hvId).padStart(2, '0')}`;
+  const id = o.id ?? `HV-${String(++_hvId).padStart(2, '0')}`;
   const group = new THREE.Group();
   group.userData.turbineId = id;            // reutiliza el picking de la flota
 
@@ -85,8 +88,15 @@ export function createSubstationTower(o = {}) {
     s.mesh.position.copy(pos.get(n.id)).add(new THREE.Vector3(0, 0.6, 0));
     s.mesh.userData = { turbineId: id };
     group.add(s.mesh);
-    sensors.push({ id: `s${sensors.length + 1}`, ...s, phase: Math.random() * 6.28, status: 'ok' });
+    sensors.push({ id: `s${sensors.length + 1}`, ...s, phase: Math.random() * 6.28, status: 'ok', _hfrac: pos.get(n.id).y / H });
   }
+
+  // Silueta «fantasma» de lo que falta (avance 4D): cono que envuelve la celosía,
+  // con su propio material/plano de corte (lo gestiona FleetView.setProgress).
+  const ghostMat = ghostMatBase.clone();
+  const ghostMesh = new THREE.Mesh(new THREE.CylinderGeometry(top * 0.6, base * 0.6, H, 8, 1, true), ghostMat);
+  ghostMesh.position.y = H / 2; ghostMesh.userData = { turbineId: id }; ghostMesh.visible = false;
+  group.add(ghostMesh);
 
   // Hitbox invisible (radio generoso) para seleccionar la torre fácilmente desde lejos.
   const hbR = Math.max(base, 6) * 1.6;
@@ -94,12 +104,15 @@ export function createSubstationTower(o = {}) {
   hit.position.y = (H + 10) / 2; hit.userData = { turbineId: id, hitbox: true };
   group.add(hit);
 
-  return { id, type: 'hv', label: `Torre AT ${id}`, height: H, group, sensors, dimMats: [mat], topY: H };
+  return { id, type: 'hv', label: o.label ?? `Torre AT ${id}`, height: H, group, sensors, dimMats: [mat], topY: H,
+           solidMats: [mat], ghost: { meshes: [ghostMesh], mats: [ghostMat] } };
 }
 
-// Cable de conexión por el suelo (cilindro oscuro, leve curva).
-export function groundCable(a, b, y = 0.7) {
-  const A = new THREE.Vector3(a.x, y, a.z), B = new THREE.Vector3(b.x, y, b.z);
+// Cable de conexión por el suelo (cilindro oscuro). Si `y` se omite, respeta la
+// cota de cada extremo (a.y / b.y) para seguir el relieve; si no, aplana a `y`.
+export function groundCable(a, b, y) {
+  const ya = y != null ? y : (a.y ?? 0.7), yb = y != null ? y : (b.y ?? 0.7);
+  const A = new THREE.Vector3(a.x, ya, a.z), B = new THREE.Vector3(b.x, yb, b.z);
   return member(A, B, 0.35, cableMat);
 }
 

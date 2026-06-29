@@ -8,15 +8,15 @@
 //   inspecciones y señal temporal EN VIVO desde un Web Worker (DataSource).
 // Recortes (modelado) los hace shm.css ocultando, no borrando.
 // ─────────────────────────────────────────────────────────────────────────────
-import { FleetView } from './fleet_view.js?v=211';
-import { DataSource } from './data_source.js?v=211';
-import { computeTwin } from './digital_twin.js?v=211';
-import { ParkManager, loadParksStore } from './parks.js?v=211';
+import { FleetView } from './fleet_view.js?v=212';
+import { DataSource } from './data_source.js?v=212';
+import { computeTwin } from './digital_twin.js?v=212';
+import { ParkManager, loadParksStore } from './parks.js?v=212';
+import { MapView } from './map_view.js?v=212';
+import { defaultStages, builtFromStages } from './parks_data_caman.js?v=212';
 
 const F1_BASE = { turbine: 0.283, hv: 1.6 };
-const REWIND_VER = 'v211';   // versión visible del build (subir junto al cache-bust)
-const LAYOUT_KEY = 'rewind-layout';
-const loadLayout = () => { try { return JSON.parse(localStorage.getItem(LAYOUT_KEY)); } catch { return null; } };
+const REWIND_VER = 'v212';   // versión visible del build (subir junto al cache-bust)
 const FS = 62.5;   // frecuencia de muestreo de la señal (Hz), igual que shm_worker.js
 // Clasificador ML de daño (0..4)
 const CLS = ['Sin daño', 'Leve', 'Moderado', 'Alto', 'Muy alto'];
@@ -87,6 +87,7 @@ async function boot() {
   const liveUrl = new URLSearchParams(location.search).get('live');
   const ds = new DataSource(liveUrl ? { liveUrl } : {});
   window.shmData = ds;
+  const statusBar = buildStatusBar(fleet, { source: liveUrl ? 'En vivo' : 'Simulado' });
   ds.onTick = (msg) => {
     const alarmed = [];
     rawAnom.clear();
@@ -104,6 +105,7 @@ async function boot() {
     nameplate.alarm(fleet.selected && alarmed.includes(fleet.selected.id));
     dash.setAlarms(alarmed);
     dash.onTick(msg);
+    statusBar.onTick(msg); statusBar.setAlarms(alarmed.length);
   };
 
   // ── Carga del parque con barra de progreso en la portada ──────────────────
@@ -114,8 +116,8 @@ async function boot() {
     if (pc) pc.textContent = Math.round(pct) + '%';
     if (st && status) st.textContent = status;
   };
-  // ── Multiparque: store de parques (migra el layout antiguo a «Parque 1») ─────
-  const store = loadParksStore(loadLayout());
+  // ── Multiparque: store de parques (por defecto se siembra el parque real Camán I) ─
+  const store = loadParksStore();
   const activePark = store.parks.find(p => p.id === store.activeId) || store.parks[0];
   const fresh = !(activePark.turbines?.length) && !(activePark.hv?.length);
   if (fresh) {
@@ -131,32 +133,61 @@ async function boot() {
     setLoad(84, `${activePark.name} cargado`); await delay(120);
   }
 
-  // Fallas y daño de demostración (mientras se conectan los sensores reales)
+  // Sin fallas ni daño de demostración por ahora: el parque arranca todo sano
+  // (cuando se conecten los sensores reales, el estado vendrá del gateway).
   const dmgMap = {};
-  if (fleet.structures[2]?.sensors[1]) fleet.structures[2].sensors[1].status = 'fault';
-  const lastHV = [...fleet.structures].reverse().find(s => s.type === 'hv');
-  if (lastHV?.sensors[2]) lastHV.sensors[2].status = 'fault';
-  if (fleet.structures[4]) dmgMap[fleet.structures[4].id] = 0.45;
 
   const buildManifest = () => fleet.structures.map(s => ({
     id: s.id, type: s.type, f1: F1_BASE[s.type] || 0.5, dmg: dmgMap[s.id] || 0,
     sensors: s.sensors.map(se => ({ id: se.id, status: se.status || 'ok' })),
   }));
-  const syncData = () => { ds.init(buildManifest()); dash.setStructures(fleet.getStructures()); };
+  let mapView = null;   // vista 2D Leaflet (se crea más abajo)
+  const syncData = () => { ds.init(buildManifest()); dash.setStructures(fleet.getStructures()); mapView?.setStructures(); };
+
+  // Vista 2D del parque (Leaflet): click en un marcador → vuelve al 3D enfocando la torre.
+  mapView = new MapView(document.getElementById('map-container'), fleet, {
+    onPick: (id) => { document.body.classList.remove('map-full'); fleet.selectById(id); },   // mantiene el PiP visible
+    onToggleFull: () => { document.body.classList.toggle('map-full'); mapView.invalidate(); },
+  });
+  window.shmMap = mapView;
+  mapView.setStructures();
 
   // Árbol lateral Parque ▸ Zona ▸ Torre
   pm = new ParkManager({ el: document.getElementById('park-tree'), fleet, store, onSync: syncData });
   window.shmParks = pm;
   pm.syncFleetToActive(); pm.save();     // captura el layout fresco/cargado en el store
   pm.bind(); pm.render();
+  statusBar.setParque(pm.active.name, fleet.structures.length);
 
   const saveLayout = () => { pm.syncFleetToActive(); pm.save(); };
   fleet.onChange = syncData;        // re-sincroniza telemetría al agregar
   fleet.onLayoutChange = saveLayout; // persiste el orden al mover/agregar
-  fleet.onSelect = (obj) => { dash.select(obj); nameplate.show(obj); ds.focus(obj ? obj.id : null); };
+  const towerCard = buildTowerCard(vpwrap, fleet, { onShowAvance: () => dash.showPane('avance') });
+  fleet.onFrame = towerCard.tick;     // la ficha se reposiciona con el bucle de render
+  fleet.onSelect = (obj) => { dash.select(obj); nameplate.show(obj); towerCard.setData(obj); statusBar.setSelected(obj); ds.focus(obj ? obj.id : null); };
+
+  // Mapa 2D (PiP) visible por defecto.
+  document.body.classList.add('map-pip');
+  document.getElementById('shm-map-tool')?.classList.add('active');
+  mapView.invalidate();
+
+  // ESC: en pantalla completa del mapa, restaura; si no, deselecciona la estructura.
+  addEventListener('keydown', (e) => {
+    if (e.key !== 'Escape') return;
+    if (document.body.classList.contains('map-full')) { document.body.classList.remove('map-full'); mapView.invalidate(); return; }
+    if (fleet.selected) fleet.clearSelection();
+  });
 
   syncData();
   fleet.playIntro();
+
+  // ── Relieve conceptual del terreno (DEM vendorizado) — encendido por defecto ─
+  setLoad(88, 'Cargando relieve…'); await delay(40);
+  try {
+    await fleet.loadTerrain('data/caman_dem.json?v=212');
+    fleet.setTerrainVisible(true);
+    document.getElementById('shm-relieve-tool')?.classList.add('active');
+  } catch (e) { console.warn('[shm] relieve no disponible', e); }
 
   // ── Gemelo digital: f₁ + diagramas por el solver de PÓRTICO (bloqueante) ───
   setLoad(90, 'Calculando gemelo digital…'); await delay(60);
@@ -203,6 +234,15 @@ function buildToolbar(toolbar, fleet, getPM = () => null) {
   const del = mk('shm-del-tool', 'Borrar la estructura seleccionada (Supr)',
     `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M5 7h14M10 7V5h4v2M6 7l1 13h10l1-13"/></svg>`,
     'Borrar', () => { if (fleet.selected) fleet.removeStructure(fleet.selected.id); });
+  // Avance de obra (4D): conmuta el «llenado» de las torres (sólido erigido + silueta de lo que falta).
+  const avance = mk('shm-avance-tool', 'Mostrar/ocultar el avance de obra (4D)',
+    `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M5 21V11h4v10M10 21V7h4v14M15 21V3h4v18"/></svg>`,
+    'Avance', () => { const on = !fleet.constructionMode; fleet.setConstructionMode(on); avance.classList.toggle('active', on); });
+  if (fleet.constructionMode) avance.classList.add('active');
+  // Relieve conceptual del terreno (curvas de nivel + tinte hipsométrico).
+  const relieve = mk('shm-relieve-tool', 'Mostrar/ocultar el relieve del terreno',
+    `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M3 20 L9 8 L13 15 L16 10 L21 20 Z"/></svg>`,
+    'Relieve', () => { const on = !fleet.terrainOn; fleet.setTerrainVisible(on); relieve.classList.toggle('active', on); });
   // El botón «Editar» es el interruptor maestro del modo edición: con él activo se
   // pueden crear, borrar y mover estructuras; apagado, sólo se monitorea.
   // TODO(perfiles): condicionar la visibilidad de «Editar» al rol del usuario.
@@ -214,10 +254,19 @@ function buildToolbar(toolbar, fleet, getPM = () => null) {
   const edit = mk('shm-edit-tool', 'Activar/desactivar el modo edición (crear · borrar · mover)',
     `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 20 L4 16 L15 5 L19 9 L8 20 Z"/><line x1="13" y1="7" x2="17" y2="11"/></svg>`,
     'Editar', () => setEditing(!fleet.editMode));
-  toolbar.append(sep, pause, edit, add, hv, del);
+  toolbar.append(sep, pause, edit, avance, relieve, add, hv, del);
+  // Conmutador de vista: mapa 2D (Leaflet) ⇄ parque 3D.
+  const mapBtn = mk('shm-map-tool', 'Mostrar/ocultar el mini-mapa 2D del parque',
+    `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M9 4 L3 6 V20 L9 18 L15 20 L21 18 V4 L15 6 L9 4 Z"/><path d="M9 4 V18 M15 6 V20"/></svg>`,
+    'Mapa', () => {
+      const on = document.body.classList.toggle('map-pip');
+      if (!on) document.body.classList.remove('map-full');   // al cerrar el mapa, salir también de pantalla completa
+      mapBtn.classList.toggle('active', on);
+      if (on) { window.shmMap?.invalidate(); window.shmMap?.refresh(); }
+    });
   // «Árbol» va ARRIBA DE TODO, sobre la flecha de selección (1.er control de la barra).
   const topSep = document.createElement('div'); topSep.className = 'tool-sep';
-  toolbar.prepend(tree, topSep);
+  toolbar.prepend(tree, mapBtn, topSep);
   if (document.body.classList.contains('tree-open')) tree.classList.add('active');
 
   // Supr/Delete borra la estructura seleccionada (sólo en modo edición).
@@ -264,6 +313,84 @@ function buildBanner(vpwrap) {
   };
 }
 
+// Barra de estado inferior propia de ReWind (reemplaza la de modelado FEM).
+function buildStatusBar(fleet, o = {}) {
+  const bar = document.getElementById('statusbar');
+  if (!bar) return { onTick() {}, setSelected() {}, setParque() {}, setAlarms() {} };
+  const wrap = document.createElement('div'); wrap.className = 'shm-sb-wrap';
+  wrap.innerHTML = `
+    <span class="shm-sb" id="sb-parque">Parque: <b>—</b></span>
+    <span class="shm-sb" id="sb-struct">Estructuras: —</span>
+    <span class="shm-sb" id="sb-avance">Avance parque: —</span>
+    <span class="shm-sb" id="sb-sens">Sensores: —</span>
+    <span class="shm-sb" id="sb-alarm">Alarmas: 0</span>
+    <span class="shm-sb" id="sb-wind">Viento medio: —</span>
+    <span class="shm-sb" id="sb-source">Fuente: ${o.source || '—'}</span>
+    <span class="shm-sb shm-sb-grow" id="sb-selstruct">Sin selección</span>
+    <span class="shm-sb" id="sb-clock">--:--:--</span>`;
+  bar.appendChild(wrap);
+  const $ = (id) => wrap.querySelector('#' + id);
+  const clock = () => { $('sb-clock').textContent = new Date().toLocaleTimeString('es-CL'); };
+  clock(); setInterval(clock, 1000);
+  return {
+    setParque(name, count) { $('sb-parque').querySelector('b').textContent = name || '—'; if (count != null) $('sb-struct').textContent = `Estructuras: ${count}`; },
+    setSelected(obj) { $('sb-selstruct').textContent = obj ? `Selección: ${obj.label}` : 'Sin selección'; },
+    setAlarms(n) { const e = $('sb-alarm'); e.textContent = `Alarmas: ${n}`; e.classList.toggle('on', n > 0); },
+    onTick(msg) {
+      let ok = 0, fault = 0, wsum = 0, wn = 0;
+      for (const id in msg.summaries) { const s = msg.summaries[id]; for (const se of s.sensors) (se.status === 'fault' ? fault++ : ok++); if (s.wind != null) { wsum += s.wind; wn++; } }
+      $('sb-sens').textContent = `Sensores: ${ok} OK · ${fault} en falla`;
+      $('sb-wind').textContent = `Viento medio: ${wn ? (wsum / wn).toFixed(1) : '—'} m/s`;
+      const bs = fleet.structures.map(s => s.built).filter(b => b != null);
+      $('sb-avance').textContent = `Avance parque: ${bs.length ? Math.round(bs.reduce((a, b) => a + b, 0) / bs.length * 100) : 0}%`;
+    },
+  };
+}
+
+// Ficha flotante junto a la torre seleccionada: datos generales + avance de obra.
+function buildTowerCard(vpwrap, fleet, o = {}) {
+  const onShowAvance = o.onShowAvance || (() => {});
+  const el = document.createElement('div');
+  el.id = 'shm-towercard'; el.style.display = 'none';
+  (vpwrap || document.body).appendChild(el);
+  el.addEventListener('click', (e) => {
+    if (e.target.closest('.tc-x')) { dismissed = true; el.style.display = 'none'; return; }
+    if (e.target.closest('.tc-btn') && cur) onShowAvance(cur.id);
+  });
+  let cur = null, lastT = 0, dismissed = false;
+  const render = () => {
+    if (!cur) return;
+    const sum = window.shmData?.get(cur.id);
+    const pct = Math.round((cur.built != null ? cur.built : 1) * 100);
+    const sp = (s) => s.pct != null ? s.pct : (s.done ? 100 : 0);
+    const doneN = cur.stages ? cur.stages.filter(s => sp(s) >= 100).length : 0;
+    const etapa = cur.stages ? (pct >= 100 ? 'Obra completa' : `${doneN}/${cur.stages.length} etapas`) : '';
+    el.innerHTML = `
+      <div class="tc-h">${cur.label}<button class="tc-x" type="button" title="Cerrar">✕</button></div>
+      <div class="tc-r"><span>${cur.type === 'hv' ? 'Torre AT' : 'Aerogenerador'}</span><b>${cur.height} m</b></div>
+      ${sum ? `<div class="tc-r"><span>f₁</span><b>${sum.f1.toFixed(3)} Hz</b></div>` : ''}
+      ${sum ? `<div class="tc-r"><span>Viento</span><b>${sum.wind != null ? sum.wind.toFixed(1) + ' m/s' : '—'}</b></div>` : ''}
+      ${sum ? `<div class="tc-r"><span>Temp.</span><b>${sum.temp.toFixed(1)} °C</b></div>` : ''}
+      <div class="tc-r"><span>Avance</span><b>${pct}%</b></div>
+      <div class="tc-bar"><i style="width:${pct}%"></i></div>
+      <div class="tc-stage">${etapa}</div>
+      <button class="tc-btn" type="button">Ver avance ›</button>`;
+  };
+  const tick = () => {                    // llamado por fleet.onFrame (bucle de render)
+    if (!cur || dismissed) return;
+    const a = fleet.anchorScreen(cur);
+    if (a && !a.behind) {
+      const wr = (vpwrap || document.body).getBoundingClientRect();
+      el.style.display = 'block';
+      el.style.left = (a.x - wr.left + 16) + 'px';
+      el.style.top = (a.y - wr.top) + 'px';
+    } else el.style.display = 'none';
+    const now = performance.now();
+    if (now - lastT > 500) { lastT = now; render(); }
+  };
+  return { tick, setData(st) { cur = st; dismissed = false; if (!st) { el.style.display = 'none'; return; } render(); } };
+}
+
 // Genera y descarga un informe de falla (.txt) de la estructura.
 function downloadReport(obj) {
   const sum = window.shmData?.get(obj.id) || {};
@@ -298,20 +425,41 @@ function buildDashboard(panel, fleet, actions) {
       </div>
       <button id="shm-report-btn" title="Informe compilado de todo el parque">📄 Parque</button>
     </div>
-    <div class="shm-fleet">
-      <div class="shm-stat"><div class="k">Estructuras</div><div class="v" id="shm-count">0</div></div>
-      <div class="shm-stat"><div class="k">Sensores OK</div><div class="v" style="color:var(--success)" id="shm-ok">0</div></div>
-      <div class="shm-stat"><div class="k">Fallas</div><div class="v" style="color:var(--danger)" id="shm-fault">0</div></div>
-      <div class="shm-stat"><div class="k">Alarmas</div><div class="v" style="color:var(--danger)" id="shm-alarm-count">0</div></div>
+    <div class="shm-main">
+    <div class="shm-toptabs">
+      <button class="shm-toptab active" data-v="parque">Parque</button>
+      <button class="shm-toptab" data-v="seleccion">Selección</button>
     </div>
-    <div class="shm-listwrap">
-      <div class="shm-list-h">Estructuras del parque</div>
-      <div class="shm-list" id="shm-list"></div>
+    <div class="shm-views">
+    <div class="shm-view" id="view-parque">
+      <div class="shm-fleet">
+        <div class="shm-stat"><div class="k">Estructuras</div><div class="v" id="shm-count">0</div></div>
+        <div class="shm-stat"><div class="k">Sensores OK</div><div class="v" style="color:var(--success)" id="shm-ok">0</div></div>
+        <div class="shm-stat"><div class="k">Fallas</div><div class="v" style="color:var(--danger)" id="shm-fault">0</div></div>
+        <div class="shm-stat"><div class="k">Alarmas</div><div class="v" style="color:var(--danger)" id="shm-alarm-count">0</div></div>
+      </div>
+      <div class="shm-parkprog" id="shm-parkprog"></div>
+      <div class="shm-listwrap">
+        <div class="shm-list-h">Estructuras del parque</div>
+        <div class="shm-list" id="shm-list"></div>
+      </div>
     </div>
-    <div class="shm-detail" id="shm-detail"><div class="empty">Selecciona una estructura<br>(en la lista o en la vista).</div></div>`;
+    <div class="shm-view" id="view-seleccion" style="display:none">
+      <div class="shm-detail" id="shm-detail"><div class="empty">Selecciona una estructura<br>(en la lista, el mapa o la vista 3D).</div></div>
+    </div>
+    </div>
+    </div>`;
   panel.appendChild(el);
   const $ = (s) => el.querySelector(s);
   el.querySelector('#shm-report-btn').addEventListener('click', () => buildReport(null));   // compilado del parque
+
+  // Pestañas de nivel superior: Parque (flota) ⇄ Selección (estructura elegida).
+  function setTopView(v) {
+    $('#view-parque').style.display = v === 'parque' ? '' : 'none';
+    $('#view-seleccion').style.display = v === 'seleccion' ? '' : 'none';
+    el.querySelectorAll('.shm-toptab').forEach(t => t.classList.toggle('active', t.dataset.v === v));
+  }
+  el.querySelectorAll('.shm-toptab').forEach(t => t.addEventListener('click', () => setTopView(t.dataset.v)));
 
   let list = [], current = null, pane = 'datos', sigBuf = {}, sigRAF = null, freqHist = {};
   let specOff = null, specLast = 0;                 // espectrograma (offscreen + scroll)
@@ -324,6 +472,15 @@ function buildDashboard(panel, fleet, actions) {
     return `rgb(${a[0] + (b[0] - a[0]) * f | 0},${a[1] + (b[1] - a[1]) * f | 0},${a[2] + (b[2] - a[2]) * f | 0})`;
   };
 
+  // Color del punto por AVANCE de obra (mismo criterio que el mapa 2D).
+  function progColor(st) {
+    if (!st) return 'var(--text-muted)';
+    if (st.alarm) return '#ef4444';
+    const b = st.built != null ? st.built : 1;
+    if (b >= 0.97) return '#22c55e';   // operativa
+    if (b <= 0.02) return '#94a3b8';   // solo fundación
+    return '#f59e0b';                  // en montaje
+  }
   function setStructures(structs) {
     list = structs;
     $('#shm-count').textContent = structs.length;
@@ -331,14 +488,27 @@ function buildDashboard(panel, fleet, actions) {
     for (const s of structs) {
       const row = document.createElement('button');
       row.className = 'shm-row'; row.dataset.id = s.id;
-      row.innerHTML = `<span class="dot"></span><span class="nm">${s.label}</span><span class="ty">${s.type === 'hv' ? 'AT' : 'T'}</span>`;
+      const c = progColor(fleet.getStructure(s.id));
+      row.innerHTML = `<span class="dot" style="background:${c};box-shadow:0 0 6px ${c}"></span><span class="nm">${s.label}</span><span class="ty">${s.type === 'hv' ? 'AT' : 'T'}</span>`;
       row.addEventListener('click', () => fleet.selectById(s.id));
       lc.appendChild(row);
     }
     highlight();
+    updateParkProgress();
   }
   function highlight() {
     el.querySelectorAll('.shm-row').forEach(r => r.classList.toggle('active', current && r.dataset.id === current.id));
+  }
+  // Resumen de avance de obra del parque (barra + conteo por etapa) en la cabecera.
+  function updateParkProgress() {
+    const box = $('#shm-parkprog'); if (!box) return;
+    const bs = fleet.structures.map(s => s.built).filter(b => b != null);
+    if (!bs.length) { box.innerHTML = ''; return; }
+    const avg = Math.round(bs.reduce((a, b) => a + b, 0) / bs.length * 100);
+    const done = bs.filter(b => b >= 0.999).length, found = bs.filter(b => b <= 0.02).length;
+    box.innerHTML = `<div class="pp-top"><span>Avance del parque</span><b>${avg}%</b></div>
+      <div class="pp-bar"><i style="width:${avg}%"></i></div>
+      <div class="pp-sub">${done} completas · ${bs.length - done - found} en montaje · ${found} solo fundación</div>`;
   }
   function setAlarms(ids) {
     const set = new Set(ids);
@@ -369,7 +539,9 @@ function buildDashboard(panel, fleet, actions) {
   function select(obj) {
     current = obj; highlight();
     sigBuf = {}; freqHist = {}; specOff = null;
-    if (!obj) { stopSig(); $('#shm-detail').innerHTML = '<div class="empty">Selecciona una estructura<br>(en la lista o en la vista).</div>'; return; }
+    if (!obj) { stopSig(); $('#shm-detail').innerHTML = '<div class="empty">Selecciona una estructura<br>(en la lista, el mapa o la vista 3D).</div>'; setTopView('parque'); return; }
+    setTopView('seleccion');     // al elegir una torre, salta a la pestaña Selección
+    pane = 'avance';             // …y por defecto muestra el Avance de obra
     renderDetail();
   }
 
@@ -379,6 +551,7 @@ function buildDashboard(panel, fleet, actions) {
       <div id="shm-alarmbar" style="display:none"></div>
       <div class="shm-tabs">
         <button class="shm-tab" data-p="datos">Datos</button>
+        <button class="shm-tab" data-p="avance">Avance</button>
         <button class="shm-tab" data-p="senal">Señal</button>
         <button class="shm-tab" data-p="sensores">Sensores</button>
         <button class="shm-tab" data-p="hist">Histórico</button>
@@ -410,6 +583,7 @@ function buildDashboard(panel, fleet, actions) {
         <div class="row"><span>Sensores</span><b id="d-ns">—</b></div>
         <div class="row"><span>f₁ gemelo digital</span><b>${window.shmTwin?.[o.type] ? window.shmTwin[o.type].toFixed(3) + ' Hz' : '… calculando'}</b></div>
         <div class="row"><span>f₁ actual</span><b id="d-f1">—</b></div>
+        <div class="row"><span>Velocidad del viento</span><b id="d-wind">—</b></div>
         <div class="row"><span>Temperatura</span><b id="d-temp">—</b></div>
         <div class="row"><span>Clasificación ML</span><b id="d-cls">…</b></div>
         <div class="row"><span>Índice de daño</span><b id="d-dmg">${dmg}%</b></div>
@@ -422,6 +596,51 @@ function buildDashboard(panel, fleet, actions) {
       const deg0 = Math.round(((fleet.getYaw(o.id) * 180 / Math.PI) % 360 + 360) % 360);
       sl.value = deg0; vv.textContent = deg0 + '°';
       sl.addEventListener('input', () => { vv.textContent = sl.value + '°'; fleet.setYaw(o.id, sl.value * Math.PI / 180); fleet.onLayoutChange?.(); });
+    } else if (pane === 'avance') {
+      if (!o.stages) o.stages = defaultStages(o.type, o.built != null ? o.built : 0);
+      const stages = o.stages;
+      const built = builtFromStages(stages), pct = Math.round(built * 100);
+      const stPct = (s) => s.pct != null ? s.pct : (s.done ? 100 : 0);
+      const doneN = stages.filter(s => stPct(s) >= 100).length;
+      const inProg = stages.filter(s => { const p = stPct(s); return p > 0 && p < 100; }).length;
+      const rows = stages.map((s, i) => { const p = stPct(s); return `
+        <div class="av-row ${p >= 100 ? 'done' : ''}">
+          <div class="av-top">
+            <span class="av-nm" data-act="rename" data-i="${i}" title="Renombrar">${s.name}</span>
+            <input type="number" class="av-pp" data-i="${i}" min="0" max="100" step="5" value="${p}" title="% de avance de la etapa">
+            <span class="av-pp-u">%</span>
+            <input type="date" class="av-date" data-i="${i}" value="${s.date || ''}" title="Fecha de la etapa">
+            <button class="av-del" data-act="del" data-i="${i}" title="Quitar etapa">✕</button>
+          </div>
+          <div class="av-sbar"><i style="width:${p}%"></i></div>
+        </div>`; }).join('');
+      body.innerHTML = `
+        <div class="av-pct">${pct}<span>%</span></div>
+        <div class="av-bar"><i style="width:${pct}%"></i></div>
+        <div class="row"><span>Etapas completas</span><b>${doneN}/${stages.length}</b></div>
+        <div class="row"><span>En curso</span><b>${inProg}</b></div>
+        <div class="av-stages">${rows}</div>
+        <button class="av-add" data-act="add">＋ Agregar etapa</button>
+        <div class="note" style="font-size:10px">Ajusta el % de cada etapa (admite parciales), su fecha, o agrega/quita etapas. El % global y el llenado 3D se derivan de las etapas.</div>`;
+      const applyStages = (re = true) => {
+        o.built = builtFromStages(o.stages);
+        fleet.setProgress(o.id, o.built);
+        fleet.onLayoutChange?.();            // persiste
+        updateParkProgress(); window.shmMap?.refresh?.();
+        if (re) renderPane();
+      };
+      body.querySelectorAll('[data-act]').forEach(b => b.addEventListener('click', () => {
+        const i = +b.dataset.i, act = b.dataset.act;
+        if (act === 'rename') { const s = o.stages[i]; const n = (prompt('Renombrar etapa:', s.name) || '').trim(); if (n) { s.name = n; applyStages(); } }
+        else if (act === 'del') { if (o.stages.length > 1) { o.stages.splice(i, 1); applyStages(); } }
+        else if (act === 'add') { const n = (prompt('Nombre de la etapa nueva:', 'Nueva etapa') || '').trim(); if (n) { o.stages.push({ name: n, pct: 0, date: '' }); applyStages(); } }
+      }));
+      body.querySelectorAll('.av-pp').forEach(inp => inp.addEventListener('change', () => {
+        const s = o.stages[+inp.dataset.i]; s.pct = Math.max(0, Math.min(100, +inp.value || 0));
+        if (s.pct >= 100 && !s.date) s.date = new Date().toISOString().slice(0, 10);
+        applyStages();
+      }));
+      body.querySelectorAll('.av-date').forEach(d => d.addEventListener('change', () => { o.stages[+d.dataset.i].date = d.value; fleet.onLayoutChange?.(); }));
     } else if (pane === 'senal') {
       body.innerHTML = `<div class="note" style="margin-top:0">Señal de aceleración en vivo (se mueve en tiempo real):</div><div id="sig-wrap"></div>`;
       const wrap = body.querySelector('#sig-wrap');
@@ -497,6 +716,7 @@ function buildDashboard(panel, fleet, actions) {
       const set = (id, v) => { const n = $('#' + id); if (n) n.textContent = v; };
       set('d-ns', `${ok}/${ns} OK`);
       set('d-f1', `${sum.f1.toFixed(3)} Hz`);
+      set('d-wind', sum.wind != null ? `${sum.wind.toFixed(1)} m/s` : '—');
       set('d-temp', `${sum.temp.toFixed(1)} °C`);
       set('d-dmg', `${Math.round((sum.dmg || 0) * 100)} %`);
       const cls = sum.cls || 0, cn = $('#d-cls');
@@ -517,11 +737,10 @@ function buildDashboard(panel, fleet, actions) {
     let ok = 0, fault = 0;
     for (const id in msg.summaries) for (const se of msg.summaries[id].sensors) (se.status === 'fault' ? fault++ : ok++);
     $('#shm-ok').textContent = ok; $('#shm-fault').textContent = fault;
-    // puntos de la lista
+    // puntos de la lista: color por AVANCE de obra (igual que el mapa 2D)
     for (const s of list) {
-      const sum = msg.summaries[s.id]; if (!sum) continue;
       const row = el.querySelector(`.shm-row[data-id="${s.id}"]`); if (!row) continue;
-      const dot = row.querySelector('.dot'), c = CLS_COL[sum.cls || 0];
+      const dot = row.querySelector('.dot'), c = progColor(fleet.getStructure(s.id));
       if (row.classList.contains('alarm')) { dot.style.background = ''; dot.style.boxShadow = ''; }  // CSS maneja el rojo titilante
       else { dot.style.background = c; dot.style.boxShadow = `0 0 6px ${c}`; }
     }
@@ -1049,7 +1268,9 @@ ${detalle}${compilado}
     win.document.open(); win.document.write(html); win.document.close();
   }
 
-  return { setStructures, select, onTick, setAlarms, refresh: () => { if (current) renderPane(); } };
+  // Abre una sub-pestaña de la estructura seleccionada (p. ej. desde la ficha flotante).
+  function showPane(p) { if (!current) return; pane = p; setTopView('seleccion'); renderDetail(); }
+  return { setStructures, select, onTick, setAlarms, showPane, refresh: () => { if (current) renderPane(); } };
 }
 
 function startBoot() { boot().catch(e => { console.error('[shm] boot', e); window.__rewindCloseLanding?.(); }); }

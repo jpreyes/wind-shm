@@ -9,7 +9,7 @@
 // migraremos a InstancedMesh + atenuación por shader (ver docs/wind-shm-issues.md).
 // ─────────────────────────────────────────────────────────────────────────────
 import * as THREE from 'three';
-import { circularFoundation } from './structures.js?v=211';
+import { circularFoundation } from './structures.js?v=212';
 
 export const TOWER_H = 90;          // altura de buje (m), coherente con el macromodelo
 
@@ -52,6 +52,10 @@ const baseMats = {
 const hitboxGeo = new THREE.CylinderGeometry(15, 15, TOWER_H + 24, 10);
 const hitboxMat = new THREE.MeshBasicMaterial({ colorWrite: false, depthWrite: false });
 
+// Material «fantasma» (silueta de lo que falta construir) — se CLONA por torre
+// porque cada una lleva su propio plano de corte (avance 4D).
+const ghostMatBase = new THREE.MeshBasicMaterial({ color: 0x8fb9d6, transparent: true, opacity: 0.16, depthWrite: false, side: THREE.DoubleSide });
+
 let _uid = 0;
 
 /**
@@ -77,6 +81,13 @@ export function createTurbine(o = {}) {
   const mast = new THREE.Mesh(mastGeo, mTower);
   mast.position.y = TOWER_H / 2; mast.castShadow = true; mast.userData.turbineId = id;
   group.add(mast);
+
+  // Fuste «fantasma»: silueta de lo que falta erigir (avance 4D). Misma geometría,
+  // material clonado con su propio plano de corte (lo gestiona FleetView.setProgress).
+  const ghostMat = ghostMatBase.clone();
+  const ghostMast = new THREE.Mesh(mastGeo, ghostMat);
+  ghostMast.position.y = TOWER_H / 2; ghostMast.userData.turbineId = id; ghostMast.visible = false;
+  group.add(ghostMast);
 
   // Conjunto superior (góndola + rotor) — gira en azimut (yaw)
   const top = new THREE.Group();
@@ -107,6 +118,18 @@ export function createTurbine(o = {}) {
     rotor.add(blade);
   }
 
+  // Cabeza «fantasma» (góndola + buje + 3 aspas) en el tope: se muestra mientras la
+  // torre NO está operativa, para que se reconozca que es un aerogenerador (sin girar).
+  // Usa el mismo material fantasma del fuste (mismo plano de corte: queda por encima).
+  const topGhost = new THREE.Group();
+  topGhost.position.y = TOWER_H; topGhost.rotation.y = yaw;
+  const gNac = new THREE.Mesh(nacelleGeo, ghostMat); gNac.position.set(0, 1.6, -1.2); gNac.userData.turbineId = id; topGhost.add(gNac);
+  const gRotor = new THREE.Group(); gRotor.position.set(0, 1.6, 4.0);
+  gRotor.add(new THREE.Mesh(hubGeo, ghostMat));
+  for (let i = 0; i < 3; i++) { const b = new THREE.Mesh(bladeGeo, ghostMat); b.rotation.z = (i * 2 * Math.PI) / 3; b.userData.turbineId = id; gRotor.add(b); }
+  topGhost.add(gRotor); topGhost.visible = false;
+  group.add(topGhost);
+
   // ── Capa de vida: 2 sensores MEMS + gateway (chillones, bien visibles, centrados) ──
   const mkLive = (color) => new THREE.MeshStandardMaterial({
     color: 0x0a0a0a, emissive: color, emissiveIntensity: 1.4, roughness: 0.35,
@@ -118,7 +141,7 @@ export function createTurbine(o = {}) {
     const r = THREE.MathUtils.lerp(2.7, 1.05, hy);    // radio del fuste cónico a esa altura
     s.position.set(0, TOWER_H * hy, r + 0.2);          // al frente, centrado en el eje
     s.userData = { turbineId: id, sensor: tag };
-    group.add(s); sensors.push({ id: tag, mesh: s, mat: m, tag, phase: Math.random() * 6.28, status: 'ok' });
+    group.add(s); sensors.push({ id: tag, mesh: s, mat: m, tag, phase: Math.random() * 6.28, status: 'ok', _hfrac: hy });
   }
   const gMat = mkLive(0x47b6ff);
   const gw = new THREE.Mesh(gatewayGeo, gMat);
@@ -131,6 +154,9 @@ export function createTurbine(o = {}) {
   hit.position.y = (TOWER_H + 24) / 2; hit.userData = { turbineId: id, hitbox: true };
   group.add(hit);
 
-  return { id, type: 'turbine', label: `Torre ${id}`, height: TOWER_H, power: '~3 MW',
-           group, top, rotor, sensors, gateway, bodyMats, dimMats: bodyMats, spin, yaw };
+  return { id, type: 'turbine', label: o.label ?? `Torre ${id}`, height: TOWER_H, power: '~3 MW',
+           group, top, rotor, sensors, gateway, bodyMats, dimMats: bodyMats, spin, yaw, operational: true,
+           // Avance 4D: SOLO el fuste se «llena» (corte por debajo); la cabeza (góndola+rotor)
+           // se muestra sólida y girando al estar operativa, o como silueta fantasma si no.
+           solidMats: [mTower], _ghostHead: topGhost, ghost: { meshes: [ghostMast], mats: [ghostMat] } };
 }

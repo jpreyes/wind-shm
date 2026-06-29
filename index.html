@@ -29,9 +29,10 @@
       window.dispatchEvent(new Event('pwa-installed'));
     });
   </script>
-  <link rel="stylesheet" href="style.css?v=211">
-  <link rel="stylesheet" href="ui-v2.css?v=211">
-  <link rel="stylesheet" href="shm.css?v=211">
+  <link rel="stylesheet" href="lib/leaflet/leaflet.css?v=212">
+  <link rel="stylesheet" href="style.css?v=212">
+  <link rel="stylesheet" href="ui-v2.css?v=212">
+  <link rel="stylesheet" href="shm.css?v=212">
   <script type="importmap">
   {
     "imports": {
@@ -56,7 +57,7 @@
         </g>
         <circle cx="12" cy="11" r="1.7" fill="var(--teal)"/>
       </svg>
-      ReWind
+      ReWind <span class="brand-park">Camán</span>
     </div>
 
     <nav id="menu-nav">
@@ -478,6 +479,8 @@
 
       <div id="results-banner">MODO RESULTADOS — haga clic sobre nodos y elementos para ver valores</div>
       <div id="viewport-container"></div>
+      <!-- ReWind: vista 2D del parque (Leaflet); se muestra sobre el canvas en modo mapa -->
+      <div id="map-container" aria-label="Mapa del parque"></div>
     </div>
 
     <!-- PANEL RESIZE HANDLE -->
@@ -930,6 +933,7 @@
       </g>
     </svg>
 
+    <div class="hero-park">Camán</div>
     <h1 class="hero-title">ReWind</h1>
     <p class="hero-tag">Monitoreo de salud estructural de torres eólicas</p>
     <div id="load-wrap">
@@ -963,9 +967,11 @@ setTimeout(function () { window.__rewindCloseLanding(); }, 25000);   // fallback
 
 <!-- numeric.js para solver (Fase 2+) -->
 <script src="lib/numeric.js"></script>
-<script type="module" src="js/app.js?v=211"></script>
+<!-- Leaflet (vista 2D del parque en ReWind) — global window.L, antes de los módulos -->
+<script src="lib/leaflet/leaflet.js?v=212"></script>
+<script type="module" src="js/app.js?v=212"></script>
 <!-- wind-shm: modo SHM (flota de torres) sobre el shell de PÓRTICO -->
-<script type="module" src="js/shm/shm_mode.js?v=211"></script>
+<script type="module" src="js/shm/shm_mode.js?v=212"></script>
 
 <!-- PWA: registrar el service worker (offline). Solo en contexto seguro
      (https o localhost); el navegador deja navigator.serviceWorker undefined

@@ -5,6 +5,7 @@ Thumbs.db
 *.log
 npm-debug.log*
 .claude/
+data/
 
 # Archivos del profesor (fuente local, NO se publican): Excel de normas y PDFs
 excel/

@@ -7,10 +7,13 @@
 // ─────────────────────────────────────────────────────────────────────────────
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
-import { createTurbine, TOWER_H } from './turbine_mesh.js?v=211';
-import { createSubstationTower, groundCable, overheadLine } from './structures.js?v=211';
+import { createTurbine, TOWER_H } from './turbine_mesh.js?v=212';
+import { createSubstationTower, groundCable, overheadLine } from './structures.js?v=212';
+import { toScene } from './parks_data_caman.js?v=212';
+import { CAMAN_ROADS } from './caman_roads.js?v=212';
 
 const SPACING = 235;
+const TOWER_SCALE = 2.2;   // agranda las torres (vista esquemática) para que destaquen sobre el relieve
 
 // Dispersión pseudo-aleatoria pero determinista (estable entre re-layouts).
 function jitter(n, seed) { const v = Math.sin(n * seed) * 43758.5453; return (v - Math.floor(v) - 0.5); }
@@ -63,13 +66,15 @@ export class FleetView {
     // Fondo igual que el PÓRTICO original (toma el color del tema activo).
     this.scene.background = cssColor('--bg', '#070a0f');
 
-    this.camera = new THREE.PerspectiveCamera(55, w / h, 1, 8000);
+    this.camera = new THREE.PerspectiveCamera(55, w / h, 1, 32000);   // far amplio: Camán I + grid de ~24k en escena
     this.camera.position.set(220, 150, 320);
 
     this.renderer = new THREE.WebGLRenderer({ antialias: true });
     this.renderer.setSize(w, h);
     this.renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+    this.renderer.localClippingEnabled = true;   // planos de corte por material (avance 4D)
     container.appendChild(this.renderer.domElement);
+    this.constructionMode = true;                 // 4D: torres «llenándose» según su avance
 
     this.controls = new OrbitControls(this.camera, this.renderer.domElement);
     this.controls.enableDamping = true;
@@ -78,6 +83,7 @@ export class FleetView {
 
     this._lights();
     this._ground();
+    this._buildRoads();
     this._buildWind();
 
     this.raycaster = new THREE.Raycaster();
@@ -99,9 +105,69 @@ export class FleetView {
   // Sin suelo ni cielo: solo la grilla del PÓRTICO original (color del tema).
   _ground() {
     const line = cssColor('--border2', '#2d3a4d');
-    const grid = new THREE.GridHelper(6000, 60, line, line);
-    grid.material.opacity = 0.35; grid.material.transparent = true;
+    const grid = new THREE.GridHelper(24000, 80, line, line);   // área amplia, celdas grandes (~300 u, ×3 del espaciado anterior)
+    grid.material.opacity = 0.28; grid.material.transparent = true;
     this.scene.add(grid);
+    this.grid = grid;            // se oculta al activar el relieve
+  }
+
+  // ── Relieve conceptual (capa de terreno) ─────────────────────────────────────
+  // Carga el DEM vendorizado y añade la malla (oculta hasta activarla).
+  async loadTerrain(url) {
+    const { Terrain } = await import('./terrain.js?v=212');
+    const dem = await (await fetch(url)).json();
+    this.terrain = new Terrain(dem, { vex: 1.5 });   // relieve exagerado (esquemático)
+    this.scene.add(this.terrain.mesh);
+    this.terrainOn = true;
+    this.applyElevation();                            // las torres SIEMPRE quedan a la cota
+    return this.terrain;
+  }
+
+  // Apoya todas las estructuras (y cables/caminos) sobre la cota del terreno.
+  // Se llama una vez al cargar el relieve; la elevación NO depende de su visibilidad.
+  applyElevation() {
+    for (const st of this.structures) {
+      st.group.position.y = this.groundY(st.group.position.x, st.group.position.z);
+      this.setProgress(st.id, st.built);     // los planos de corte dependen de la cota base
+    }
+    this.rebuildCables();
+    this._buildRoads();
+  }
+
+  // Muestra/oculta SOLO la malla del relieve; las torres quedan elevadas siempre.
+  setTerrainVisible(on) {
+    this.terrainOn = !!on && !!this.terrain;
+    if (this.terrain) this.terrain.mesh.visible = this.terrainOn;
+    if (this.grid) this.grid.visible = true;   // el grid genérico queda siempre (el relieve se asienta encima; no se ve «pelao»)
+  }
+
+  // Cota del terreno en (x,z) si está cargado (independiente de su visibilidad).
+  groundY(x, z) { return this.terrain ? this.terrain.heightAt(x, z) : 0; }
+
+  // Proyecta el tope de una estructura a coordenadas de pantalla (para la ficha flotante).
+  anchorScreen(st) {
+    if (!st) return null;
+    const h = (st.height || TOWER_H) * (st.group.scale.y || 1);
+    const p = st.group.position;
+    const v = new THREE.Vector3(p.x, p.y + h * 0.92, p.z).project(this.camera);
+    const r = this.renderer.domElement.getBoundingClientRect();
+    return { x: (v.x * 0.5 + 0.5) * r.width + r.left, y: (-v.y * 0.5 + 0.5) * r.height + r.top, behind: v.z > 1 };
+  }
+
+  // Caminos del parque (KMZ): polilíneas drapeadas sobre el terreno (o a ras si plano).
+  _buildRoads() {
+    if (this.roads) for (const r of this.roads) { this.scene.remove(r); r.geometry.dispose(); }
+    this.roads = [];
+    // Tubo de color saturado (alto contraste sobre el relieve pálido).
+    this._roadMat ||= new THREE.MeshBasicMaterial({ color: 0xff7a1a });
+    for (const seg of CAMAN_ROADS) {
+      const pts = seg.map(([lo, la]) => { const s = toScene(lo, la); return new THREE.Vector3(s.x, this.groundY(s.x, s.z) + 1.0, s.z); });
+      if (pts.length < 2) continue;
+      const geo = new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pts), pts.length * 2, 3, 5, false);
+      const tube = new THREE.Mesh(geo, this._roadMat);
+      tube.renderOrder = 2; tube.frustumCulled = false;
+      this.roads.push(tube); this.scene.add(tube);
+    }
   }
 
   // Partículas de viento que cruzan el parque (deriva en +X, reciclan).
@@ -127,8 +193,12 @@ export class FleetView {
 
   /** Agrega una torre al parque y la coloca en la grilla. */
   addTurbine(opts = {}) {
-    const t = createTurbine(opts);
+    const t = createTurbine(opts);   // opts.id, opts.label, opts.yaw, opts.spin
     t.dim = 0;                       // 0 = nítida, 1 = atenuada
+    if (opts.lat != null) t.lat = opts.lat;     // coordenadas reales (WGS84) si vienen del KMZ
+    if (opts.lon != null) t.lon = opts.lon;
+    if (opts.built != null) t.built = opts.built;   // avance de obra 4D (0..1)
+    if (opts.stages) t.stages = opts.stages;         // etapas de obra (editables)
     t.group.position.copy(opts.pos ? new THREE.Vector3(opts.pos.x, 0, opts.pos.z) : this._slot(this.turbines.length));
     this.turbines.push(t);
     this.structures.push(t);
@@ -170,6 +240,18 @@ export class FleetView {
   getStructure(id) { return this.structures.find(s => s.id === id) || null; }
   selectById(id) { const o = this.getStructure(id); if (o) this.selectTurbine(o); }
   _addLabel(st) { const sp = makeLabelSprite(st.label); sp.position.set(0, 2, 14); st.group.add(sp); st._label = sp; }   // al pie, fuera de la fundación
+  // Agranda la estructura (vista esquemática) sin agrandar su etiqueta flotante.
+  _applyScale(st, k = TOWER_SCALE) {
+    st.group.scale.setScalar(k);
+    if (st._label) { st._label.scale.multiplyScalar(1 / k); st._label.position.set(0, 2 / k, 14 / k); }
+  }
+  // Cambia la etiqueta visible (nombre) de una estructura y reconstruye su sprite 3D.
+  setLabel(id, text) {
+    const st = this.getStructure(id); if (!st || !text) return;
+    st.label = text;
+    if (st._label) { st.group.remove(st._label); st._label.material.map?.dispose?.(); st._label.material.dispose?.(); st._label = null; }
+    this._addLabel(st);
+  }
   setSensorStatus(structId, sensorId, status) {
     const st = this.getStructure(structId); if (!st) return;
     const se = st.sensors.find(x => x.id === sensorId); if (se) se.status = status;
@@ -179,11 +261,52 @@ export class FleetView {
   setYaw(structId, rad) {
     const st = this.getStructure(structId); if (!st) return;
     if (st.top) st.top.rotation.y = rad; else st.group.rotation.y = rad;
+    if (st._ghostHead) st._ghostHead.rotation.y = rad;   // la cabeza fantasma sigue la orientación
     st.yaw = rad;
   }
   getYaw(structId) {
     const st = this.getStructure(structId); if (!st) return 0;
     return st.top ? st.top.rotation.y : (st.group.rotation.y || 0);
+  }
+
+  // ── Avance de obra (4D): «llena» la estructura hasta la cota erigida ──────────
+  // built ∈ [0,1]: el cuerpo sólido se recorta por debajo de la cota y la silueta
+  // fantasma por encima; los sensores por sobre lo erigido se ocultan.
+  setProgress(structId, built) {
+    const st = this.getStructure(structId); if (!st) return;
+    built = Math.max(0, Math.min(1, built ?? st.built ?? 1));
+    st.built = built;
+    // «Operativa»: turbina con rotor instalado (gira); torre AT cuando está completa.
+    const op = st.type === 'turbine' ? built >= 0.97 : built >= 0.999;
+    st.operational = st.type === 'turbine' ? op : false;
+    if (!this.constructionMode) return;
+    const h = (st.height || TOWER_H) * (st.group.scale.y || 1);
+    const yCut = st.group.position.y + built * h;
+    (st._planeBelow ||= new THREE.Plane()).setComponents(0, -1, 0, yCut);   // conserva y ≤ yCut (lo erigido)
+    (st._planeAbove ||= new THREE.Plane()).setComponents(0, 1, 0, -yCut);   // conserva y ≥ yCut (lo que falta)
+    for (const m of (st.solidMats || [])) { m.clippingPlanes = [st._planeBelow]; m.clipShadows = true; }
+    for (const m of (st.ghost?.mats || [])) m.clippingPlanes = [st._planeAbove];
+    for (const gm of (st.ghost?.meshes || [])) gm.visible = !op;   // silueta del fuste/celosía que falta
+    if (st.type === 'turbine') {
+      if (st._ghostHead) st._ghostHead.visible = !op;   // cabeza fantasma mientras no esté operativa
+      if (st.top) st.top.visible = op;                  // cabeza sólida (girando) sólo si operativa
+    }
+    for (const s of st.sensors) if (s._hfrac != null) s.mesh.visible = built >= s._hfrac;
+  }
+
+  // Activa/desactiva el modo construcción (4D). Apagado → torres completas y operativas.
+  setConstructionMode(on) {
+    this.constructionMode = !!on;
+    for (const st of this.structures) {
+      if (on) { this.setProgress(st.id, st.built); continue; }
+      for (const m of (st.solidMats || [])) m.clippingPlanes = null;
+      for (const m of (st.ghost?.mats || [])) m.clippingPlanes = null;
+      for (const gm of (st.ghost?.meshes || [])) gm.visible = false;
+      if (st._ghostHead) st._ghostHead.visible = false;
+      if (st.top) st.top.visible = true;
+      if (st.type === 'turbine') st.operational = true;
+      for (const s of st.sensors) s.mesh.visible = true;
+    }
   }
 
   // Alarma de emergencia: faro rojo titilante sobre la estructura.
@@ -216,9 +339,10 @@ export class FleetView {
   // Posición de cámara que encuadra toda la flota, centrada.
   frame() {
     const { center, radius } = this._extent();
-    const tgt = new THREE.Vector3(center.x, TOWER_H * 0.45, center.z);
+    const gy = this.groundY(center.x, center.z), H = TOWER_H * TOWER_SCALE;
+    const tgt = new THREE.Vector3(center.x, gy + H * 0.45, center.z);
     const dist = Math.max(radius * 2.0, 280);
-    const pos = new THREE.Vector3(center.x + dist * 0.45, TOWER_H * 1.15 + radius * 0.4, center.z + dist);
+    const pos = new THREE.Vector3(center.x + dist * 0.45, gy + H * 1.15 + radius * 0.4, center.z + dist);
     return { pos, tgt };
   }
 
@@ -272,6 +396,7 @@ export class FleetView {
     const mats = [...(st.dimMats || st.bodyMats || []), ...st.sensors.map(s => s.mat)];
     if (st.gateway?.mat) mats.push(st.gateway.mat);
     if (st._beacon?.mat) mats.push(st._beacon.mat);
+    if (st.ghost?.mats) mats.push(...st.ghost.mats);
     for (const m of mats) m?.dispose?.();
     if (st._label) { st._label.material.map?.dispose?.(); st._label.material.dispose?.(); }
   }
@@ -312,20 +437,28 @@ export class FleetView {
     this.onChange = null; this.onLayoutChange = null;
     this.clearAll();
     for (const t of (p?.turbines || [])) {
-      const o = this.addTurbine({ pos: { x: t.x, z: t.z } });
+      const o = this.addTurbine({ pos: { x: t.x, z: t.z }, id: t.id, label: t.label, lat: t.lat, lon: t.lon, built: t.built, stages: t.stages });
       if (t.yaw != null) this.setYaw(o.id, t.yaw);
       o.zone = t.zone || null;
+      this._applyScale(o);
+      this.setProgress(o.id, t.built);          // aplica el llenado 4D
     }
     if ((p?.hv || []).length) {
       this.substation = { towers: [], sensors: [] };
       for (const h of p.hv) {
-        const hv = createSubstationTower({});
+        const hv = createSubstationTower({ id: h.id, label: h.label });
         hv.group.position.set(h.x, 0, h.z); hv.dim = 0;
         if (h.yaw != null) this.setYaw(hv.id, h.yaw);
+        if (h.lat != null) hv.lat = h.lat;
+        if (h.lon != null) hv.lon = h.lon;
+        if (h.built != null) hv.built = h.built;
+        if (h.stages) hv.stages = h.stages;
         hv.zone = h.zone || null;
         this.scene.add(hv.group);
         this.substation.towers.push(hv); this.substation.sensors.push(...hv.sensors);
         this.structures.push(hv); this._addLabel(hv);
+        this._applyScale(hv);
+        this.setProgress(hv.id, h.built);       // aplica el llenado 4D
       }
       this.rebuildCables();
     }
@@ -349,9 +482,10 @@ export class FleetView {
     for (const s of list) box.expandByPoint(s.group.position);
     const c = box.getCenter(new THREE.Vector3()), sz = box.getSize(new THREE.Vector3());
     const radius = Math.max(sz.x, sz.z) / 2 + SPACING;
-    const tgt = new THREE.Vector3(c.x, TOWER_H * 0.45, c.z);
+    const gy = this.groundY(c.x, c.z), H = TOWER_H * TOWER_SCALE;
+    const tgt = new THREE.Vector3(c.x, gy + H * 0.45, c.z);
     const dist = Math.max(radius * 2.0, 280);
-    const pos = new THREE.Vector3(c.x + dist * 0.45, TOWER_H * 1.15 + radius * 0.4, c.z + dist);
+    const pos = new THREE.Vector3(c.x + dist * 0.45, gy + H * 1.15 + radius * 0.4, c.z + dist);
     this.flyTo(pos, tgt, 1100);
   }
 
@@ -363,14 +497,15 @@ export class FleetView {
     this.cables = [];
     const addC = (m) => { this.scene.add(m); this.cables.push(m); };
     const tw = this.substation.towers;
-    const hubs = tw.map(hv => new THREE.Vector3(hv.group.position.x, 1, hv.group.position.z));
-    // conductores aéreos entre torres HV consecutivas
+    // Las posiciones ya llevan la cota del terreno en .y (si el relieve está activo).
+    const hubs = tw.map(hv => new THREE.Vector3(hv.group.position.x, hv.group.position.y + 1, hv.group.position.z));
+    // conductores aéreos entre torres HV consecutivas (siguen la cota de cada torre)
     for (let i = 0; i < tw.length - 1; i++) {
-      const a = tw[i].group.position, b = tw[i + 1].group.position, y = (tw[i].topY || 40) * 0.9;
-      addC(overheadLine(new THREE.Vector3(a.x, y, a.z), new THREE.Vector3(b.x, y, b.z)));
+      const a = tw[i].group.position, b = tw[i + 1].group.position, dh = (tw[i].topY || 40) * 0.9;
+      addC(overheadLine(new THREE.Vector3(a.x, a.y + dh, a.z), new THREE.Vector3(b.x, b.y + dh, b.z)));
     }
-    // cadena colectora + alimentador único
-    const pts = this.turbines.map(t => t.group.position.clone());
+    // cadena colectora + alimentador único (cables a ras, +0.7 sobre el terreno)
+    const pts = this.turbines.map(t => { const p = t.group.position.clone(); p.y += 0.7; return p; });
     if (pts.length && hubs.length) {
       const dHub = (i) => Math.min(...hubs.map(h => pts[i].distanceTo(h)));
       const rest = pts.map((_, i) => i);
@@ -464,7 +599,7 @@ export class FleetView {
     }
 
     for (const t of this.turbines) {
-      if (!this.paused) t.rotor.rotation.z += t.spin * dt;
+      if (!this.paused && t.operational !== false) t.rotor.rotation.z += t.spin * dt;   // sólo giran las operativas
       // Gateway: siempre encendido (indica que la torre transmite)
       t.gateway.mat.emissiveIntensity = 0.6 + 1.0 * (0.5 + 0.5 * Math.sin(tt * 1.6 + t.gateway.phase));
     }
@@ -513,10 +648,16 @@ export class FleetView {
     if (this.selected) {
       const p = this.selected.group.position, pulse = 0.5 + 0.5 * Math.sin(tt * 4);
       ring.visible = true;
-      ring.position.set(p.x, 1.2, p.z);
-      ring.scale.setScalar((this.selected.type === 'hv' ? 1.15 : 1.3) * (1 + 0.08 * Math.sin(tt * 4)));
+      ring.position.set(p.x, p.y + 1.2, p.z);                                  // a la cota de la torre
+      ring.scale.setScalar((this.selected.type === 'hv' ? 1.15 : 1.3) * TOWER_SCALE * (1 + 0.08 * Math.sin(tt * 4)));
       ring.material.opacity = 0.6 + 0.35 * pulse;
     } else ring.visible = false;
+
+    // Relieve: se oscurece al seleccionar una torre (recede sin volverse blanco).
+    if (this.terrain) {
+      const u = this.terrain.mesh.material.uniforms.uDim;
+      u.value += ((this.selected ? 1.0 : 0.0) - u.value) * Math.min(dt * 4, 1);
+    }
 
     // Animación de entrada / vuelo general (con easing)
     if (this._intro) {
@@ -529,9 +670,9 @@ export class FleetView {
     // Zoom cinematográfico hacia la torre seleccionada
     else if (this._focusing && this.selected) {
       const p = this.selected.group.position;
-      const h = this.selected.height || TOWER_H;
-      const tgt = new THREE.Vector3(p.x, h * 0.55, p.z);
-      const desired = new THREE.Vector3(p.x + 0.8 * h, h * 0.9, p.z + 1.25 * h);
+      const h = (this.selected.height || TOWER_H) * (this.selected.group.scale.y || 1);
+      const tgt = new THREE.Vector3(p.x, p.y + h * 0.55, p.z);                       // mira la torre a su cota real
+      const desired = new THREE.Vector3(p.x + 0.9 * h, p.y + h * 1.1, p.z + 1.35 * h); // ángulo más picado (evita el relieve)
       this.controls.target.lerp(tgt, dt * 2.5);
       this.camera.position.lerp(desired, dt * 2.5);
       if (this.camera.position.distanceTo(desired) < 4) this._focusing = false;
@@ -539,5 +680,6 @@ export class FleetView {
 
     this.controls.update();
     this.renderer.render(this.scene, this.camera);
+    this.onFrame?.();          // hook por frame (p. ej. reposicionar la ficha flotante)
   };
 }

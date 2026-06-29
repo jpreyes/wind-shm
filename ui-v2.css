@@ -249,6 +249,15 @@ button:focus-visible, select:focus-visible, input:focus-visible {
 #hero-frame .frame-support { fill: none; stroke: var(--text-muted); stroke-width: 2.5; }
 @keyframes draw-path { to { stroke-dashoffset: 0; } }
 
+/* «Camán» en diagonal, justo sobre el título ReWind (nombre del contrato) */
+.hero-park {
+  font-family: var(--font-display);
+  font-size: clamp(20px, 3.2vw, 34px);
+  font-weight: 800; letter-spacing: 0.06em;
+  color: var(--teal); transform: rotate(-7deg);
+  margin: 0 0 -6px -2px; transform-origin: left bottom;
+  animation: fade-up 1s 0.15s ease both;
+}
 .hero-title {
   font-family: var(--font-display);
   font-size: clamp(54px, 9vw, 96px);

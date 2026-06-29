@@ -36,6 +36,8 @@ function tick() {
     // f₁ con leve deriva + caída por daño (indicador SHM)
     const f1 = s.f1 * (1 - s.dmg * 0.04) + (Math.random() - 0.5) * 0.002;
     const temp = 18 + 7 * Math.sin(now * 0.04 + s.id.length) + (Math.random() - 0.5);
+    // Velocidad del viento (m/s) — racheada, varía por torre (parque eólico)
+    const wind = Math.max(0, 7 + 3.5 * Math.sin(now * 0.05 + s.id.length * 0.7) + 1.8 * Math.sin(now * 0.9 + s.id.length) + (Math.random() - 0.5));
     let rms = 0;
     const sensors = s.sensors.map(se => {
       const ok = se.status === 'ok';
@@ -48,7 +50,7 @@ function tick() {
     // Clasificador ML (simulado): nivel de daño 0..4 desde daño + estado de sensores.
     let cls = s.dmg < 0.05 ? 0 : s.dmg < 0.15 ? 1 : s.dmg < 0.30 ? 2 : s.dmg < 0.50 ? 3 : 4;
     if (sensors.some(se => se.status === 'fault')) cls = Math.max(cls, 2);
-    summaries[s.id] = { f1, temp, rms, dmg: s.dmg, cls, sensors };
+    summaries[s.id] = { f1, temp, wind, dmg: s.dmg, cls, rms, sensors };
 
     if (s.id === focus) {
       waves[s.id] = s.sensors.map(se => {

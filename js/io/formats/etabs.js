@@ -15,7 +15,7 @@
 //  · una sección ETABS referencia un material → una sección por par (material, sección).
 // Round-trip verificado para edificios (nodos en niveles, columnas/vigas estándar).
 // ──────────────────────────────────────────────────────────────────────────────
-import { registerFormat } from '../registry.js?v=211';
+import { registerFormat } from '../registry.js?v=212';
 
 const RF = ['PI', 'V2I', 'V3I', 'TI', 'M2I', 'M3I', 'PJ', 'V2J', 'V3J', 'TJ', 'M2J', 'M3J'];
 const RMAP = { UX: 'ux', UY: 'uy', UZ: 'uz', RX: 'rx', RY: 'ry', RZ: 'rz' };

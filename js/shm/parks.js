@@ -8,22 +8,21 @@
 // El ParkManager mantiene el store, sincroniza con el FleetView y pinta el árbol.
 // ─────────────────────────────────────────────────────────────────────────────
 
+import { buildCamanPark } from './parks_data_caman.js?v=212';
+
 const KEY = 'rewind-parks';
+const SEED = 'caman-i-v6';      // sello de siembra; al cambiarlo se re-siembra el store (v6: etapas con % de avance)
 let _seq = 0;
 const uid = (p) => p + Date.now().toString(36) + (++_seq).toString(36);
 
-// Carga el store; si no existe, migra un layout antiguo {turbines,hv} a un parque.
-export function loadParksStore(oldLayout) {
+// Carga el store. Si no hay store o su sello no coincide con SEED, lo (re)siembra
+// con el parque real Camán I (datos georreferenciados del KMZ del cliente).
+export function loadParksStore() {
   let s = null;
   try { s = JSON.parse(localStorage.getItem(KEY)); } catch {}
-  if (s && Array.isArray(s.parks) && s.parks.length) return s;
-  const zId = uid('z');
-  const park = {
-    id: uid('p'), name: 'Parque 1', zones: [{ id: zId, name: 'Zona A' }],
-    turbines: (oldLayout?.turbines || []).map(t => ({ ...t, zone: zId })),
-    hv: (oldLayout?.hv || []).map(h => ({ ...h, zone: zId })),
-  };
-  return { activeId: park.id, parks: [park] };
+  if (s && s.seed === SEED && Array.isArray(s.parks) && s.parks.length) return s;
+  const park = buildCamanPark(uid);
+  return { activeId: park.id, parks: [park], seed: SEED };
 }
 
 export class ParkManager {
@@ -44,7 +43,7 @@ export class ParkManager {
   syncFleetToActive() {
     const a = this.active; if (!a) return;
     const f = this.fleet;
-    const row = (t) => ({ x: +t.group.position.x.toFixed(1), z: +t.group.position.z.toFixed(1), yaw: +f.getYaw(t.id).toFixed(4), zone: t.zone || null });
+    const row = (t) => ({ id: t.id, label: t.label, x: +t.group.position.x.toFixed(1), z: +t.group.position.z.toFixed(1), yaw: +f.getYaw(t.id).toFixed(4), zone: t.zone || null, lat: t.lat ?? null, lon: t.lon ?? null, built: t.built ?? null, stages: t.stages ?? null });
     a.turbines = f.turbines.map(row);
     a.hv = (f.substation?.towers || []).map(row);
   }
@@ -74,8 +73,7 @@ export class ParkManager {
 
   renamePark(id) {
     const p = this.store.parks.find(x => x.id === id); if (!p) return;
-    const name = (prompt('Renombrar parque:', p.name) || '').trim();
-    if (name) { p.name = name; this.save(); this.render(); }
+    this._inlineEdit(this.el.querySelector(`.pt-park[data-pk="${id}"] .pt-name`), p.name, (v) => { p.name = v; this.save(); this.render(); });
   }
 
   deletePark(id) {
@@ -102,8 +100,7 @@ export class ParkManager {
 
   renameZone(zoneId) {
     const z = this.active?.zones.find(x => x.id === zoneId); if (!z) return;
-    const name = (prompt('Renombrar zona:', z.name) || '').trim();
-    if (name) { z.name = name; this.save(); this.render(); }
+    this._inlineEdit(this.el.querySelector(`.pt-zone .pt-name[data-id="${zoneId}"]`), z.name, (v) => { z.name = v; this.save(); this.render(); });
   }
 
   deleteZone(zoneId) {
@@ -127,6 +124,40 @@ export class ParkManager {
     const st = this.fleet.getStructure(structId); if (!st) return;
     st.zone = zoneId || null;
     this.syncFleetToActive(); this.save(); this.render();
+  }
+
+  // Renombra una torre EN LÍNEA (el id se mantiene estable).
+  renameStructure(structId) {
+    const st = this.fleet.getStructure(structId); if (!st) return;
+    this._inlineEdit(this.el.querySelector(`.pt-tower[data-id="${structId}"] .pt-name`), st.label, (v) => {
+      this.fleet.setLabel(structId, v);            // etiqueta 3D flotante
+      this.syncFleetToActive(); this.save(); this.render(); this.onSync();
+    });
+  }
+
+  // Borra una torre desde el árbol (fleet limpia escena, cables, selección y persiste).
+  removeStructure(structId) {
+    this.fleet.removeStructure(structId);
+    this.render();
+  }
+
+  // Edición de nombre EN LÍNEA (sin el prompt del sistema): reemplaza el rótulo por
+  // un input; Enter/blur confirma, Esc cancela.
+  _inlineEdit(nameEl, value, commit) {
+    if (!nameEl) return;
+    const input = document.createElement('input');
+    input.className = 'pt-edit'; input.value = value;
+    nameEl.replaceWith(input);
+    input.focus(); input.select();
+    let done = false;
+    const finish = (save) => {
+      if (done) return; done = true;
+      const v = input.value.trim();
+      if (save && v && v !== value) commit(v); else this.render();
+    };
+    input.addEventListener('keydown', (e) => { e.stopPropagation(); if (e.key === 'Enter') finish(true); else if (e.key === 'Escape') finish(false); });
+    input.addEventListener('blur', () => finish(true));
+    input.addEventListener('click', (e) => e.stopPropagation());
   }
 
   // Llamar tras agregar una torre desde la barra: la mete en la zona enfocada.
@@ -165,6 +196,7 @@ export class ParkManager {
           h += `<div class="pt-tower" data-id="${st.id}">
             <span class="pt-dot ${st.type}"></span>
             <span class="pt-name" data-act="select" data-id="${st.id}" title="Seleccionar">${esc(st.label)}</span>
+            <span class="pt-acts"><button class="pt-icon" data-act="rename-tower" data-id="${st.id}" title="Renombrar">✎</button><button class="pt-icon" data-act="del-tower" data-id="${st.id}" title="Eliminar">🗑</button></span>
             <select class="pt-zsel" data-id="${st.id}" title="Mover a zona">${zoneOpts(st.zone || '')}</select>
           </div>`;
         }
@@ -187,6 +219,8 @@ export class ParkManager {
         case 'del-park': this.deletePark(id); break;
         case 'add-zone': this.addZone(); break;
         case 'rename-zone': this.renameZone(id); break;
+        case 'rename-tower': this.renameStructure(id); break;
+        case 'del-tower': this.removeStructure(id); break;
         case 'del-zone': this.deleteZone(id); break;
         case 'focus-zone': this.focusZone(id); break;
         case 'select': this.fleet.selectById(id); break;

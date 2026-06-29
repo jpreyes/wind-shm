@@ -103,6 +103,8 @@ html, body { height: 100%; overflow: hidden; background: var(--bg); color: var(-
   letter-spacing: -0.3px;
 }
 .brand-sub { font-size: 10px; color: var(--text-muted); font-weight: 400; }
+/* «Camán» = nombre del contrato de explotación, junto a la marca ReWind */
+.brand-park { font-size: 11px; font-weight: 600; color: var(--teal); background: color-mix(in srgb, var(--teal) 16%, transparent); border: 1px solid color-mix(in srgb, var(--teal) 40%, transparent); border-radius: 5px; padding: 1px 7px; margin-left: 4px; letter-spacing: 0; }
 
 #menu-nav { display: flex; align-items: stretch; flex: 1; }
 
