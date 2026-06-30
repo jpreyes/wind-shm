@@ -9,7 +9,8 @@
 // más un botón «Abrir partida» (vista completa). Sólo DOM/overlay; el 3D lo provee
 // fleet_view (anchorScreenAt / focusComponent).
 // ─────────────────────────────────────────────────────────────────────────────
-import { TURBINE_COMPONENTS, HV_COMPONENTS, enrichStages } from './parks_data_caman.js?v=256';
+import { TURBINE_COMPONENTS, HV_COMPONENTS, enrichStages } from './parks_data_caman.js?v=257';
+import * as CTwin from './construction_twin.js?v=257';
 
 const fmt = (iso) => { if (!iso) return '—'; const [y, m, d] = iso.split('-'); return `${d}/${m}/${y.slice(2)}`; };
 
@@ -73,6 +74,23 @@ export function buildAvanceHUD(vpwrap, fleet) {
     callouts = []; svg.innerHTML = ''; expanded = null;
   }
 
+  // Crosslink con el gemelo de construcción (R-31): por componente, la f₁ medida de
+  // su etapa y si concuerda con la curva predicha (no por debajo).
+  const _chk = (p) => p ? { f1: p.f1, enBanda: !p.below } : null;
+  function buildTwinChecks(st, stages) {
+    const f1 = (typeof window !== 'undefined' && window.shmTwin?.turbine) || 0.283;
+    const win = CTwin.softStiffWindow(14);
+    const mc = CTwin.measuredCurve(f1, stages, st.id);
+    const pt = (i) => mc.points[i] || null;
+    return {
+      fuste: mc.reached >= 1 ? _chk(pt(Math.min(3, mc.reached - 1))) : null,
+      gondola: _chk(pt(4)),
+      rotor: _chk(pt(5)),
+      fundacion: mc.reached >= 1 ? { f1: pt(mc.reached - 1).f1, enBanda: !mc.defect } : null,
+      cableado: mc.reached >= 6 ? { f1, enBanda: CTwin.inBand(f1, win) && !mc.defect } : null,
+    };
+  }
+
   function show(st) {
     clear();
     if (!st || (st.type !== 'turbine' && st.type !== 'hv')) { root.style.display = 'none'; cur = null; return; }
@@ -81,6 +99,7 @@ export function buildAvanceHUD(vpwrap, fleet) {
     stages = enrichStages(st.stages, st.type, st.id);
     st.stages = stages;                                   // persiste el enriquecido en la estructura
     root.style.display = 'block';
+    const twin = st.type === 'turbine' ? buildTwinChecks(st, stages) : null;   // crosslink gemelo de construcción (R-31)
     // Lados: base a la izquierda, cuerpo/tope a la derecha (se reparte para no chocar).
     comps.forEach((c, i) => {
       const stage = stages[i] || { pct: 0 };
@@ -89,7 +108,7 @@ export function buildAvanceHUD(vpwrap, fleet) {
       el.className = `ah-callout side-${side}`;
       el.dataset.component = c.component;
       const photos = photosFor(c, stage);               // reales o mockups (no se persisten)
-      callouts.push({ el, comp: c, stage, side, photos });
+      callouts.push({ el, comp: c, stage, side, photos, twin: twin ? twin[c.component] : null });
       el.addEventListener('click', (e) => { if (!e.target.closest('.ah-open')) toggle(c.component); });
       const line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
       line.setAttribute('class', 'ah-line');
@@ -135,7 +154,7 @@ export function buildAvanceHUD(vpwrap, fleet) {
             <tr><td>Plan</td><td>${fmt(s.plannedStart)} → ${fmt(s.plannedEnd)}</td></tr>
             <tr><td>Real</td><td>${fmt(s.actualStart)} → ${fmt(s.actualEnd)}</td></tr>
             <tr><td>Responsable</td><td>${s.responsable || '—'}</td></tr>
-            <tr><td>Gemelo (R-31)</td><td>${s.twinCheck ? `f₁ ${s.twinCheck.f1} Hz · ${s.twinCheck.enBanda ? 'en banda ✓' : 'fuera ✗'}` : '<span class="ah-mut">pendiente</span>'}</td></tr>
+            <tr><td>Gemelo (R-31)</td><td>${co.twin ? `f₁ ${co.twin.f1.toFixed(3)} Hz · ${co.twin.enBanda ? 'concuerda ✓' : 'bajo lo predicho ✗'}` : '<span class="ah-mut">pendiente</span>'}</td></tr>
           </table>
           <div class="ah-foto-h">Fotos <span class="ah-mut">(${co.photos.length})</span></div>
           ${co.photos.length
@@ -239,7 +258,7 @@ export function buildAvanceHUD(vpwrap, fleet) {
               <tr><td>Real</td><td>${fmt(s.actualStart)} → ${fmt(s.actualEnd)}</td></tr>
               <tr><td>Desviación</td><td>${slip == null ? '—' : (slip > 0 ? `<b class="late">+${slip} días</b>` : 'en plazo')}</td></tr>
               <tr><td>Responsable</td><td>${s.responsable || '—'}</td></tr>
-              <tr><td>Verificación gemelo</td><td>${s.twinCheck ? `f₁ ${s.twinCheck.f1} Hz · ${s.twinCheck.enBanda ? 'en banda ✓' : 'fuera ✗'}` : '<span class="ah-mut">pendiente (R-31)</span>'}</td></tr>
+              <tr><td>Verificación gemelo</td><td>${co.twin ? `f₁ ${co.twin.f1.toFixed(3)} Hz · ${co.twin.enBanda ? 'concuerda ✓' : 'bajo lo predicho ✗'}` : '<span class="ah-mut">pendiente (R-31)</span>'}</td></tr>
             </table>
             <div class="ah-bitacora"><div class="ah-sub">Bitácora</div><ul>${bitacora.map(b => `<li>${b}</li>`).join('') || '<li class="ah-mut">Sin eventos</li>'}</ul></div>
           </div>
@@ -275,7 +294,7 @@ export function buildAvanceHUD(vpwrap, fleet) {
         <tr><td>Real (inicio → fin)</td><td>${fmt(s.actualStart)} → ${fmt(s.actualEnd)}</td></tr>
         <tr><td>Desviación</td><td>${slip == null ? '—' : (slip > 0 ? '+' + slip + ' días (atrasada)' : 'en plazo')}</td></tr>
         <tr><td>Responsable</td><td>${s.responsable || '—'}</td></tr>
-        <tr><td>Verificación gemelo</td><td>${s.twinCheck ? 'f₁ ' + s.twinCheck.f1 + ' Hz' : 'pendiente (R-31)'}</td></tr>
+        <tr><td>Verificación gemelo</td><td>${co.twin ? 'f₁ ' + co.twin.f1.toFixed(3) + ' Hz · ' + (co.twin.enBanda ? 'concuerda' : 'bajo lo predicho') : 'pendiente (R-31)'}</td></tr>
       </table>
       <p class="mut" style="margin-top:18px">Documento de avance generado por ReWind. Datos de cronograma sintéticos/editables; las fotos e informes reales se integran con el almacenamiento (R-10).</p>`;
     const w = window.open('', '_blank');
