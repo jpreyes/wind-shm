@@ -8,16 +8,17 @@
 //   inspecciones y señal temporal EN VIVO desde un Web Worker (DataSource).
 // Recortes (modelado) los hace shm.css ocultando, no borrando.
 // ─────────────────────────────────────────────────────────────────────────────
-import { FleetView } from './fleet_view.js?v=241';
-import { DataSource } from './data_source.js?v=241';
-import { computeTwin } from './digital_twin.js?v=241';
-import { ParkManager, loadParksStore } from './parks.js?v=241';
-import { MapView } from './map_view.js?v=241';
-import { defaultStages, builtFromStages } from './parks_data_caman.js?v=241';
-import { compassRoseSVG } from './compass.js?v=241';
+import { FleetView } from './fleet_view.js?v=242';
+import { DataSource } from './data_source.js?v=242';
+import { computeTwin } from './digital_twin.js?v=242';
+import { ParkManager, loadParksStore } from './parks.js?v=242';
+import { MapView } from './map_view.js?v=242';
+import { defaultStages, builtFromStages } from './parks_data_caman.js?v=242';
+import { compassRoseSVG } from './compass.js?v=242';
+import { buildAvanceHUD } from './avance_hud.js?v=242';
 
 const F1_BASE = { turbine: 0.283, hv: 1.6 };
-const REWIND_VER = 'v241';   // versión visible del build (subir junto al cache-bust)
+const REWIND_VER = 'v242';   // versión visible del build (subir junto al cache-bust)
 const FS = 62.5;   // frecuencia de muestreo de la señal (Hz), igual que shm_worker.js
 // Clasificador ML de daño (0..4)
 const CLS = ['Sin daño', 'Leve', 'Moderado', 'Alto', 'Muy alto'];
@@ -197,7 +198,9 @@ async function boot() {
   fleet.onLayoutChange = saveLayout; // persiste el orden al mover/agregar
   const towerCard = buildTowerCard(vpwrap, fleet, { onShowAvance: () => dash.showPane('avance') });
   const compass = buildCompass(vpwrap, fleet);   // rosa de los vientos (gira con la cámara)
-  fleet.onFrame = () => { towerCard.tick(); compass.update(); };   // reposiciona ficha + brújula con el render
+  const avanceHUD = buildAvanceHUD(vpwrap, fleet);   // HUD tipo Stark de avance por componente (Frente 1)
+  window.shmAvanceHUD = avanceHUD;
+  fleet.onFrame = () => { towerCard.tick(); compass.update(); avanceHUD.tick(); };   // reposiciona ficha + brújula + HUD con el render
   const isMobile = () => matchMedia('(max-width: 820px)').matches;
   fleet.onSelect = (obj) => {
     // En modo Shadow, seleccionar una torre en 3D = colocar un RECEPTOR ahí (igual
@@ -215,7 +218,10 @@ async function boot() {
       if (isMobile()) { document.body.classList.remove('tree-open'); document.body.classList.add('panel-open'); }
       return;
     }
-    dash.select(obj); nameplate.show(obj); towerCard.setData(obj); statusBar.setSelected(obj); ds.focus(obj ? obj.id : null); if (obj) mapView?.focus(obj);
+    dash.select(obj); nameplate.show(obj); statusBar.setSelected(obj); ds.focus(obj ? obj.id : null); if (obj) mapView?.focus(obj);
+    // Detalle de torre = HUD de avance (Frente 1): la ficha SHM mini cede ante el HUD,
+    // los datos SHM viven en la pestaña «Selección» del panel.
+    if (obj) { towerCard.setData(null); avanceHUD.show(obj); } else { towerCard.setData(null); avanceHUD.hide(); }
     if (obj && isMobile()) { document.body.classList.remove('tree-open'); document.body.classList.add('panel-open'); }   // en móvil: cierra el árbol y abre el panel
   };
   // Cajones móviles: tocar el fondo cierra árbol y panel.
@@ -245,7 +251,7 @@ async function boot() {
   // ── Relieve conceptual del terreno (DEM vendorizado) — encendido por defecto ─
   setLoad(88, 'Cargando relieve…'); await delay(40);
   try {
-    await fleet.loadTerrain('data/caman_dem.json?v=241');
+    await fleet.loadTerrain('data/caman_dem.json?v=242');
     fleet.setTerrainVisible(true);
     document.getElementById('shm-relieve-tool')?.classList.add('active');
   } catch (e) { console.warn('[shm] relieve no disponible', e); }

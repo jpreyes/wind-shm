@@ -7,11 +7,11 @@
 // ─────────────────────────────────────────────────────────────────────────────
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
-import { createTurbine, TOWER_H } from './turbine_mesh.js?v=241';
-import { createSubstationTower, groundCable, overheadLine } from './structures.js?v=241';
-import { toScene, CAMAN_CENTER, LAYOUT_SCALE } from './parks_data_caman.js?v=241';
-import { CAMAN_ROADS } from './caman_roads.js?v=241';
-import { solarPosition, dateFromLocal, sunSceneDir } from './solar.js?v=241';
+import { createTurbine, TOWER_H } from './turbine_mesh.js?v=242';
+import { createSubstationTower, groundCable, overheadLine } from './structures.js?v=242';
+import { toScene, CAMAN_CENTER, LAYOUT_SCALE } from './parks_data_caman.js?v=242';
+import { CAMAN_ROADS } from './caman_roads.js?v=242';
+import { solarPosition, dateFromLocal, sunSceneDir } from './solar.js?v=242';
 
 const SPACING = 235;
 const TOWER_SCALE = 2.2;   // agranda las torres (vista esquemática) para que destaquen sobre el relieve
@@ -269,7 +269,7 @@ export class FleetView {
   // ── Relieve conceptual (capa de terreno) ─────────────────────────────────────
   // Carga el DEM vendorizado y añade la malla (oculta hasta activarla).
   async loadTerrain(url) {
-    const { Terrain } = await import('./terrain.js?v=241');
+    const { Terrain } = await import('./terrain.js?v=242');
     this._TerrainClass = Terrain;                     // para reconstruir al cambiar de escala
     const dem = await (await fetch(url)).json();
     this.terrain = new Terrain(dem, { vex: 1.5 });   // relieve exagerado (esquemático)
@@ -333,13 +333,39 @@ export class FleetView {
   }
 
   // Proyecta el tope de una estructura a coordenadas de pantalla (para la ficha flotante).
-  anchorScreen(st) {
+  anchorScreen(st) { return this.anchorScreenAt(st, 0.92); }
+
+  // Proyecta a pantalla un punto a la fracción yFrac de la altura de la estructura
+  // (0 = base, 1 = buje). Para anclar las callouts del HUD de avance por componente.
+  anchorScreenAt(st, yFrac) {
     if (!st) return null;
     const h = (st.height || TOWER_H) * (st.group.scale.y || 1);
     const p = st.group.position;
-    const v = new THREE.Vector3(p.x, p.y + h * 0.92, p.z).project(this.camera);
+    const v = new THREE.Vector3(p.x, p.y + h * yFrac, p.z).project(this.camera);
     const r = this.renderer.domElement.getBoundingClientRect();
     return { x: (v.x * 0.5 + 0.5) * r.width + r.left, y: (-v.y * 0.5 + 0.5) * r.height + r.top, behind: v.z > 1 };
+  }
+
+  // Tween de cámara reutilizable (posición + target) con easing — «el girito» del HUD.
+  cameraTo(targetVec, posVec, dur = 680) {
+    this._focusing = false; this._intro = null;
+    this._tween = {
+      fromPos: this.camera.position.clone(), toPos: posVec.clone(),
+      fromTgt: this.controls.target.clone(), toTgt: targetVec.clone(),
+      t0: performance.now(), dur,
+    };
+  }
+
+  // Encuadra suavemente un COMPONENTE de una estructura (a la fracción yFrac de su
+  // altura), girando un poco la cámara para que se note el movimiento. Frente 1.
+  focusComponent(st, yFrac) {
+    if (!st) return;
+    const h = (st.height || TOWER_H) * (st.group.scale.y || 1), p = st.group.position;
+    const tgt = new THREE.Vector3(p.x, p.y + h * yFrac, p.z);
+    const dist = h * 0.85 + 60 * this.scaleK;
+    const ang = Math.atan2(this.camera.position.x - p.x, this.camera.position.z - p.z) + 0.55;   // gira ~0.55 rad
+    const pos = new THREE.Vector3(p.x + Math.sin(ang) * dist, tgt.y + h * 0.22, p.z + Math.cos(ang) * dist);
+    this.cameraTo(tgt, pos, 680);
   }
 
   // Ángulo (grados, sentido horario CSS) hacia el que apunta el Norte de la escena
@@ -418,6 +444,7 @@ export class FleetView {
   selectTurbine(t) {
     this.selected = t || null;
     this._focusing = !!t;
+    this._tween = null;             // cancela un «girito» del HUD en curso al cambiar de selección
     this.onSelect?.(t || null);
   }
   clearSelection() { this.selectTurbine(null); this.frameGeneral(); }
@@ -873,8 +900,16 @@ export class FleetView {
       u.value += ((this.selected ? 1.0 : 0.0) - u.value) * Math.min(dt * 4, 1);
     }
 
+    // Tween de cámara dirigido (HUD de avance: «el girito» a un componente)
+    if (this._tween) {
+      const s = Math.min((performance.now() - this._tween.t0) / this._tween.dur, 1);
+      const e = s < 0.5 ? 4 * s * s * s : 1 - Math.pow(-2 * s + 2, 3) / 2;   // easeInOutCubic
+      this.camera.position.lerpVectors(this._tween.fromPos, this._tween.toPos, e);
+      this.controls.target.lerpVectors(this._tween.fromTgt, this._tween.toTgt, e);
+      if (s >= 1) this._tween = null;
+    }
     // Animación de entrada / vuelo general (con easing)
-    if (this._intro) {
+    else if (this._intro) {
       const s = Math.min((performance.now() - this._intro.t0) / this._intro.dur, 1);
       const e = s < 0.5 ? 4 * s * s * s : 1 - Math.pow(-2 * s + 2, 3) / 2;   // easeInOutCubic
       this.camera.position.lerpVectors(this._intro.from.pos, this._intro.to.pos, e);

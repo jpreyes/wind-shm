@@ -104,6 +104,62 @@ export function defaultStages(type, built = 0) {
 export const builtFromStages = (stages) => (stages && stages.length)
   ? stages.reduce((a, s) => a + (s.pct != null ? s.pct : (s.done ? 100 : 0)), 0) / (stages.length * 100) : 0;
 
+// ── Partidas por COMPONENTE (Frente 1 · HUD de avance) ───────────────────────
+// Cada componente físico se ancla a una fracción de la altura de la torre (yFrac)
+// para colgar su callout en el 3D, y lleva un ícono para el HUD.
+export const TURBINE_COMPONENTS = [
+  { component: 'fundacion', label: 'Fundación',            yFrac: 0.04, icon: '▣', durDays: 21 },
+  { component: 'fuste',     label: 'Montaje de fuste',     yFrac: 0.52, icon: '▮', durDays: 16 },
+  { component: 'gondola',   label: 'Góndola',              yFrac: 1.00, icon: '⬢', durDays: 7 },
+  { component: 'rotor',     label: 'Rotor / aspas',        yFrac: 1.07, icon: '✳', durDays: 6 },
+  { component: 'cableado',  label: 'Cableado / colectora', yFrac: 0.10, icon: '╲', durDays: 12 },
+];
+export const HV_COMPONENTS = [
+  { component: 'fundacion',    label: 'Fundación',               yFrac: 0.05, icon: '▣', durDays: 14 },
+  { component: 'celosia',      label: 'Montaje de celosía',      yFrac: 0.55, icon: '▦', durDays: 18 },
+  { component: 'crucetas',     label: 'Crucetas / aisladores',   yFrac: 0.92, icon: '┳', durDays: 6 },
+  { component: 'conductores',  label: 'Tendido de conductores',  yFrac: 0.80, icon: '╍', durDays: 9 },
+  { component: 'energizacion', label: 'Energización',            yFrac: 0.30, icon: '⚡', durDays: 4 },
+];
+const RESP = ['Cuadrilla Civil A', 'Cuadrilla Civil B', 'Montajes Sur Ltda.', 'Eléctrica Austral', 'Grúas Patagonia', 'Comisionamiento'];
+const DAY = 864e5;
+const isoAdd = (baseMs, days) => new Date(baseMs + days * DAY).toISOString().slice(0, 10);
+
+// Enriquece (o migra) las etapas a PARTIDAS por componente con cronograma sintético
+// realista y EDITABLE: línea base (plan) + fechas reales con atraso, responsable,
+// placeholders de fotos/informes y crosslink al gemelo (twinCheck). Idempotente:
+// si una partida ya trae `component`+`plannedStart`, se respeta (datos editados).
+export function enrichStages(stages, type = 'turbine', seed = '') {
+  const comps = type === 'hv' ? HV_COMPONENTS : TURBINE_COMPONENTS;
+  stages = (stages && stages.length) ? stages : defaultStages(type, 0);
+  const built = builtFromStages(stages), n = comps.length;
+  const doneN = Math.round(built * n), now = Date.now();
+  const totalDur = comps.reduce((a, c) => a + c.durDays + 4, 0);
+  const startAgo = Math.round(totalDur * (0.45 + 0.9 * built)) + Math.round(hash01(seed) * 20);
+  const projStartMs = now - startAgo * DAY;
+  let cursor = 0;
+  return comps.map((c, i) => {
+    const prev = stages[i] || {};
+    if (prev.component && prev.plannedStart) return prev;     // ya enriquecida/editada
+    const pStart = cursor, pEnd = cursor + c.durDays;
+    cursor = pEnd + 3 + Math.round(hash01(seed + c.component) * 5);
+    const slip = Math.round((hash01(seed + 's' + c.component) * 2 - 0.4) * 6);   // atraso típico (días)
+    const pct = prev.pct != null ? prev.pct
+      : (i < doneN ? 100 : (i === doneN ? Math.round(((built * n) % 1) * 100) : 0));
+    const done = pct >= 100, started = pct > 0;
+    return {
+      id: prev.id || (seed + '-' + c.component),
+      component: c.component, name: c.label, label: c.label, pct,
+      plannedStart: isoAdd(projStartMs, pStart), plannedEnd: isoAdd(projStartMs, pEnd),
+      actualStart: started ? isoAdd(projStartMs, pStart + Math.max(0, slip)) : null,
+      actualEnd: done ? isoAdd(projStartMs, pEnd + slip) : null,
+      responsable: RESP[(i + Math.floor(hash01(seed) * RESP.length)) % RESP.length],
+      fotos: prev.fotos || [], informes: prev.informes || [], twinCheck: prev.twinCheck || null,
+      date: prev.date || (done ? isoAdd(projStartMs, pEnd + slip) : ''),   // compat con el editor actual
+    };
+  });
+}
+
 // Construye el parque Camán I para el store de parks.js.
 // @param makeId  fábrica de ids única (recibe un prefijo) — la provee parks.js.
 export function buildCamanPark(makeId) {
