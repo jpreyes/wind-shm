@@ -7,11 +7,11 @@
 // ─────────────────────────────────────────────────────────────────────────────
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
-import { createTurbine, TOWER_H } from './turbine_mesh.js?v=219';
-import { createSubstationTower, groundCable, overheadLine } from './structures.js?v=219';
-import { toScene, CAMAN_CENTER, LAYOUT_SCALE } from './parks_data_caman.js?v=219';
-import { CAMAN_ROADS } from './caman_roads.js?v=219';
-import { solarPosition, dateFromLocal, sunSceneDir } from './solar.js?v=219';
+import { createTurbine, TOWER_H } from './turbine_mesh.js?v=220';
+import { createSubstationTower, groundCable, overheadLine } from './structures.js?v=220';
+import { toScene, CAMAN_CENTER, LAYOUT_SCALE } from './parks_data_caman.js?v=220';
+import { CAMAN_ROADS } from './caman_roads.js?v=220';
+import { solarPosition, dateFromLocal, sunSceneDir } from './solar.js?v=220';
 
 const SPACING = 235;
 const TOWER_SCALE = 2.2;   // agranda las torres (vista esquemática) para que destaquen sobre el relieve
@@ -233,7 +233,7 @@ export class FleetView {
   _ensureCatcher() {
     if (!this._catcher) {
       const g = new THREE.PlaneGeometry(1, 1); g.rotateX(-Math.PI / 2);
-      const m = new THREE.ShadowMaterial({ opacity: 0.46, color: 0x1b2e6b });   // sombra azul/índigo (igual que sobre el relieve)
+      const m = new THREE.ShadowMaterial({ opacity: 0.36, color: 0x1b2e6b });   // sombra azul/índigo, tenue (igual que sobre el relieve)
       this._catcher = new THREE.Mesh(g, m); this._catcher.receiveShadow = true; this._catcher.renderOrder = 1;
       this.scene.add(this._catcher);
     }
@@ -255,7 +255,7 @@ export class FleetView {
   // ── Relieve conceptual (capa de terreno) ─────────────────────────────────────
   // Carga el DEM vendorizado y añade la malla (oculta hasta activarla).
   async loadTerrain(url) {
-    const { Terrain } = await import('./terrain.js?v=219');
+    const { Terrain } = await import('./terrain.js?v=220');
     this._TerrainClass = Terrain;                     // para reconstruir al cambiar de escala
     const dem = await (await fetch(url)).json();
     this.terrain = new Terrain(dem, { vex: 1.5 });   // relieve exagerado (esquemático)
