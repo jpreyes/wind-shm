@@ -1,5 +1,5 @@
 // ──────────────────────────────────────────────────────────────────────────────
-// Service Worker de PÓRTICO — soporte offline (PWA)
+// Service Worker de ReWind — soporte offline (PWA)
 //
 // Estrategia: "network-first con respaldo en caché".
 //   • En línea  → siempre intenta la red (evita servir módulos viejos durante el
@@ -9,8 +9,8 @@
 // Al subir la versión de la app, suba también CACHE_VERSION para forzar una
 // limpieza completa de la caché antigua en la próxima visita en línea.
 // ──────────────────────────────────────────────────────────────────────────────
-const CACHE_VERSION = 'v214';
-const CACHE = `portico-${CACHE_VERSION}`;
+const CACHE_VERSION = 'v215';
+const CACHE = `rewind-${CACHE_VERSION}`;
 
 // Núcleo mínimo para que la app arranque aunque sea la primera vez sin red.
 // `index.html` = landing (marketing); `app.html` = la aplicación ReWind.
@@ -21,13 +21,13 @@ const SHELL = [
   './index.html',
   './app.html',
   './manifest.webmanifest',
-  './style.css?v=257',
-  './ui-v2.css?v=257',
-  './shm.css?v=257',
-  './js/shm/shm_mode.js?v=257',
+  './style.css?v=258',
+  './ui-v2.css?v=258',
+  './shm.css?v=258',
+  './js/shm/shm_mode.js?v=258',
   './lib/numeric.js',
-  './lib/leaflet/leaflet.js?v=257',
-  './lib/leaflet/leaflet.css?v=257',
+  './lib/leaflet/leaflet.js?v=258',
+  './lib/leaflet/leaflet.css?v=258',
   './icons/icon.svg',
   './icons/icon-192.png',
   './icons/icon-512.png',

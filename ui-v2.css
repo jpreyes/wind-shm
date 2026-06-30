@@ -1,5 +1,5 @@
 /* ══════════════════════════════════════════════════════════════
-   PÓRTICO — Capa de rediseño v2 (se carga después de style.css)
+   ReWind — Capa de rediseño v2 (se carga después de style.css)
    Portada institucional + refinamiento visual general
    ══════════════════════════════════════════════════════════════ */
 
@@ -124,7 +124,7 @@ button:focus-visible, select:focus-visible, input:focus-visible {
 .landing-card .inst-names strong { font-size: 12px; }
 .landing-card .inst-names span { font-size: 9.5px; }
 .landing-card .landing-hero { padding: 0 22px; max-width: 100%; margin: 2px 0 0; }
-.landing-card #hero-frame { width: min(210px, 62%); margin-bottom: 4px; }   /* logo PÓRTICO prominente */
+.landing-card #hero-frame { width: min(210px, 62%); margin-bottom: 4px; }   /* logo ReWind prominente */
 .landing-card .hero-title { font-size: clamp(40px, 9vw, 56px); }
 .landing-card .hero-tag { margin-top: 6px; font-size: 13px; }
 .landing-card .hero-desc { display: none; }      /* descripción larga: fuera para mantenerla pequeña */

@@ -1,4 +1,4 @@
-"""Servidor de desarrollo sin caché para PÓRTICO (análisis estructural 3D).
+"""Servidor de desarrollo sin caché para ReWind (SHM de torres eólicas).
 Uso: python serve.py [puerto]   (puerto por defecto: 8765)
 """
 import http.server, socketserver, os, sys
@@ -34,5 +34,5 @@ class Server(socketserver.ThreadingTCPServer):
     daemon_threads = True
 
 with Server(('', PORT), NoCacheHandler) as httpd:
-    print(f'PORTICO -> http://localhost:{PORT}')
+    print(f'ReWind -> http://localhost:{PORT}')
     httpd.serve_forever()

@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// shm_mode.js — integra ReWind (parque + monitor SHM) DENTRO del shell de PÓRTICO.
+// shm_mode.js — integra ReWind (parque + monitor SHM) y arma su propio shell.
 //
 // · Monta la flota en el viewport real, agrega botones (Torre, Detener).
 // · Lista de estructuras seleccionables en la barra (torres + torres AT).
@@ -8,19 +8,19 @@
 //   inspecciones y señal temporal EN VIVO desde un Web Worker (DataSource).
 // Recortes (modelado) los hace shm.css ocultando, no borrando.
 // ─────────────────────────────────────────────────────────────────────────────
-import { FleetView } from './fleet_view.js?v=257';
-import { DataSource } from './data_source.js?v=257';
-import { computeTwin } from './digital_twin.js?v=257';
-import { ParkManager, loadParksStore } from './parks.js?v=257';
-import { MapView } from './map_view.js?v=257';
-import { defaultStages, builtFromStages } from './parks_data_caman.js?v=257';
-import { compassRoseSVG } from './compass.js?v=257';
-import { buildAvanceHUD } from './avance_hud.js?v=257';
-import { renderAvance } from './avance_dashboard.js?v=257';
-import * as Insp from './inspection.js?v=257';
+import { FleetView } from './fleet_view.js?v=258';
+import { DataSource } from './data_source.js?v=258';
+import { computeTwin } from './digital_twin.js?v=258';
+import { ParkManager, loadParksStore } from './parks.js?v=258';
+import { MapView } from './map_view.js?v=258';
+import { defaultStages, builtFromStages } from './parks_data_caman.js?v=258';
+import { compassRoseSVG } from './compass.js?v=258';
+import { buildAvanceHUD } from './avance_hud.js?v=258';
+import { renderAvance } from './avance_dashboard.js?v=258';
+import * as Insp from './inspection.js?v=258';
 
 const F1_BASE = { turbine: 0.283, hv: 1.6 };
-const REWIND_VER = 'v257';   // versión visible del build (subir junto al cache-bust)
+const REWIND_VER = 'v258';   // versión visible del build (subir junto al cache-bust)
 const FS = 62.5;   // frecuencia de muestreo de la señal (Hz), igual que shm_worker.js
 // Clasificador ML de daño (0..4)
 const CLS = ['Sin daño', 'Leve', 'Moderado', 'Alto', 'Muy alto'];
@@ -59,7 +59,7 @@ async function boot() {
   const toolbar = document.getElementById('toolbar');
   const panel = document.getElementById('panel');
   const vpwrap = document.getElementById('viewport-wrap');
-  if (!container || !panel) { console.warn('[shm] shell de PÓRTICO no encontrado'); window.__rewindCloseLanding?.(); return; }
+  if (!container || !panel) { console.warn('[shm] shell de ReWind no encontrado'); window.__rewindCloseLanding?.(); return; }
 
   document.body.classList.add('shm');
   if (!matchMedia('(max-width: 820px)').matches) document.body.classList.add('tree-open');   // en móvil el árbol arranca cerrado (es cajón)
@@ -256,12 +256,12 @@ async function boot() {
   // ── Relieve conceptual del terreno (DEM vendorizado) — encendido por defecto ─
   setLoad(88, 'Cargando relieve…'); await delay(40);
   try {
-    await fleet.loadTerrain('data/caman_dem.json?v=257');
+    await fleet.loadTerrain('data/caman_dem.json?v=258');
     fleet.setTerrainVisible(true);
     document.getElementById('shm-relieve-tool')?.classList.add('active');
   } catch (e) { console.warn('[shm] relieve no disponible', e); }
 
-  // ── Gemelo digital: f₁ + diagramas por el solver de PÓRTICO (bloqueante) ───
+  // ── Gemelo digital: f₁ + diagramas por el solver FEM (bloqueante) ───
   setLoad(90, 'Calculando gemelo digital…'); await delay(60);
   const tw = computeTwin();
   window.shmTwin = tw;
@@ -1005,7 +1005,7 @@ function buildDashboard(panel, fleet, actions) {
         <div class="note">Seguimiento de la frecuencia natural f₁ (vs. línea base del gemelo):</div>
         <canvas class="sig" id="freq-canvas" style="height:80px"></canvas>
         ${nvm}
-        <div class="note">f₁ a la baja = pérdida de rigidez (daño). Diagramas del solver de PÓRTICO.</div>`;
+        <div class="note">f₁ a la baja = pérdida de rigidez (daño). Diagramas del solver FEM del gemelo digital.</div>`;
       if (o.type === 'hv') {
         const ax = window.shmTwin?.hvAxial;
         if (ax) { $('#hv-t').textContent = `${ax.tMax.toFixed(0)} kN`; $('#hv-c').textContent = `${ax.cMax.toFixed(0)} kN`; }

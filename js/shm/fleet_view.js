@@ -7,11 +7,11 @@
 // ─────────────────────────────────────────────────────────────────────────────
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
-import { createTurbine, TOWER_H } from './turbine_mesh.js?v=257';
-import { createSubstationTower, groundCable, overheadLine } from './structures.js?v=257';
-import { toScene, CAMAN_CENTER, LAYOUT_SCALE } from './parks_data_caman.js?v=257';
-import { CAMAN_ROADS } from './caman_roads.js?v=257';
-import { solarPosition, dateFromLocal, sunSceneDir } from './solar.js?v=257';
+import { createTurbine, TOWER_H } from './turbine_mesh.js?v=258';
+import { createSubstationTower, groundCable, overheadLine } from './structures.js?v=258';
+import { toScene, CAMAN_CENTER, LAYOUT_SCALE } from './parks_data_caman.js?v=258';
+import { CAMAN_ROADS } from './caman_roads.js?v=258';
+import { solarPosition, dateFromLocal, sunSceneDir } from './solar.js?v=258';
 
 const SPACING = 235;
 const TOWER_SCALE = 2.2;   // agranda las torres (vista esquemática) para que destaquen sobre el relieve
@@ -37,7 +37,7 @@ function makeLabelSprite(text) {
   return sp;
 }
 
-// Lee una variable CSS de tema de PÓRTICO como color hex (#rrggbb).
+// Lee una variable CSS del tema como color hex (#rrggbb).
 function cssColor(name, fallback) {
   try {
     const v = getComputedStyle(document.body).getPropertyValue(name).trim();
@@ -64,7 +64,7 @@ export class FleetView {
 
     const w = container.clientWidth, h = container.clientHeight;
     this.scene = new THREE.Scene();
-    // Fondo igual que el PÓRTICO original (toma el color del tema activo).
+    // Fondo según el tema activo (toma el color del tema).
     this.scene.background = cssColor('--bg', '#070a0f');
 
     this.camera = new THREE.PerspectiveCamera(55, w / h, 1, 32000);   // far amplio: Camán I + grid de ~24k en escena
@@ -257,7 +257,7 @@ export class FleetView {
     this._updateShadowReceivers();
   }
 
-  // Sin suelo ni cielo: solo la grilla del PÓRTICO original (color del tema).
+  // Sin suelo ni cielo: solo la grilla (color del tema).
   _ground() {
     const line = cssColor('--border2', '#2d3a4d');
     const grid = new THREE.GridHelper(24000, 80, line, line);   // área amplia, celdas grandes (~300 u, ×3 del espaciado anterior)
@@ -269,7 +269,7 @@ export class FleetView {
   // ── Relieve conceptual (capa de terreno) ─────────────────────────────────────
   // Carga el DEM vendorizado y añade la malla (oculta hasta activarla).
   async loadTerrain(url) {
-    const { Terrain } = await import('./terrain.js?v=257');
+    const { Terrain } = await import('./terrain.js?v=258');
     this._TerrainClass = Terrain;                     // para reconstruir al cambiar de escala
     const dem = await (await fetch(url)).json();
     this.terrain = new Terrain(dem, { vex: 1.5 });   // relieve exagerado (esquemático)
@@ -639,7 +639,7 @@ export class FleetView {
   }
   frameGeneral() { const f = this.frame(); this.flyTo(f.pos, f.tgt, 1300); }
 
-  // Subestación: 2 torres de alta tensión (celosía PÓRTICO) + cables.
+  // Subestación: 2 torres de alta tensión (celosía 3D) + cables.
   buildSubstation() {
     if (this.substation) return;
     const { center, radius } = this._extent();

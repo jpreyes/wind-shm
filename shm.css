@@ -1,10 +1,9 @@
 /* ═══════════════════════════════════════════════════════════════════════════
-   shm.css — MODO SHM sobre el shell de PÓRTICO (wind-shm)
-   Reutiliza el chrome de PÓRTICO (toolbar, panel, menú, tema de colores) y:
-   · oculta lo que acordamos sacar (modelado) — NO lo borra (reversible),
+   shm.css — estilos de ReWind (wind-shm)
+   Define el chrome de la app (toolbar, panel, menú, tema de colores) y:
    · muestra la flota de torres en el viewport,
    · convierte el panel derecho en el dashboard SHM.
-   Todo bajo `body.shm` → quitar la clase devuelve PÓRTICO intacto.
+   Todo bajo `body.shm` (la app siempre corre con esa clase).
    ═══════════════════════════════════════════════════════════════════════════ */
 
 /* ── Pantalla de carga (portada) ───────────────────────────────────────────── */
@@ -27,7 +26,7 @@ body.shm #menubar { min-width: 0; overflow-x: auto; }
 @media (min-width: 821px) { #shm-panel-tool { display: none; } }   /* «Datos» sólo en móvil/tablet vertical */
 
 /* ── Árbol lateral Parque ▸ Zona ▸ Torre (ReWind) ──────────────────────────── */
-/* En PÓRTICO clásico el árbol no existe en el grid (display:none → el grid de 4
+/* El árbol puede no estar en el grid (display:none → el grid de 4
    columnas calza con sus 4 hijos). En ReWind es la 1.ª columna: colapsada mide 0
    (sin sacarla del grid, para no correr el resto) y abierta mide --tree-w. */
 #park-tree { display: none; }
@@ -139,7 +138,7 @@ body.shm li[data-action="template"] { display: none; }
 body.shm #viewport-container > canvas:not(.shm-canvas) { display: none !important; }
 body.shm #viewport-container > canvas.shm-canvas { display: block; }
 
-/* ── Toolbar: botones SHM (estilo .tool de PÓRTICO) ────────────────────────── */
+/* ── Toolbar: botones SHM (estilo .tool) ───────────────────────────────────── */
 #shm-add-tool, #shm-pause-tool, #shm-hv-tool, #shm-edit-tool, #shm-del-tool { display: none; }
 /* Siempre visibles en modo SHM: mapa + animación + edición + avance 4D + relieve */
 body.shm #shm-pause-tool, body.shm #shm-edit-tool, body.shm #shm-avance-tool, body.shm #shm-relieve-tool, body.shm #shm-map-tool { display: flex; }

@@ -1,17 +1,17 @@
 // ─────────────────────────────────────────────────────────────────────────────
 // digital_twin.js — GEMELO DIGITAL (ReWind).
 //
-// Corre el SOLVER MODAL real de PÓRTICO sobre los modelos FE de las estructuras
+// Corre el SOLVER MODAL FEM real sobre los modelos FE de las estructuras
 // para obtener su frecuencia natural f₁ (línea base SHM). La torre eólica usa el
 // macromodelo `turbine`; la torre de alta tensión usa el generador de torres de
-// PÓRTICO (celosía 3D). Requiere numeric.js (presente en el navegador).
+// celosía 3D. Requiere numeric.js (presente en el navegador).
 // ─────────────────────────────────────────────────────────────────────────────
-import { Model } from '../model/model.js?v=257';
-import { Serializer } from '../model/serializer.js?v=257';
-import { insertTurbine } from '../model/macros/turbine.js?v=257';
-import { ModalSolver } from '../solver/modal_solver.js?v=257';
-import { StaticSolver } from '../solver/static_solver.js?v=257';
-import { generarTorre } from '../../asistente/generador.js?v=257';
+import { Model } from '../model/model.js?v=258';
+import { Serializer } from '../model/serializer.js?v=258';
+import { insertTurbine } from '../model/macros/turbine.js?v=258';
+import { ModalSolver } from '../solver/modal_solver.js?v=258';
+import { StaticSolver } from '../solver/static_solver.js?v=258';
+import { generarTorre } from '../../asistente/generador.js?v=258';
 
 // f₁ del aerogenerador (macromodelo: fuste cónico + RNA + resortes de fundación).
 export function turbineF1() {
@@ -21,7 +21,7 @@ export function turbineF1() {
   return new ModalSolver().solve(m, 3).freq[0];
 }
 
-// f₁ de la torre de alta tensión (celosía 3D generada por PÓRTICO, nudos rígidos).
+// f₁ de la torre de alta tensión (celosía 3D generada por el solver, nudos rígidos).
 export function hvF1() {
   const model = generarTorre(
     { torre: { altura_m: 42, base_m: 7, cima_m: 2.5, paneles: 7, rotulado: false,

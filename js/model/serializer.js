@@ -1,7 +1,7 @@
 // ──────────────────────────────────────────────────────────────────────────────
 // Serializer — JSON (.s3d) and CSV import/export
 // ──────────────────────────────────────────────────────────────────────────────
-import { Model } from './model.js?v=257';
+import { Model } from './model.js?v=258';
 
 export class Serializer {
 
@@ -112,7 +112,7 @@ export class Serializer {
       return String(v);
     };
 
-    lines.push('# PÓRTICO CSV Export');
+    lines.push('# ReWind CSV Export');
     lines.push(`# Unidades: ${model.units}`);
     lines.push('#');
 
@@ -384,11 +384,11 @@ export class Serializer {
 
   getTemplate() {
     return `# ══════════════════════════════════════════════════════════════
-# PÓRTICO — Plantilla CSV v2.0
+# ReWind — Plantilla CSV v2.0
 # Instrucciones:
 #   1. Llene las filas de datos en Excel / Google Sheets
 #   2. Exporte como CSV (separado por comas)
-#   3. Use Archivo → Importar CSV en PÓRTICO
+#   3. Use Archivo → Importar CSV en ReWind
 #   4. Las líneas que comienzan con # son ignoradas
 #   5. El orden correcto: MATERIAL → SECTION → NODE → ELEMENT
 #      → DIAPHRAGM → LOAD_CASE → LOAD_NODAL/LOAD_DIST → NODE_MASS → COMBINATION

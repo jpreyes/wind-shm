@@ -17,7 +17,7 @@
        de que el resto de scripts se ejecute). -->
   <script>
     // Tema: claro por defecto; aplica el guardado antes de pintar (sin flash).
-    try { document.documentElement.dataset.theme = localStorage.getItem('portico_theme') || 'light'; } catch (e) {}
+    try { document.documentElement.dataset.theme = localStorage.getItem('rewind_theme') || localStorage.getItem('portico_theme') || 'light'; } catch (e) {}
     window.__pwaInstall = null;
     window.addEventListener('beforeinstallprompt', function (e) {
       e.preventDefault();
@@ -29,10 +29,10 @@
       window.dispatchEvent(new Event('pwa-installed'));
     });
   </script>
-  <link rel="stylesheet" href="lib/leaflet/leaflet.css?v=257">
-  <link rel="stylesheet" href="style.css?v=257">
-  <link rel="stylesheet" href="ui-v2.css?v=257">
-  <link rel="stylesheet" href="shm.css?v=257">
+  <link rel="stylesheet" href="lib/leaflet/leaflet.css?v=258">
+  <link rel="stylesheet" href="style.css?v=258">
+  <link rel="stylesheet" href="ui-v2.css?v=258">
+  <link rel="stylesheet" href="shm.css?v=258">
   <script type="importmap">
   {
     "imports": {
@@ -187,13 +187,13 @@ setTimeout(function () { window.__rewindCloseLanding(); }, 25000);   // fallback
 <!-- numeric.js para el gemelo digital (solver modal/estático) -->
 <script src="lib/numeric.js"></script>
 <!-- Leaflet (vista 2D del parque en ReWind) — global window.L, antes de los módulos -->
-<script src="lib/leaflet/leaflet.js?v=257"></script>
-<!-- Toggle de tema (claro/oscuro). Antes lo cableaba app.js (PÓRTICO); ReWind lo hace aquí. -->
+<script src="lib/leaflet/leaflet.js?v=258"></script>
+<!-- Toggle de tema (claro/oscuro). ReWind lo cablea aquí. -->
 <script>
   (function () {
     function toggle() {
       var d = document.documentElement, next = d.dataset.theme === 'dark' ? 'light' : 'dark';
-      d.dataset.theme = next; try { localStorage.setItem('portico_theme', next); } catch (e) {}
+      d.dataset.theme = next; try { localStorage.setItem('rewind_theme', next); } catch (e) {}
     }
     addEventListener('DOMContentLoaded', function () {
       ['btn-theme', 'landing-theme'].forEach(function (id) {
@@ -203,7 +203,7 @@ setTimeout(function () { window.__rewindCloseLanding(); }, 25000);   // fallback
   })();
 </script>
 <!-- ReWind: SHM de torres eólicas (se auto-bootea sobre el shell) -->
-<script type="module" src="js/shm/shm_mode.js?v=257"></script>
+<script type="module" src="js/shm/shm_mode.js?v=258"></script>
 
 <!-- PWA: registrar el service worker (offline). Solo en contexto seguro
      (https o localhost); el navegador deja navigator.serviceWorker undefined

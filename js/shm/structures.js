@@ -7,7 +7,7 @@
 // Los miembros se dibujan con un cilindro unitario reescalado (1 geometría).
 // ─────────────────────────────────────────────────────────────────────────────
 import * as THREE from 'three';
-import { generarTorre } from '../../asistente/generador.js?v=257';
+import { generarTorre } from '../../asistente/generador.js?v=258';
 
 const UNIT_CYL = new THREE.CylinderGeometry(1, 1, 1, 6);
 const _up = new THREE.Vector3(0, 1, 0);
@@ -61,7 +61,7 @@ export function createSubstationTower(o = {}) {
   const group = new THREE.Group();
   group.userData.turbineId = id;            // reutiliza el picking de la flota
 
-  // Geometría REAL desde el generador de torres de transmisión de PÓRTICO
+  // Geometría REAL desde el generador de torres de transmisión
   // (celosía 3D: 4 patas cónicas + anillos + X por cara + crucetas). Nodos/barras FE.
   const ficha = { torre: { altura_m: H, base_m: base, cima_m: top, paneles: panels, rotulado: true,
     crucetas: [{ z_m: H * 0.78, largo_m: base }, { z_m: H * 0.94, largo_m: base * 0.75 }] } };
