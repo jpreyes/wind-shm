@@ -437,6 +437,10 @@ body.shm #shm-banner.show { display: flex; animation: shm-blink 0.8s steps(1) in
 .shm-sun .sun-btn { width: 100%; padding: 6px; cursor: pointer; border-radius: var(--radius-sm, 6px);
   background: var(--bg4); color: var(--text); border: 1px solid var(--border2); }
 .shm-sun .sun-btn:hover { filter: brightness(1.15); }
+.shm-sun .sun-btn.active { border-color: var(--accent); color: var(--accent); }
+.shm-sun .sun-legend { display: flex; flex-wrap: wrap; gap: 6px 10px; margin: 6px 0 2px; font-size: 11px; color: var(--text-muted); }
+.shm-sun .sun-legend span { display: flex; align-items: center; gap: 4px; }
+.shm-sun .sun-legend i { width: 11px; height: 11px; border-radius: 2px; display: inline-block; }
 
 /* Estudio de sol en el mapa 2D: ACLARA/desatura el basemap (lámina de estudio)
    para que la sombra índigo oscura contraste encima (antes lo oscurecía → sombra

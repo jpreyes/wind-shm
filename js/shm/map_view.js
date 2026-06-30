@@ -6,10 +6,10 @@
 // Click en un marcador → conmuta a la vista 3D enfocando esa estructura (onPick).
 // Leaflet se carga como global (window.L) desde lib/leaflet/leaflet.js.
 // ─────────────────────────────────────────────────────────────────────────────
-import { CAMAN_CENTER } from './parks_data_caman.js?v=231';
-import { CAMAN_ROADS } from './caman_roads.js?v=231';
-import { compassRoseSVG } from './compass.js?v=231';
-import { annualFlicker, flickerOK, FLICKER_LIMITS, REAL_CASE_FACTOR } from './shadow_flicker.js?v=231';
+import { CAMAN_CENTER } from './parks_data_caman.js?v=232';
+import { CAMAN_ROADS } from './caman_roads.js?v=232';
+import { compassRoseSVG } from './compass.js?v=232';
+import { annualFlicker, flickerOK, FLICKER_LIMITS, REAL_CASE_FACTOR, flickerMap } from './shadow_flicker.js?v=232';
 
 // Color del marcador según el avance de obra (coherente con el 4D / panel).
 function colorFor(st) {
@@ -117,6 +117,34 @@ export class MapView {
 
   clearReceptors() { this.recepLayer?.clearLayers(); this._receptors = []; }
 
+  // Mapa de flicker (horas/año) sobre el área — salida estilo WindPRO. Toggle.
+  toggleFlickerMap() {
+    const L = window.L; if (!L || !this.map) return false;
+    if (this._flickerOverlay) { this.map.removeLayer(this._flickerOverlay); this._flickerOverlay = null; return false; }
+    const lats = [], lons = [];
+    for (const t of this.fleet.structures) { if (t.type !== 'hv' && t.lat != null && (t.built ?? 1) >= 0.97) { lats.push(t.lat); lons.push(t.lon); } }
+    if (!lats.length) { alert('No hay turbinas operativas para el mapa de flicker.'); return false; }
+    const pad = 0.018;
+    const bbox = { lat0: Math.min(...lats) - pad, lat1: Math.max(...lats) + pad, lon0: Math.min(...lons) - pad, lon1: Math.max(...lons) + pad };
+    const map = flickerMap(this.fleet.structures, bbox, { nx: 160, ny: 110, stepMin: 15 });
+    const cv = document.createElement('canvas'); cv.width = map.nx; cv.height = map.ny;
+    const ctx = cv.getContext('2d'), img = ctx.createImageData(map.nx, map.ny);
+    for (let i = 0; i < map.hours.length; i++) {
+      const h = map.hours[i]; let r = 0, g = 0, b = 0, a = 0;
+      if (h >= 30) { r = 239; g = 68; b = 68; a = 165; }        // excede el límite (rojo)
+      else if (h >= 15) { r = 251; g = 146; b = 60; a = 140; }   // alto (naranja)
+      else if (h >= 5) { r = 253; g = 224; b = 71; a = 120; }    // moderado (amarillo)
+      else if (h >= 1) { r = 190; g = 230; b = 120; a = 90; }    // bajo (verde)
+      const k = i * 4; img.data[k] = r; img.data[k + 1] = g; img.data[k + 2] = b; img.data[k + 3] = a;
+    }
+    ctx.putImageData(img, 0, 0);
+    const bounds = [[bbox.lat0, bbox.lon0], [bbox.lat1, bbox.lon1]];
+    this._flickerOverlay = L.imageOverlay(cv.toDataURL(), bounds, { opacity: 0.6, interactive: false }).addTo(this.map);
+    this.map.fitBounds(bounds);
+    return true;
+  }
+  clearFlickerMap() { if (this._flickerOverlay) { this.map.removeLayer(this._flickerOverlay); this._flickerOverlay = null; } }
+
   // Informe de cumplimiento de shadow-flicker (todos los receptores) → ventana imprimible.
   flickerReport() {
     const rs = this._receptors || [];
@@ -174,7 +202,7 @@ export class MapView {
     const L = window.L; if (!L || !this.map) return;
     this.sunMode = !!on;
     this.el.classList.toggle('mv-sun', this.sunMode);                          // atenúa el basemap (CSS)
-    if (!this.sunMode) this.clearReceptors();                                  // los receptores son del estudio de sol
+    if (!this.sunMode) { this.clearReceptors(); this.clearFlickerMap(); }      // todo el estudio de sombra es del modo Shadow
     if (this.markersLayer) { this.sunMode ? this.map.removeLayer(this.markersLayer) : this.markersLayer.addTo(this.map); }
     if (!this.shadowLayer) this.shadowLayer = L.layerGroup();
     this.sunMode ? this.shadowLayer.addTo(this.map) : this.map.removeLayer(this.shadowLayer);

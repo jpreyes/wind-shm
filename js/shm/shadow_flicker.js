@@ -14,7 +14,7 @@
 //
 // Módulo ES puro (Node + navegador). Verificable: `node js/shm/shadow_flicker.js`.
 // ─────────────────────────────────────────────────────────────────────────────
-import { solarPosition } from './solar.js?v=231';
+import { solarPosition } from './solar.js?v=232';
 
 const M_PER_DEG_LAT = 111320;
 export const FLICKER_LIMITS = { hoursYear: 30, minDay: 30 };   // referencia LAI (Alemania)
@@ -80,6 +80,56 @@ export function annualFlicker(turbines, recep, opt = {}) {
 /** ¿Cumple el límite LAI (≤30 h/año y ≤30 min/día)? */
 export function flickerOK(res, lim = FLICKER_LIMITS) {
   return res.hoursYear <= lim.hoursYear && res.maxMinDay <= lim.minDay;
+}
+
+/**
+ * Mapa de parpadeo de sombra (worst-case) sobre un área — la salida típica del
+ * software de la industria (p.ej. WindPRO): horas/año en una grilla. Rasteriza la
+ * franja de sombra de cada turbina operativa minuto a minuto del año, deduplicando
+ * por celda en cada instante (una celda suma ≤1 paso por minuto, la golpee 1 o N
+ * turbinas).
+ * @param {Array} turbines  @param {{lat0,lat1,lon0,lon1}} bbox  @param {object} opt
+ * @returns {{nx, ny, bbox, hours:Float32Array, peak:number}}
+ */
+export function flickerMap(turbines, bbox, opt = {}) {
+  const nx = opt.nx ?? 120, ny = opt.ny ?? 80;
+  const tz = opt.tz ?? -4, stepMin = opt.stepMin ?? 15, minElev = opt.minElev ?? 3;
+  const maxDist = opt.maxDist ?? 1500, H = opt.hubHeight ?? 90, R = opt.rotorR ?? 42;
+  const year = opt.year ?? new Date().getFullYear();
+  const latC = (bbox.lat0 + bbox.lat1) / 2, lonC = (bbox.lon0 + bbox.lon1) / 2;
+  const mLon = M_PER_DEG_LAT * Math.cos(latC * Math.PI / 180);
+  const cw = (bbox.lon1 - bbox.lon0) * mLon / nx, ch = (bbox.lat1 - bbox.lat0) * M_PER_DEG_LAT / ny;
+  const tpx = [];
+  for (const t of turbines) {
+    if (t.lat == null || t.type === 'hv' || (t.built ?? 1) < 0.97) continue;
+    tpx.push({ x: ((t.lon - bbox.lon0) / (bbox.lon1 - bbox.lon0)) * nx, y: ((bbox.lat1 - t.lat) / (bbox.lat1 - bbox.lat0)) * ny });
+  }
+  const minutes = new Float32Array(nx * ny), stamp = new Int32Array(nx * ny).fill(-1);
+  const inc = Math.max(cw, ch), rad = Math.max(0, Math.round(R / Math.min(cw, ch)));
+  const start = Date.UTC(year, 0, 1); let gen = 0;
+  for (let d = 0; d < 365; d++) {
+    for (let m = 0; m < 1440; m += stepMin) {
+      const sp = solarPosition(new Date(start + d * 86400000 + (m - tz * 60) * 60000), latC, lonC);
+      if (sp.elevation < minElev) continue;
+      const anti = (sp.azimuth + 180) * Math.PI / 180, tanE = Math.tan(sp.elevation * Math.PI / 180);
+      const dLo = (H - R) / tanE, dHi = Math.min((H + R) / tanE, maxDist);
+      if (dHi <= dLo) continue;
+      const dirE = Math.sin(anti), dirN = Math.cos(anti);
+      gen++;                                                   // un sello por instante → dedup global por celda
+      for (const t0 of tpx) {
+        for (let dist = dLo; dist <= dHi; dist += inc) {
+          const ix = Math.round(t0.x + dirE * dist / cw), iy = Math.round(t0.y - dirN * dist / ch);
+          for (let yy = Math.max(0, iy - rad); yy <= Math.min(ny - 1, iy + rad); yy++)
+            for (let xx = Math.max(0, ix - rad); xx <= Math.min(nx - 1, ix + rad); xx++) {
+              const idx = yy * nx + xx; if (stamp[idx] !== gen) { stamp[idx] = gen; minutes[idx] += stepMin; }
+            }
+        }
+      }
+    }
+  }
+  const hours = new Float32Array(nx * ny); let peak = 0;
+  for (let i = 0; i < minutes.length; i++) { hours[i] = minutes[i] / 60; if (hours[i] > peak) peak = hours[i]; }
+  return { nx, ny, bbox, hours, peak };
 }
 
 // ── Autoverificación (node js/shm/shadow_flicker.js) ──────────────────────────
