@@ -8,21 +8,21 @@
 //   inspecciones y señal temporal EN VIVO desde un Web Worker (DataSource).
 // Recortes (modelado) los hace shm.css ocultando, no borrando.
 // ─────────────────────────────────────────────────────────────────────────────
-import { FleetView } from './fleet_view.js?v=266';
-import { DataSource } from './data_source.js?v=266';
-import { computeTwin } from './digital_twin.js?v=266';
-import { ParkManager, loadParksStore } from './parks.js?v=266';
-import { MapView } from './map_view.js?v=266';
-import { defaultStages, builtFromStages } from './parks_data_caman.js?v=266';
-import { compassRoseSVG } from './compass.js?v=266';
-import { buildAvanceHUD } from './avance_hud.js?v=266';
-import { renderAvance } from './avance_dashboard.js?v=266';
-import * as Insp from './inspection.js?v=266';
-import * as Fat from './fatigue.js?v=266';
-import { t, getLang, setLang } from './i18n.js?v=266';
+import { FleetView } from './fleet_view.js?v=267';
+import { DataSource } from './data_source.js?v=267';
+import { computeTwin } from './digital_twin.js?v=267';
+import { ParkManager, loadParksStore } from './parks.js?v=267';
+import { MapView } from './map_view.js?v=267';
+import { defaultStages, builtFromStages } from './parks_data_caman.js?v=267';
+import { compassRoseSVG } from './compass.js?v=267';
+import { buildAvanceHUD } from './avance_hud.js?v=267';
+import { renderAvance } from './avance_dashboard.js?v=267';
+import * as Insp from './inspection.js?v=267';
+import * as Fat from './fatigue.js?v=267';
+import { t, getLang, setLang } from './i18n.js?v=267';
 
 const F1_BASE = { turbine: 0.283, hv: 1.6 };
-const REWIND_VER = 'v266';   // versión visible del build (subir junto al cache-bust)
+const REWIND_VER = 'v267';   // versión visible del build (subir junto al cache-bust)
 const FS = 62.5;   // frecuencia de muestreo de la señal (Hz), igual que shm_worker.js
 // Clasificador ML de daño (0..4)
 const CLS = ['Sin daño', 'Leve', 'Moderado', 'Alto', 'Muy alto'];
@@ -263,7 +263,7 @@ async function boot() {
   // ── Relieve conceptual del terreno (DEM vendorizado) — encendido por defecto ─
   setLoad(88, 'Cargando relieve…'); await delay(40);
   try {
-    await fleet.loadTerrain('data/caman_dem.json?v=266');
+    await fleet.loadTerrain('data/caman_dem.json?v=267');
     fleet.setTerrainVisible(true);
     document.getElementById('shm-relieve-tool')?.classList.add('active');
   } catch (e) { console.warn('[shm] relieve no disponible', e); }
@@ -1668,7 +1668,8 @@ function buildDashboard(panel, fleet, actions) {
   function buildReport(target) {
     const o = target;
     const coverImg = new URL('images/example.jpg', location.href).href;   // ruta absoluta (la pestaña nueva no tiene base)
-    const fmtT = (t) => new Date(t).toLocaleString('es-CL');
+    const _lc = getLang() === 'en' ? 'en-GB' : 'es-CL';
+    const fmtT = (ms) => new Date(ms).toLocaleString(_lc);
     const esc = (s) => String(s).replace(/[<>&]/g, c => ({ '<': '&lt;', '>': '&gt;', '&': '&amp;' }[c]));
 
     // — utilidades de imagen (lienzo blanco, tinta oscura; los dibujos sí llevan color) —
@@ -1699,7 +1700,7 @@ function buildDashboard(panel, fleet, actions) {
         const cw = w / cols, rh = (h - 14) / rows.length;
         for (let r = 0; r < rows.length; r++) for (let cI = 0; cI < cols; cI++) { g.fillStyle = heat(rows[rows.length - 1 - r][cI] / gmax); g.fillRect(cI * cw, r * rh, Math.ceil(cw), Math.ceil(rh)); }
       }
-      g.fillStyle = '#888'; g.font = '9px sans-serif'; g.fillText('8 Hz', 2, 10); g.fillText('0.2 Hz', 2, h - 16); g.fillText('tiempo →', w - 50, h - 2);
+      g.fillStyle = '#888'; g.font = '9px sans-serif'; g.fillText('8 Hz', 2, 10); g.fillText('0.2 Hz', 2, h - 16); g.fillText(t('brep.time'), w - 50, h - 2);
       return c.toDataURL('image/png');
     };
 
@@ -1721,7 +1722,7 @@ function buildDashboard(panel, fleet, actions) {
       // ejes de altura (m) a la izquierda
       g.fillStyle = '#94a0ad'; g.font = '9px Inter, sans-serif'; g.textAlign = 'right';
       for (let k = 0; k <= 4; k++) { const z = zMax * k / 4; g.fillText(z.toFixed(0), 17, Y(z) + 3); }
-      g.save(); g.translate(9, (topY + baseY) / 2); g.rotate(-Math.PI / 2); g.textAlign = 'center'; g.fillStyle = '#aab3bd'; g.fillText('altura (m)', 0, 0); g.restore();
+      g.save(); g.translate(9, (topY + baseY) / 2); g.rotate(-Math.PI / 2); g.textAlign = 'center'; g.fillStyle = '#aab3bd'; g.fillText(t('brep.height'), 0, 0); g.restore();
 
       // silueta SIN deformar (referencia): tronco gris claro centrado en cx
       g.fillStyle = 'rgba(150,160,172,.16)';
@@ -1835,10 +1836,10 @@ function buildDashboard(panel, fleet, actions) {
   ${arcs}${ticks}
   <polygon points="${bx1.toFixed(1)},${by1.toFixed(1)} ${nx.toFixed(1)},${ny.toFixed(1)} ${bx2.toFixed(1)},${by2.toFixed(1)}" fill="#243040"/>
   <circle cx="${cx}" cy="${cy}" r="9" fill="#243040"/><circle cx="${cx}" cy="${cy}" r="4" fill="#fff"/>
-  <text x="${cx - R}" y="${cy + 18}" font-size="11" fill="#16a34a" text-anchor="middle">sano</text>
-  <text x="${cx + R}" y="${cy + 18}" font-size="11" fill="#dc2626" text-anchor="middle">crítico</text>
-  <text x="${cx}" y="${cy + 30}" font-size="20" font-weight="700" fill="${col}" text-anchor="middle">${CLS[cls]}</text>
-  <text x="${cx}" y="${cy + 48}" font-size="11" fill="#6b7785" text-anchor="middle">Índice de daño ${Math.round((dmg || 0) * 100)} %</text>
+  <text x="${cx - R}" y="${cy + 18}" font-size="11" fill="#16a34a" text-anchor="middle">${t('brep.healthy')}</text>
+  <text x="${cx + R}" y="${cy + 18}" font-size="11" fill="#dc2626" text-anchor="middle">${t('brep.critical')}</text>
+  <text x="${cx}" y="${cy + 30}" font-size="20" font-weight="700" fill="${col}" text-anchor="middle">${t('cls.' + cls)}</text>
+  <text x="${cx}" y="${cy + 48}" font-size="11" fill="#6b7785" text-anchor="middle">${t('brep.dmgIndex', Math.round((dmg || 0) * 100))}</text>
 </svg>`;
     };
 
@@ -1847,26 +1848,26 @@ function buildDashboard(panel, fleet, actions) {
       const d = window.shmData?.get(s.id) || {};
       const cls = d.cls || 0, fault = (d.sensors || []).some(x => x.status === 'fault');
       const alerta = cls >= 3 || fault;
-      const clsCell = cls >= 3 ? `<span class="warn">${CLS[cls]}</span>` : CLS[cls];
-      return `<tr><td>${esc(s.label)}</td><td>${s.type === 'hv' ? 'Torre AT' : 'Aerogenerador'}</td><td>${s.height} m</td><td>${(d.sensors || s.sensors).length}</td><td>${clsCell}</td><td>${alerta ? '<span class="warn">Alerta</span>' : 'Operativa'}</td></tr>`;
+      const clsCell = cls >= 3 ? `<span class="warn">${t('cls.' + cls)}</span>` : t('cls.' + cls);
+      return `<tr><td>${esc(s.label)}</td><td>${s.type === 'hv' ? t('brep.typeHV') : t('brep.typeTurbine')}</td><td>${s.height} m</td><td>${(d.sensors || s.sensors).length}</td><td>${clsCell}</td><td>${alerta ? `<span class="warn">${t('brep.alert')}</span>` : t('brep.operational')}</td></tr>`;
     }).join('');
 
     let detalle = '';
     if (o) {
       const d = window.shmData?.get(o.id) || {}; const sid = topSid();
       const cls = d.cls || 0;
-      const sensRows = (d.sensors || o.sensors).map((se, i) => `<tr><td>${se.id}</td><td>MEMS · acelerómetro</td><td>${o.type === 'hv' ? 'nodo ' + (i + 1) : (se.id.includes('mid') ? 'centro del fuste' : 'tope del fuste')}</td><td>${se.status === 'fault' ? '<span class="warn">FALLA</span>' : 'Operativo'}</td><td>${se.rms != null ? (se.rms * 1000).toFixed(1) + ' mg' : '—'}</td></tr>`).join('');
-      const evRows = (clsEvents[o.id] || []).slice(-12).reverse().map(e => `<tr><td>${fmtT(e.t)}</td><td>${CLS[e.from]} → ${e.to >= 3 ? `<span class="warn">${CLS[e.to]}</span>` : CLS[e.to]}</td></tr>`).join('') || '<tr><td colspan="2">Sin cambios registrados.</td></tr>';
-      const mRows = (actions.log || []).filter(m => m.id === o.id).slice(-12).reverse().map(m => `<tr><td>${fmtT(m.t)}</td><td>${esc(m.action)}</td></tr>`).join('') || '<tr><td colspan="2">Sin acciones de mantenimiento.</td></tr>';
+      const sensRows = (d.sensors || o.sensors).map((se, i) => `<tr><td>${se.id}</td><td>${t('brep.sMems')}</td><td>${o.type === 'hv' ? t('brep.sNode', i + 1) : (se.id.includes('mid') ? t('brep.sMid') : t('brep.sTop'))}</td><td>${se.status === 'fault' ? `<span class="warn">${t('brep.sFault')}</span>` : t('brep.sOp')}</td><td>${se.rms != null ? (se.rms * 1000).toFixed(1) + ' mg' : '—'}</td></tr>`).join('');
+      const evRows = (clsEvents[o.id] || []).slice(-12).reverse().map(e => `<tr><td>${fmtT(e.t)}</td><td>${t('cls.' + e.from)} → ${e.to >= 3 ? `<span class="warn">${t('cls.' + e.to)}</span>` : t('cls.' + e.to)}</td></tr>`).join('') || `<tr><td colspan="2">${t('brep.noChanges')}</td></tr>`;
+      const mRows = (actions.log || []).filter(m => m.id === o.id).slice(-12).reverse().map(m => `<tr><td>${fmtT(m.t)}</td><td>${esc(m.action)}</td></tr>`).join('') || `<tr><td colspan="2">${t('brep.noMaint')}</td></tr>`;
       // Buffer sintético para el gateway (nodo de enlace en la base de la torre).
       const gwBuf = []; for (let i = 0; i < 300; i++) gwBuf.push(0.22 * Math.sin(2 * Math.PI * 0.283 * i / FS) + 0.08 * (Math.random() - 0.5));
       const vibBlock = (label, buf, fault) => `
-        <h3>${esc(label)}${fault ? ' · <span class="warn">en falla</span>' : ''}</h3>
-        <div class="plot"><div class="cap">Señal temporal</div><img src="${imgSignal(buf)}"></div>
+        <h3>${esc(label)}${fault ? ` · <span class="warn">${t('brep.vibFault')}</span>` : ''}</h3>
+        <div class="plot"><div class="cap">${t('brep.vibSignal')}</div><img src="${imgSignal(buf)}"></div>
         <div class="vib2"><div class="plot"><div class="cap">FFT</div><img src="${imgFFT(buf)}"></div><div class="plot"><div class="cap">PSD</div><img src="${imgPSD(buf)}"></div></div>
-        <div class="plot"><div class="cap">Escalograma wavelet (Morlet)</div><img src="${imgWavelet(buf)}"></div>`;
-      const vibSensores = (o.sensors).map(se => vibBlock(`Sensor ${se.id} — MEMS acelerómetro`, sigBuf[se.id], se.status === 'fault')).join('');
-      const vibGateway = o.type === 'turbine' ? vibBlock('Gateway — nodo de enlace (base)', gwBuf, false) : '';
+        <div class="plot"><div class="cap">${t('brep.vibWavelet')}</div><img src="${imgWavelet(buf)}"></div>`;
+      const vibSensores = (o.sensors).map(se => vibBlock(t('brep.sensorLabel', se.id), sigBuf[se.id], se.status === 'fault')).join('');
+      const vibGateway = o.type === 'turbine' ? vibBlock(t('brep.gateway'), gwBuf, false) : '';
       // Estado estructural: deformada a partir de lo que MIDEN los sensores (no de una carga).
       // Desplazamiento ≈ aceleración_RMS / (2π·f₁)²  en cada sensor (a su altura) + base = 0.
       const f1m = (window.shmTwin?.[o.type]) || (o.type === 'hv' ? 1.6 : 0.283);
@@ -1895,43 +1896,43 @@ function buildDashboard(panel, fleet, actions) {
       if (measProf.length) {
         const maxD = Math.max(...measProf.map(p => p.disp), 1e-9);
         estado = `
-          <h3>Estado estructural — deformada (desplazamientos medidos por los sensores)</h3>
+          <h3>${t('brep.hEstado')}</h3>
           <div class="cols">
             <div class="draw"><img src="${imgDeformed(measProf, o.type, sensMarks)}" style="width:230px;border:1px solid #e8ebef;border-radius:8px"></div>
             <table class="ficha">
-              <tr><th>Fecha y hora</th><td>${fmtT(Date.now())}</td></tr>
-              <tr><th>Desplazamiento máx (punta)</th><td>${(maxD * 1000).toFixed(1)} mm</td></tr>
-              <tr><th>Deriva (drift)</th><td>${(maxD / o.height * 100).toFixed(3)} % de H</td></tr>
-              <tr><th>Fuente</th><td>Medición de los sensores (RMS → desplazamiento)</td></tr>
-              ${o.type === 'hv' && window.shmTwin?.hvAxial ? `<tr><th>Axial máx (gemelo)</th><td>${window.shmTwin.hvAxial.tMax.toFixed(0)} / ${window.shmTwin.hvAxial.cMax.toFixed(0)} kN</td></tr>` : ''}
+              <tr><th>${t('brep.fDateTime')}</th><td>${fmtT(Date.now())}</td></tr>
+              <tr><th>${t('brep.fMaxDisp')}</th><td>${(maxD * 1000).toFixed(1)} mm</td></tr>
+              <tr><th>${t('brep.fDrift')}</th><td>${t('brep.driftUnit', (maxD / o.height * 100).toFixed(3))}</td></tr>
+              <tr><th>${t('brep.fSource')}</th><td>${t('brep.srcMeas')}</td></tr>
+              ${o.type === 'hv' && window.shmTwin?.hvAxial ? `<tr><th>${t('brep.fAxial')}</th><td>${window.shmTwin.hvAxial.tMax.toFixed(0)} / ${window.shmTwin.hvAxial.cMax.toFixed(0)} kN</td></tr>` : ''}
             </table>
           </div>
-          <div class="note">Deformada estimada a partir de la vibración MEDIDA por los sensores (no de una carga). Color = magnitud del desplazamiento (ver barra).</div>`;
+          <div class="note">${t('brep.defNote')}</div>`;
       }
       detalle = `
-        <h2>2 · Estructura ${esc(o.label)}</h2>
+        <h2>2 · ${t('brep.struct')} ${esc(o.label)}</h2>
         <div style="text-align:center;margin:6px 0 14px">${imgGauge(cls, d.dmg)}</div>
         <div class="cols">
           <div class="draw">${schematic(o)}</div>
           <table class="ficha">
-            <tr><th>Tipo</th><td>${o.type === 'hv' ? 'Torre de alta tensión' : 'Aerogenerador'}</td></tr>
-            <tr><th>Altura</th><td>${o.height} m</td></tr>
-            ${o.type === 'turbine' ? '<tr><th>Potencia</th><td>~3 MW</td></tr>' : ''}
-            <tr><th>f₁ gemelo digital</th><td>${window.shmTwin?.[o.type] ? window.shmTwin[o.type].toFixed(3) + ' Hz' : '—'}</td></tr>
-            <tr><th>f₁ actual</th><td>${d.f1 != null ? d.f1.toFixed(3) + ' Hz' : '—'}</td></tr>
-            <tr><th>Temperatura</th><td>${d.temp != null ? d.temp.toFixed(1) + ' °C' : '—'}</td></tr>
-            <tr><th>Índice de daño</th><td>${Math.round((d.dmg || 0) * 100)} %</td></tr>
-            <tr><th>Clasificación ML</th><td>${cls >= 3 ? `<span class="warn">${CLS[cls]}</span>` : CLS[cls]}</td></tr>
+            <tr><th>${t('brep.fType')}</th><td>${o.type === 'hv' ? t('det.typeHV') : t('det.typeTurbine')}</td></tr>
+            <tr><th>${t('brep.fHeight')}</th><td>${o.height} m</td></tr>
+            ${o.type === 'turbine' ? `<tr><th>${t('brep.fPower')}</th><td>~3 MW</td></tr>` : ''}
+            <tr><th>${t('brep.fF1twin')}</th><td>${window.shmTwin?.[o.type] ? window.shmTwin[o.type].toFixed(3) + ' Hz' : '—'}</td></tr>
+            <tr><th>${t('brep.fF1now')}</th><td>${d.f1 != null ? d.f1.toFixed(3) + ' Hz' : '—'}</td></tr>
+            <tr><th>${t('brep.fTemp')}</th><td>${d.temp != null ? d.temp.toFixed(1) + ' °C' : '—'}</td></tr>
+            <tr><th>${t('brep.fDmg')}</th><td>${Math.round((d.dmg || 0) * 100)} %</td></tr>
+            <tr><th>${t('brep.fClsML')}</th><td>${cls >= 3 ? `<span class="warn">${t('cls.' + cls)}</span>` : t('cls.' + cls)}</td></tr>
           </table>
         </div>
         ${estado}
-        <h3>Sensores</h3>
-        <table><thead><tr><th>ID</th><th>Tipo</th><th>Ubicación</th><th>Estado</th><th>RMS</th></tr></thead><tbody>${sensRows}</tbody></table>
-        <h3>Historial de anomalías y advertencias</h3>
-        <table><thead><tr><th>Fecha y hora</th><th>Cambio de nivel</th></tr></thead><tbody>${evRows}</tbody></table>
-        <h3>Acciones de mantenimiento</h3>
-        <table><thead><tr><th>Fecha y hora</th><th>Acción</th></tr></thead><tbody>${mRows}</tbody></table>
-        <h2>3 · Análisis de vibración — todos los sensores y gateway</h2>
+        <h3>${t('brep.hSensors')}</h3>
+        <table><thead><tr><th>${t('brep.thID')}</th><th>${t('brep.thType')}</th><th>${t('brep.thLoc')}</th><th>${t('brep.thStatus')}</th><th>${t('brep.thRMS')}</th></tr></thead><tbody>${sensRows}</tbody></table>
+        <h3>${t('brep.hAnom')}</h3>
+        <table><thead><tr><th>${t('brep.fDateTime')}</th><th>${t('brep.thChange')}</th></tr></thead><tbody>${evRows}</tbody></table>
+        <h3>${t('brep.hMaint')}</h3>
+        <table><thead><tr><th>${t('brep.fDateTime')}</th><th>${t('brep.thAction')}</th></tr></thead><tbody>${mRows}</tbody></table>
+        <h2>${t('brep.h2Vib')}</h2>
         ${vibSensores}${vibGateway}`;
     }
 
@@ -1941,17 +1942,17 @@ function buildDashboard(panel, fleet, actions) {
       const allEv = [];
       for (const id in clsEvents) for (const e of clsEvents[id]) allEv.push({ ...e, id });
       allEv.sort((a, b) => b.t - a.t);
-      const evRows = allEv.slice(0, 20).map(e => `<tr><td>${fmtT(e.t)}</td><td>${esc(fleet.getStructure(e.id)?.label || e.id)}</td><td>${CLS[e.from]} → ${e.to >= 3 ? `<span class="warn">${CLS[e.to]}</span>` : CLS[e.to]}</td></tr>`).join('') || '<tr><td colspan="3">Sin cambios registrados.</td></tr>';
-      const mRows = (actions.log || []).slice(-20).reverse().map(m => `<tr><td>${fmtT(m.t)}</td><td>${esc(fleet.getStructure(m.id)?.label || m.id)}</td><td>${esc(m.action)}</td></tr>`).join('') || '<tr><td colspan="3">Sin acciones registradas.</td></tr>';
+      const evRows = allEv.slice(0, 20).map(e => `<tr><td>${fmtT(e.t)}</td><td>${esc(fleet.getStructure(e.id)?.label || e.id)}</td><td>${t('cls.' + e.from)} → ${e.to >= 3 ? `<span class="warn">${t('cls.' + e.to)}</span>` : t('cls.' + e.to)}</td></tr>`).join('') || `<tr><td colspan="3">${t('brep.noChanges')}</td></tr>`;
+      const mRows = (actions.log || []).slice(-20).reverse().map(m => `<tr><td>${fmtT(m.t)}</td><td>${esc(fleet.getStructure(m.id)?.label || m.id)}</td><td>${esc(m.action)}</td></tr>`).join('') || `<tr><td colspan="3">${t('brep.noActions')}</td></tr>`;
       compilado = `
-        <h2>2 · Historial de anomalías y advertencias</h2>
-        <table><thead><tr><th>Fecha y hora</th><th>Estructura</th><th>Cambio de nivel</th></tr></thead><tbody>${evRows}</tbody></table>
-        <h2>3 · Bitácora de mantenimiento</h2>
-        <table><thead><tr><th>Fecha y hora</th><th>Estructura</th><th>Acción</th></tr></thead><tbody>${mRows}</tbody></table>`;
+        <h2>${t('brep.h2AnomAll')}</h2>
+        <table><thead><tr><th>${t('brep.fDateTime')}</th><th>${t('brep.thStructure')}</th><th>${t('brep.thChange')}</th></tr></thead><tbody>${evRows}</tbody></table>
+        <h2>${t('brep.h2Maint')}</h2>
+        <table><thead><tr><th>${t('brep.fDateTime')}</th><th>${t('brep.thStructure')}</th><th>${t('brep.thAction')}</th></tr></thead><tbody>${mRows}</tbody></table>`;
     }
     const nAlarm = list.filter(s => { const d = window.shmData?.get(s.id) || {}; return (d.cls || 0) >= 3 || (d.sensors || []).some(x => x.status === 'fault'); }).length;
-    const html = `<!doctype html><html lang="es"><head><meta charset="utf-8">
-<title>Informe ReWind — Salud estructural</title>
+    const html = `<!doctype html><html lang="${getLang()}"><head><meta charset="utf-8">
+<title>${t('brep.docTitle')}</title>
 <style>
   @page { margin: 18mm; }
   * { box-sizing: border-box; }
@@ -1993,25 +1994,25 @@ function buildDashboard(panel, fleet, actions) {
   <img src="${coverImg}" alt="Parque eólico">
   <div class="veil"></div>
   <div class="ct">
-    <div class="kicker"><svg width="20" height="24" viewBox="0 0 24 24"><line x1="12" y1="23" x2="12" y2="12" stroke="#fff" stroke-width="2" stroke-linecap="round"/><g stroke="#fff" stroke-width="2" stroke-linecap="round"><line x1="12" y1="11" x2="12" y2="3"/><line x1="12" y1="11" x2="19" y2="15"/><line x1="12" y1="11" x2="5" y2="15"/></g></svg> ReWind · Monitoreo de salud estructural</div>
-    <h1 class="big">Informe<br>Parque Eólico</h1>
-    <div class="meta2">${fmtT(Date.now())} &nbsp;·&nbsp; ${list.length} estructuras &nbsp;·&nbsp; ${o ? esc(o.label) : 'compilado'} &nbsp;·&nbsp; ${REWIND_VER}</div>
+    <div class="kicker"><svg width="20" height="24" viewBox="0 0 24 24"><line x1="12" y1="23" x2="12" y2="12" stroke="#fff" stroke-width="2" stroke-linecap="round"/><g stroke="#fff" stroke-width="2" stroke-linecap="round"><line x1="12" y1="11" x2="12" y2="3"/><line x1="12" y1="11" x2="19" y2="15"/><line x1="12" y1="11" x2="5" y2="15"/></g></svg> ${t('brep.coverKicker')}</div>
+    <h1 class="big">${t('brep.coverH1')}</h1>
+    <div class="meta2">${fmtT(Date.now())} &nbsp;·&nbsp; ${list.length} ${t('brep.structuresWord')} &nbsp;·&nbsp; ${o ? esc(o.label) : t('brep.compiledWord')} &nbsp;·&nbsp; ${REWIND_VER}</div>
   </div>
 </section>
 <header>
   <svg width="34" height="40" viewBox="0 0 24 24"><line x1="12" y1="23" x2="12" y2="12" stroke="#0d9488" stroke-width="2" stroke-linecap="round"/><g stroke="#0d9488" stroke-width="2" stroke-linecap="round"><line x1="12" y1="11" x2="12" y2="3"/><line x1="12" y1="11" x2="19" y2="15"/><line x1="12" y1="11" x2="5" y2="15"/></g><circle cx="12" cy="11" r="1.7" fill="#0d9488"/></svg>
-  <div class="htxt"><h1>Informe de salud estructural</h1><div class="meta">ReWind ${REWIND_VER} · ${o ? esc(o.label) : 'Informe compilado del parque'} · ${fmtT(Date.now())}</div></div>
+  <div class="htxt"><h1>${t('brep.headerH1')}</h1><div class="meta">ReWind ${REWIND_VER} · ${o ? esc(o.label) : t('brep.headerCompiled')} · ${fmtT(Date.now())}</div></div>
 </header>
-<h2>1 · Resumen de la flota</h2>
-<p class="lead">${list.length} estructuras monitoreadas · ${nAlarm ? `<span class="warn">${nAlarm} en alerta</span>` : 'sin alertas activas'}.</p>
-<table><thead><tr><th>Estructura</th><th>Tipo</th><th>Altura</th><th>Sensores</th><th>Clasificación ML</th><th>Estado</th></tr></thead><tbody>${rowsHtml}</tbody></table>
+<h2>${t('brep.h2Fleet')}</h2>
+<p class="lead">${t('brep.lead', list.length)} · ${nAlarm ? `<span class="warn">${t('brep.alertN', nAlarm)}</span>` : t('brep.noAlerts')}.</p>
+<table><thead><tr><th>${t('brep.thStructure')}</th><th>${t('brep.thType')}</th><th>${t('brep.thHeight')}</th><th>${t('brep.thSensors')}</th><th>${t('brep.thClsML')}</th><th>${t('brep.thState')}</th></tr></thead><tbody>${rowsHtml}</tbody></table>
 ${detalle}${compilado}
-<footer>Generado por ReWind — plataforma de monitoreo de salud estructural (SHM). Clasificación de daño por servicio ML sobre la telemetría de los acelerómetros MEMS. Documento de carácter informativo.</footer>
-<div class="noprint"><button onclick="window.print()">🖨 Imprimir / Guardar PDF</button></div>
+<footer>${t('brep.footer')}</footer>
+<div class="noprint"><button onclick="window.print()">${t('brep.print')}</button></div>
 </body></html>`;
 
     const win = window.open('', '_blank');
-    if (!win) { alert('Permite las ventanas emergentes para ver el informe.'); return; }
+    if (!win) { alert(t('brep.popup')); return; }
     win.document.open(); win.document.write(html); win.document.close();
   }
 
