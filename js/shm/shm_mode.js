@@ -8,16 +8,16 @@
 //   inspecciones y señal temporal EN VIVO desde un Web Worker (DataSource).
 // Recortes (modelado) los hace shm.css ocultando, no borrando.
 // ─────────────────────────────────────────────────────────────────────────────
-import { FleetView } from './fleet_view.js?v=230';
-import { DataSource } from './data_source.js?v=230';
-import { computeTwin } from './digital_twin.js?v=230';
-import { ParkManager, loadParksStore } from './parks.js?v=230';
-import { MapView } from './map_view.js?v=230';
-import { defaultStages, builtFromStages } from './parks_data_caman.js?v=230';
-import { compassRoseSVG } from './compass.js?v=230';
+import { FleetView } from './fleet_view.js?v=231';
+import { DataSource } from './data_source.js?v=231';
+import { computeTwin } from './digital_twin.js?v=231';
+import { ParkManager, loadParksStore } from './parks.js?v=231';
+import { MapView } from './map_view.js?v=231';
+import { defaultStages, builtFromStages } from './parks_data_caman.js?v=231';
+import { compassRoseSVG } from './compass.js?v=231';
 
 const F1_BASE = { turbine: 0.283, hv: 1.6 };
-const REWIND_VER = 'v230';   // versión visible del build (subir junto al cache-bust)
+const REWIND_VER = 'v231';   // versión visible del build (subir junto al cache-bust)
 const FS = 62.5;   // frecuencia de muestreo de la señal (Hz), igual que shm_worker.js
 // Clasificador ML de daño (0..4)
 const CLS = ['Sin daño', 'Leve', 'Moderado', 'Alto', 'Muy alto'];
@@ -227,7 +227,7 @@ async function boot() {
   // ── Relieve conceptual del terreno (DEM vendorizado) — encendido por defecto ─
   setLoad(88, 'Cargando relieve…'); await delay(40);
   try {
-    await fleet.loadTerrain('data/caman_dem.json?v=230');
+    await fleet.loadTerrain('data/caman_dem.json?v=231');
     fleet.setTerrainVisible(true);
     document.getElementById('shm-relieve-tool')?.classList.add('active');
   } catch (e) { console.warn('[shm] relieve no disponible', e); }
@@ -288,9 +288,9 @@ function buildToolbar(toolbar, fleet, getPM = () => null) {
     'Relieve', () => { const on = !fleet.terrainOn; fleet.setTerrainVisible(on); relieve.classList.toggle('active', on); });
   // Sol y sombras (análisis de sombra según hora/día — Frente 2).
   const sunCtl = buildSunControl(fleet);
-  const sol = mk('shm-sun-tool', 'Sol y sombras: ver la sombra de las torres según la hora y el día',
+  const sol = mk('shm-sun-tool', 'Shadow: estudio de sombra de las torres según hora y día',
     `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><circle cx="12" cy="12" r="4.2"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3M4.9 4.9l2.1 2.1M17 17l2.1 2.1M19.1 4.9 17 7M7 17l-2.1 2.1"/></svg>`,
-    'Sol', () => { const on = !fleet.sunMode; fleet.setSunEnabled(on); sol.classList.toggle('active', on); sunCtl.setOpen(on); window.shmMap?.setSunShadows(on, on ? fleet.getSunInfo() : null); });
+    'Shadow', () => { const on = !fleet.sunMode; fleet.setSunEnabled(on); sol.classList.toggle('active', on); sunCtl.setOpen(on); window.shmMap?.setSunShadows(on, on ? fleet.getSunInfo() : null); });
   // El botón «Editar» es el interruptor maestro del modo edición: con él activo se
   // pueden crear, borrar y mover estructuras; apagado, sólo se monitorea.
   // TODO(perfiles): condicionar la visibilidad de «Editar» al rol del usuario.
@@ -347,7 +347,7 @@ function buildSunControl(fleet) {
   el.id = 'shm-sun'; el.className = 'shm-sun';
   const isoToday = new Date().toISOString().slice(0, 10);
   el.innerHTML = `
-    <div class="sun-head"><span class="sun-title">Sol y sombras</span><span class="sun-read" id="sun-read">—</span></div>
+    <div class="sun-head"><span class="sun-title">Shadow · estudio de sombra</span><span class="sun-read" id="sun-read">—</span></div>
     <label class="sun-ctl"><span>Hora</span><input type="range" id="sun-hour" min="0" max="24" step="0.25" value="13"><b id="sun-hh">13:00</b></label>
     <label class="sun-ctl"><span>Fecha</span><input type="date" id="sun-date" value="${isoToday}" min="2015-01-01" max="2040-12-31"></label>
     <label class="sun-real"><input type="checkbox" id="sun-realscale" checked> Escala real <span class="sun-hint">(sombra fiel)</span></label>
@@ -371,10 +371,15 @@ function buildSunControl(fleet) {
   hourEl.addEventListener('input', apply);
   dateEl.addEventListener('change', apply);
   realEl.addEventListener('change', () => fleet.setRealScale(realEl.checked));
-  let raf = null, last = 0;
-  const stop = () => { if (raf) cancelAnimationFrame(raf); raf = null; playBtn.textContent = '▶ Animar el día'; };
-  const tick = (ts) => { if (!last) last = ts; const dt = (ts - last) / 1000; last = ts; let h = +hourEl.value + dt * 2; if (h >= 24) h -= 24; hourEl.value = h.toFixed(2); apply(); raf = requestAnimationFrame(tick); };
-  playBtn.addEventListener('click', () => { if (raf) stop(); else { last = 0; playBtn.textContent = '⏸ Pausar'; raf = requestAnimationFrame(tick); } });
+  // Animación del día con setInterval + paso de 0.25 h (alineado al step del slider,
+  // así no lo «encaja» de vuelta; el rAF con pasos < step quedaba estancado).
+  let timer = null;
+  const stop = () => { if (timer) { clearInterval(timer); timer = null; } playBtn.textContent = '▶ Animar el día'; };
+  playBtn.addEventListener('click', () => {
+    if (timer) { stop(); return; }
+    playBtn.textContent = '⏸ Pausar';
+    timer = setInterval(() => { let h = +hourEl.value + 0.25; if (h >= 24) h -= 24; hourEl.value = h.toFixed(2); apply(); }, 90);   // ~día completo en 9 s
+  });
   return { setOpen(on) { el.classList.toggle('show', on); if (on) { realEl.checked = fleet.realScale; apply(); } else stop(); } };
 }
 
