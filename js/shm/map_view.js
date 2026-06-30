@@ -6,11 +6,12 @@
 // Click en un marcador → conmuta a la vista 3D enfocando esa estructura (onPick).
 // Leaflet se carga como global (window.L) desde lib/leaflet/leaflet.js.
 // ─────────────────────────────────────────────────────────────────────────────
-import { CAMAN_CENTER } from './parks_data_caman.js?v=240';
-import { CAMAN_ROADS } from './caman_roads.js?v=240';
-import { compassRoseSVG } from './compass.js?v=240';
-import { annualFlicker, flickerOK, FLICKER_LIMITS, REAL_CASE_FACTOR, flickerMap, criticalWindow, interTurbineShading } from './shadow_flicker.js?v=240';
-import { realCaseWeight, METEO_CAMAN } from './meteo_caman.js?v=240';
+import { CAMAN_CENTER } from './parks_data_caman.js?v=241';
+import { CAMAN_ROADS } from './caman_roads.js?v=241';
+import { compassRoseSVG } from './compass.js?v=241';
+import { annualFlicker, flickerOK, FLICKER_LIMITS, REAL_CASE_FACTOR, flickerMap, criticalWindow, interTurbineShading } from './shadow_flicker.js?v=241';
+import { realCaseWeight, METEO_CAMAN } from './meteo_caman.js?v=241';
+import { parseReceptorFile } from './receptor_import.js?v=241';
 
 const REAL_W = (month, antiAz) => realCaseWeight(month, antiAz, METEO_CAMAN);   // ponderador meteo del sitio
 
@@ -118,9 +119,10 @@ export class MapView {
   }
 
   // Agrega un receptor (vivienda) y calcula su parpadeo de sombra anual worst-case.
-  addReceptor(latlng) {
+  // opts: {name, silent (no abre popup ni refresca — para importación en lote), stepMin}
+  addReceptor(latlng, opts = {}) {
     const L = window.L; if (!L) return;
-    const res = annualFlicker(this.fleet.structures, { lat: latlng.lat, lon: latlng.lng }, { stepMin: 2, realWeightFn: REAL_W });
+    const res = annualFlicker(this.fleet.structures, { lat: latlng.lat, lon: latlng.lng }, { stepMin: opts.stepMin ?? 2, realWeightFn: REAL_W });
     const ok = flickerOK(res);
     const col = ok ? '#22c55e' : '#ef4444';
     const icon = L.divIcon({ className: 'rcp-icon', iconSize: [22, 22], iconAnchor: [11, 11],
@@ -128,20 +130,37 @@ export class MapView {
     const m = L.marker(latlng, { icon }).addTo(this.recepLayer);
     const win = criticalWindow(res.cal);
     this._receptors ||= [];
-    const n = this._receptors.length + 1;
-    const entry = { n, lat: latlng.lat, lon: latlng.lng, res, ok, win, marker: m };
+    const n = (this._recSeq = (this._recSeq || 0) + 1);   // contador monótono (estable ante borrados)
+    const name = (opts.name || '').trim();
+    const entry = { n, name, lat: latlng.lat, lon: latlng.lng, res, ok, win, marker: m };
     this._receptors.push(entry);
+    if (name) m.bindTooltip(name, { direction: 'top' });
     m.bindPopup(
-      `<b>Receptor ${n}</b><br>Worst-case: <b>${res.hoursYear.toFixed(1)} h/año</b> · ${res.maxMinDay} min/día<br>` +
+      `<b>${name || 'Receptor ' + n}</b><br>Worst-case: <b>${res.hoursYear.toFixed(1)} h/año</b> · ${res.maxMinDay} min/día<br>` +
       `Real (meteo) ≈ <b>${res.hoursYearReal.toFixed(1)} h/año</b><br>` +
       `${res.daysAffected} días afectados<br>` +
       (win ? `Parada sugerida: <b>${win.months}</b>, <b>${win.hours}</b><br>` : '') +
       `<span style="color:${col}">${ok ? '✓ Cumple' : '✗ Excede'}</span> (≤${FLICKER_LIMITS.hoursYear} h · ≤${FLICKER_LIMITS.minDay} min, worst-case)<br>` +
       `<a href="#" class="rcp-del">Quitar</a>`
-    ).openPopup();
+    );
+    if (!opts.silent) m.openPopup();
     m.on('popupopen', (ev) => { const a = ev.popup.getElement()?.querySelector('.rcp-del'); a && a.addEventListener('click', (x) => { x.preventDefault(); this.recepLayer.removeLayer(m); this._receptors = this._receptors.filter(r => r !== entry); window.shmDash?.refreshShadow?.(); }); });
-    window.shmDash?.refreshShadow?.();   // refresca la lista de la pestaña Shadow flicker
-    return entry;                         // {n, lat, lon, res, ok, win, marker} — usado por la ficha 3D
+    if (!opts.silent) window.shmDash?.refreshShadow?.();   // refresca la lista de la pestaña Shadow flicker
+    return entry;                         // {n, name, lat, lon, res, ok, win, marker} — usado por la ficha 3D / importación
+  }
+
+  // Importa receptores desde un archivo (CSV/KML/KMZ/GeoJSON/SHP) y los calcula en lote.
+  async importReceptors(file) {
+    let pts;
+    try { pts = await parseReceptorFile(file); }
+    catch (err) { alert('No se pudo importar: ' + (err.message || err)); return 0; }
+    if (!pts.length) { alert('No se encontraron puntos válidos en ' + file.name + '.'); return 0; }
+    if (!this.sunMode) this.sunMode = true;   // permite importar aunque el clic-receptor esté inactivo
+    for (const p of pts) this.addReceptor({ lat: p.lat, lng: p.lon }, { name: p.name, silent: true, stepMin: 5 });
+    if (this._receptors?.length) { try { this.map.fitBounds(this._receptors.map(r => [r.lat, r.lon]), { padding: [40, 40] }); } catch {} }
+    window.shmDash?.refreshShadow?.();
+    alert(`Importados ${pts.length} receptor(es) desde ${file.name}.`);
+    return pts.length;
   }
 
   // Quita un receptor por su número (desde la pestaña Shadow flicker del panel).
@@ -273,7 +292,7 @@ export class MapView {
         .map(([id, min]) => `${labelById.get(id)} (${(min / 60).toFixed(1)} h)`).join(', ') || '—';
       const win = r.win ? `${r.win.months} · ${r.win.hours} (pico ${r.win.peak.month} ${r.win.peak.hour})` : '—';
       return `<div class="card">
-        <div class="card-h"><b>Receptor #${r.n}</b> ${badge(r.ok)}<span class="muted">${r.lat.toFixed(5)}, ${r.lon.toFixed(5)}</span></div>
+        <div class="card-h"><b>${r.name ? r.name + ' (#' + r.n + ')' : 'Receptor #' + r.n}</b> ${badge(r.ok)}<span class="muted">${r.lat.toFixed(5)}, ${r.lon.toFixed(5)}</span></div>
         <div class="stats">
           <div class="stat"><div class="sv ${r.res.hoursYear > 30 ? 'over' : ''}">${r.res.hoursYear.toFixed(1)}</div><div class="sk">h/año worst-case</div></div>
           <div class="stat"><div class="sv ${r.res.maxMinDay > 30 ? 'over' : ''}">${r.res.maxMinDay}</div><div class="sk">min/día máx</div></div>
@@ -287,7 +306,7 @@ export class MapView {
     }).join('');
 
     const sumRows = rs.map(r =>
-      `<tr class="${r.ok ? 'rok' : 'rbad'}"><td>${r.n}</td><td>${r.lat.toFixed(5)}, ${r.lon.toFixed(5)}</td>` +
+      `<tr class="${r.ok ? 'rok' : 'rbad'}"><td>${r.name ? r.name + ' (#' + r.n + ')' : '#' + r.n}</td><td>${r.lat.toFixed(5)}, ${r.lon.toFixed(5)}</td>` +
       `<td class="num">${r.res.hoursYear.toFixed(1)}</td><td class="num">${r.res.maxMinDay}</td>` +
       `<td class="num">${r.res.daysAffected}</td><td class="num">${r.res.hoursYearReal.toFixed(1)}</td>` +
       `<td>${r.win ? r.win.months + ' · ' + r.win.hours : '—'}</td>` +
@@ -382,7 +401,7 @@ export class MapView {
         ${cards}
 
         <h2>5 · Tabla de cumplimiento</h2>
-        <table><thead><tr><th>#</th><th>Coordenadas (lat, lon)</th><th class="num">h/año worst</th><th class="num">min/día</th><th class="num">días</th><th class="num">h/año real</th><th>Parada sugerida</th><th class="ctr">Estado</th></tr></thead><tbody>${sumRows}</tbody></table>
+        <table><thead><tr><th>Receptor</th><th>Coordenadas (lat, lon)</th><th class="num">h/año worst</th><th class="num">min/día</th><th class="num">días</th><th class="num">h/año real</th><th>Parada sugerida</th><th class="ctr">Estado</th></tr></thead><tbody>${sumRows}</tbody></table>
 
         <h2>6 · Programa de turbinas</h2>
         <table><thead><tr><th>Turbina</th><th class="num">Latitud</th><th class="num">Longitud</th><th>Estado de obra</th></tr></thead><tbody>${schedRows}</tbody></table>

@@ -8,16 +8,16 @@
 //   inspecciones y señal temporal EN VIVO desde un Web Worker (DataSource).
 // Recortes (modelado) los hace shm.css ocultando, no borrando.
 // ─────────────────────────────────────────────────────────────────────────────
-import { FleetView } from './fleet_view.js?v=240';
-import { DataSource } from './data_source.js?v=240';
-import { computeTwin } from './digital_twin.js?v=240';
-import { ParkManager, loadParksStore } from './parks.js?v=240';
-import { MapView } from './map_view.js?v=240';
-import { defaultStages, builtFromStages } from './parks_data_caman.js?v=240';
-import { compassRoseSVG } from './compass.js?v=240';
+import { FleetView } from './fleet_view.js?v=241';
+import { DataSource } from './data_source.js?v=241';
+import { computeTwin } from './digital_twin.js?v=241';
+import { ParkManager, loadParksStore } from './parks.js?v=241';
+import { MapView } from './map_view.js?v=241';
+import { defaultStages, builtFromStages } from './parks_data_caman.js?v=241';
+import { compassRoseSVG } from './compass.js?v=241';
 
 const F1_BASE = { turbine: 0.283, hv: 1.6 };
-const REWIND_VER = 'v240';   // versión visible del build (subir junto al cache-bust)
+const REWIND_VER = 'v241';   // versión visible del build (subir junto al cache-bust)
 const FS = 62.5;   // frecuencia de muestreo de la señal (Hz), igual que shm_worker.js
 // Clasificador ML de daño (0..4)
 const CLS = ['Sin daño', 'Leve', 'Moderado', 'Alto', 'Muy alto'];
@@ -245,7 +245,7 @@ async function boot() {
   // ── Relieve conceptual del terreno (DEM vendorizado) — encendido por defecto ─
   setLoad(88, 'Cargando relieve…'); await delay(40);
   try {
-    await fleet.loadTerrain('data/caman_dem.json?v=240');
+    await fleet.loadTerrain('data/caman_dem.json?v=241');
     fleet.setTerrainVisible(true);
     document.getElementById('shm-relieve-tool')?.classList.add('active');
   } catch (e) { console.warn('[shm] relieve no disponible', e); }
@@ -680,14 +680,14 @@ function buildDashboard(panel, fleet, actions) {
 
     const rows = rcp.length ? rcp.map(r => `
       <div class="ssh-rcp ${r.ok ? 'ok' : 'bad'}">
-        <span class="ssh-n">#${r.n}</span>
+        <span class="ssh-n" title="${r.name || ('Receptor ' + r.n)}">${r.name ? r.name : '#' + r.n}</span>
         <span class="ssh-v">
           <b>${r.res.hoursYear.toFixed(1)}</b> h/año<span class="ssh-sub"> (real≈${r.res.hoursYearReal.toFixed(1)})</span><br>
           <span class="ssh-st">${r.res.maxMinDay} min/día · ${r.res.daysAffected} días · ${r.ok ? '✓ cumple' : '✗ excede'}</span>
           ${r.win ? `<span class="ssh-st">⏸ parada: ${r.win.months} · ${r.win.hours}</span>` : ''}
         </span>
         <button class="ssh-del" data-n="${r.n}" title="Quitar receptor">✕</button>
-      </div>`).join('') : `<div class="ssh-empty">Sin receptores. Haz clic en el mapa 2D (con Shadow activo) para agregar una vivienda y calcular su parpadeo anual.</div>`;
+      </div>`).join('') : `<div class="ssh-empty">Sin receptores. Haz clic en el mapa 2D (con Shadow activo) para agregar una vivienda, o <b>importa</b> un archivo (CSV/KML/KMZ/SHP) abajo.</div>`;
 
     host.innerHTML = `
       <div class="ssh-hdr">Estudio de sombra · Camán I</div>
@@ -709,16 +709,26 @@ function buildDashboard(panel, fleet, actions) {
       <div class="ssh-actions">
         <button id="ssh-fmap" class="sun-btn js-fmap ${mv?._flickerOverlay ? 'active' : ''}" type="button">🗺️ Mapa de flicker (h/año)</button>
         <div class="sun-legend"><span><i style="background:#bee678"></i>1–5</span><span><i style="background:#fde047"></i>5–15</span><span><i style="background:#fb923c"></i>15–30</span><span><i style="background:#ef4444"></i>≥30 ✗</span></div>
-        <button id="ssh-report" class="sun-btn" type="button">📄 Informe completo</button>
+        <button id="ssh-report" class="sun-btn" type="button">📄 Informe completo (todos)</button>
         <button id="ssh-inter" class="sun-btn" type="button">🌀 Sombreado entre torres</button>
       </div>
-      <div class="ssh-rcp-h">Receptores (viviendas) · ${rcp.length}${rcp.length ? ` · ${nEx} excede(n)` : ''}</div>
+      <div class="ssh-rcp-h">Receptores (viviendas) · ${rcp.length}${rcp.length ? ` · ${nEx} excede(n)` : ''}
+        <span class="ssh-rcp-act">
+          <input type="file" id="ssh-file" accept=".csv,.txt,.kml,.kmz,.geojson,.json,.shp" style="display:none">
+          <button id="ssh-import" class="ssh-mini" type="button" title="Importar receptores desde CSV / KML / KMZ / GeoJSON / SHP">📂 Importar</button>
+          ${rcp.length ? `<button id="ssh-clear" class="ssh-mini" type="button" title="Quitar todos los receptores">🗑 Limpiar</button>` : ''}
+        </span>
+      </div>
       <div class="ssh-list">${rows}</div>
-      <div class="ssh-foot">Worst-case astronómico (sol siempre despejado, rotor siempre girando) — el criterio que acepta la autoridad. «Real» pondera estadística de sol, operación y rosa de vientos del sitio.</div>`;
+      <div class="ssh-foot">Worst-case astronómico (sol siempre despejado, rotor siempre girando) — el criterio que acepta la autoridad. «Real» pondera estadística de sol, operación y rosa de vientos del sitio. El informe completo incluye a <b>todos</b> los receptores (marcados o importados).</div>`;
     host.querySelector('#ssh-fmap')?.addEventListener('click', () => { window.shmMap?.toggleFlickerMap(); window.shmSyncFlickerBtns?.(); });
     host.querySelector('#ssh-report')?.addEventListener('click', () => window.shmMap?.flickerReport());
     host.querySelector('#ssh-inter')?.addEventListener('click', () => window.shmMap?.interTurbineReport());
     host.querySelectorAll('.ssh-del').forEach(b => b.addEventListener('click', () => window.shmMap?.removeReceptor(+b.dataset.n)));
+    const fileInp = host.querySelector('#ssh-file');
+    host.querySelector('#ssh-import')?.addEventListener('click', () => fileInp?.click());
+    fileInp?.addEventListener('change', async (e) => { const f = e.target.files?.[0]; e.target.value = ''; if (f) await window.shmMap?.importReceptors(f); });
+    host.querySelector('#ssh-clear')?.addEventListener('click', () => { if (confirm('¿Quitar todos los receptores?')) window.shmMap?.clearReceptors(); });
   }
   function showShadow() { setTopView('shadow'); }
 

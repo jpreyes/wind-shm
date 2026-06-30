@@ -456,7 +456,10 @@ body.shm #shm-banner.show { display: flex; animation: shm-blink 0.8s steps(1) in
 .shm-shadow .sun-legend { display: flex; flex-wrap: wrap; gap: 6px 10px; margin: 1px 0; font-size: 11px; color: var(--text-muted); }
 .shm-shadow .sun-legend span { display: flex; align-items: center; gap: 4px; }
 .shm-shadow .sun-legend i { width: 11px; height: 11px; border-radius: 2px; display: inline-block; }
-.shm-shadow .ssh-rcp-h { font-size: 12px; font-weight: 700; color: var(--text-muted); border-top: 1px solid var(--border); padding-top: 9px; }
+.shm-shadow .ssh-rcp-h { display: flex; align-items: center; justify-content: space-between; gap: 8px; flex-wrap: wrap; font-size: 12px; font-weight: 700; color: var(--text-muted); border-top: 1px solid var(--border); padding-top: 9px; }
+.shm-shadow .ssh-rcp-act { display: flex; gap: 6px; }
+.shm-shadow .ssh-mini { cursor: pointer; background: var(--bg4); color: var(--text); border: 1px solid var(--border2); border-radius: var(--radius-sm, 6px); padding: 4px 8px; font-family: inherit; font-size: 11px; font-weight: 600; }
+.shm-shadow .ssh-mini:hover { filter: brightness(1.15); border-color: var(--accent); }
 .shm-shadow .ssh-empty { font-size: 12px; color: var(--text-muted); line-height: 1.5; }
 .shm-shadow .ssh-list { display: flex; flex-direction: column; gap: 6px; }
 .shm-shadow .ssh-rcp { display: flex; align-items: center; gap: 8px; padding: 7px 9px; border-radius: var(--radius-sm, 6px);
