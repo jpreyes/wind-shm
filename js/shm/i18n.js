@@ -34,6 +34,8 @@ const DICT = {
     'tool.pan': 'Mover', 'tool.pan.tip': 'Mover la vista (PAN): arrastra con el botón izquierdo',
     'tool.map': 'Mapa', 'tool.map.tip': 'Mostrar/ocultar el mini-mapa 2D del parque',
     'tool.data': 'Datos', 'tool.data.tip': 'Mostrar/ocultar el panel de datos',
+    'tool.pInsp': 'Inspección', 'tool.pInsp.tip': 'Abrir el panel de inspección (micro-CMMS)',
+    'tool.pShm': 'Sensores', 'tool.pShm.tip': 'Abrir el panel SHM (estado por sensores · señal · fatiga)',
     // Menú superior
     'menu.park': 'Parque', 'menu.data': 'Datos', 'menu.report': 'Informe',
     'mi.newTower': '＋ Nueva torre', 'mi.newHV': '＋ Nueva torre AT',
@@ -304,6 +306,8 @@ const DICT = {
     'tool.pan': 'Pan', 'tool.pan.tip': 'Pan the view: drag with the left button',
     'tool.map': 'Map', 'tool.map.tip': 'Show/hide the 2D mini-map of the park',
     'tool.data': 'Data', 'tool.data.tip': 'Show/hide the data panel',
+    'tool.pInsp': 'Inspection', 'tool.pInsp.tip': 'Open the inspection panel (micro-CMMS)',
+    'tool.pShm': 'Sensors', 'tool.pShm.tip': 'Open the SHM panel (sensor status · signal · fatigue)',
     'menu.park': 'Park', 'menu.data': 'Data', 'menu.report': 'Report',
     'mi.newTower': '＋ New turbine', 'mi.newHV': '＋ New HV tower',
     'mi.exportPark': '⤓ Export park (.json)', 'mi.importPark': '⤒ Import park (.json)',

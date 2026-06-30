@@ -8,21 +8,21 @@
 //   inspecciones y señal temporal EN VIVO desde un Web Worker (DataSource).
 // Recortes (modelado) los hace shm.css ocultando, no borrando.
 // ─────────────────────────────────────────────────────────────────────────────
-import { FleetView } from './fleet_view.js?v=269';
-import { DataSource } from './data_source.js?v=269';
-import { computeTwin } from './digital_twin.js?v=269';
-import { ParkManager, loadParksStore } from './parks.js?v=269';
-import { MapView } from './map_view.js?v=269';
-import { defaultStages, builtFromStages } from './parks_data_caman.js?v=269';
-import { compassRoseSVG } from './compass.js?v=269';
-import { buildAvanceHUD } from './avance_hud.js?v=269';
-import { renderAvance } from './avance_dashboard.js?v=269';
-import * as Insp from './inspection.js?v=269';
-import * as Fat from './fatigue.js?v=269';
-import { t, getLang, setLang } from './i18n.js?v=269';
+import { FleetView } from './fleet_view.js?v=270';
+import { DataSource } from './data_source.js?v=270';
+import { computeTwin } from './digital_twin.js?v=270';
+import { ParkManager, loadParksStore } from './parks.js?v=270';
+import { MapView } from './map_view.js?v=270';
+import { defaultStages, builtFromStages } from './parks_data_caman.js?v=270';
+import { compassRoseSVG } from './compass.js?v=270';
+import { buildAvanceHUD } from './avance_hud.js?v=270';
+import { renderAvance } from './avance_dashboard.js?v=270';
+import * as Insp from './inspection.js?v=270';
+import * as Fat from './fatigue.js?v=270';
+import { t, getLang, setLang } from './i18n.js?v=270';
 
 const F1_BASE = { turbine: 0.283, hv: 1.6 };
-const REWIND_VER = 'v269';   // versión visible del build (subir junto al cache-bust)
+const REWIND_VER = 'v270';   // versión visible del build (subir junto al cache-bust)
 const FS = 62.5;   // frecuencia de muestreo de la señal (Hz), igual que shm_worker.js
 // Clasificador ML de daño (0..4)
 const CLS = ['Sin daño', 'Leve', 'Moderado', 'Alto', 'Muy alto'];
@@ -263,7 +263,7 @@ async function boot() {
   // ── Relieve conceptual del terreno (DEM vendorizado) — encendido por defecto ─
   setLoad(88, 'Cargando relieve…'); await delay(40);
   try {
-    await fleet.loadTerrain('data/caman_dem.json?v=269');
+    await fleet.loadTerrain('data/caman_dem.json?v=270');
     fleet.setTerrainVisible(true);
     document.getElementById('shm-relieve-tool')?.classList.add('active');
   } catch (e) { console.warn('[shm] relieve no disponible', e); }
@@ -326,6 +326,14 @@ function buildToolbar(toolbar, fleet, getPM = () => null) {
   const sol = mk('shm-sun-tool', t('tool.shadow.tip'),
     `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><circle cx="12" cy="12" r="4.2"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3M4.9 4.9l2.1 2.1M17 17l2.1 2.1M19.1 4.9 17 7M7 17l-2.1 2.1"/></svg>`,
     t('tool.shadow'), () => { const on = !fleet.sunMode; fleet.setSunEnabled(on); sol.classList.toggle('active', on); sunCtl.setOpen(on); window.shmMap?.setSunShadows(on, on ? fleet.getSunInfo() : null); if (on) window.shmDash?.showShadow(); else window.shmDash?.refreshShadow(); avance.classList.toggle('active', fleet.constructionMode); });
+  // Accesos a las pestañas del panel derecho (igual que «Avance» abre Obra).
+  const openPanel = () => { if (matchMedia('(max-width: 820px)').matches) { document.body.classList.add('panel-open'); document.body.classList.remove('tree-open'); } };
+  const pInsp = mk('shm-pinsp-tool', t('tool.pInsp.tip'),
+    `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><rect x="6" y="4" width="12" height="17" rx="2"/><path d="M9.5 4 V3 h5 v1 M9 11 h6 M9 15 h6 M9 18.5 h4"/></svg>`,
+    t('tool.pInsp'), () => { window.shmDash?.showInsp?.(); openPanel(); });
+  const pShm = mk('shm-pshm-tool', t('tool.pShm.tip'),
+    `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12h3l2-6 4 14 3-10 2 4h4"/></svg>`,
+    t('tool.pShm'), () => { window.shmDash?.showSHM?.(); openPanel(); });
   // El botón «Editar» es el interruptor maestro del modo edición: con él activo se
   // pueden crear, borrar y mover estructuras; apagado, sólo se monitorea.
   // TODO(perfiles): condicionar la visibilidad de «Editar» al rol del usuario.
@@ -368,7 +376,7 @@ function buildToolbar(toolbar, fleet, getPM = () => null) {
   toolbar.append(
     tree, mapBtn, relieve, panelTool, sepEl(),
     pause, pan, edit, sepEl(),
-    avance, sol, sepEl(),
+    avance, sol, pInsp, pShm, sepEl(),
     add, hv, del,
   );
   if (document.body.classList.contains('tree-open')) tree.classList.add('active');
@@ -2025,7 +2033,7 @@ ${detalle}${compilado}
     const v = el.querySelector('.shm-toptab.active')?.dataset.v;
     if (v === 'shm') renderSHM(); else if (v === 'insp') renderInsp(); else if (v === 'obra') showObra();
   }
-  return { setStructures, select, onTick, setAlarms, showShadow, showObra, showInsp: () => setTopView('insp'), refreshShadow: renderShadow, refresh, buildReport };
+  return { setStructures, select, onTick, setAlarms, showShadow, showObra, showInsp: () => setTopView('insp'), showSHM: () => setTopView('shm'), showSeleccion: () => setTopView('seleccion'), showParque: () => setTopView('parque'), refreshShadow: renderShadow, refresh, buildReport };
 }
 
 function startBoot() { boot().catch(e => { console.error('[shm] boot', e); window.__rewindCloseLanding?.(); }); }
