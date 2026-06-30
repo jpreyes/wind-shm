@@ -8,16 +8,16 @@
 //   inspecciones y señal temporal EN VIVO desde un Web Worker (DataSource).
 // Recortes (modelado) los hace shm.css ocultando, no borrando.
 // ─────────────────────────────────────────────────────────────────────────────
-import { FleetView } from './fleet_view.js?v=236';
-import { DataSource } from './data_source.js?v=236';
-import { computeTwin } from './digital_twin.js?v=236';
-import { ParkManager, loadParksStore } from './parks.js?v=236';
-import { MapView } from './map_view.js?v=236';
-import { defaultStages, builtFromStages } from './parks_data_caman.js?v=236';
-import { compassRoseSVG } from './compass.js?v=236';
+import { FleetView } from './fleet_view.js?v=237';
+import { DataSource } from './data_source.js?v=237';
+import { computeTwin } from './digital_twin.js?v=237';
+import { ParkManager, loadParksStore } from './parks.js?v=237';
+import { MapView } from './map_view.js?v=237';
+import { defaultStages, builtFromStages } from './parks_data_caman.js?v=237';
+import { compassRoseSVG } from './compass.js?v=237';
 
 const F1_BASE = { turbine: 0.283, hv: 1.6 };
-const REWIND_VER = 'v236';   // versión visible del build (subir junto al cache-bust)
+const REWIND_VER = 'v237';   // versión visible del build (subir junto al cache-bust)
 const FS = 62.5;   // frecuencia de muestreo de la señal (Hz), igual que shm_worker.js
 // Clasificador ML de daño (0..4)
 const CLS = ['Sin daño', 'Leve', 'Moderado', 'Alto', 'Muy alto'];
@@ -81,6 +81,7 @@ async function boot() {
   const nameplate = buildNameplate(vpwrap);
   const banner = buildBanner(vpwrap);
   const dash = buildDashboard(panel, fleet, actions);
+  window.shmDash = dash;
   initPanelResize();   // redimensionar el panel derecho (antes lo cableaba app.js)
 
   document.getElementById('btn-zoomext')?.addEventListener('click', () => fleet.clearSelection());
@@ -227,7 +228,7 @@ async function boot() {
   // ── Relieve conceptual del terreno (DEM vendorizado) — encendido por defecto ─
   setLoad(88, 'Cargando relieve…'); await delay(40);
   try {
-    await fleet.loadTerrain('data/caman_dem.json?v=236');
+    await fleet.loadTerrain('data/caman_dem.json?v=237');
     fleet.setTerrainVisible(true);
     document.getElementById('shm-relieve-tool')?.classList.add('active');
   } catch (e) { console.warn('[shm] relieve no disponible', e); }
@@ -290,7 +291,7 @@ function buildToolbar(toolbar, fleet, getPM = () => null) {
   const sunCtl = buildSunControl(fleet);
   const sol = mk('shm-sun-tool', 'Shadow: estudio de sombra de las torres según hora y día',
     `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><circle cx="12" cy="12" r="4.2"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3M4.9 4.9l2.1 2.1M17 17l2.1 2.1M19.1 4.9 17 7M7 17l-2.1 2.1"/></svg>`,
-    'Shadow', () => { const on = !fleet.sunMode; fleet.setSunEnabled(on); sol.classList.toggle('active', on); sunCtl.setOpen(on); window.shmMap?.setSunShadows(on, on ? fleet.getSunInfo() : null); });
+    'Shadow', () => { const on = !fleet.sunMode; fleet.setSunEnabled(on); sol.classList.toggle('active', on); sunCtl.setOpen(on); window.shmMap?.setSunShadows(on, on ? fleet.getSunInfo() : null); if (on) window.shmDash?.showShadow(); else window.shmDash?.refreshShadow(); });
   // El botón «Editar» es el interruptor maestro del modo edición: con él activo se
   // pueden crear, borrar y mover estructuras; apagado, sólo se monitorea.
   // TODO(perfiles): condicionar la visibilidad de «Editar» al rol del usuario.
@@ -352,18 +353,10 @@ function buildSunControl(fleet) {
     <label class="sun-ctl"><span>Fecha</span><input type="date" id="sun-date" value="${isoToday}" min="2015-01-01" max="2040-12-31"></label>
     <label class="sun-real"><input type="checkbox" id="sun-realscale" checked> Escala real <span class="sun-hint">(sombra fiel)</span></label>
     <div class="sun-foot"><button id="sun-play" class="sun-btn" type="button">▶ Animar el día</button></div>
-    <div class="sun-foot"><button id="sun-fmap" class="sun-btn" type="button">🗺️ Mapa de flicker (h/año)</button></div>
-    <div class="sun-legend"><span><i style="background:#bee678"></i>1–5</span><span><i style="background:#fde047"></i>5–15</span><span><i style="background:#fb923c"></i>15–30</span><span><i style="background:#ef4444"></i>≥30 ✗</span></div>
-    <div class="sun-hint" style="margin:8px 0 3px">Clic en el mapa 2D = receptor (vivienda)</div>
-    <div class="sun-foot"><button id="sun-report" class="sun-btn" type="button">📄 Informe de sombras</button></div>
-    <div class="sun-foot"><button id="sun-inter" class="sun-btn" type="button">🌀 Sombra entre torres</button></div>`;
+    <div class="sun-hint" style="margin:7px 0 0">Análisis (flicker, informes, receptores) → pestaña <b>Shadow flicker</b> del panel derecho.</div>`;
   wrap.appendChild(el);
   const hourEl = el.querySelector('#sun-hour'), dateEl = el.querySelector('#sun-date'), realEl = el.querySelector('#sun-realscale');
   const hh = el.querySelector('#sun-hh'), read = el.querySelector('#sun-read'), playBtn = el.querySelector('#sun-play');
-  el.querySelector('#sun-report').addEventListener('click', () => window.shmMap?.flickerReport());
-  el.querySelector('#sun-inter').addEventListener('click', () => window.shmMap?.interTurbineReport());
-  const fmapBtn = el.querySelector('#sun-fmap');
-  fmapBtn.addEventListener('click', () => { fmapBtn.classList.toggle('active', window.shmMap?.toggleFlickerMap()); });
   const fmtH = (h) => `${String(Math.floor(h)).padStart(2, '0')}:${String(Math.round((h % 1) * 60) % 60).padStart(2, '0')}`;
   const apply = () => {
     const hour = +hourEl.value;
@@ -576,8 +569,10 @@ function buildDashboard(panel, fleet, actions) {
     <div class="shm-toptabs">
       <button class="shm-toptab active" data-v="parque">Parque</button>
       <button class="shm-toptab" data-v="seleccion">Selección</button>
+      <button class="shm-toptab" data-v="shadow">Shadow flicker</button>
     </div>
     <div class="shm-views">
+    <div class="shm-view" id="view-shadow" style="display:none"><div class="shm-shadow" id="shm-shadow"></div></div>
     <div class="shm-view" id="view-parque">
       <div class="shm-fleet">
         <div class="shm-stat"><div class="k">Estructuras</div><div class="v" id="shm-count">0</div></div>
@@ -600,13 +595,52 @@ function buildDashboard(panel, fleet, actions) {
   const $ = (s) => el.querySelector(s);
   el.querySelector('#shm-report-btn').addEventListener('click', () => buildReport(null));   // compilado del parque
 
-  // Pestañas de nivel superior: Parque (flota) ⇄ Selección (estructura elegida).
+  // Pestañas de nivel superior: Parque (flota) ⇄ Selección (estructura) ⇄ Shadow flicker.
   function setTopView(v) {
     $('#view-parque').style.display = v === 'parque' ? '' : 'none';
     $('#view-seleccion').style.display = v === 'seleccion' ? '' : 'none';
+    $('#view-shadow').style.display = v === 'shadow' ? '' : 'none';
     el.querySelectorAll('.shm-toptab').forEach(t => t.classList.toggle('active', t.dataset.v === v));
+    if (v === 'shadow') renderShadow();
   }
   el.querySelectorAll('.shm-toptab').forEach(t => t.addEventListener('click', () => setTopView(t.dataset.v)));
+
+  // ── Pestaña «Shadow flicker»: análisis de sombras en el panel derecho ────────
+  // Los controles de hora/fecha viven en el HUD flotante (sobre el visor); aquí van
+  // los ANÁLISIS: mapa de flicker, informes y la lista de receptores (viviendas).
+  function renderShadow() {
+    const host = $('#shm-shadow'); if (!host) return;
+    const mv = window.shmMap;
+    if (!fleet.sunMode) {
+      host.innerHTML = `<div class="ssh-off">☀️ El estudio de sombra está apagado.<br><br>
+        Activa <b>Shadow flicker</b> en la barra de herramientas (izquierda) para encender el sol móvil, ver las sombras sobre el relieve y analizar el parpadeo (shadow-flicker) sobre las viviendas.</div>`;
+      return;
+    }
+    const rcp = (mv?._receptors) || [];
+    const nEx = rcp.filter(r => !r.ok).length;
+    const rows = rcp.length ? rcp.map(r => `
+      <div class="ssh-rcp ${r.ok ? 'ok' : 'bad'}">
+        <span class="ssh-n">#${r.n}</span>
+        <span class="ssh-v"><b>${r.res.hoursYear.toFixed(1)}</b> h/año · real≈${r.res.hoursYearReal.toFixed(1)}<br>
+          <span class="ssh-st">${r.ok ? '✓ cumple' : '✗ excede'}${r.win ? ' · parada: ' + r.win.months : ''}</span></span>
+        <button class="ssh-del" data-n="${r.n}" title="Quitar receptor">✕</button>
+      </div>`).join('') : `<div class="ssh-empty">Sin receptores. Haz clic en el mapa 2D (con Shadow activo) para agregar una vivienda y calcular su parpadeo anual.</div>`;
+    host.innerHTML = `
+      <div class="ssh-hdr">Estudio de sombra · Camán I</div>
+      <div class="ssh-actions">
+        <button id="ssh-fmap" class="sun-btn ${mv?._flickerOverlay ? 'active' : ''}" type="button">🗺️ Mapa de flicker (h/año)</button>
+        <div class="sun-legend"><span><i style="background:#bee678"></i>1–5</span><span><i style="background:#fde047"></i>5–15</span><span><i style="background:#fb923c"></i>15–30</span><span><i style="background:#ef4444"></i>≥30 ✗</span></div>
+        <button id="ssh-report" class="sun-btn" type="button">📄 Informe de cumplimiento</button>
+        <button id="ssh-inter" class="sun-btn" type="button">🌀 Sombreado entre torres</button>
+      </div>
+      <div class="ssh-rcp-h">Receptores (viviendas) · ${rcp.length}${rcp.length ? ` · ${nEx} excede(n)` : ''}</div>
+      <div class="ssh-list">${rows}</div>`;
+    host.querySelector('#ssh-fmap')?.addEventListener('click', (e) => { e.currentTarget.classList.toggle('active', window.shmMap?.toggleFlickerMap()); });
+    host.querySelector('#ssh-report')?.addEventListener('click', () => window.shmMap?.flickerReport());
+    host.querySelector('#ssh-inter')?.addEventListener('click', () => window.shmMap?.interTurbineReport());
+    host.querySelectorAll('.ssh-del').forEach(b => b.addEventListener('click', () => window.shmMap?.removeReceptor(+b.dataset.n)));
+  }
+  function showShadow() { setTopView('shadow'); }
 
   let list = [], current = null, pane = 'datos', sigBuf = {}, sigRAF = null, freqHist = {};
   let specOff = null, specLast = 0;                 // espectrograma (offscreen + scroll)
@@ -1417,7 +1451,7 @@ ${detalle}${compilado}
 
   // Abre una sub-pestaña de la estructura seleccionada (p. ej. desde la ficha flotante).
   function showPane(p) { if (!current) return; pane = p; setTopView('seleccion'); renderDetail(); }
-  return { setStructures, select, onTick, setAlarms, showPane, refresh: () => { if (current) renderPane(); } };
+  return { setStructures, select, onTick, setAlarms, showPane, showShadow, refreshShadow: renderShadow, refresh: () => { if (current) renderPane(); } };
 }
 
 function startBoot() { boot().catch(e => { console.error('[shm] boot', e); window.__rewindCloseLanding?.(); }); }

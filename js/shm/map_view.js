@@ -6,11 +6,11 @@
 // Click en un marcador → conmuta a la vista 3D enfocando esa estructura (onPick).
 // Leaflet se carga como global (window.L) desde lib/leaflet/leaflet.js.
 // ─────────────────────────────────────────────────────────────────────────────
-import { CAMAN_CENTER } from './parks_data_caman.js?v=236';
-import { CAMAN_ROADS } from './caman_roads.js?v=236';
-import { compassRoseSVG } from './compass.js?v=236';
-import { annualFlicker, flickerOK, FLICKER_LIMITS, REAL_CASE_FACTOR, flickerMap, criticalWindow, interTurbineShading } from './shadow_flicker.js?v=236';
-import { realCaseWeight, METEO_CAMAN } from './meteo_caman.js?v=236';
+import { CAMAN_CENTER } from './parks_data_caman.js?v=237';
+import { CAMAN_ROADS } from './caman_roads.js?v=237';
+import { compassRoseSVG } from './compass.js?v=237';
+import { annualFlicker, flickerOK, FLICKER_LIMITS, REAL_CASE_FACTOR, flickerMap, criticalWindow, interTurbineShading } from './shadow_flicker.js?v=237';
+import { realCaseWeight, METEO_CAMAN } from './meteo_caman.js?v=237';
 
 const REAL_W = (month, antiAz) => realCaseWeight(month, antiAz, METEO_CAMAN);   // ponderador meteo del sitio
 
@@ -116,11 +116,21 @@ export class MapView {
       `<span style="color:${col}">${ok ? '✓ Cumple' : '✗ Excede'}</span> (≤${FLICKER_LIMITS.hoursYear} h · ≤${FLICKER_LIMITS.minDay} min, worst-case)<br>` +
       `<a href="#" class="rcp-del">Quitar</a>`
     ).openPopup();
-    m.on('popupopen', (ev) => { const a = ev.popup.getElement()?.querySelector('.rcp-del'); a && a.addEventListener('click', (x) => { x.preventDefault(); this.recepLayer.removeLayer(m); this._receptors = this._receptors.filter(r => r !== entry); }); });
+    m.on('popupopen', (ev) => { const a = ev.popup.getElement()?.querySelector('.rcp-del'); a && a.addEventListener('click', (x) => { x.preventDefault(); this.recepLayer.removeLayer(m); this._receptors = this._receptors.filter(r => r !== entry); window.shmDash?.refreshShadow?.(); }); });
+    window.shmDash?.refreshShadow?.();   // refresca la lista de la pestaña Shadow flicker
     return res;
   }
 
-  clearReceptors() { this.recepLayer?.clearLayers(); this._receptors = []; }
+  // Quita un receptor por su número (desde la pestaña Shadow flicker del panel).
+  removeReceptor(n) {
+    const e = (this._receptors || []).find(r => r.n === n);
+    if (!e) return;
+    this.recepLayer.removeLayer(e.marker);
+    this._receptors = this._receptors.filter(r => r !== e);
+    window.shmDash?.refreshShadow?.();
+  }
+
+  clearReceptors() { this.recepLayer?.clearLayers(); this._receptors = []; window.shmDash?.refreshShadow?.(); }
 
   // Mapa de flicker (horas/año) sobre el área — salida estilo WindPRO. Toggle.
   toggleFlickerMap() {
