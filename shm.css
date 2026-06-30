@@ -262,8 +262,14 @@ body.shm.view-2d .vp-pip-resize {
 .ah-open:hover { filter: brightness(1.08); }
 /* Modal «Abrir partida» */
 .ah-modal { position: fixed; inset: 0; z-index: 60; background: rgba(4,8,14,.62); display: flex; align-items: center; justify-content: center; pointer-events: auto; padding: 24px; }
-.ah-modal-card { width: min(620px, 96vw); max-height: 90vh; overflow: auto; background: var(--bg2, #0e1620); border: 1px solid var(--border2, #2a3a4d); border-radius: 12px; color: #dbe7f2; box-shadow: 0 20px 60px rgba(0,0,0,.6); }
-.ah-modal-h { display: flex; align-items: center; gap: 9px; padding: 14px 18px; border-bottom: 1px solid var(--border, #1e2a38); font-size: 15px; }
+/* Paleta OSCURA fija (independiente del tema claro/oscuro) para garantizar contraste. */
+.ah-modal-card { width: min(620px, 96vw); max-height: 90vh; overflow: auto; background: #0f1722; border: 1px solid #28384a; border-radius: 12px; color: #e6eef6; box-shadow: 0 20px 60px rgba(0,0,0,.6); }
+.ah-modal-card .ah-mut { color: #93a6b8; }
+.ah-modal-card .ah-sub { color: #9fb3c6; }
+.ah-modal-card .ah-kv td { color: #e6eef6; }
+.ah-modal-card .ah-kv td:first-child { color: #93a6b8; }
+.ah-modal-card .ah-bitacora ul { color: #cdd9e4; }
+.ah-modal-h { display: flex; align-items: center; gap: 9px; padding: 14px 18px; border-bottom: 1px solid #223044; font-size: 15px; color: #f0f5fa; }
 .ah-modal-h .ah-x { margin-left: auto; background: none; border: 0; color: #8aa0b4; font-size: 16px; cursor: pointer; }
 .ah-modal-h .ah-x:hover { color: #fff; }
 .ah-modal-body { padding: 16px 18px; font-size: 13px; }
@@ -273,8 +279,8 @@ body.shm.view-2d .vp-pip-resize {
 .ah-sub { font-weight: 700; color: #8aa0b4; font-size: 12px; margin: 6px 0; text-transform: uppercase; letter-spacing: .5px; }
 .ah-bitacora ul { margin: 4px 0 0; padding-left: 16px; line-height: 1.6; }
 .ah-modal .late { color: #f87171; }
-.ah-modal-foot { display: flex; gap: 10px; justify-content: flex-end; padding: 12px 18px; border-top: 1px solid var(--border, #1e2a38); }
-.ah-modal-foot button { cursor: pointer; border-radius: 7px; padding: 7px 14px; font-family: inherit; font-size: 12.5px; font-weight: 600; border: 1px solid var(--border2, #2a3a4d); background: var(--bg3, #16202c); color: #dbe7f2; }
+.ah-modal-foot { display: flex; gap: 10px; justify-content: flex-end; padding: 12px 18px; border-top: 1px solid #223044; }
+.ah-modal-foot button { cursor: pointer; border-radius: 7px; padding: 7px 14px; font-family: inherit; font-size: 12.5px; font-weight: 600; border: 1px solid #2a3a4d; background: #17222f; color: #e6eef6; }
 .ah-modal-foot .ah-report { background: var(--accent, #38bdf8); color: #06283a; border: 0; }
 .ah-modal-foot button:hover { filter: brightness(1.1); }
 /* Modo compacto del HUD: columna izquierda angosta, deja el visor para la torre */
