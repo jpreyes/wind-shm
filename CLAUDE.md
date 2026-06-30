@@ -17,7 +17,7 @@ Each turbine carries **2 MEMS accelerometers** (top + mid mast) + a gateway → 
 
 ## What this is (the running app)
 
-**ReWind** — a browser-based SHM tool for wind farms, built on the FEM engine inherited from PÓRTICO (Instituto de Obras Civiles, Universidad Austral de Chile, Dr. Juan Patricio Reyes). Vanilla JS ES modules + Three.js + Leaflet + a small `numeric.js`. **No build step, no bundler, no framework, no `package.json`** — `index.html` boots ReWind via an importmap; the app **self-boots** from `js/shm/shm_mode.js` (`startBoot()` on `load`), there is **no `app.js`** anymore.
+**ReWind** — a browser-based SHM tool for wind farms, built on the FEM engine inherited from PÓRTICO (Instituto de Obras Civiles, Universidad Austral de Chile, Dr. Juan Patricio Reyes). Vanilla JS ES modules + Three.js + Leaflet + a small `numeric.js`. **No build step, no bundler, no framework, no `package.json`** — `app.html` boots ReWind via an importmap; the app **self-boots** from `js/shm/shm_mode.js` (`startBoot()` on `load`), there is **no `app.js`** anymore. **`index.html` is the marketing landing page** (static, editorial; CTAs link to `app.html`) — added in R-16. So the deploy entry point (`/`) is the landing and the app lives at `/app.html`.
 
 The app must run from a static server with no install, and is a PWA (installable/offline). **This fork (`wind-shm`) is published on GitHub Pages** (static hosting) from `main` — it is a purely static site, so there is **no Cloudflare Worker / no server-side API** in this deploy. *(Upstream `structweb3d`/PÓRTICO deploys as a Cloudflare Worker; the inherited `wrangler.jsonc`/`worker/` are not part of the ReWind GitHub Pages deploy. The real-time telemetry backend lives in `bridge/` and is separate from the static site.)*
 
@@ -33,7 +33,7 @@ The app must run from a static server with no install, and is a PWA (installable
 Every internal import and worker URL carries a query string, e.g. `import { Model } from './model/model.js?v=216'`. This is a **global app version** used to bust browser/SW caches. When you ship a change to shipped JS/CSS, **bump it across all files at once** (current version: **v251**):
 
 ```bash
-files=$(grep -rl "v=251" --include=*.js --include=*.html js index.html sw.js)
+files=$(grep -rl "v=251" --include=*.js --include=*.html js app.html sw.js)
 for f in $files; do sed -i 's/v=251/v=252/g' "$f"; done
 ```
 
@@ -45,7 +45,7 @@ Gotchas:
 
 ## Architecture
 
-ReWind **self-boots**: `index.html` imports `js/shm/shm_mode.js`, which on `load` runs `startBoot()` — builds the toolbar, dashboard, status bar, the `FleetView` (Three.js) and the `MapView` (Leaflet). There is **no `App` orchestrator** and no `window.app` PÓRTICO instance.
+ReWind **self-boots**: `app.html` imports `js/shm/shm_mode.js`, which on `load` runs `startBoot()` — builds the toolbar, dashboard, status bar, the `FleetView` (Three.js) and the `MapView` (Leaflet). There is **no `App` orchestrator** and no `window.app` PÓRTICO instance.
 
 **ReWind app (`js/shm/`):**
 - **`shm_mode.js`** — the entry point + UI glue: toolbar (Mapa/Avance/Relieve…), right-panel dashboard with lateral tabs (Parque ▸ árbol / Selección ▸ Datos·Estado·Movimiento), the Avance (4D progress) editor, the floating tower card, the status bar, panel resize, theming, `REWIND_VER`.

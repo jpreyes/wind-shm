@@ -4,7 +4,7 @@
   "description": "Monitoreo de salud estructural (SHM) de aerogeneradores: flota 3D, sensores en tiempo real y gemelo digital.",
   "lang": "es-CL",
   "dir": "ltr",
-  "start_url": "./index.html",
+  "start_url": "./app.html",
   "scope": "./",
   "display": "standalone",
   "orientation": "landscape",

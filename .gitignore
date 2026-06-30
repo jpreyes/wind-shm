@@ -21,3 +21,6 @@ asistente/_sp001/
 # Memoria de referencia (.docx): fuente local, no se versiona ni se publica
 referencias/*.docx
 *.docx
+
+# Zips subidos al repo local (entregables/fuentes), no se versionan
+*.zip

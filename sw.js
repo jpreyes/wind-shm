@@ -9,15 +9,17 @@
 // Al subir la versión de la app, suba también CACHE_VERSION para forzar una
 // limpieza completa de la caché antigua en la próxima visita en línea.
 // ──────────────────────────────────────────────────────────────────────────────
-const CACHE_VERSION = 'v207';
+const CACHE_VERSION = 'v208';
 const CACHE = `portico-${CACHE_VERSION}`;
 
 // Núcleo mínimo para que la app arranque aunque sea la primera vez sin red.
+// `index.html` = landing (marketing); `app.html` = la aplicación ReWind.
 // El resto de módulos (Three.js, solver, ui, ejemplos) se cachean al vuelo
 // en la primera visita en línea gracias a la estrategia network-first.
 const SHELL = [
   './',
   './index.html',
+  './app.html',
   './manifest.webmanifest',
   './style.css?v=251',
   './ui-v2.css?v=251',
@@ -66,9 +68,10 @@ self.addEventListener('fetch', (e) => {
       // Sin red: servir desde caché
       const cached = await caches.match(req);
       if (cached) return cached;
-      // Para navegaciones, devolver el index.html cacheado (app shell)
+      // Para navegaciones: app.html → shell de la app; el resto → la landing.
       if (req.mode === 'navigate') {
-        const shell = await caches.match('./index.html');
+        const isApp = url.pathname.endsWith('/app.html');
+        const shell = await caches.match(isApp ? './app.html' : './index.html');
         if (shell) return shell;
       }
       return new Response('Sin conexión y sin copia en caché.', {
