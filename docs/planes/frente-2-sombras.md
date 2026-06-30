@@ -108,13 +108,18 @@ Mitigación: módulos de parada (shutdown). Open-source emergente: WIMBY SF.
    cinemático (vista amplia).
 13. ✅ **Sin marca de terceros** (v240) — se quitó «WindPRO/WindFarmer/EMD» del botón, del informe (pie
    = sólo directriz LAI) y de los comentarios, por prudencia legal.
+14. ✅ **Importación de receptores multi-formato + informe de todos** (v241) — `js/shm/receptor_import.js`
+   (ES puro, sin deps) parsea **CSV/TXT, KML, KMZ, GeoJSON y SHP** (puntos; KMZ vía DecompressionStream +
+   lectura mínima del ZIP; SHP rechaza UTM pidiendo WGS84). `map_view.importReceptors(file)` los agrega en
+   lote con nombre; botones «📂 Importar» y «🗑 Limpiar» en el panel; el informe completo agrupa a **todos**
+   los receptores (marcados o importados) con su nombre.
 
 ## Estado
-**Frente 2 (sombras) — funcionalmente completo (v240).** Cubre visualización 3D/2D de sombras sobre el
-relieve, estudio horario/diario, worst-case y real-case (meteo) cuantitativos, mapa de flicker (2D+3D),
-informe imprimible tipo industria, calendario de parada y sombreado inter-turbinas. **Pendiente sólo lo
-opcional/futuro:** datos meteo medidos reales (TMY/estación → `R-10`) e importación de receptores
-(KMZ/CSV) en vez de clic manual.
+**Frente 2 (sombras) — completo (v241).** Cubre visualización 3D/2D de sombras sobre el relieve, estudio
+horario/diario, worst-case y real-case (meteo) cuantitativos, mapa de flicker (2D+3D), receptores por clic
+o importados (CSV/KML/KMZ/GeoJSON/SHP), informe imprimible tipo industria con calendario de parada y
+sombreado inter-turbinas. **Pendiente sólo lo futuro:** datos meteo medidos reales (TMY/estación → `R-10`)
+y reproyección de SHP en otros sistemas (hoy se exige WGS84).
 
 ## Dependencias
 - Receptores (viviendas) como capa de datos del parque.
