@@ -7,11 +7,11 @@
 // ─────────────────────────────────────────────────────────────────────────────
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
-import { createTurbine, TOWER_H } from './turbine_mesh.js?v=238';
-import { createSubstationTower, groundCable, overheadLine } from './structures.js?v=238';
-import { toScene, CAMAN_CENTER, LAYOUT_SCALE } from './parks_data_caman.js?v=238';
-import { CAMAN_ROADS } from './caman_roads.js?v=238';
-import { solarPosition, dateFromLocal, sunSceneDir } from './solar.js?v=238';
+import { createTurbine, TOWER_H } from './turbine_mesh.js?v=239';
+import { createSubstationTower, groundCable, overheadLine } from './structures.js?v=239';
+import { toScene, CAMAN_CENTER, LAYOUT_SCALE } from './parks_data_caman.js?v=239';
+import { CAMAN_ROADS } from './caman_roads.js?v=239';
+import { solarPosition, dateFromLocal, sunSceneDir } from './solar.js?v=239';
 
 const SPACING = 235;
 const TOWER_SCALE = 2.2;   // agranda las torres (vista esquemática) para que destaquen sobre el relieve
@@ -125,6 +125,10 @@ export class FleetView {
   setSunEnabled(on) {
     this.sunMode = !!on;
     if (on) {
+      // El estudio de sombra muestra las torres COMPLETAS (sin el 4D de avance):
+      // se proyecta el escenario operativo. Se recuerda el estado para restaurarlo.
+      this._prevConstruction = this.constructionMode;
+      if (this.constructionMode) this.setConstructionMode(false);
       this.setRealScale(true);          // el estudio de sol va en escala real (sombra fiel); setRealScale arma la sombra
     } else {
       this.sun.castShadow = false;
@@ -134,6 +138,8 @@ export class FleetView {
       this.sun.position.set(250, 350, 180); this.sun.intensity = 1.0; this.sun.color.setHex(0xffffff);
       this.hemi.intensity = 1.15;
       this._sunInfo = null;
+      if (this._prevConstruction) this.setConstructionMode(true);   // restaura el avance 4D
+      this._prevConstruction = null;
     }
   }
 
@@ -263,7 +269,7 @@ export class FleetView {
   // ── Relieve conceptual (capa de terreno) ─────────────────────────────────────
   // Carga el DEM vendorizado y añade la malla (oculta hasta activarla).
   async loadTerrain(url) {
-    const { Terrain } = await import('./terrain.js?v=238');
+    const { Terrain } = await import('./terrain.js?v=239');
     this._TerrainClass = Terrain;                     // para reconstruir al cambiar de escala
     const dem = await (await fetch(url)).json();
     this.terrain = new Terrain(dem, { vex: 1.5 });   // relieve exagerado (esquemático)

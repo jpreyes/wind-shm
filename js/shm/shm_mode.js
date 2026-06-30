@@ -8,16 +8,16 @@
 //   inspecciones y señal temporal EN VIVO desde un Web Worker (DataSource).
 // Recortes (modelado) los hace shm.css ocultando, no borrando.
 // ─────────────────────────────────────────────────────────────────────────────
-import { FleetView } from './fleet_view.js?v=238';
-import { DataSource } from './data_source.js?v=238';
-import { computeTwin } from './digital_twin.js?v=238';
-import { ParkManager, loadParksStore } from './parks.js?v=238';
-import { MapView } from './map_view.js?v=238';
-import { defaultStages, builtFromStages } from './parks_data_caman.js?v=238';
-import { compassRoseSVG } from './compass.js?v=238';
+import { FleetView } from './fleet_view.js?v=239';
+import { DataSource } from './data_source.js?v=239';
+import { computeTwin } from './digital_twin.js?v=239';
+import { ParkManager, loadParksStore } from './parks.js?v=239';
+import { MapView } from './map_view.js?v=239';
+import { defaultStages, builtFromStages } from './parks_data_caman.js?v=239';
+import { compassRoseSVG } from './compass.js?v=239';
 
 const F1_BASE = { turbine: 0.283, hv: 1.6 };
-const REWIND_VER = 'v238';   // versión visible del build (subir junto al cache-bust)
+const REWIND_VER = 'v239';   // versión visible del build (subir junto al cache-bust)
 const FS = 62.5;   // frecuencia de muestreo de la señal (Hz), igual que shm_worker.js
 // Clasificador ML de daño (0..4)
 const CLS = ['Sin daño', 'Leve', 'Moderado', 'Alto', 'Muy alto'];
@@ -200,6 +200,21 @@ async function boot() {
   fleet.onFrame = () => { towerCard.tick(); compass.update(); };   // reposiciona ficha + brújula con el render
   const isMobile = () => matchMedia('(max-width: 820px)').matches;
   fleet.onSelect = (obj) => {
+    // En modo Shadow, seleccionar una torre en 3D = colocar un RECEPTOR ahí (igual
+    // que hacer clic en el mapa 2D): muestra el informe de parpadeo en la ficha y
+    // la barra lateral, sin la ficha/datos de avance. No hace zoom cinemático.
+    if (obj && fleet.sunMode) {
+      fleet._focusing = false;                       // conserva la vista amplia del estudio (como en 2D)
+      nameplate.show(obj); statusBar.setSelected(obj);
+      if (obj.lat != null) {
+        const entry = mapView?.addReceptor({ lat: obj.lat, lng: obj.lon });   // crea receptor + refresca panel Shadow
+        towerCard.setShadow(obj, entry);             // ficha = informe del receptor
+        mapView?.focus(obj);
+        window.shmDash?.showShadow();                // barra lateral con la info de sombra (como en 2D)
+      } else towerCard.setData(null);
+      if (isMobile()) { document.body.classList.remove('tree-open'); document.body.classList.add('panel-open'); }
+      return;
+    }
     dash.select(obj); nameplate.show(obj); towerCard.setData(obj); statusBar.setSelected(obj); ds.focus(obj ? obj.id : null); if (obj) mapView?.focus(obj);
     if (obj && isMobile()) { document.body.classList.remove('tree-open'); document.body.classList.add('panel-open'); }   // en móvil: cierra el árbol y abre el panel
   };
@@ -230,7 +245,7 @@ async function boot() {
   // ── Relieve conceptual del terreno (DEM vendorizado) — encendido por defecto ─
   setLoad(88, 'Cargando relieve…'); await delay(40);
   try {
-    await fleet.loadTerrain('data/caman_dem.json?v=238');
+    await fleet.loadTerrain('data/caman_dem.json?v=239');
     fleet.setTerrainVisible(true);
     document.getElementById('shm-relieve-tool')?.classList.add('active');
   } catch (e) { console.warn('[shm] relieve no disponible', e); }
@@ -293,7 +308,7 @@ function buildToolbar(toolbar, fleet, getPM = () => null) {
   const sunCtl = buildSunControl(fleet);
   const sol = mk('shm-sun-tool', 'Shadow: estudio de sombra de las torres según hora y día',
     `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><circle cx="12" cy="12" r="4.2"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3M4.9 4.9l2.1 2.1M17 17l2.1 2.1M19.1 4.9 17 7M7 17l-2.1 2.1"/></svg>`,
-    'Shadow', () => { const on = !fleet.sunMode; fleet.setSunEnabled(on); sol.classList.toggle('active', on); sunCtl.setOpen(on); window.shmMap?.setSunShadows(on, on ? fleet.getSunInfo() : null); if (on) window.shmDash?.showShadow(); else window.shmDash?.refreshShadow(); });
+    'Shadow', () => { const on = !fleet.sunMode; fleet.setSunEnabled(on); sol.classList.toggle('active', on); sunCtl.setOpen(on); window.shmMap?.setSunShadows(on, on ? fleet.getSunInfo() : null); if (on) window.shmDash?.showShadow(); else window.shmDash?.refreshShadow(); avance.classList.toggle('active', fleet.constructionMode); });
   // El botón «Editar» es el interruptor maestro del modo edición: con él activo se
   // pueden crear, borrar y mover estructuras; apagado, sólo se monitorea.
   // TODO(perfiles): condicionar la visibilidad de «Editar» al rol del usuario.
@@ -500,11 +515,28 @@ function buildTowerCard(vpwrap, fleet, o = {}) {
   (vpwrap || document.body).appendChild(el);
   el.addEventListener('click', (e) => {
     if (e.target.closest('.tc-x')) { dismissed = true; el.style.display = 'none'; return; }
-    if (e.target.closest('.tc-btn') && cur) onShowAvance(cur.id);
+    if (!e.target.closest('.tc-btn') || !cur) return;
+    if (shadowEntry) window.shmMap?.flickerReport();   // modo sombra: botón → informe completo
+    else onShowAvance(cur.id);
   });
-  let cur = null, lastT = 0, dismissed = false;
+  let cur = null, lastT = 0, dismissed = false, shadowEntry = null;
+  // Ficha en modo Shadow: la torre seleccionada actúa como RECEPTOR → muestra su
+  // parpadeo de sombra (como el popup del 2D) + acceso al informe completo.
+  const renderShadow = () => {
+    const r = shadowEntry, res = r.res;
+    el.innerHTML = `
+      <div class="tc-h">☀️ Receptor · ${cur.label}<button class="tc-x" type="button" title="Cerrar">✕</button></div>
+      <div class="tc-r"><span>Parpadeo (worst)</span><b class="${res.hoursYear > 30 ? 'bad' : ''}">${res.hoursYear.toFixed(1)} h/año</b></div>
+      <div class="tc-r"><span>Máx por día</span><b class="${res.maxMinDay > 30 ? 'bad' : ''}">${res.maxMinDay} min</b></div>
+      <div class="tc-r"><span>Días afectados</span><b>${res.daysAffected}</b></div>
+      <div class="tc-r"><span>Real (meteo)</span><b>${res.hoursYearReal.toFixed(1)} h/año</b></div>
+      <div class="tc-r"><span>Cumplimiento</span><b class="${r.ok ? 'ok' : 'bad'}">${r.ok ? '✓ Cumple' : '✗ Excede'}</b></div>
+      <div class="tc-stage">${r.win ? '⏸ Parada sugerida: ' + r.win.months + ' · ' + r.win.hours : 'Sin ventana crítica'}</div>
+      <button class="tc-btn" type="button">📄 Informe completo ›</button>`;
+  };
   const render = () => {
     if (!cur) return;
+    if (shadowEntry) { renderShadow(); return; }
     const sum = window.shmData?.get(cur.id);
     const pct = Math.round((cur.built != null ? cur.built : 1) * 100);
     const sp = (s) => s.pct != null ? s.pct : (s.done ? 100 : 0);
@@ -527,13 +559,24 @@ function buildTowerCard(vpwrap, fleet, o = {}) {
     if (a && !a.behind) {
       const wr = (vpwrap || document.body).getBoundingClientRect();
       el.style.display = 'block';
-      el.style.left = (a.x - wr.left + 16) + 'px';
-      el.style.top = (a.y - wr.top) + 'px';
+      // Clamp al viewport: en modo Shadow la cámara no hace zoom a la torre (vista
+      // amplia), así que la torre puede quedar fuera de pantalla → fija la ficha al
+      // borde para que el informe del receptor siempre se vea (transform: translateY(-50%)).
+      const cw = el.offsetWidth || 190, chh = el.offsetHeight || 130;
+      const x = Math.max(8, Math.min(a.x - wr.left + 16, wr.width - cw - 8));
+      const y = Math.max(8 + chh / 2, Math.min(a.y - wr.top, wr.height - chh / 2 - 8));
+      el.style.left = x + 'px';
+      el.style.top = y + 'px';
     } else el.style.display = 'none';
     const now = performance.now();
     if (now - lastT > 500) { lastT = now; render(); }
   };
-  return { tick, setData(st) { cur = st; dismissed = false; if (!st) { el.style.display = 'none'; return; } render(); } };
+  return {
+    tick,
+    setData(st) { shadowEntry = null; cur = st; dismissed = false; if (!st) { el.style.display = 'none'; return; } render(); },
+    // Modo Shadow: la torre seleccionada es el receptor (entry = {res, ok, win, …}).
+    setShadow(st, entry) { cur = st; shadowEntry = entry; dismissed = false; if (!st || !entry) { el.style.display = 'none'; return; } render(); },
+  };
 }
 
 // Genera y descarga un informe de falla (.txt) de la estructura.

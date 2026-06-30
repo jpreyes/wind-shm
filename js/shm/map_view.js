@@ -6,11 +6,11 @@
 // Click en un marcador → conmuta a la vista 3D enfocando esa estructura (onPick).
 // Leaflet se carga como global (window.L) desde lib/leaflet/leaflet.js.
 // ─────────────────────────────────────────────────────────────────────────────
-import { CAMAN_CENTER } from './parks_data_caman.js?v=238';
-import { CAMAN_ROADS } from './caman_roads.js?v=238';
-import { compassRoseSVG } from './compass.js?v=238';
-import { annualFlicker, flickerOK, FLICKER_LIMITS, REAL_CASE_FACTOR, flickerMap, criticalWindow, interTurbineShading } from './shadow_flicker.js?v=238';
-import { realCaseWeight, METEO_CAMAN } from './meteo_caman.js?v=238';
+import { CAMAN_CENTER } from './parks_data_caman.js?v=239';
+import { CAMAN_ROADS } from './caman_roads.js?v=239';
+import { compassRoseSVG } from './compass.js?v=239';
+import { annualFlicker, flickerOK, FLICKER_LIMITS, REAL_CASE_FACTOR, flickerMap, criticalWindow, interTurbineShading } from './shadow_flicker.js?v=239';
+import { realCaseWeight, METEO_CAMAN } from './meteo_caman.js?v=239';
 
 const REAL_W = (month, antiAz) => realCaseWeight(month, antiAz, METEO_CAMAN);   // ponderador meteo del sitio
 
@@ -141,7 +141,7 @@ export class MapView {
     ).openPopup();
     m.on('popupopen', (ev) => { const a = ev.popup.getElement()?.querySelector('.rcp-del'); a && a.addEventListener('click', (x) => { x.preventDefault(); this.recepLayer.removeLayer(m); this._receptors = this._receptors.filter(r => r !== entry); window.shmDash?.refreshShadow?.(); }); });
     window.shmDash?.refreshShadow?.();   // refresca la lista de la pestaña Shadow flicker
-    return res;
+    return entry;                         // {n, lat, lon, res, ok, win, marker} — usado por la ficha 3D
   }
 
   // Quita un receptor por su número (desde la pestaña Shadow flicker del panel).
