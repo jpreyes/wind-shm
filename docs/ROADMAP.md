@@ -59,11 +59,30 @@ Insight, fos4X/Wölfel, Onyx InSight, ROMO Wind, SkySpecs. Ordenadas por valor/e
 
 ---
 
+## 🚩 Buque insignia — diferenciadores de alto valor que pocos hacen
+
+*Dos jugadas que usan lo que ReWind ya tiene (el gemelo FEM + 2 acelerómetros) para
+ofrecer algo que las plataformas SHM «data-only» no pueden: inferir el estado
+estructural en puntos SIN sensor. La mayoría del estado del arte es offshore y con
+galgas caras; ReWind apunta a **onshore, con MEMS baratos y un gemelo físico en el
+navegador**. Fundamentado en literatura 2025 (Devriendt & Weijtjens; WES 2025;
+revisiones de extensión de vida).*
+
+- ⬜ **🌟 Gemelo de CONSTRUCCIÓN / puesta en marcha (SHM durante el montaje)** `[R-31]` ***(PRIORITARIO — Camán se está construyendo AHORA y ya trabajamos el 4D)***: la SHM clásica arranca en operación; **monitorear estructuralmente mientras se construye es un white space** (la literatura no cubre el seguimiento modal durante el montaje ni la captura de la línea base de puesta en marcha con gemelo). ReWind ya modela el estado constructivo (`built`/`stages`, planos de corte 4D), así que el paso natural es:
+  - **Frecuencia esperada vs. medida por etapa.** A medida que sube el fuste, el gemelo predice f₁ en cada estado constructivo (voladizo de altura = fracción construida → f₁ baja por una curva conocida). **Desviación de la curva predicha = anomalía** (pretensado de pernos de brida insuficiente, fundación aún sin rigidez/curado, defecto de grout, base mal apoyada). Reusa `digital_twin.js` + `modal_solver` evaluados sobre el mástil parcial.
+  - **Fundación en obra:** curado/madurez del hormigón (ganancia de rigidez), **asentamiento/tilt temprano**, jaula de anclaje/bolt-circle. Problemas caros y frecuentes (fundaciones agrietadas, fisuras por asentamiento plástico).
+  - **Línea base («fingerprint») de puesta en marcha:** capturar f₁/f₂/amortiguamiento de cada torre recién montada **es lo que habilita toda la SHM operacional posterior** (es la referencia contra la que se comparará). Capturarla durante la construcción es el momento natural y casi nadie lo hace bien. Entrega: un **módulo de QA/commissioning** — predicho vs. medido por etapa, banderas verde/ámbar/rojo, y el fingerprint auto-generado que alimenta la SHM operacional.
+  - *Encaje:* el más bajo en esfuerzo de los dos (no necesita 20 años de fatiga), da **valor inmediato en Camán**, y construye sobre el 4D que ya estamos modificando.
+- ⬜ **🌟 Gemelo de CARGAS — sensado virtual + fatiga para extensión de vida (operacional)** `[R-30]`: usar el gemelo + los 2 MEMS para **reconstruir el campo de tensión en los hotspots SIN sensor** (soldadura de base, brida atornillada, interfaz fuste–fundación) por **expansión modal** sobre las formas del gemelo, y de ahí **rainflow + curva S-N → daño Palmgren-Miner → vida consumida / RUL**. Caso de negocio: la flota mundial llega a sus ~20 años de diseño y la **extensión de vida** vale millones; hoy se decide con reevaluaciones genéricas, no con la historia de cargas real de *esa* máquina. Fusiona `[R-21]` (OMA da la base modal viva) + `[R-22]` (fatiga). Entrega: **«certificado de salud y vida remanente»** vivo por torre y flota. *Límites honestos:* 2 acelerómetros → ~2 modos resueltos; fatiga aproximada (banda de incertidumbre), conviene biaxial y, si hay, viento/potencia de SCADA; validar contra una galga en una torre piloto.
+
+---
+
 ## Secuencia sugerida
 
-1. **`R-21` OMA desde la señal medida** — alto valor, bajo costo; demuestra que esto es SHM real.
-2. **`R-22` fatiga / DEL** — entregable de alto valor percibido, núcleo numérico acotado.
-3. **`R-10` `DataSource` + `R-23` alarmas** — habilitan la conexión industrial y el resto.
-4. **`R-18` ventana de avance de obra** — es lo que el cliente ve hoy (parque en construcción).
-5. **`R-8`/`R-16` quitar marca/arranque PÓRTICO** y **`R-6` i18n** — pulido de producto.
-6. Mayores: `R-11` (Electron + InfluxDB), `R-19` (sombras), `R-25`–`R-29` (predictivo, flota, drivetrain).
+1. **`R-21` OMA desde la señal medida** — alto valor, bajo costo; demuestra que esto es SHM real **y habilita el buque insignia** (la base modal viva).
+2. **🌟 `R-31` gemelo de construcción** — *el mejor encaje hoy*: Camán se construye ahora, ya trabajamos el 4D, no necesita fatiga de 20 años → valor inmediato. Reusa `R-21` + el 4D.
+3. **`R-18` ventana de avance de obra** — soporte natural del `R-31` (es lo que el cliente ve hoy).
+4. **`R-22` fatiga / DEL** → **🌟 `R-30` gemelo de cargas / extensión de vida** — la jugada operacional de alto valor (madura cuando haya horas de operación).
+5. **`R-10` `DataSource` + `R-23` alarmas** — habilitan la conexión industrial y el resto.
+6. **`R-8`/`R-16` quitar marca/arranque PÓRTICO** y **`R-6` i18n** — pulido de producto.
+7. Mayores: `R-11` (Electron + InfluxDB), `R-19` (sombras), `R-25`–`R-29` (predictivo, flota, drivetrain).
