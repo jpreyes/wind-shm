@@ -6,10 +6,10 @@
 // Click en un marcador → conmuta a la vista 3D enfocando esa estructura (onPick).
 // Leaflet se carga como global (window.L) desde lib/leaflet/leaflet.js.
 // ─────────────────────────────────────────────────────────────────────────────
-import { CAMAN_CENTER } from './parks_data_caman.js?v=232';
-import { CAMAN_ROADS } from './caman_roads.js?v=232';
-import { compassRoseSVG } from './compass.js?v=232';
-import { annualFlicker, flickerOK, FLICKER_LIMITS, REAL_CASE_FACTOR, flickerMap } from './shadow_flicker.js?v=232';
+import { CAMAN_CENTER } from './parks_data_caman.js?v=233';
+import { CAMAN_ROADS } from './caman_roads.js?v=233';
+import { compassRoseSVG } from './compass.js?v=233';
+import { annualFlicker, flickerOK, FLICKER_LIMITS, REAL_CASE_FACTOR, flickerMap, criticalWindow, interTurbineShading } from './shadow_flicker.js?v=233';
 
 // Color del marcador según el avance de obra (coherente con el 4D / panel).
 function colorFor(st) {
@@ -100,14 +100,16 @@ export class MapView {
     const icon = L.divIcon({ className: 'rcp-icon', iconSize: [22, 22], iconAnchor: [11, 11],
       html: `<svg width="22" height="22" viewBox="0 0 22 22"><circle cx="11" cy="11" r="9" fill="${col}" stroke="#0b1018" stroke-width="1.5"/><path d="M6 11 L11 6.5 L16 11 M7.5 10 V16 H14.5 V10" fill="none" stroke="#0b1018" stroke-width="1.4" stroke-linejoin="round"/></svg>` });
     const m = L.marker(latlng, { icon }).addTo(this.recepLayer);
+    const win = criticalWindow(res.cal);
     this._receptors ||= [];
     const n = this._receptors.length + 1;
-    const entry = { n, lat: latlng.lat, lon: latlng.lng, res, ok, marker: m };
+    const entry = { n, lat: latlng.lat, lon: latlng.lng, res, ok, win, marker: m };
     this._receptors.push(entry);
     m.bindPopup(
       `<b>Receptor ${n}</b><br>Worst-case: <b>${res.hoursYear.toFixed(1)} h/año</b> · ${res.maxMinDay} min/día<br>` +
       `Estimación real ≈ ${res.hoursYearReal.toFixed(1)} h/año<br>` +
       `${res.daysAffected} días afectados<br>` +
+      (win ? `Parada sugerida: <b>${win.months}</b>, <b>${win.hours}</b><br>` : '') +
       `<span style="color:${col}">${ok ? '✓ Cumple' : '✗ Excede'}</span> (≤${FLICKER_LIMITS.hoursYear} h · ≤${FLICKER_LIMITS.minDay} min, worst-case)<br>` +
       `<a href="#" class="rcp-del">Quitar</a>`
     ).openPopup();
@@ -154,6 +156,7 @@ export class MapView {
       `<tr style="background:${r.ok ? '#eafaf0' : '#fdeaea'}"><td>${r.n}</td><td>${r.lat.toFixed(5)}, ${r.lon.toFixed(5)}</td>` +
       `<td style="text-align:right">${r.res.hoursYear.toFixed(1)}</td><td style="text-align:right">${r.res.maxMinDay}</td>` +
       `<td style="text-align:right">${r.res.hoursYearReal.toFixed(1)}</td>` +
+      `<td>${r.win ? r.win.months + ' · ' + r.win.hours : '—'}</td>` +
       `<td style="text-align:center;color:${r.ok ? '#15803d' : '#b91c1c'};font-weight:600">${r.ok ? 'Cumple' : 'Excede'}</td></tr>`).join('');
     const html = `<!doctype html><meta charset=utf-8><title>Informe de shadow-flicker — Camán I</title>
       <style>body{font:14px system-ui,sans-serif;margin:32px;color:#1b2533}h1{font-size:19px}table{border-collapse:collapse;width:100%;margin-top:12px;font-size:13px}
@@ -162,10 +165,29 @@ export class MapView {
       <p class="muted">${rs.length} receptor(es) · ${nEx} excede(n) el límite · Generado ${new Date().toLocaleString('es-CL')}<br>
       Worst-case astronómico (norma LAI: sol siempre despejado, rotor siempre girando). Límite: ≤30 h/año y ≤30 min/día.
       «Real ≈» = estimación con factor de probabilidad (${(REAL_CASE_FACTOR * 100).toFixed(0)}%); refinar con meteo del sitio.</p>
-      <table><thead><tr><th>#</th><th>Coordenadas (lat, lon)</th><th>h/año (worst)</th><th>min/día (worst)</th><th>h/año (real≈)</th><th>Cumplimiento</th></tr></thead><tbody>${rows}</tbody></table>`;
+      <table><thead><tr><th>#</th><th>Coordenadas (lat, lon)</th><th>h/año (worst)</th><th>min/día (worst)</th><th>h/año (real≈)</th><th>Parada sugerida (mes · hora)</th><th>Cumplimiento</th></tr></thead><tbody>${rows}</tbody></table>`;
+    this._openReport(html, 'informe_sombras_caman.html');
+  }
+
+  // Informe de sombreado ENTRE turbinas (proxy de pérdida por sombra mutua).
+  interTurbineReport() {
+    const { perTurbine, total } = interTurbineShading(this.fleet.structures, { stepMin: 10 });
+    if (!perTurbine.length) { alert('No hay turbinas operativas para el análisis inter-turbinas.'); return; }
+    const rows = perTurbine.map(r => `<tr><td>${r.label}</td><td style="text-align:right">${r.hoursYear.toFixed(1)}</td></tr>`).join('');
+    const html = `<!doctype html><meta charset=utf-8><title>Sombreado entre torres — Camán I</title>
+      <style>body{font:14px system-ui,sans-serif;margin:32px;color:#1b2533}h1{font-size:19px}table{border-collapse:collapse;width:60%;margin-top:12px;font-size:13px}
+      th,td{border:1px solid #cbd5e1;padding:6px 9px}th{background:#f1f5f9;text-align:left}.muted{color:#64748b;font-size:12px;line-height:1.5}</style>
+      <h1>Sombreado entre turbinas (worst-case) — Camán I</h1>
+      <p class="muted">${perTurbine.length} turbinas operativas · total ${total.toFixed(0)} h/año de sombra mutua · Generado ${new Date().toLocaleString('es-CL')}<br>
+      Horas/año en que el rotor de cada turbina cae en la sombra de otra (proxy de pérdida por sombreado; aproxima el buje como receptor a nivel de suelo). La pérdida energética real depende de la curva de potencia y del viento.</p>
+      <table><thead><tr><th>Turbina</th><th>h/año en sombra de otras</th></tr></thead><tbody>${rows}</tbody></table>`;
+    this._openReport(html, 'sombreado_entre_torres_caman.html');
+  }
+
+  _openReport(html, filename) {
     const w = window.open('', '_blank');
     if (w) { w.document.write(html); w.document.close(); }
-    else { const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([html], { type: 'text/html' })); a.download = 'informe_sombras_caman.html'; a.click(); }
+    else { const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([html], { type: 'text/html' })); a.download = filename; a.click(); }
   }
 
   // (Re)crea los marcadores desde la flota viva (lat/lon por estructura).

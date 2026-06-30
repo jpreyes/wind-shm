@@ -8,16 +8,16 @@
 //   inspecciones y señal temporal EN VIVO desde un Web Worker (DataSource).
 // Recortes (modelado) los hace shm.css ocultando, no borrando.
 // ─────────────────────────────────────────────────────────────────────────────
-import { FleetView } from './fleet_view.js?v=232';
-import { DataSource } from './data_source.js?v=232';
-import { computeTwin } from './digital_twin.js?v=232';
-import { ParkManager, loadParksStore } from './parks.js?v=232';
-import { MapView } from './map_view.js?v=232';
-import { defaultStages, builtFromStages } from './parks_data_caman.js?v=232';
-import { compassRoseSVG } from './compass.js?v=232';
+import { FleetView } from './fleet_view.js?v=233';
+import { DataSource } from './data_source.js?v=233';
+import { computeTwin } from './digital_twin.js?v=233';
+import { ParkManager, loadParksStore } from './parks.js?v=233';
+import { MapView } from './map_view.js?v=233';
+import { defaultStages, builtFromStages } from './parks_data_caman.js?v=233';
+import { compassRoseSVG } from './compass.js?v=233';
 
 const F1_BASE = { turbine: 0.283, hv: 1.6 };
-const REWIND_VER = 'v232';   // versión visible del build (subir junto al cache-bust)
+const REWIND_VER = 'v233';   // versión visible del build (subir junto al cache-bust)
 const FS = 62.5;   // frecuencia de muestreo de la señal (Hz), igual que shm_worker.js
 // Clasificador ML de daño (0..4)
 const CLS = ['Sin daño', 'Leve', 'Moderado', 'Alto', 'Muy alto'];
@@ -227,7 +227,7 @@ async function boot() {
   // ── Relieve conceptual del terreno (DEM vendorizado) — encendido por defecto ─
   setLoad(88, 'Cargando relieve…'); await delay(40);
   try {
-    await fleet.loadTerrain('data/caman_dem.json?v=232');
+    await fleet.loadTerrain('data/caman_dem.json?v=233');
     fleet.setTerrainVisible(true);
     document.getElementById('shm-relieve-tool')?.classList.add('active');
   } catch (e) { console.warn('[shm] relieve no disponible', e); }
@@ -355,11 +355,13 @@ function buildSunControl(fleet) {
     <div class="sun-foot"><button id="sun-fmap" class="sun-btn" type="button">🗺️ Mapa de flicker (h/año)</button></div>
     <div class="sun-legend"><span><i style="background:#bee678"></i>1–5</span><span><i style="background:#fde047"></i>5–15</span><span><i style="background:#fb923c"></i>15–30</span><span><i style="background:#ef4444"></i>≥30 ✗</span></div>
     <div class="sun-hint" style="margin:8px 0 3px">Clic en el mapa 2D = receptor (vivienda)</div>
-    <div class="sun-foot"><button id="sun-report" class="sun-btn" type="button">📄 Informe de sombras</button></div>`;
+    <div class="sun-foot"><button id="sun-report" class="sun-btn" type="button">📄 Informe de sombras</button></div>
+    <div class="sun-foot"><button id="sun-inter" class="sun-btn" type="button">🌀 Sombra entre torres</button></div>`;
   wrap.appendChild(el);
   const hourEl = el.querySelector('#sun-hour'), dateEl = el.querySelector('#sun-date'), realEl = el.querySelector('#sun-realscale');
   const hh = el.querySelector('#sun-hh'), read = el.querySelector('#sun-read'), playBtn = el.querySelector('#sun-play');
   el.querySelector('#sun-report').addEventListener('click', () => window.shmMap?.flickerReport());
+  el.querySelector('#sun-inter').addEventListener('click', () => window.shmMap?.interTurbineReport());
   const fmapBtn = el.querySelector('#sun-fmap');
   fmapBtn.addEventListener('click', () => { fmapBtn.classList.toggle('active', window.shmMap?.toggleFlickerMap()); });
   const fmtH = (h) => `${String(Math.floor(h)).padStart(2, '0')}:${String(Math.round((h % 1) * 60) % 60).padStart(2, '0')}`;

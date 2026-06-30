@@ -14,7 +14,7 @@
 //
 // Módulo ES puro (Node + navegador). Verificable: `node js/shm/shadow_flicker.js`.
 // ─────────────────────────────────────────────────────────────────────────────
-import { solarPosition } from './solar.js?v=232';
+import { solarPosition } from './solar.js?v=233';
 
 const M_PER_DEG_LAT = 111320;
 export const FLICKER_LIMITS = { hoursYear: 30, minDay: 30 };   // referencia LAI (Alemania)
@@ -48,12 +48,14 @@ export function annualFlicker(turbines, recep, opt = {}) {
     turb.push({ id: t.id, dist, bearing: (Math.atan2(tE, tN) * 180 / Math.PI + 360) % 360 });
   }
   const byTurbine = new Map();
-  if (!turb.length) return { hoursYear: 0, maxMinDay: 0, daysAffected: 0, hoursYearReal: 0, byTurbine };
+  const cal = new Float32Array(12 * 24);   // minutos de flicker por mes × hora local (calendario de parada)
+  if (!turb.length) return { hoursYear: 0, maxMinDay: 0, daysAffected: 0, hoursYearReal: 0, byTurbine, cal };
 
   let totalMin = 0, maxDay = 0, days = 0;
   const start = Date.UTC(year, 0, 1);
   for (let d = 0; d < 365; d++) {
     let dayMin = 0;
+    const month = new Date(year, 0, 1 + d).getMonth();
     for (let m = 0; m < 1440; m += stepMin) {
       const date = new Date(start + d * 86400000 + (m - tz * 60) * 60000);   // minuto local → UTC
       const sp = solarPosition(date, recep.lat, recep.lon);
@@ -70,11 +72,44 @@ export function annualFlicker(turbines, recep, opt = {}) {
           hit = true;
         }
       }
-      if (hit) dayMin += stepMin;
+      if (hit) { dayMin += stepMin; cal[month * 24 + ((m / 60) | 0)] += stepMin; }
     }
     totalMin += dayMin; if (dayMin > maxDay) maxDay = dayMin; if (dayMin > 0) days++;
   }
-  return { hoursYear: totalMin / 60, maxMinDay: maxDay, daysAffected: days, hoursYearReal: (totalMin / 60) * realFactor, byTurbine };
+  return { hoursYear: totalMin / 60, maxMinDay: maxDay, daysAffected: days, hoursYearReal: (totalMin / 60) * realFactor, byTurbine, cal };
+}
+
+const MESES = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic'];
+/** Ventana crítica (meses y horas con flicker) a partir de la matriz mes×hora → para el calendario de parada. */
+export function criticalWindow(cal) {
+  let m0 = 12, m1 = -1, h0 = 24, h1 = -1, peakIdx = -1, peak = 0;
+  for (let mo = 0; mo < 12; mo++) for (let h = 0; h < 24; h++) {
+    const v = cal[mo * 24 + h]; if (v <= 0) continue;
+    if (mo < m0) m0 = mo; if (mo > m1) m1 = mo; if (h < h0) h0 = h; if (h > h1) h1 = h;
+    if (v > peak) { peak = v; peakIdx = mo * 24 + h; }
+  }
+  if (m1 < 0) return null;
+  const hh = (h) => `${String(h).padStart(2, '0')}:00`;
+  return { months: `${MESES[m0]}–${MESES[m1]}`, hours: `${hh(h0)}–${hh(h1 + 1)}`,
+    peak: { month: MESES[(peakIdx / 24) | 0], hour: hh(peakIdx % 24) } };
+}
+
+/**
+ * Sombreado ENTRE turbinas: horas/año en que el rotor de cada turbina operativa cae
+ * en la sombra de OTRAS (proxy de pérdida por sombreado mutuo). Aproximación: trata
+ * el buje como un receptor a nivel de suelo.
+ * @returns {{perTurbine:Array<{id,hoursYear}>, total:number}}
+ */
+export function interTurbineShading(turbines, opt = {}) {
+  const op = turbines.filter(t => t.lat != null && t.type !== 'hv' && (t.built ?? 1) >= 0.97);
+  const perTurbine = [];
+  for (const t of op) {
+    const others = op.filter(o => o !== t);
+    const res = annualFlicker(others, { lat: t.lat, lon: t.lon }, { stepMin: opt.stepMin ?? 10, maxDist: opt.maxDist ?? 1500 });
+    perTurbine.push({ id: t.id, label: t.label || t.id, hoursYear: res.hoursYear });
+  }
+  perTurbine.sort((a, b) => b.hoursYear - a.hoursYear);
+  return { perTurbine, total: perTurbine.reduce((s, r) => s + r.hoursYear, 0) };
 }
 
 /** ¿Cumple el límite LAI (≤30 h/año y ≤30 min/día)? */

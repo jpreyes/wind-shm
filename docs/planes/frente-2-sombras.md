@@ -70,10 +70,17 @@ Mitigación: módulos de parada (shutdown). Open-source emergente: WIMBY SF.
    worst-case × `REAL_CASE_FACTOR` (≈0.15: P(sol)·P(operación)·P(orientación)); el popup y el
    informe muestran worst-case + estimación real. *Falta el real-case estadístico riguroso* (rosa
    de vientos + % de sol horario), que requiere meteo del sitio (`R-10`).
-6. ✅ **Informe de cumplimiento** (v230) — `MapView.flickerReport()` + botón «📄 Informe de sombras»
-   en el panel de Sol → ventana imprimible con todos los receptores (worst-case, min/día, real≈,
-   cumplimiento), resumen y nº que exceden. *(Falta calendario de parada/mitigación.)*
-7. ⬜ **(Difer.)** sombreado inter-turbina con estimación de pérdida energética.
+6. ✅ **Informe de cumplimiento + calendario de parada** (v230/v233) — `flickerReport()` + botón
+   «📄 Informe de sombras»: ventana imprimible con todos los receptores (worst-case, min/día, real≈,
+   cumplimiento). `annualFlicker` acumula una matriz **mes×hora**; `criticalWindow()` da la **ventana
+   de parada sugerida** (meses + horas + pico), mostrada en el popup del receptor y en el informe →
+   base de la mitigación por curtailment.
+7. ✅ **Sombreado inter-turbina** (v233) — `interTurbineShading()` + botón «🌀 Sombra entre torres»:
+   horas/año en que el rotor de cada turbina cae en la sombra de otra (proxy de pérdida por sombra
+   mutua; aproxima el buje como receptor). Informe ordenado por turbina. *La pérdida energética fina
+   requiere curva de potencia + viento (futuro).*
+8. ⬜ **Real-case estadístico riguroso** — rosa de vientos + % de sol horario; requiere meteo del
+   sitio (`R-10`). Hoy se cubre con la estimación por factor (ítem 5).
 
 ## Dependencias
 - Receptores (viviendas) como capa de datos del parque.
