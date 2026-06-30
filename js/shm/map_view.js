@@ -6,10 +6,10 @@
 // Click en un marcador → conmuta a la vista 3D enfocando esa estructura (onPick).
 // Leaflet se carga como global (window.L) desde lib/leaflet/leaflet.js.
 // ─────────────────────────────────────────────────────────────────────────────
-import { CAMAN_CENTER } from './parks_data_caman.js?v=233';
-import { CAMAN_ROADS } from './caman_roads.js?v=233';
-import { compassRoseSVG } from './compass.js?v=233';
-import { annualFlicker, flickerOK, FLICKER_LIMITS, REAL_CASE_FACTOR, flickerMap, criticalWindow, interTurbineShading } from './shadow_flicker.js?v=233';
+import { CAMAN_CENTER } from './parks_data_caman.js?v=234';
+import { CAMAN_ROADS } from './caman_roads.js?v=234';
+import { compassRoseSVG } from './compass.js?v=234';
+import { annualFlicker, flickerOK, FLICKER_LIMITS, REAL_CASE_FACTOR, flickerMap, criticalWindow, interTurbineShading } from './shadow_flicker.js?v=234';
 
 // Color del marcador según el avance de obra (coherente con el 4D / panel).
 function colorFor(st) {
@@ -122,7 +122,7 @@ export class MapView {
   // Mapa de flicker (horas/año) sobre el área — salida estilo WindPRO. Toggle.
   toggleFlickerMap() {
     const L = window.L; if (!L || !this.map) return false;
-    if (this._flickerOverlay) { this.map.removeLayer(this._flickerOverlay); this._flickerOverlay = null; return false; }
+    if (this._flickerOverlay) { this.map.removeLayer(this._flickerOverlay); this._flickerOverlay = null; this.fleet.clearFlickerSurface?.(); return false; }
     const lats = [], lons = [];
     for (const t of this.fleet.structures) { if (t.type !== 'hv' && t.lat != null && (t.built ?? 1) >= 0.97) { lats.push(t.lat); lons.push(t.lon); } }
     if (!lats.length) { alert('No hay turbinas operativas para el mapa de flicker.'); return false; }
@@ -143,9 +143,10 @@ export class MapView {
     const bounds = [[bbox.lat0, bbox.lon0], [bbox.lat1, bbox.lon1]];
     this._flickerOverlay = L.imageOverlay(cv.toDataURL(), bounds, { opacity: 0.6, interactive: false }).addTo(this.map);
     this.map.fitBounds(bounds);
+    this.fleet.setFlickerSurface?.(cv, bbox);     // también drapeado sobre el relieve en 3D
     return true;
   }
-  clearFlickerMap() { if (this._flickerOverlay) { this.map.removeLayer(this._flickerOverlay); this._flickerOverlay = null; } }
+  clearFlickerMap() { if (this._flickerOverlay) { this.map.removeLayer(this._flickerOverlay); this._flickerOverlay = null; } this.fleet.clearFlickerSurface?.(); }
 
   // Informe de cumplimiento de shadow-flicker (todos los receptores) → ventana imprimible.
   flickerReport() {

@@ -7,11 +7,11 @@
 // ─────────────────────────────────────────────────────────────────────────────
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
-import { createTurbine, TOWER_H } from './turbine_mesh.js?v=233';
-import { createSubstationTower, groundCable, overheadLine } from './structures.js?v=233';
-import { toScene, CAMAN_CENTER, LAYOUT_SCALE } from './parks_data_caman.js?v=233';
-import { CAMAN_ROADS } from './caman_roads.js?v=233';
-import { solarPosition, dateFromLocal, sunSceneDir } from './solar.js?v=233';
+import { createTurbine, TOWER_H } from './turbine_mesh.js?v=234';
+import { createSubstationTower, groundCable, overheadLine } from './structures.js?v=234';
+import { toScene, CAMAN_CENTER, LAYOUT_SCALE } from './parks_data_caman.js?v=234';
+import { CAMAN_ROADS } from './caman_roads.js?v=234';
+import { solarPosition, dateFromLocal, sunSceneDir } from './solar.js?v=234';
 
 const SPACING = 235;
 const TOWER_SCALE = 2.2;   // agranda las torres (vista esquemática) para que destaquen sobre el relieve
@@ -261,7 +261,7 @@ export class FleetView {
   // ── Relieve conceptual (capa de terreno) ─────────────────────────────────────
   // Carga el DEM vendorizado y añade la malla (oculta hasta activarla).
   async loadTerrain(url) {
-    const { Terrain } = await import('./terrain.js?v=233');
+    const { Terrain } = await import('./terrain.js?v=234');
     this._TerrainClass = Terrain;                     // para reconstruir al cambiar de escala
     const dem = await (await fetch(url)).json();
     this.terrain = new Terrain(dem, { vex: 1.5 });   // relieve exagerado (esquemático)
@@ -293,6 +293,36 @@ export class FleetView {
 
   // Cota del terreno en (x,z) si está cargado (independiente de su visibilidad).
   groundY(x, z) { return this.terrain ? this.terrain.heightAt(x, z) : 0; }
+
+  // Mapa de flicker drapeado sobre el relieve en 3D: superficie texturizada con el
+  // mismo heatmap del 2D, con cada vértice apoyado en la cota del terreno.
+  setFlickerSurface(canvas, bbox) {
+    this.clearFlickerSurface();
+    const NX = 96, NY = 64;
+    const pos = new Float32Array(NX * NY * 3), uv = new Float32Array(NX * NY * 2);
+    for (let j = 0; j < NY; j++) for (let i = 0; i < NX; i++) {
+      const u = i / (NX - 1), v = j / (NY - 1);
+      const lon = bbox.lon0 + u * (bbox.lon1 - bbox.lon0), lat = bbox.lat0 + v * (bbox.lat1 - bbox.lat0);
+      const s = toScene(lon, lat), k = (j * NX + i) * 3, m = (j * NX + i) * 2;
+      pos[k] = s.x; pos[k + 1] = this.groundY(s.x, s.z) + 2.0; pos[k + 2] = s.z; uv[m] = u; uv[m + 1] = v;
+    }
+    const idx = [];
+    for (let j = 0; j < NY - 1; j++) for (let i = 0; i < NX - 1; i++) { const a = j * NX + i, b = a + 1, c = a + NX, d = c + 1; idx.push(a, c, b, b, c, d); }
+    const geo = new THREE.BufferGeometry();
+    geo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+    geo.setAttribute('uv', new THREE.BufferAttribute(uv, 2));
+    geo.setIndex(idx);
+    const tex = new THREE.CanvasTexture(canvas); tex.minFilter = THREE.LinearFilter; tex.magFilter = THREE.LinearFilter;
+    const mat = new THREE.MeshBasicMaterial({ map: tex, transparent: true, opacity: 0.72, depthWrite: false, side: THREE.DoubleSide });
+    this._flickerSurface = new THREE.Mesh(geo, mat); this._flickerSurface.renderOrder = 2; this._flickerSurface.name = 'flicker-surface';
+    this.scene.add(this._flickerSurface);
+  }
+  clearFlickerSurface() {
+    if (!this._flickerSurface) return;
+    this.scene.remove(this._flickerSurface);
+    this._flickerSurface.geometry.dispose(); this._flickerSurface.material.map?.dispose?.(); this._flickerSurface.material.dispose();
+    this._flickerSurface = null;
+  }
 
   // Proyecta el tope de una estructura a coordenadas de pantalla (para la ficha flotante).
   anchorScreen(st) {
