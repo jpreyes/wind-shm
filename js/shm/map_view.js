@@ -6,10 +6,10 @@
 // Click en un marcador → conmuta a la vista 3D enfocando esa estructura (onPick).
 // Leaflet se carga como global (window.L) desde lib/leaflet/leaflet.js.
 // ─────────────────────────────────────────────────────────────────────────────
-import { CAMAN_CENTER } from './parks_data_caman.js?v=229';
-import { CAMAN_ROADS } from './caman_roads.js?v=229';
-import { compassRoseSVG } from './compass.js?v=229';
-import { annualFlicker, flickerOK, FLICKER_LIMITS } from './shadow_flicker.js?v=229';
+import { CAMAN_CENTER } from './parks_data_caman.js?v=230';
+import { CAMAN_ROADS } from './caman_roads.js?v=230';
+import { compassRoseSVG } from './compass.js?v=230';
+import { annualFlicker, flickerOK, FLICKER_LIMITS, REAL_CASE_FACTOR } from './shadow_flicker.js?v=230';
 
 // Color del marcador según el avance de obra (coherente con el 4D / panel).
 function colorFor(st) {
@@ -100,17 +100,45 @@ export class MapView {
     const icon = L.divIcon({ className: 'rcp-icon', iconSize: [22, 22], iconAnchor: [11, 11],
       html: `<svg width="22" height="22" viewBox="0 0 22 22"><circle cx="11" cy="11" r="9" fill="${col}" stroke="#0b1018" stroke-width="1.5"/><path d="M6 11 L11 6.5 L16 11 M7.5 10 V16 H14.5 V10" fill="none" stroke="#0b1018" stroke-width="1.4" stroke-linejoin="round"/></svg>` });
     const m = L.marker(latlng, { icon }).addTo(this.recepLayer);
+    this._receptors ||= [];
+    const n = this._receptors.length + 1;
+    const entry = { n, lat: latlng.lat, lon: latlng.lng, res, ok, marker: m };
+    this._receptors.push(entry);
     m.bindPopup(
-      `<b>Receptor</b><br>${res.hoursYear.toFixed(1)} h/año · ${res.maxMinDay} min/día<br>` +
+      `<b>Receptor ${n}</b><br>Worst-case: <b>${res.hoursYear.toFixed(1)} h/año</b> · ${res.maxMinDay} min/día<br>` +
+      `Estimación real ≈ ${res.hoursYearReal.toFixed(1)} h/año<br>` +
       `${res.daysAffected} días afectados<br>` +
-      `<span style="color:${col}">${ok ? '✓ Cumple' : '✗ Excede'}</span> (≤${FLICKER_LIMITS.hoursYear} h · ≤${FLICKER_LIMITS.minDay} min)<br>` +
+      `<span style="color:${col}">${ok ? '✓ Cumple' : '✗ Excede'}</span> (≤${FLICKER_LIMITS.hoursYear} h · ≤${FLICKER_LIMITS.minDay} min, worst-case)<br>` +
       `<a href="#" class="rcp-del">Quitar</a>`
     ).openPopup();
-    m.on('popupopen', (ev) => { const a = ev.popup.getElement()?.querySelector('.rcp-del'); a && a.addEventListener('click', (x) => { x.preventDefault(); this.recepLayer.removeLayer(m); }); });
+    m.on('popupopen', (ev) => { const a = ev.popup.getElement()?.querySelector('.rcp-del'); a && a.addEventListener('click', (x) => { x.preventDefault(); this.recepLayer.removeLayer(m); this._receptors = this._receptors.filter(r => r !== entry); }); });
     return res;
   }
 
-  clearReceptors() { this.recepLayer?.clearLayers(); }
+  clearReceptors() { this.recepLayer?.clearLayers(); this._receptors = []; }
+
+  // Informe de cumplimiento de shadow-flicker (todos los receptores) → ventana imprimible.
+  flickerReport() {
+    const rs = this._receptors || [];
+    if (!rs.length) { alert('Agrega receptores (clic en el mapa con el Sol activo) para generar el informe.'); return; }
+    const nEx = rs.filter(r => !r.ok).length;
+    const rows = rs.map(r =>
+      `<tr style="background:${r.ok ? '#eafaf0' : '#fdeaea'}"><td>${r.n}</td><td>${r.lat.toFixed(5)}, ${r.lon.toFixed(5)}</td>` +
+      `<td style="text-align:right">${r.res.hoursYear.toFixed(1)}</td><td style="text-align:right">${r.res.maxMinDay}</td>` +
+      `<td style="text-align:right">${r.res.hoursYearReal.toFixed(1)}</td>` +
+      `<td style="text-align:center;color:${r.ok ? '#15803d' : '#b91c1c'};font-weight:600">${r.ok ? 'Cumple' : 'Excede'}</td></tr>`).join('');
+    const html = `<!doctype html><meta charset=utf-8><title>Informe de shadow-flicker — Camán I</title>
+      <style>body{font:14px system-ui,sans-serif;margin:32px;color:#1b2533}h1{font-size:19px}table{border-collapse:collapse;width:100%;margin-top:12px;font-size:13px}
+      th,td{border:1px solid #cbd5e1;padding:6px 9px}th{background:#f1f5f9;text-align:left}.muted{color:#64748b;font-size:12px;line-height:1.5}</style>
+      <h1>Informe de parpadeo de sombra (shadow-flicker) — Camán I</h1>
+      <p class="muted">${rs.length} receptor(es) · ${nEx} excede(n) el límite · Generado ${new Date().toLocaleString('es-CL')}<br>
+      Worst-case astronómico (norma LAI: sol siempre despejado, rotor siempre girando). Límite: ≤30 h/año y ≤30 min/día.
+      «Real ≈» = estimación con factor de probabilidad (${(REAL_CASE_FACTOR * 100).toFixed(0)}%); refinar con meteo del sitio.</p>
+      <table><thead><tr><th>#</th><th>Coordenadas (lat, lon)</th><th>h/año (worst)</th><th>min/día (worst)</th><th>h/año (real≈)</th><th>Cumplimiento</th></tr></thead><tbody>${rows}</tbody></table>`;
+    const w = window.open('', '_blank');
+    if (w) { w.document.write(html); w.document.close(); }
+    else { const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([html], { type: 'text/html' })); a.download = 'informe_sombras_caman.html'; a.click(); }
+  }
 
   // (Re)crea los marcadores desde la flota viva (lat/lon por estructura).
   setStructures() {

@@ -14,22 +14,27 @@
 //
 // Módulo ES puro (Node + navegador). Verificable: `node js/shm/shadow_flicker.js`.
 // ─────────────────────────────────────────────────────────────────────────────
-import { solarPosition } from './solar.js?v=229';
+import { solarPosition } from './solar.js?v=230';
 
 const M_PER_DEG_LAT = 111320;
 export const FLICKER_LIMITS = { hoursYear: 30, minDay: 30 };   // referencia LAI (Alemania)
+// Factor real-case ≈ P(sol despejado) · P(rotor operando) · P(orientación que
+// proyecta sombra). Valor por defecto conservador para el sur de Chile (nuboso);
+// ajustable cuando haya estadística meteo real (rosa de vientos + % de sol → R-10).
+export const REAL_CASE_FACTOR = 0.15;
 
 /**
- * Parpadeo de sombra anual «worst-case» en un receptor.
+ * Parpadeo de sombra anual «worst-case» en un receptor (+ estimación real-case).
  * @param {Array} turbines  estructuras con {lat, lon, type, built, height}
  * @param {{lat,lon}} recep  receptor (vivienda)
- * @param {object} opt  {tz=-4, stepMin=1, minElev=3, maxDist=1500, hubHeight=90, rotorR=42, year}
- * @returns {{hoursYear, maxMinDay, daysAffected, byTurbine:Map}}
+ * @param {object} opt  {tz=-4, stepMin=1, minElev=3, maxDist=1500, hubHeight=90, rotorR=42, year, realFactor}
+ * @returns {{hoursYear, maxMinDay, daysAffected, hoursYearReal, byTurbine:Map}}
  */
 export function annualFlicker(turbines, recep, opt = {}) {
   const tz = opt.tz ?? -4, stepMin = opt.stepMin ?? 1, minElev = opt.minElev ?? 3;
   const maxDist = opt.maxDist ?? 1500, H = opt.hubHeight ?? 90, R = opt.rotorR ?? 42;
   const year = opt.year ?? new Date().getFullYear();
+  const realFactor = opt.realFactor ?? REAL_CASE_FACTOR;
   const mLon = M_PER_DEG_LAT * Math.cos(recep.lat * Math.PI / 180);
 
   // Sólo turbinas operativas (rotor montado) dentro del alcance del flicker.
@@ -43,7 +48,7 @@ export function annualFlicker(turbines, recep, opt = {}) {
     turb.push({ id: t.id, dist, bearing: (Math.atan2(tE, tN) * 180 / Math.PI + 360) % 360 });
   }
   const byTurbine = new Map();
-  if (!turb.length) return { hoursYear: 0, maxMinDay: 0, daysAffected: 0, byTurbine };
+  if (!turb.length) return { hoursYear: 0, maxMinDay: 0, daysAffected: 0, hoursYearReal: 0, byTurbine };
 
   let totalMin = 0, maxDay = 0, days = 0;
   const start = Date.UTC(year, 0, 1);
@@ -69,7 +74,7 @@ export function annualFlicker(turbines, recep, opt = {}) {
     }
     totalMin += dayMin; if (dayMin > maxDay) maxDay = dayMin; if (dayMin > 0) days++;
   }
-  return { hoursYear: totalMin / 60, maxMinDay: maxDay, daysAffected: days, byTurbine };
+  return { hoursYear: totalMin / 60, maxMinDay: maxDay, daysAffected: days, hoursYearReal: (totalMin / 60) * realFactor, byTurbine };
 }
 
 /** ¿Cumple el límite LAI (≤30 h/año y ≤30 min/día)? */

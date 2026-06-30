@@ -66,8 +66,13 @@ Mitigación: módulos de parada (shutdown). Open-source emergente: WIMBY SF.
    la franja recibe flicker, lejos = 0). UI: en modo Sol, **clic en el mapa 2D coloca un receptor**
    (vivienda) y muestra su flicker + **cumplimiento ≤30 h/año y ≤30 min/día** (verde ✓ / rojo ✗),
    con opción de quitar. *(Pendientes opcionales abajo.)*
-5. ⬜ **Real-case estadístico** — % de sol + rosa de vientos + horas de operación.
-6. ⬜ **Reporte/mitigación** — exportar informe de cumplimiento + calendario de parada; ráster de flicker.
+5. 🟡 **Real-case (estimación)** (v230) — `annualFlicker` devuelve también `hoursYearReal` =
+   worst-case × `REAL_CASE_FACTOR` (≈0.15: P(sol)·P(operación)·P(orientación)); el popup y el
+   informe muestran worst-case + estimación real. *Falta el real-case estadístico riguroso* (rosa
+   de vientos + % de sol horario), que requiere meteo del sitio (`R-10`).
+6. ✅ **Informe de cumplimiento** (v230) — `MapView.flickerReport()` + botón «📄 Informe de sombras»
+   en el panel de Sol → ventana imprimible con todos los receptores (worst-case, min/día, real≈,
+   cumplimiento), resumen y nº que exceden. *(Falta calendario de parada/mitigación.)*
 7. ⬜ **(Difer.)** sombreado inter-turbina con estimación de pérdida energética.
 
 ## Dependencias
