@@ -7,11 +7,11 @@
 // ─────────────────────────────────────────────────────────────────────────────
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
-import { createTurbine, TOWER_H } from './turbine_mesh.js?v=217';
-import { createSubstationTower, groundCable, overheadLine } from './structures.js?v=217';
-import { toScene, CAMAN_CENTER, LAYOUT_SCALE } from './parks_data_caman.js?v=217';
-import { CAMAN_ROADS } from './caman_roads.js?v=217';
-import { solarPosition, dateFromLocal, sunSceneDir } from './solar.js?v=217';
+import { createTurbine, TOWER_H } from './turbine_mesh.js?v=218';
+import { createSubstationTower, groundCable, overheadLine } from './structures.js?v=218';
+import { toScene, CAMAN_CENTER, LAYOUT_SCALE } from './parks_data_caman.js?v=218';
+import { CAMAN_ROADS } from './caman_roads.js?v=218';
+import { solarPosition, dateFromLocal, sunSceneDir } from './solar.js?v=218';
 
 const SPACING = 235;
 const TOWER_SCALE = 2.2;   // agranda las torres (vista esquemática) para que destaquen sobre el relieve
@@ -175,17 +175,18 @@ export class FleetView {
   getSunInfo() { return this._sunInfo || null; }
 
   // Posiciona el sol (dirección, intensidad y color) según la efeméride del parque.
-  // Radio que cubre flota + RELIEVE (para que la sombra de los cerros entre en el
-  // mapa de sombra), centrado en el centro de la flota.
-  _sunRadius() {
-    const { center, radius } = this._extent();
-    let r = radius;
-    if (this.terrain?.mesh) {
-      const g = this.terrain.mesh.geometry; if (!g.boundingBox) g.computeBoundingBox();
-      const bb = g.boundingBox;
-      r = Math.max(r, Math.abs(bb.max.x - center.x), Math.abs(bb.min.x - center.x), Math.abs(bb.max.z - center.z), Math.abs(bb.min.z - center.z));
-    }
-    return { center, radius: r };
+  // Foco del estudio de sol: el grupo en obra/operativo + margen para sombras
+  // largas. Acota el mapa de sombra a esta zona → texeles finos (ancho de torre
+  // fiel) conservando los cerros cercanos; sólo se excluyen los lejanos.
+  _studyFocus() {
+    const built = this.turbines.filter(t => (t.built ?? 1) > 0.3);
+    const list = built.length ? built : this.structures;
+    const box = new THREE.Box3();
+    for (const s of list) box.expandByPoint(s.group.position);
+    if (box.isEmpty()) box.expandByPoint(new THREE.Vector3());
+    const center = box.getCenter(new THREE.Vector3()), sz = box.getSize(new THREE.Vector3());
+    const radius = Math.max(sz.x, sz.z) / 2 + TOWER_H * this.scaleK * 6 + SPACING;   // + margen de sombra a sol bajo
+    return { center, radius };
   }
 
   applySunTime() {
@@ -194,8 +195,8 @@ export class FleetView {
     const sp = solarPosition(date, CAMAN_CENTER.lat, CAMAN_CENTER.lon);
     this._sunInfo = sp;
     const dir = sunSceneDir(sp.elevation, sp.azimuth);
-    const { center, radius } = this._sunRadius();
-    const dist = Math.max(radius * 2.5, 3000);
+    const { center, radius } = this._studyFocus();
+    const dist = Math.max(radius * 2.5, 2000);
     this.sun.target.position.copy(center); this.sun.target.updateMatrixWorld();
     this.sun.position.set(center.x + dir.x * dist, Math.max(center.y + dir.y * dist, center.y + 5), center.z + dir.z * dist);
     const e = sp.elevation;
@@ -211,9 +212,9 @@ export class FleetView {
 
   _setupSunShadow() {
     this.sun.castShadow = true;
-    const sh = this.sun.shadow, { radius } = this._sunRadius();
-    sh.mapSize.set(2048, 2048);                              // cubre flota + relieve (sombra de cerros)
-    const d = radius * 1.12, c = sh.camera;                 // cubre todo el relieve (sombra de cerros incluida)
+    const sh = this.sun.shadow, { radius } = this._studyFocus();
+    sh.mapSize.set(4096, 4096);                              // acotado al foco → texeles finos (ancho de torre fiel)
+    const d = radius * 1.05, c = sh.camera;
     c.left = -d; c.right = d; c.top = d; c.bottom = -d; c.near = 1; c.far = radius * 6 + 4000;
     c.updateProjectionMatrix();
     sh.bias = -0.0004; sh.normalBias = 2.0;                 // evita el acne del auto-sombreado del terreno
@@ -232,7 +233,7 @@ export class FleetView {
   _ensureCatcher() {
     if (!this._catcher) {
       const g = new THREE.PlaneGeometry(1, 1); g.rotateX(-Math.PI / 2);
-      const m = new THREE.ShadowMaterial({ opacity: 0.3 });
+      const m = new THREE.ShadowMaterial({ opacity: 0.46, color: 0x1b2e6b });   // sombra azul/índigo (igual que sobre el relieve)
       this._catcher = new THREE.Mesh(g, m); this._catcher.receiveShadow = true; this._catcher.renderOrder = 1;
       this.scene.add(this._catcher);
     }
@@ -254,7 +255,7 @@ export class FleetView {
   // ── Relieve conceptual (capa de terreno) ─────────────────────────────────────
   // Carga el DEM vendorizado y añade la malla (oculta hasta activarla).
   async loadTerrain(url) {
-    const { Terrain } = await import('./terrain.js?v=217');
+    const { Terrain } = await import('./terrain.js?v=218');
     this._TerrainClass = Terrain;                     // para reconstruir al cambiar de escala
     const dem = await (await fetch(url)).json();
     this.terrain = new Terrain(dem, { vex: 1.5 });   // relieve exagerado (esquemático)

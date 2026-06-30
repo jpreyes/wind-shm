@@ -9,7 +9,7 @@
 // torres y drapear caminos sobre el relieve.
 // ─────────────────────────────────────────────────────────────────────────────
 import * as THREE from 'three';
-import { CAMAN_CENTER, LAYOUT_SCALE, toScene } from './parks_data_caman.js?v=217';
+import { CAMAN_CENTER, LAYOUT_SCALE, toScene } from './parks_data_caman.js?v=218';
 
 const M_PER_DEG_LAT = 111320;
 const M_PER_DEG_LON = 111320 * Math.cos(CAMAN_CENTER.lat * Math.PI / 180);
@@ -115,7 +115,7 @@ export class Terrain {
     // ShaderMaterial conceptual no recibe sombras, así que superponemos un
     // ShadowMaterial que SÓLO dibuja la sombra translúcida sobre la superficie del
     // terreno (Frente 2: sombras sobre el relieve). polygonOffset evita z-fighting.
-    const shMat = new THREE.ShadowMaterial({ opacity: 0.34 });
+    const shMat = new THREE.ShadowMaterial({ opacity: 0.46, color: 0x1b2e6b });   // sombra azul/índigo (contrasta sobre el relieve pálido, no gris ni café)
     shMat.polygonOffset = true; shMat.polygonOffsetFactor = -1; shMat.polygonOffsetUnits = -1; shMat.depthWrite = false;
     const shadowMesh = new THREE.Mesh(geo, shMat);
     shadowMesh.receiveShadow = true; shadowMesh.renderOrder = 0; shadowMesh.visible = false; shadowMesh.name = 'terrain-shadow';
