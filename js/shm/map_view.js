@@ -6,9 +6,9 @@
 // Click en un marcador → conmuta a la vista 3D enfocando esa estructura (onPick).
 // Leaflet se carga como global (window.L) desde lib/leaflet/leaflet.js.
 // ─────────────────────────────────────────────────────────────────────────────
-import { CAMAN_CENTER } from './parks_data_caman.js?v=224';
-import { CAMAN_ROADS } from './caman_roads.js?v=224';
-import { compassRoseSVG } from './compass.js?v=224';
+import { CAMAN_CENTER } from './parks_data_caman.js?v=225';
+import { CAMAN_ROADS } from './caman_roads.js?v=225';
+import { compassRoseSVG } from './compass.js?v=225';
 
 // Color del marcador según el avance de obra (coherente con el 4D / panel).
 function colorFor(st) {
@@ -137,9 +137,9 @@ export class MapView {
       const Lm = Math.min(H / tan, 3000);                                       // largo de sombra (cap a 3 km con sol muy bajo)
       const dlat = (Lm * cb) / 111320, dlon = (Lm * sb) / (111320 * Math.cos(st.lat * Math.PI / 180));
       const tip = [st.lat + dlat, st.lon + dlon];
-      L.polyline([[st.lat, st.lon], tip], { color: SH, weight: 3, opacity: 0.55 }).addTo(this.shadowLayer);
+      L.polyline([[st.lat, st.lon], tip], { color: SH, weight: 3.5, opacity: 0.75 }).addTo(this.shadowLayer);
       if (st.type !== 'hv' && frac >= 0.97)                                     // disco del rotor sólo si está montado
-        L.circle(tip, { radius: 42, stroke: false, fillColor: SH, fillOpacity: 0.3 }).addTo(this.shadowLayer);
+        L.circle(tip, { radius: 42, stroke: false, fillColor: SH, fillOpacity: 0.42 }).addTo(this.shadowLayer);
     }
   }
 

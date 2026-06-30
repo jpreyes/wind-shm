@@ -384,8 +384,10 @@ body.shm #shm-banner.show { display: flex; animation: shm-blink 0.8s steps(1) in
   background: var(--bg4); color: var(--text); border: 1px solid var(--border2); }
 .shm-sun .sun-btn:hover { filter: brightness(1.15); }
 
-/* Estudio de sol en el mapa 2D: atenúa el basemap para que la sombra contraste */
-.mv-sun .leaflet-tile-pane { filter: brightness(0.5) saturate(0.65); }
+/* Estudio de sol en el mapa 2D: ACLARA/desatura el basemap (lámina de estudio)
+   para que la sombra índigo oscura contraste encima (antes lo oscurecía → sombra
+   oscura sobre fondo oscuro = invisible). */
+.mv-sun .leaflet-tile-pane { filter: brightness(1.2) saturate(0.28) contrast(0.82); }
 
 /* ── Rosa de los vientos (3D flotante arriba-derecha + 2D control) ─────────── */
 #shm-compass { position: absolute; right: 14px; top: 14px; z-index: 25; width: 58px; height: 58px; pointer-events: none; }
