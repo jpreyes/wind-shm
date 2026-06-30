@@ -8,16 +8,16 @@
 //   inspecciones y señal temporal EN VIVO desde un Web Worker (DataSource).
 // Recortes (modelado) los hace shm.css ocultando, no borrando.
 // ─────────────────────────────────────────────────────────────────────────────
-import { FleetView } from './fleet_view.js?v=228';
-import { DataSource } from './data_source.js?v=228';
-import { computeTwin } from './digital_twin.js?v=228';
-import { ParkManager, loadParksStore } from './parks.js?v=228';
-import { MapView } from './map_view.js?v=228';
-import { defaultStages, builtFromStages } from './parks_data_caman.js?v=228';
-import { compassRoseSVG } from './compass.js?v=228';
+import { FleetView } from './fleet_view.js?v=229';
+import { DataSource } from './data_source.js?v=229';
+import { computeTwin } from './digital_twin.js?v=229';
+import { ParkManager, loadParksStore } from './parks.js?v=229';
+import { MapView } from './map_view.js?v=229';
+import { defaultStages, builtFromStages } from './parks_data_caman.js?v=229';
+import { compassRoseSVG } from './compass.js?v=229';
 
 const F1_BASE = { turbine: 0.283, hv: 1.6 };
-const REWIND_VER = 'v228';   // versión visible del build (subir junto al cache-bust)
+const REWIND_VER = 'v229';   // versión visible del build (subir junto al cache-bust)
 const FS = 62.5;   // frecuencia de muestreo de la señal (Hz), igual que shm_worker.js
 // Clasificador ML de daño (0..4)
 const CLS = ['Sin daño', 'Leve', 'Moderado', 'Alto', 'Muy alto'];
@@ -58,7 +58,8 @@ async function boot() {
   const vpwrap = document.getElementById('viewport-wrap');
   if (!container || !panel) { console.warn('[shm] shell de PÓRTICO no encontrado'); window.__rewindCloseLanding?.(); return; }
 
-  document.body.classList.add('shm', 'tree-open');
+  document.body.classList.add('shm');
+  if (!matchMedia('(max-width: 820px)').matches) document.body.classList.add('tree-open');   // en móvil el árbol arranca cerrado (es cajón)
 
   const fleet = new FleetView(container);
   fleet.renderer.domElement.classList.add('shm-canvas');
@@ -194,12 +195,24 @@ async function boot() {
   const towerCard = buildTowerCard(vpwrap, fleet, { onShowAvance: () => dash.showPane('avance') });
   const compass = buildCompass(vpwrap, fleet);   // rosa de los vientos (gira con la cámara)
   fleet.onFrame = () => { towerCard.tick(); compass.update(); };   // reposiciona ficha + brújula con el render
-  fleet.onSelect = (obj) => { dash.select(obj); nameplate.show(obj); towerCard.setData(obj); statusBar.setSelected(obj); ds.focus(obj ? obj.id : null); if (obj) mapView?.focus(obj); };
+  const isMobile = () => matchMedia('(max-width: 820px)').matches;
+  fleet.onSelect = (obj) => {
+    dash.select(obj); nameplate.show(obj); towerCard.setData(obj); statusBar.setSelected(obj); ds.focus(obj ? obj.id : null); if (obj) mapView?.focus(obj);
+    if (obj && isMobile()) { document.body.classList.remove('tree-open'); document.body.classList.add('panel-open'); }   // en móvil: cierra el árbol y abre el panel
+  };
+  // Cajones móviles: tocar el fondo cierra árbol y panel.
+  document.getElementById('drawer-backdrop')?.addEventListener('click', () => {
+    document.body.classList.remove('tree-open', 'panel-open');
+    document.getElementById('shm-tree-tool')?.classList.remove('active');
+    document.getElementById('shm-panel-tool')?.classList.remove('active');
+  });
 
-  // Mapa 2D (PiP) visible por defecto.
-  document.body.classList.add('map-pip');
-  document.getElementById('shm-map-tool')?.classList.add('active');
-  mapView.invalidate();
+  // Mapa 2D (PiP) visible por defecto (en móvil arranca cerrado: el PiP taparía la vista).
+  if (!matchMedia('(max-width: 820px)').matches) {
+    document.body.classList.add('map-pip');
+    document.getElementById('shm-map-tool')?.classList.add('active');
+    mapView.invalidate();
+  }
 
   // ESC: si el 2D está como principal, vuelve al 3D; si no, deselecciona la estructura.
   addEventListener('keydown', (e) => {
@@ -214,7 +227,7 @@ async function boot() {
   // ── Relieve conceptual del terreno (DEM vendorizado) — encendido por defecto ─
   setLoad(88, 'Cargando relieve…'); await delay(40);
   try {
-    await fleet.loadTerrain('data/caman_dem.json?v=228');
+    await fleet.loadTerrain('data/caman_dem.json?v=229');
     fleet.setTerrainVisible(true);
     document.getElementById('shm-relieve-tool')?.classList.add('active');
   } catch (e) { console.warn('[shm] relieve no disponible', e); }
@@ -308,9 +321,13 @@ function buildToolbar(toolbar, fleet, getPM = () => null) {
       };
       apply(); setTimeout(apply, 80);
     });
+  // Botón «Datos»: abre/cierra el panel derecho como cajón (sólo visible en móvil).
+  const panelTool = mk('shm-panel-tool', 'Mostrar/ocultar el panel de datos',
+    `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M14 4v16M17 9h1M17 13h1"/></svg>`,
+    'Datos', () => { const on = document.body.classList.toggle('panel-open'); if (on) document.body.classList.remove('tree-open'); panelTool.classList.toggle('active', on); });
   // «Árbol» va ARRIBA DE TODO, sobre la flecha de selección (1.er control de la barra).
   const topSep = document.createElement('div'); topSep.className = 'tool-sep';
-  toolbar.prepend(tree, mapBtn, topSep);
+  toolbar.prepend(tree, mapBtn, panelTool, topSep);
   if (document.body.classList.contains('tree-open')) tree.classList.add('active');
 
   // Supr/Delete borra la estructura seleccionada (sólo en modo edición).

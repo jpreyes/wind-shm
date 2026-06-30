@@ -21,8 +21,10 @@ body.shm #viewport-wrap { min-width: 0; }
 body.shm #viewport-container { min-width: 0; }
 body.shm #viewport-container > canvas { max-width: 100%; }
 body.shm #menubar { min-width: 0; overflow-x: auto; }
-@media (max-width: 1024px) { body.shm #main { grid-template-columns: var(--tree-w) var(--toolbar-w) 1fr 5px min(var(--panel-w), 50vw); } }
-@media (max-width: 680px)  { body.shm #main { grid-template-columns: var(--tree-w) var(--toolbar-w) 1fr 5px min(var(--panel-w), 62vw); } }
+@media (min-width: 821px) and (max-width: 1024px) { body.shm #main { grid-template-columns: var(--tree-w) var(--toolbar-w) 1fr 5px min(var(--panel-w), 46vw); } }
+
+#drawer-backdrop { display: none; }                     /* oculto en escritorio */
+@media (min-width: 821px) { #shm-panel-tool { display: none; } }   /* «Datos» sólo en móvil/tablet vertical */
 
 /* ── Árbol lateral Parque ▸ Zona ▸ Torre (ReWind) ──────────────────────────── */
 /* En PÓRTICO clásico el árbol no existe en el grid (display:none → el grid de 4
@@ -38,6 +40,33 @@ body.shm #park-tree {
   font-size: 12.5px;
 }
 body.shm.tree-open #park-tree { border-right-width: 1px; }
+
+/* ── Móvil / tablet vertical (≤820px): árbol y panel como CAJONES deslizables ──
+   (Va DESPUÉS de las reglas de escritorio de #main/#park-tree para ganar en orden.)
+   El grid queda en [toolbar][viewport] y el árbol/panel salen del flujo como cajones
+   sobre el viewport, para que la vista ocupe todo el ancho. */
+@media (max-width: 820px) {
+  body.shm #main { position: relative; grid-template-columns: var(--toolbar-w) 1fr; }
+  body.shm #panel-resize-handle { display: none; }
+  body.shm #park-tree {
+    position: absolute; top: 0; bottom: 0; left: var(--toolbar-w); width: min(80vw, 280px);
+    z-index: 45; border-right: 1px solid var(--border2);
+    box-shadow: 6px 0 22px rgba(0,0,0,.4); transition: transform .22s ease;
+  }
+  body.shm:not(.tree-open) #park-tree { transform: translateX(-118%); }   /* cerrado (fuera de pantalla) */
+  body.shm.tree-open #park-tree { transform: translateX(0); }             /* abierto */
+  body.shm #panel {
+    position: absolute; top: 0; bottom: 0; right: 0; width: min(88vw, 340px);
+    z-index: 46; box-shadow: -6px 0 22px rgba(0,0,0,.4); border-left: 1px solid var(--border2);
+    transition: transform .22s ease;
+  }
+  body.shm:not(.panel-open) #panel { transform: translateX(118%); }
+  body.shm.panel-open #panel { transform: translateX(0); }
+  #drawer-backdrop { position: absolute; left: var(--toolbar-w); right: 0; top: 0; bottom: 0; z-index: 44; background: rgba(0,0,0,.45); }
+  body.shm.tree-open #drawer-backdrop, body.shm.panel-open #drawer-backdrop { display: block; }
+  body.shm #toolbar { overflow-y: auto; }              /* botones desplazables si no caben */
+  body.shm #statusbar { overflow-x: auto; white-space: nowrap; }
+}
 
 #park-tree .pt-head { display: flex; align-items: center; justify-content: space-between;
   padding: 9px 10px; font-weight: 700; letter-spacing: .3px; color: var(--text);
