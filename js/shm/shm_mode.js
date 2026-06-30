@@ -8,18 +8,19 @@
 //   inspecciones y señal temporal EN VIVO desde un Web Worker (DataSource).
 // Recortes (modelado) los hace shm.css ocultando, no borrando.
 // ─────────────────────────────────────────────────────────────────────────────
-import { FleetView } from './fleet_view.js?v=251';
-import { DataSource } from './data_source.js?v=251';
-import { computeTwin } from './digital_twin.js?v=251';
-import { ParkManager, loadParksStore } from './parks.js?v=251';
-import { MapView } from './map_view.js?v=251';
-import { defaultStages, builtFromStages } from './parks_data_caman.js?v=251';
-import { compassRoseSVG } from './compass.js?v=251';
-import { buildAvanceHUD } from './avance_hud.js?v=251';
-import { renderAvance } from './avance_dashboard.js?v=251';
+import { FleetView } from './fleet_view.js?v=252';
+import { DataSource } from './data_source.js?v=252';
+import { computeTwin } from './digital_twin.js?v=252';
+import { ParkManager, loadParksStore } from './parks.js?v=252';
+import { MapView } from './map_view.js?v=252';
+import { defaultStages, builtFromStages } from './parks_data_caman.js?v=252';
+import { compassRoseSVG } from './compass.js?v=252';
+import { buildAvanceHUD } from './avance_hud.js?v=252';
+import { renderAvance } from './avance_dashboard.js?v=252';
+import * as Insp from './inspection.js?v=252';
 
 const F1_BASE = { turbine: 0.283, hv: 1.6 };
-const REWIND_VER = 'v251';   // versión visible del build (subir junto al cache-bust)
+const REWIND_VER = 'v252';   // versión visible del build (subir junto al cache-bust)
 const FS = 62.5;   // frecuencia de muestreo de la señal (Hz), igual que shm_worker.js
 // Clasificador ML de daño (0..4)
 const CLS = ['Sin daño', 'Leve', 'Moderado', 'Alto', 'Muy alto'];
@@ -255,7 +256,7 @@ async function boot() {
   // ── Relieve conceptual del terreno (DEM vendorizado) — encendido por defecto ─
   setLoad(88, 'Cargando relieve…'); await delay(40);
   try {
-    await fleet.loadTerrain('data/caman_dem.json?v=251');
+    await fleet.loadTerrain('data/caman_dem.json?v=252');
     fleet.setTerrainVisible(true);
     document.getElementById('shm-relieve-tool')?.classList.add('active');
   } catch (e) { console.warn('[shm] relieve no disponible', e); }
@@ -766,6 +767,7 @@ function buildDashboard(panel, fleet, actions) {
   function showShadow() { setTopView('shadow'); }
 
   let list = [], current = null, pane = 'datos', sigBuf = {}, sigRAF = null, freqHist = {};
+  let inspSel = null;   // id de la inspección abierta en la pestaña Inspección
   let specOff = null, specLast = 0;                 // espectrograma (offscreen + scroll)
   const clsHist = {}, clsEvents = {}; let lastHistT = 0;   // histórico de clasificación ML
   const SPEC_W = 170, SPEC_BINS = 48, SPEC_FMAX = 6;
@@ -842,7 +844,7 @@ function buildDashboard(panel, fleet, actions) {
 
   function select(obj) {
     current = obj; highlight();
-    sigBuf = {}; freqHist = {}; specOff = null;
+    sigBuf = {}; freqHist = {}; specOff = null; inspSel = null;
     if (!obj) {
       stopSig();
       $('#shm-detail').innerHTML = '<div class="empty">Selecciona una estructura<br>(en la lista, el mapa o la vista 3D).</div>';
@@ -961,31 +963,169 @@ function buildDashboard(panel, fleet, actions) {
     updateDynamic(sum);
   }
 
-  // ── Pestaña Inspección: inspección periódica + histórico de EVALUACIÓN ────────
+  // ── Pestaña Inspección: micro-sistema de gestión (R-32) ──────────────────────
+  // Inspecciones por estructura con hallazgos catalogados → score determinista
+  // 0–100 (port de structapp-base), ensayos, documentos, histórico de evaluación
+  // e informe. La «evaluación de inspección» es distinta del estado por sensores (SHM).
+  const ihash = (s) => { let h = 0; for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) >>> 0; return h; };
+  function seedInspection(o) {
+    const h = ihash(o.id), fault = o.sensors.some(s => s.status === 'fault');
+    const insp = Insp.addInspection(o.id, {
+      inspector: ['J. Pérez', 'M. Soto', 'C. Vidal'][h % 3],
+      date: new Date(Date.now() - (18 + h % 140) * 864e5).toISOString().slice(0, 10),
+      location: 'Fuste / fundación', summary: 'Inspección visual de rutina (ejemplo).',
+    });
+    const nD = fault ? 2 : (h % 3 === 0 ? 1 : 0);
+    for (let k = 0; k < nD; k++) insp.damages.push({
+      id: Insp.uid(), location: ['Fundación', 'Fuste (medio)', 'Brida', 'Base'][(h + k) % 4],
+      damage_type: Insp.DAMAGE_TYPES[(h + k * 7) % Insp.DAMAGE_TYPES.length],
+      damage_cause: Insp.DAMAGE_CAUSES[(h + k * 5) % Insp.DAMAGE_CAUSES.length],
+      severity: Insp.SEVERITIES[fault ? (k === 0 ? 2 : 1) : (h % 2)],
+      extent: (5 + (h % 45)) + '%', comments: '',
+    });
+    insp.condition = Insp.conditionFromScore(Insp.inspectionScore(insp.damages));
+    Insp.updateInspection(o.id, insp);
+  }
+
+  // Mini-gráfico de evolución del score de inspección (histórico de evaluación).
+  function evalHistorySVG(hist) {
+    if (hist.length < 2) return '<div class="ins-mut">Una sola evaluación; el histórico aparece al registrar más inspecciones.</div>';
+    const W = 280, H = 70, ml = 22, mb = 14, mt = 6, pw = W - ml - 8, ph = H - mt - mb;
+    const X = (i) => ml + (i / (hist.length - 1)) * pw, Y = (v) => mt + (1 - v / 100) * ph;
+    const pts = hist.map((p, i) => `${X(i).toFixed(1)},${Y(p.score).toFixed(1)}`).join(' ');
+    const dots = hist.map((p, i) => `<circle cx="${X(i).toFixed(1)}" cy="${Y(p.score).toFixed(1)}" r="2.6" fill="${Insp.scoreBand(p.score).cls === 'critica' ? '#ef4444' : Insp.scoreBand(p.score).cls === 'observacion' ? '#f59e0b' : '#22c55e'}"/>`).join('');
+    const grid = [0, 50, 100].map(v => `<line x1="${ml}" y1="${Y(v)}" x2="${W - 8}" y2="${Y(v)}" stroke="var(--border,#28384a)" stroke-width="0.5"/><text x="${ml - 4}" y="${Y(v) + 3}" text-anchor="end" font-size="7" fill="var(--text-muted,#93a6b8)">${v}</text>`).join('');
+    return `<svg viewBox="0 0 ${W} ${H}" style="width:100%;height:auto;aspect-ratio:${W}/${H};display:block;background:var(--bg3);border:1px solid var(--border);border-radius:6px">
+      ${grid}<polyline points="${pts}" fill="none" stroke="var(--accent,#38bdf8)" stroke-width="2"/>${dots}</svg>`;
+  }
+
   function renderInsp() {
-    const o = current; if (!o) { const h = $('#shm-insp'); if (h) h.innerHTML = '<div class="empty">Selecciona una estructura.</div>'; return; }
-    const seed = o.id.split('').reduce((a, c) => a + c.charCodeAt(0), 0);
-    const days = 30 + (seed % 120);
-    const last = new Date(Date.now() - days * 864e5).toLocaleDateString('es-CL');
-    const next = new Date(Date.now() + (180 - days % 180) * 864e5).toLocaleDateString('es-CL');
-    const fault = o.sensors.some(s => s.status === 'fault');
-    $('#shm-insp').innerHTML = `
-      <div class="shm-body">
-        <div class="row"><span>Última inspección</span><b>${last}</b></div>
-        <div class="row"><span>Próxima inspección</span><b>${next}</b></div>
-        <div class="row"><span>Sensores instalados</span><b>${o.sensors.length}</b></div>
-        <div class="row"><span>Observación</span><b style="color:${fault ? 'var(--danger)' : 'var(--success)'}">${fault ? 'Revisar sensor en falla' : 'Sin novedades'}</b></div>
-        <div class="note">Inspección periódica (datos de muestra). Se integrará con el registro de mantenimiento.</div>
-        <div class="shm-sub2">Histórico de evaluación del estado estructural</div>
-        <div class="note" style="margin-top:0">Clasificación del estado en el tiempo (evaluación):</div>
-        <canvas class="sig" id="cls-band" style="height:34px"></canvas>
-        <div id="cls-legend" style="display:flex;gap:10px;flex-wrap:wrap;margin:6px 0 10px;font-size:10px;color:var(--text-muted)">
-          ${CLS.map((n, i) => `<span><span style="display:inline-block;width:9px;height:9px;border-radius:2px;background:${CLS_COL[i]};margin-right:4px"></span>${n}</span>`).join('')}
+    const host = $('#shm-insp'); const o = current;
+    if (!host) return;
+    if (!o) { host.innerHTML = '<div class="empty">Selecciona una estructura.</div>'; return; }
+    let inspections = Insp.getInspections(o.id);
+    if (!inspections.length) { seedInspection(o); inspections = Insp.getInspections(o.id); }
+    if (!inspSel || !inspections.some(i => i.id === inspSel)) inspSel = inspections[0].id;
+    const sel = inspections.find(i => i.id === inspSel);
+    const score = Insp.inspectionScore(sel.damages), band = Insp.scoreBand(score);
+    const latest = inspections[0], lscore = Insp.inspectionScore(latest.damages);
+    const hist = inspections.slice().sort((a, b) => (a.date || '').localeCompare(b.date || '')).map(i => ({ date: i.date, score: Insp.inspectionScore(i.damages) }));
+    const opt = (arr, v) => arr.map(x => `<option ${x === v ? 'selected' : ''}>${x}</option>`).join('');
+    const condOpt = Insp.CONDITIONS.map(c => `<option value="${c.key}" ${c.key === sel.condition ? 'selected' : ''}>${c.label}</option>`).join('');
+
+    const dmgRows = sel.damages.length ? sel.damages.map(d => {
+      const sc = Insp.scoreDamage(d), b = Insp.scoreBand(sc);
+      return `<div class="ins-dmg">
+        <span class="ins-dmg-sc ${b.cls}">${sc.toFixed(0)}</span>
+        <span class="ins-dmg-v"><b>${d.damage_type}</b><br><span class="ins-mut">${d.severity} · ${d.damage_cause}${d.extent ? ' · ' + d.extent : ''}${d.location ? ' · ' + d.location : ''}</span></span>
+        <button class="ins-x" data-del-dmg="${d.id}" title="Quitar hallazgo">✕</button></div>`;
+    }).join('') : '<div class="ins-mut">Sin hallazgos. Agrega uno abajo.</div>';
+
+    const listRows = inspections.map(i => {
+      const sc = Insp.inspectionScore(i.damages), b = Insp.scoreBand(sc);
+      return `<button class="ins-row ${i.id === inspSel ? 'active' : ''}" data-insp="${i.id}">
+        <span class="ins-dot ${Insp.conditionFromScore(sc)}"></span>
+        <span class="ins-row-d">${i.date}</span><span class="ins-row-i">${i.inspector}</span>
+        <span class="ins-row-s ${b.cls}">${sc.toFixed(0)}</span></button>`;
+    }).join('');
+
+    host.innerHTML = `
+      <div class="shm-body ins-body">
+        <div class="ins-head">Inspección · ${o.label}
+          <span class="ins-cond ${latest.condition}">${Insp.conditionLabel(latest.condition)}</span></div>
+        <div class="ins-kpis">
+          <div class="ins-kpi"><div class="k">Inspecciones</div><div class="v">${inspections.length}</div></div>
+          <div class="ins-kpi"><div class="k">Último score</div><div class="v ${Insp.scoreBand(lscore).cls}">${lscore.toFixed(0)}</div></div>
+          <div class="ins-kpi"><div class="k">Hallazgos</div><div class="v">${sel.damages.length}</div></div>
         </div>
-        <div class="note">Cambios de nivel:</div>
-        <div id="cls-events"></div>
+        <div class="shm-sub2">Histórico de evaluación del estado estructural</div>
+        ${evalHistorySVG(hist)}
+        <div class="ins-actrow"><button id="ins-new" class="ins-btn">＋ Nueva inspección</button></div>
+        <div class="shm-sub2">Inspecciones</div>
+        <div class="ins-list">${listRows}</div>
+        <div class="ins-card">
+          <div class="ins-card-h">${sel.date} · <b>${sel.inspector}</b>
+            <span class="ins-score ${band.cls}" title="Score determinista 0–100">${score.toFixed(0)} <small>${band.label}</small></span></div>
+          <div class="ins-meta">
+            <label>Fecha<input type="date" id="ins-date" value="${sel.date}"></label>
+            <label>Inspector<input type="text" id="ins-insp" value="${sel.inspector}"></label>
+            <label>Condición<select id="ins-cond">${condOpt}</select></label>
+            <label>Ubicación<input type="text" id="ins-loc" value="${sel.location || ''}"></label>
+          </div>
+          <label class="ins-sumlbl">Resumen<textarea id="ins-sum" rows="2">${sel.summary || ''}</textarea></label>
+
+          <div class="shm-sub2">Hallazgos (daños) · score auto</div>
+          <div class="ins-dmgs">${dmgRows}</div>
+          <div class="ins-addform">
+            <select id="nd-type">${opt(Insp.DAMAGE_TYPES, '')}</select>
+            <select id="nd-cause">${opt(Insp.DAMAGE_CAUSES, '')}</select>
+            <div class="ins-add3">
+              <select id="nd-sev">${opt(Insp.SEVERITIES, 'Media')}</select>
+              <input type="text" id="nd-ext" placeholder="extensión (%)" >
+              <input type="text" id="nd-loc" placeholder="ubicación">
+            </div>
+            <button id="nd-add" class="ins-btn">＋ Agregar hallazgo</button>
+          </div>
+
+          <div class="shm-sub2">Ensayos (NDT) · ${sel.tests.length}</div>
+          <div class="ins-mini">${sel.tests.map(t => `<div class="ins-li">🔬 <b>${t.test_type}</b> — ${t.result_summary || '—'} <button class="ins-x" data-del-test="${t.id}">✕</button></div>`).join('') || '<div class="ins-mut">Sin ensayos.</div>'}</div>
+          <button id="ins-addtest" class="ins-mini-btn">＋ Ensayo</button>
+
+          <div class="shm-sub2">Documentos · ${sel.documents.length}</div>
+          <div class="ins-mini">${sel.documents.map(dc => `<div class="ins-li">📎 <b>${dc.title}</b> <span class="ins-mut">(${dc.category})</span> <button class="ins-x" data-del-doc="${dc.id}">✕</button></div>`).join('') || '<div class="ins-mut">Sin documentos.</div>'}</div>
+          <button id="ins-adddoc" class="ins-mini-btn">＋ Documento</button>
+
+          <div class="ins-foot"><button id="ins-report" class="ins-btn">📄 Informe de inspección</button>
+            <button id="ins-del" class="ins-del">🗑 Eliminar</button></div>
+        </div>
+        <div class="note" style="font-size:10px">Score determinista (severidad·causa·tipo·extensión, 0–100) — método portado de structapp-base. Distinto del estado por sensores (pestaña SHM).</div>
       </div>`;
-    drawHist();
+
+    const save = (re = true) => { Insp.updateInspection(o.id, sel); if (re) renderInsp(); };
+    host.querySelectorAll('[data-insp]').forEach(b => b.addEventListener('click', () => { inspSel = b.dataset.insp; renderInsp(); }));
+    host.querySelector('#ins-new').addEventListener('click', () => { const ni = Insp.addInspection(o.id, { inspector: latest.inspector }); inspSel = ni.id; renderInsp(); });
+    host.querySelector('#ins-del').addEventListener('click', () => { if (confirm('¿Eliminar esta inspección?')) { Insp.removeInspection(o.id, sel.id); inspSel = null; renderInsp(); } });
+    host.querySelector('#ins-date').addEventListener('change', (e) => { sel.date = e.target.value; save(); });
+    host.querySelector('#ins-insp').addEventListener('change', (e) => { sel.inspector = e.target.value; save(false); });
+    host.querySelector('#ins-loc').addEventListener('change', (e) => { sel.location = e.target.value; save(false); });
+    host.querySelector('#ins-sum').addEventListener('change', (e) => { sel.summary = e.target.value; save(false); });
+    host.querySelector('#ins-cond').addEventListener('change', (e) => { sel.condition = e.target.value; save(); });
+    host.querySelectorAll('[data-del-dmg]').forEach(b => b.addEventListener('click', () => { sel.damages = sel.damages.filter(d => d.id !== b.dataset.delDmg); sel.condition = Insp.conditionFromScore(Insp.inspectionScore(sel.damages)); save(); }));
+    host.querySelector('#nd-add').addEventListener('click', () => {
+      sel.damages.push({ id: Insp.uid(), damage_type: $('#nd-type').value, damage_cause: $('#nd-cause').value, severity: $('#nd-sev').value, extent: $('#nd-ext').value.trim(), location: $('#nd-loc').value.trim(), comments: '' });
+      sel.condition = Insp.conditionFromScore(Insp.inspectionScore(sel.damages)); save();
+    });
+    host.querySelector('#ins-addtest').addEventListener('click', () => { const t = (prompt('Tipo de ensayo (p.ej. Esclerómetro, Ultrasonido, Par de apriete):', '') || '').trim(); if (!t) return; const r = (prompt('Resultado / resumen:', '') || '').trim(); sel.tests.push({ id: Insp.uid(), test_type: t, result_summary: r, executed_at: new Date().toISOString().slice(0, 10) }); save(); });
+    host.querySelector('#ins-adddoc').addEventListener('click', () => { const t = (prompt('Título del documento:', '') || '').trim(); if (!t) return; const c = (prompt('Categoría (informe/fotografía/ensayo/otro):', 'informe') || 'otro').trim(); sel.documents.push({ id: Insp.uid(), title: t, category: c, issued_at: new Date().toISOString().slice(0, 10) }); save(); });
+    host.querySelectorAll('[data-del-test]').forEach(b => b.addEventListener('click', () => { sel.tests = sel.tests.filter(t => t.id !== b.dataset.delTest); save(); }));
+    host.querySelectorAll('[data-del-doc]').forEach(b => b.addEventListener('click', () => { sel.documents = sel.documents.filter(d => d.id !== b.dataset.delDoc); save(); }));
+    host.querySelector('#ins-report').addEventListener('click', () => inspectionReport(o, sel, score));
+  }
+
+  // Informe de inspección imprimible.
+  function inspectionReport(o, insp, score) {
+    const band = Insp.scoreBand(score);
+    const rows = insp.damages.map(d => `<tr><td>${d.damage_type}</td><td>${d.severity}</td><td>${d.damage_cause}</td><td>${d.extent || '—'}</td><td>${d.location || '—'}</td><td style="text-align:right">${Insp.scoreDamage(d).toFixed(0)}</td></tr>`).join('') || '<tr><td colspan="6" style="color:#15803d">Sin hallazgos.</td></tr>';
+    const tests = insp.tests.map(t => `<tr><td>${t.test_type}</td><td>${t.result_summary || '—'}</td><td>${t.executed_at || '—'}</td></tr>`).join('') || '<tr><td colspan="3" style="color:#64748b">Sin ensayos.</td></tr>';
+    const html = `<!doctype html><html lang="es"><meta charset="utf-8"><title>Inspección — ${o.label}</title>
+      <style>body{font:14px/1.5 system-ui,sans-serif;margin:0;color:#1b2533}.wrap{max-width:820px;margin:0 auto;padding:0 32px 40px}
+      .hero{background:linear-gradient(120deg,#0e7490,#155e75);color:#fff;padding:24px 32px;margin-bottom:22px}.hero h1{margin:4px 0;font-size:21px}
+      h2{font-size:15px;border-bottom:2px solid #cbd5e1;padding-bottom:5px;margin:24px 0 10px}.mut{color:#64748b;font-size:12px}
+      table{border-collapse:collapse;width:100%;font-size:13px;margin-top:6px}th,td{border:1px solid #cbd5e1;padding:6px 9px;text-align:left}th{background:#f1f5f9}
+      .score{display:inline-block;font-size:30px;font-weight:800;padding:6px 16px;border-radius:10px;color:#fff;background:${band.cls === 'critica' ? '#dc2626' : band.cls === 'observacion' ? '#d97706' : '#16a34a'}}</style>
+      <div class="hero"><div class="mut" style="color:#cfe9f1;letter-spacing:2px;text-transform:uppercase">ReWind · Inspección estructural</div>
+        <h1>Informe de inspección — ${o.label}</h1><div style="opacity:.9;font-size:13px">${insp.date} · ${insp.inspector} · ${Insp.conditionLabel(insp.condition)}</div></div>
+      <div class="wrap">
+        <h2>Evaluación</h2>
+        <p><span class="score">${score.toFixed(0)}</span> <span class="mut">/100 · ${band.label} (severidad·causa·tipo·extensión, método determinista)</span></p>
+        <p>${insp.summary || '<span class="mut">Sin resumen.</span>'}</p>
+        <h2>Hallazgos (${insp.damages.length})</h2>
+        <table><thead><tr><th>Tipo</th><th>Gravedad</th><th>Causa</th><th>Extensión</th><th>Ubicación</th><th style="text-align:right">Score</th></tr></thead><tbody>${rows}</tbody></table>
+        <h2>Ensayos (${insp.tests.length})</h2>
+        <table><thead><tr><th>Ensayo</th><th>Resultado</th><th>Fecha</th></tr></thead><tbody>${tests}</tbody></table>
+        <p class="mut" style="margin-top:18px">Generado ${new Date().toLocaleString('es-CL')} · ReWind. La evaluación de inspección es independiente del estado en vivo por sensores (SHM).</p>
+      </div></html>`;
+    const w = window.open('', '_blank'); if (w) { w.document.write(html); w.document.close(); }
   }
 
   // Actualiza los números dinámicos del panel abierto (sólo toca lo que EXISTE en

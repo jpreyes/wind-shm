@@ -571,6 +571,53 @@ body.shm #shm-banner.show { display: flex; animation: shm-blink 0.8s steps(1) in
 /* Sub-título de sección dentro de Inspección/SHM */
 #shm-panel .shm-sub2 { font-size: 12px; font-weight: 700; color: var(--text-muted); border-top: 1px solid var(--border); padding-top: 9px; margin-top: 10px; }
 
+/* ── Inspección (micro-CMMS · R-32) ──────────────────────────────────────────── */
+#shm-insp .ins-body { display: flex; flex-direction: column; gap: 8px; }
+#shm-insp .ins-head { font-size: 13px; font-weight: 700; color: var(--text); display: flex; align-items: center; gap: 8px; }
+#shm-insp .ins-cond, .ins-score, .ins-row-s, .ins-dmg-sc { font-weight: 700; }
+#shm-insp .ins-cond { margin-left: auto; font-size: 11px; padding: 2px 9px; border-radius: 999px; }
+.ins-cond.operativa, .ins-dot.operativa { background: color-mix(in srgb, #22c55e 22%, var(--bg3)); color: var(--success, #22c55e); }
+.ins-cond.observacion, .ins-dot.observacion { background: color-mix(in srgb, #f59e0b 22%, var(--bg3)); color: #f59e0b; }
+.ins-cond.critica, .ins-dot.critica { background: color-mix(in srgb, #ef4444 22%, var(--bg3)); color: var(--danger, #ef4444); }
+#shm-insp .ins-kpis { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 6px; }
+#shm-insp .ins-kpi { background: var(--bg3); border: 1px solid var(--border); border-radius: var(--radius-sm, 6px); padding: 6px 8px; }
+#shm-insp .ins-kpi .k { font-size: 10px; color: var(--text-muted); text-transform: uppercase; letter-spacing: .3px; }
+#shm-insp .ins-kpi .v { font-size: 17px; font-weight: 700; color: var(--text); }
+.ins-kpi .v.operativa, .ins-score.operativa, .ins-row-s.operativa, .ins-dmg-sc.operativa { color: var(--success, #22c55e); }
+.ins-kpi .v.observacion, .ins-score.observacion, .ins-row-s.observacion, .ins-dmg-sc.observacion { color: #f59e0b; }
+.ins-kpi .v.critica, .ins-score.critica, .ins-row-s.critica, .ins-dmg-sc.critica { color: var(--danger, #ef4444); }
+#shm-insp .ins-mut { font-size: 11px; color: var(--text-muted); }
+#shm-insp .ins-actrow { display: flex; }
+#shm-insp .ins-btn { cursor: pointer; background: var(--bg4); color: var(--text); border: 1px solid var(--border2); border-radius: var(--radius-sm, 6px); padding: 6px 10px; font-family: inherit; font-size: 12px; font-weight: 600; }
+#shm-insp .ins-btn:hover { filter: brightness(1.15); border-color: var(--accent); }
+#shm-insp .ins-list { display: flex; flex-direction: column; gap: 3px; max-height: 130px; overflow-y: auto; }
+#shm-insp .ins-row { display: flex; align-items: center; gap: 8px; width: 100%; text-align: left; cursor: pointer; background: var(--bg3); border: 1px solid var(--border); border-radius: var(--radius-sm, 6px); padding: 5px 8px; font-family: inherit; font-size: 11.5px; color: var(--text); }
+#shm-insp .ins-row.active { border-color: var(--accent); }
+#shm-insp .ins-dot { width: 9px; height: 9px; border-radius: 50%; flex: 0 0 auto; }
+#shm-insp .ins-row-d { flex: 0 0 auto; } #shm-insp .ins-row-i { flex: 1; color: var(--text-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+#shm-insp .ins-card { background: var(--bg3); border: 1px solid var(--border2); border-radius: var(--radius-sm, 6px); padding: 10px; display: flex; flex-direction: column; gap: 6px; }
+#shm-insp .ins-card-h { display: flex; align-items: center; gap: 8px; font-size: 12.5px; }
+#shm-insp .ins-score { margin-left: auto; font-size: 18px; } #shm-insp .ins-score small { font-size: 10px; font-weight: 600; }
+#shm-insp .ins-meta { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+#shm-insp .ins-meta label, #shm-insp .ins-sumlbl { display: flex; flex-direction: column; gap: 2px; font-size: 10.5px; color: var(--text-muted); }
+#shm-insp .ins-meta input, #shm-insp .ins-meta select, #shm-insp .ins-sumlbl textarea, #shm-insp .ins-addform select, #shm-insp .ins-addform input {
+  background: var(--bg4); color: var(--text); border: 1px solid var(--border2); border-radius: 5px; padding: 4px 6px; font-family: inherit; font-size: 12px; width: 100%; }
+#shm-insp .ins-dmgs { display: flex; flex-direction: column; gap: 5px; }
+#shm-insp .ins-dmg { display: flex; align-items: center; gap: 8px; background: var(--bg4); border-radius: 5px; padding: 5px 7px; font-size: 11.5px; }
+#shm-insp .ins-dmg-sc { flex: 0 0 28px; text-align: center; font-size: 14px; }
+#shm-insp .ins-dmg-v { flex: 1; line-height: 1.3; }
+#shm-insp .ins-x { background: none; border: 0; color: var(--text-muted); cursor: pointer; font-size: 13px; padding: 2px 4px; border-radius: 4px; flex: 0 0 auto; }
+#shm-insp .ins-x:hover { color: var(--danger, #ef4444); }
+#shm-insp .ins-addform { display: flex; flex-direction: column; gap: 5px; background: var(--bg4); border: 1px dashed var(--border2); border-radius: 6px; padding: 7px; }
+#shm-insp .ins-add3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 5px; }
+#shm-insp .ins-mini { display: flex; flex-direction: column; gap: 3px; }
+#shm-insp .ins-li { display: flex; align-items: center; gap: 6px; font-size: 11.5px; color: var(--text); }
+#shm-insp .ins-li .ins-x { margin-left: auto; }
+#shm-insp .ins-mini-btn { align-self: flex-start; cursor: pointer; background: none; color: var(--accent); border: 0; font-family: inherit; font-size: 11px; font-weight: 600; padding: 2px 0; }
+#shm-insp .ins-foot { display: flex; gap: 8px; margin-top: 4px; }
+#shm-insp .ins-del { cursor: pointer; background: none; color: var(--text-muted); border: 1px solid var(--border2); border-radius: var(--radius-sm, 6px); padding: 6px 10px; font-family: inherit; font-size: 12px; }
+#shm-insp .ins-del:hover { color: var(--danger, #ef4444); border-color: var(--danger, #ef4444); }
+
 /* ── Pestaña «Shadow flicker» del panel derecho (análisis de sombras) ───────── */
 .shm-shadow { flex: 1; min-height: 0; overflow-y: auto; padding: 12px; display: flex; flex-direction: column; gap: 10px; }
 .shm-shadow .ssh-off { color: var(--text-muted); font-size: 13px; line-height: 1.6; padding: 14px 4px; }
