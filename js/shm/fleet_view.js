@@ -7,11 +7,11 @@
 // ─────────────────────────────────────────────────────────────────────────────
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
-import { createTurbine, TOWER_H } from './turbine_mesh.js?v=253';
-import { createSubstationTower, groundCable, overheadLine } from './structures.js?v=253';
-import { toScene, CAMAN_CENTER, LAYOUT_SCALE } from './parks_data_caman.js?v=253';
-import { CAMAN_ROADS } from './caman_roads.js?v=253';
-import { solarPosition, dateFromLocal, sunSceneDir } from './solar.js?v=253';
+import { createTurbine, TOWER_H } from './turbine_mesh.js?v=254';
+import { createSubstationTower, groundCable, overheadLine } from './structures.js?v=254';
+import { toScene, CAMAN_CENTER, LAYOUT_SCALE } from './parks_data_caman.js?v=254';
+import { CAMAN_ROADS } from './caman_roads.js?v=254';
+import { solarPosition, dateFromLocal, sunSceneDir } from './solar.js?v=254';
 
 const SPACING = 235;
 const TOWER_SCALE = 2.2;   // agranda las torres (vista esquemática) para que destaquen sobre el relieve
@@ -269,7 +269,7 @@ export class FleetView {
   // ── Relieve conceptual (capa de terreno) ─────────────────────────────────────
   // Carga el DEM vendorizado y añade la malla (oculta hasta activarla).
   async loadTerrain(url) {
-    const { Terrain } = await import('./terrain.js?v=253');
+    const { Terrain } = await import('./terrain.js?v=254');
     this._TerrainClass = Terrain;                     // para reconstruir al cambiar de escala
     const dem = await (await fetch(url)).json();
     this.terrain = new Terrain(dem, { vex: 1.5 });   // relieve exagerado (esquemático)

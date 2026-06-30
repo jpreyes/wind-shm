@@ -571,6 +571,22 @@ body.shm #shm-banner.show { display: flex; animation: shm-blink 0.8s steps(1) in
 /* Sub-título de sección dentro de Inspección/SHM */
 #shm-panel .shm-sub2 { font-size: 12px; font-weight: 700; color: var(--text-muted); border-top: 1px solid var(--border); padding-top: 9px; margin-top: 10px; }
 
+/* ── Rollup de vencimientos de inspección (pestaña Parque) ───────────────────── */
+.shm-venc { margin: 8px 0; }
+.shm-venc .venc-h { font-size: 12px; font-weight: 700; color: var(--text); display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; margin-bottom: 6px; }
+.shm-venc .venc-sum { font-size: 10.5px; font-weight: 400; color: var(--text-muted); }
+.shm-venc .venc-ok { font-size: 11.5px; color: var(--success, #22c55e); }
+.shm-venc .venc-list { display: flex; flex-direction: column; gap: 3px; }
+.shm-venc .venc-row { display: flex; align-items: center; gap: 8px; width: 100%; text-align: left; cursor: pointer; background: var(--bg3); border: 1px solid var(--border); border-radius: var(--radius-sm, 6px); padding: 5px 8px; font-family: inherit; font-size: 11.5px; color: var(--text); }
+.shm-venc .venc-row:hover { border-color: var(--accent); }
+.shm-venc .venc-dot { width: 9px; height: 9px; border-radius: 50%; flex: 0 0 auto; }
+.shm-venc .venc-dot.bad { background: var(--danger, #ef4444); } .shm-venc .venc-dot.warn { background: #f59e0b; } .shm-venc .venc-dot.ok { background: var(--success, #22c55e); }
+.shm-venc .venc-nm { flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.shm-venc .venc-badges { display: flex; gap: 4px; flex: 0 0 auto; }
+.shm-venc .venc-badges .b { font-size: 9.5px; font-weight: 700; padding: 1px 6px; border-radius: 999px; background: var(--bg4); color: var(--text-muted); border: 1px solid var(--border2); }
+.shm-venc .venc-badges .b.warn { background: color-mix(in srgb, #f59e0b 20%, var(--bg3)); color: #f59e0b; }
+.shm-venc .venc-badges .b.bad { background: color-mix(in srgb, #ef4444 20%, var(--bg3)); color: var(--danger, #ef4444); }
+
 /* ── Inspección (micro-CMMS · R-32) ──────────────────────────────────────────── */
 #shm-insp .ins-body { display: flex; flex-direction: column; gap: 8px; }
 #shm-insp .ins-head { font-size: 13px; font-weight: 700; color: var(--text); display: flex; align-items: center; gap: 8px; }

@@ -8,19 +8,19 @@
 //   inspecciones y señal temporal EN VIVO desde un Web Worker (DataSource).
 // Recortes (modelado) los hace shm.css ocultando, no borrando.
 // ─────────────────────────────────────────────────────────────────────────────
-import { FleetView } from './fleet_view.js?v=253';
-import { DataSource } from './data_source.js?v=253';
-import { computeTwin } from './digital_twin.js?v=253';
-import { ParkManager, loadParksStore } from './parks.js?v=253';
-import { MapView } from './map_view.js?v=253';
-import { defaultStages, builtFromStages } from './parks_data_caman.js?v=253';
-import { compassRoseSVG } from './compass.js?v=253';
-import { buildAvanceHUD } from './avance_hud.js?v=253';
-import { renderAvance } from './avance_dashboard.js?v=253';
-import * as Insp from './inspection.js?v=253';
+import { FleetView } from './fleet_view.js?v=254';
+import { DataSource } from './data_source.js?v=254';
+import { computeTwin } from './digital_twin.js?v=254';
+import { ParkManager, loadParksStore } from './parks.js?v=254';
+import { MapView } from './map_view.js?v=254';
+import { defaultStages, builtFromStages } from './parks_data_caman.js?v=254';
+import { compassRoseSVG } from './compass.js?v=254';
+import { buildAvanceHUD } from './avance_hud.js?v=254';
+import { renderAvance } from './avance_dashboard.js?v=254';
+import * as Insp from './inspection.js?v=254';
 
 const F1_BASE = { turbine: 0.283, hv: 1.6 };
-const REWIND_VER = 'v253';   // versión visible del build (subir junto al cache-bust)
+const REWIND_VER = 'v254';   // versión visible del build (subir junto al cache-bust)
 const FS = 62.5;   // frecuencia de muestreo de la señal (Hz), igual que shm_worker.js
 // Clasificador ML de daño (0..4)
 const CLS = ['Sin daño', 'Leve', 'Moderado', 'Alto', 'Muy alto'];
@@ -256,7 +256,7 @@ async function boot() {
   // ── Relieve conceptual del terreno (DEM vendorizado) — encendido por defecto ─
   setLoad(88, 'Cargando relieve…'); await delay(40);
   try {
-    await fleet.loadTerrain('data/caman_dem.json?v=253');
+    await fleet.loadTerrain('data/caman_dem.json?v=254');
     fleet.setTerrainVisible(true);
     document.getElementById('shm-relieve-tool')?.classList.add('active');
   } catch (e) { console.warn('[shm] relieve no disponible', e); }
@@ -653,6 +653,7 @@ function buildDashboard(panel, fleet, actions) {
         <div class="shm-stat"><div class="k">Alarmas</div><div class="v" style="color:var(--danger)" id="shm-alarm-count">0</div></div>
       </div>
       <div class="shm-parkprog" id="shm-parkprog"></div>
+      <div class="shm-venc" id="shm-venc"></div>
       <div class="shm-listwrap">
         <div class="shm-list-h">Estructuras del parque</div>
         <div class="shm-list" id="shm-list"></div>
@@ -684,6 +685,7 @@ function buildDashboard(panel, fleet, actions) {
     }
     if (v === 'insp') renderInsp();
     if (v === 'shm') renderSHM();
+    if (v === 'parque') updateRollup();
   }
   el.querySelectorAll('.shm-toptab').forEach(t => t.addEventListener('click', () => setTopView(t.dataset.v)));
 
@@ -801,6 +803,7 @@ function buildDashboard(panel, fleet, actions) {
     }
     highlight();
     updateParkProgress();
+    updateRollup();
   }
   function highlight() {
     el.querySelectorAll('.shm-row').forEach(r => r.classList.toggle('active', current && r.dataset.id === current.id));
@@ -816,6 +819,34 @@ function buildDashboard(panel, fleet, actions) {
       <div class="pp-bar"><i style="width:${avg}%"></i></div>
       <div class="pp-sub">${done} completas · ${bs.length - done - found} en montaje · ${found} solo fundación</div>`;
   }
+  // Rollup de vencimientos de inspección a nivel PARQUE (bandeja en la pestaña Parque).
+  function updateRollup() {
+    const box = $('#shm-venc'); if (!box) return;
+    let vOverdue = 0, vSoon = 0, woOpen = 0, woOverdue = 0;
+    const items = [];
+    for (const st of fleet.structures) {
+      const insps = Insp.getInspections(st.id); if (!insps.length) continue;
+      const latest = insps[0], due = Insp.dueState(latest.nextDate);
+      let open = 0, odue = 0;
+      for (const ins of insps) for (const w of (ins.workOrders || [])) if (w.status !== 'cerrado') { open++; if (Insp.dueState(w.due).overdue) odue++; }
+      if (due.overdue) vOverdue++; else if (due.soon) vSoon++;
+      woOpen += open; woOverdue += odue;
+      if (due.overdue || due.soon || open) items.push({ id: st.id, label: st.label, due, open, odue });
+    }
+    if (!items.length) { box.innerHTML = `<div class="venc-h">Vencimientos de inspección</div><div class="venc-ok">✓ Sin vencimientos ni órdenes abiertas.</div>`; return; }
+    items.sort((a, b) => (b.due.overdue - a.due.overdue) || (b.odue - a.odue) || (b.open - a.open));
+    const rows = items.slice(0, 8).map(it => `
+      <button class="venc-row" data-venc="${it.id}">
+        <span class="venc-dot ${it.due.overdue ? 'bad' : it.due.soon ? 'warn' : 'ok'}"></span>
+        <span class="venc-nm">${it.label}</span>
+        <span class="venc-badges">${it.due.overdue ? '<i class="b bad">vencida</i>' : it.due.soon ? '<i class="b warn">por vencer</i>' : ''}${it.open ? `<i class="b ${it.odue ? 'bad' : ''}">${it.open} OT${it.odue ? ` · ${it.odue}⚠` : ''}</i>` : ''}</span>
+      </button>`).join('');
+    box.innerHTML = `
+      <div class="venc-h">Vencimientos de inspección <span class="venc-sum">${vOverdue} vencida(s) · ${vSoon} por vencer · ${woOpen} OT (${woOverdue}⚠)</span></div>
+      <div class="venc-list">${rows}</div>`;
+    box.querySelectorAll('[data-venc]').forEach(b => b.addEventListener('click', () => { fleet.selectById(b.dataset.venc); window.shmDash?.showInsp?.(); }));
+  }
+
   function setAlarms(ids) {
     const set = new Set(ids);
     el.querySelectorAll('.shm-row').forEach(r => r.classList.toggle('alarm', set.has(r.dataset.id)));
@@ -1104,7 +1135,7 @@ function buildDashboard(panel, fleet, actions) {
         <div class="note" style="font-size:10px">Score determinista (severidad·causa·tipo·extensión, 0–100) — método portado de structapp-base. Distinto del estado por sensores (pestaña SHM).</div>
       </div>`;
 
-    const save = (re = true) => { Insp.updateInspection(o.id, sel); if (re) renderInsp(); };
+    const save = (re = true) => { Insp.updateInspection(o.id, sel); updateRollup(); if (re) renderInsp(); };
     host.querySelectorAll('[data-insp]').forEach(b => b.addEventListener('click', () => { inspSel = b.dataset.insp; renderInsp(); }));
     host.querySelector('#ins-new').addEventListener('click', () => { const ni = Insp.addInspection(o.id, { inspector: latest.inspector }); inspSel = ni.id; renderInsp(); });
     host.querySelector('#ins-del').addEventListener('click', () => { if (confirm('¿Eliminar esta inspección?')) { Insp.removeInspection(o.id, sel.id); inspSel = null; renderInsp(); } });
@@ -1750,7 +1781,7 @@ ${detalle}${compilado}
     const v = el.querySelector('.shm-toptab.active')?.dataset.v;
     if (v === 'shm') renderSHM(); else if (v === 'insp') renderInsp(); else if (v === 'obra') showObra();
   }
-  return { setStructures, select, onTick, setAlarms, showShadow, showObra, refreshShadow: renderShadow, refresh };
+  return { setStructures, select, onTick, setAlarms, showShadow, showObra, showInsp: () => setTopView('insp'), refreshShadow: renderShadow, refresh };
 }
 
 function startBoot() { boot().catch(e => { console.error('[shm] boot', e); window.__rewindCloseLanding?.(); }); }
