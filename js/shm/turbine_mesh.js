@@ -9,7 +9,7 @@
 // migraremos a InstancedMesh + atenuación por shader (ver docs/wind-shm-issues.md).
 // ─────────────────────────────────────────────────────────────────────────────
 import * as THREE from 'three';
-import { circularFoundation } from './structures.js?v=248';
+import { circularFoundation } from './structures.js?v=249';
 
 export const TOWER_H = 90;          // altura de buje (m), coherente con el macromodelo
 
@@ -158,5 +158,8 @@ export function createTurbine(o = {}) {
            group, top, rotor, sensors, gateway, bodyMats, dimMats: bodyMats, spin, yaw, operational: true,
            // Avance 4D: SOLO el fuste se «llena» (corte por debajo); la cabeza (góndola+rotor)
            // se muestra sólida y girando al estar operativa, o como silueta fantasma si no.
-           solidMats: [mTower], _ghostHead: topGhost, ghost: { meshes: [ghostMast], mats: [ghostMat] } };
+           solidMats: [mTower], _ghostHead: topGhost, ghost: { meshes: [ghostMast], mats: [ghostMat] },
+           // Avance 4D POR COMPONENTE (Frente 1): refs a cada parte para mostrarla/llenarla
+           // según el % de su partida (índices de stages: 1=fuste, 2=góndola, 3=rotor).
+           c4d: { mast, ghostMast, nacelle: [nacelle, neck], nacelleGhost: gNac, rotorSolid: rotor, rotorGhost: gRotor } };
 }

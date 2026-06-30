@@ -7,11 +7,11 @@
 // ─────────────────────────────────────────────────────────────────────────────
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
-import { createTurbine, TOWER_H } from './turbine_mesh.js?v=248';
-import { createSubstationTower, groundCable, overheadLine } from './structures.js?v=248';
-import { toScene, CAMAN_CENTER, LAYOUT_SCALE } from './parks_data_caman.js?v=248';
-import { CAMAN_ROADS } from './caman_roads.js?v=248';
-import { solarPosition, dateFromLocal, sunSceneDir } from './solar.js?v=248';
+import { createTurbine, TOWER_H } from './turbine_mesh.js?v=249';
+import { createSubstationTower, groundCable, overheadLine } from './structures.js?v=249';
+import { toScene, CAMAN_CENTER, LAYOUT_SCALE } from './parks_data_caman.js?v=249';
+import { CAMAN_ROADS } from './caman_roads.js?v=249';
+import { solarPosition, dateFromLocal, sunSceneDir } from './solar.js?v=249';
 
 const SPACING = 235;
 const TOWER_SCALE = 2.2;   // agranda las torres (vista esquemática) para que destaquen sobre el relieve
@@ -269,7 +269,7 @@ export class FleetView {
   // ── Relieve conceptual (capa de terreno) ─────────────────────────────────────
   // Carga el DEM vendorizado y añade la malla (oculta hasta activarla).
   async loadTerrain(url) {
-    const { Terrain } = await import('./terrain.js?v=248');
+    const { Terrain } = await import('./terrain.js?v=249');
     this._TerrainClass = Terrain;                     // para reconstruir al cambiar de escala
     const dem = await (await fetch(url)).json();
     this.terrain = new Terrain(dem, { vex: 1.5 });   // relieve exagerado (esquemático)
@@ -529,6 +529,8 @@ export class FleetView {
     const st = this.getStructure(structId); if (!st) return;
     built = Math.max(0, Math.min(1, built ?? st.built ?? 1));
     st.built = built;
+    // Turbinas con partidas por componente → llenado 4D por componente (Frente 1).
+    if (st.type === 'turbine' && st.c4d && st.stages && st.stages.length >= 4) { this._setTurbineProgress4D(st); return; }
     // «Operativa»: turbina con rotor instalado (gira); torre AT cuando está completa.
     const op = st.type === 'turbine' ? built >= 0.97 : built >= 0.999;
     st.operational = st.type === 'turbine' ? op : false;
@@ -547,6 +549,33 @@ export class FleetView {
     for (const s of st.sensors) if (s._hfrac != null) s.mesh.visible = built >= s._hfrac;
   }
 
+  // Avance 4D POR COMPONENTE (Frente 1): el fuste se «llena» según su partida; la
+  // góndola y el rotor aparecen sólidos cuando su partida se completa (si no, silueta
+  // fantasma). Coherente con las callouts del HUD y el dashboard de obra.
+  _setTurbineProgress4D(st) {
+    const c = st.c4d, sts = st.stages;
+    const fr = (i) => Math.max(0, Math.min(1, (sts[i]?.pct ?? 0) / 100));
+    const fuste = fr(1), gondola = fr(2), rotor = fr(3);
+    const nacSolid = gondola >= 0.999 && fuste >= 0.999;
+    const rotSolid = rotor >= 0.999 && fuste >= 0.999;
+    st.operational = nacSolid && rotSolid;
+    if (!this.constructionMode) return;
+    const h = (st.height || TOWER_H) * (st.group.scale.y || 1);
+    const yCut = st.group.position.y + fuste * h;
+    (st._planeBelow ||= new THREE.Plane()).setComponents(0, -1, 0, yCut);   // conserva lo erigido (y ≤ yCut)
+    (st._planeAbove ||= new THREE.Plane()).setComponents(0, 1, 0, -yCut);   // conserva lo que falta (y ≥ yCut)
+    c.mast.material.clippingPlanes = [st._planeBelow]; c.mast.material.clipShadows = true;
+    c.ghostMast.material.clippingPlanes = [st._planeAbove];                 // material fantasma compartido
+    c.ghostMast.visible = fuste < 0.999;
+    if (st.top) st.top.visible = true;                                      // contenedor sólido; controlamos hijos
+    c.nacelle.forEach(m => m.visible = nacSolid);
+    c.rotorSolid.visible = rotSolid;
+    if (st._ghostHead) st._ghostHead.visible = true;                        // contenedor fantasma; controlamos hijos
+    c.nacelleGhost.visible = !nacSolid;
+    c.rotorGhost.visible = !rotSolid;
+    for (const s of st.sensors) if (s._hfrac != null) s.mesh.visible = fuste >= s._hfrac;
+  }
+
   // Activa/desactiva el modo construcción (4D). Apagado → torres completas y operativas.
   setConstructionMode(on) {
     this.constructionMode = !!on;
@@ -557,6 +586,8 @@ export class FleetView {
       for (const gm of (st.ghost?.meshes || [])) gm.visible = false;
       if (st._ghostHead) st._ghostHead.visible = false;
       if (st.top) st.top.visible = true;
+      // Restaura las partes sólidas por componente (estaban ocultas si su partida no estaba completa).
+      if (st.c4d) { st.c4d.nacelle.forEach(m => m.visible = true); st.c4d.rotorSolid.visible = true; st.c4d.nacelleGhost.visible = false; st.c4d.rotorGhost.visible = false; }
       if (st.type === 'turbine') st.operational = true;
       for (const s of st.sensors) s.mesh.visible = true;
     }

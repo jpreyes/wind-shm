@@ -6,12 +6,12 @@
 // Click en un marcador → conmuta a la vista 3D enfocando esa estructura (onPick).
 // Leaflet se carga como global (window.L) desde lib/leaflet/leaflet.js.
 // ─────────────────────────────────────────────────────────────────────────────
-import { CAMAN_CENTER } from './parks_data_caman.js?v=248';
-import { CAMAN_ROADS } from './caman_roads.js?v=248';
-import { compassRoseSVG } from './compass.js?v=248';
-import { annualFlicker, flickerOK, FLICKER_LIMITS, REAL_CASE_FACTOR, flickerMap, criticalWindow, interTurbineShading } from './shadow_flicker.js?v=248';
-import { realCaseWeight, METEO_CAMAN } from './meteo_caman.js?v=248';
-import { parseReceptorFile } from './receptor_import.js?v=248';
+import { CAMAN_CENTER } from './parks_data_caman.js?v=249';
+import { CAMAN_ROADS } from './caman_roads.js?v=249';
+import { compassRoseSVG } from './compass.js?v=249';
+import { annualFlicker, flickerOK, FLICKER_LIMITS, REAL_CASE_FACTOR, flickerMap, criticalWindow, interTurbineShading } from './shadow_flicker.js?v=249';
+import { realCaseWeight, METEO_CAMAN } from './meteo_caman.js?v=249';
+import { parseReceptorFile } from './receptor_import.js?v=249';
 
 const REAL_W = (month, antiAz) => realCaseWeight(month, antiAz, METEO_CAMAN);   // ponderador meteo del sitio
 

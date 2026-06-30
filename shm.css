@@ -531,7 +531,7 @@ body.shm #shm-banner.show { display: flex; animation: shm-blink 0.8s steps(1) in
 .shm-avance .av-kpi .v { font-size: 17px; font-weight: 700; color: var(--text); }
 .shm-avance .av-kpi .v.late { color: var(--danger, #ef4444); }
 .shm-avance .av-sub { font-size: 12px; font-weight: 700; color: var(--text-muted); border-top: 1px solid var(--border); padding-top: 9px; }
-.shm-avance .av-curve { width: 100%; height: auto; background: var(--bg3); border: 1px solid var(--border); border-radius: var(--radius-sm, 6px); }
+.shm-avance .av-curve { display: block; width: 100%; height: auto; aspect-ratio: 300 / 150; min-height: 150px; background: var(--bg3); border: 1px solid var(--border); border-radius: var(--radius-sm, 6px); }
 .shm-avance .av-leg { display: flex; gap: 14px; font-size: 11px; color: var(--text-muted); }
 .shm-avance .av-leg span { display: flex; align-items: center; gap: 5px; }
 .shm-avance .av-leg i { width: 16px; height: 0; display: inline-block; }

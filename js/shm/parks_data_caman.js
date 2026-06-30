@@ -97,8 +97,12 @@ const isoDaysAgo = (d) => new Date(Date.now() - d * 864e5).toISOString().slice(0
 // Lista de etapas por defecto; cada una con su % de avance (0–100) según `built`.
 export function defaultStages(type, built = 0) {
   const names = STAGE_NAMES[type] || STAGE_NAMES.turbine;
-  const done = Math.round((built || 0) * names.length);
-  return names.map((name, i) => ({ name, pct: i < done ? 100 : 0, date: i < done ? isoDaysAgo(15 + (names.length - i) * 9) : '' }));
+  const exact = (built || 0) * names.length, done = Math.floor(exact), frac = exact - done;
+  return names.map((name, i) => ({
+    name,
+    pct: i < done ? 100 : (i === done ? Math.round(frac * 100) : 0),   // la partida en curso lleva % parcial (llenado 4D gradual)
+    date: i < done ? isoDaysAgo(15 + (names.length - i) * 9) : '',
+  }));
 }
 // Avance (0..1) = promedio del % de las etapas (admite etapas parciales).
 export const builtFromStages = (stages) => (stages && stages.length)
