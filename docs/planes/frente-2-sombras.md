@@ -59,11 +59,16 @@ Mitigación: módulos de parada (shutdown). Open-source emergente: WIMBY SF.
    rotor si está montado), **físicamente 1:1** (metros reales). En modo Sol **oculta los divIcons**
    y **atenúa el basemap** (filtro CSS `.mv-sun .leaflet-tile-pane`); sombra en **índigo `#1b2e6b`**
    (igual que en 3D). Se sincroniza con el control de Sol (hora/fecha/animación) vía `window.shmMap`.
-4. **Worst-case cuantitativo** — proyección del disco del rotor a puntos receptores →
-   horas/año, min/día; **ráster de flicker** sobre el terreno.
-4. **Real-case estadístico** — % de sol + rosa de vientos + horas de operación.
-5. **Reporte de cumplimiento** (30 h / 30 min) + mitigación (calendario de parada).
-6. **(Difer.)** sombreado inter-turbina con estimación de pérdida energética.
+4. ✅ **Worst-case cuantitativo** (v227) — `js/shm/shadow_flicker.js`: `annualFlicker(turbines,
+   receptor)` integra el año minuto a minuto (worst-case LAI: sol siempre despejado, rotor siempre
+   girando) → **horas/año, máx min/día, días afectados** por receptor, considerando todas las
+   turbinas operativas en alcance. Verificado en Node (`node js/shm/shadow_flicker.js`: cercano en
+   la franja recibe flicker, lejos = 0). UI: en modo Sol, **clic en el mapa 2D coloca un receptor**
+   (vivienda) y muestra su flicker + **cumplimiento ≤30 h/año y ≤30 min/día** (verde ✓ / rojo ✗),
+   con opción de quitar. *(Pendientes opcionales abajo.)*
+5. ⬜ **Real-case estadístico** — % de sol + rosa de vientos + horas de operación.
+6. ⬜ **Reporte/mitigación** — exportar informe de cumplimiento + calendario de parada; ráster de flicker.
+7. ⬜ **(Difer.)** sombreado inter-turbina con estimación de pérdida energética.
 
 ## Dependencias
 - Receptores (viviendas) como capa de datos del parque.

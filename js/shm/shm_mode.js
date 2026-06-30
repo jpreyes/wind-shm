@@ -8,16 +8,16 @@
 //   inspecciones y señal temporal EN VIVO desde un Web Worker (DataSource).
 // Recortes (modelado) los hace shm.css ocultando, no borrando.
 // ─────────────────────────────────────────────────────────────────────────────
-import { FleetView } from './fleet_view.js?v=226';
-import { DataSource } from './data_source.js?v=226';
-import { computeTwin } from './digital_twin.js?v=226';
-import { ParkManager, loadParksStore } from './parks.js?v=226';
-import { MapView } from './map_view.js?v=226';
-import { defaultStages, builtFromStages } from './parks_data_caman.js?v=226';
-import { compassRoseSVG } from './compass.js?v=226';
+import { FleetView } from './fleet_view.js?v=227';
+import { DataSource } from './data_source.js?v=227';
+import { computeTwin } from './digital_twin.js?v=227';
+import { ParkManager, loadParksStore } from './parks.js?v=227';
+import { MapView } from './map_view.js?v=227';
+import { defaultStages, builtFromStages } from './parks_data_caman.js?v=227';
+import { compassRoseSVG } from './compass.js?v=227';
 
 const F1_BASE = { turbine: 0.283, hv: 1.6 };
-const REWIND_VER = 'v226';   // versión visible del build (subir junto al cache-bust)
+const REWIND_VER = 'v227';   // versión visible del build (subir junto al cache-bust)
 const FS = 62.5;   // frecuencia de muestreo de la señal (Hz), igual que shm_worker.js
 // Clasificador ML de daño (0..4)
 const CLS = ['Sin daño', 'Leve', 'Moderado', 'Alto', 'Muy alto'];
@@ -201,7 +201,7 @@ async function boot() {
   // ── Relieve conceptual del terreno (DEM vendorizado) — encendido por defecto ─
   setLoad(88, 'Cargando relieve…'); await delay(40);
   try {
-    await fleet.loadTerrain('data/caman_dem.json?v=226');
+    await fleet.loadTerrain('data/caman_dem.json?v=227');
     fleet.setTerrainVisible(true);
     document.getElementById('shm-relieve-tool')?.classList.add('active');
   } catch (e) { console.warn('[shm] relieve no disponible', e); }

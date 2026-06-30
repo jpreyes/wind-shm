@@ -6,9 +6,10 @@
 // Click en un marcador → conmuta a la vista 3D enfocando esa estructura (onPick).
 // Leaflet se carga como global (window.L) desde lib/leaflet/leaflet.js.
 // ─────────────────────────────────────────────────────────────────────────────
-import { CAMAN_CENTER } from './parks_data_caman.js?v=226';
-import { CAMAN_ROADS } from './caman_roads.js?v=226';
-import { compassRoseSVG } from './compass.js?v=226';
+import { CAMAN_CENTER } from './parks_data_caman.js?v=227';
+import { CAMAN_ROADS } from './caman_roads.js?v=227';
+import { compassRoseSVG } from './compass.js?v=227';
+import { annualFlicker, flickerOK, FLICKER_LIMITS } from './shadow_flicker.js?v=227';
 
 // Color del marcador según el avance de obra (coherente con el 4D / panel).
 function colorFor(st) {
@@ -85,7 +86,31 @@ export class MapView {
       L.polyline(seg.map(([lo, la]) => [la, lo]), { color: '#6b5836', weight: 5, opacity: 0.35 }).addTo(this.roadsLayer).bringToBack();
     }
     this.markersLayer = L.layerGroup().addTo(this.map);
+    this.recepLayer = L.layerGroup().addTo(this.map);          // receptores del estudio de sombra
+    // En modo Sol, clic en el mapa coloca un receptor (vivienda) y calcula su flicker.
+    this.map.on('click', (e) => { if (this.sunMode) this.addReceptor(e.latlng); });
   }
+
+  // Agrega un receptor (vivienda) y calcula su parpadeo de sombra anual worst-case.
+  addReceptor(latlng) {
+    const L = window.L; if (!L) return;
+    const res = annualFlicker(this.fleet.structures, { lat: latlng.lat, lon: latlng.lng }, { stepMin: 2 });
+    const ok = flickerOK(res);
+    const col = ok ? '#22c55e' : '#ef4444';
+    const icon = L.divIcon({ className: 'rcp-icon', iconSize: [22, 22], iconAnchor: [11, 11],
+      html: `<svg width="22" height="22" viewBox="0 0 22 22"><circle cx="11" cy="11" r="9" fill="${col}" stroke="#0b1018" stroke-width="1.5"/><path d="M6 11 L11 6.5 L16 11 M7.5 10 V16 H14.5 V10" fill="none" stroke="#0b1018" stroke-width="1.4" stroke-linejoin="round"/></svg>` });
+    const m = L.marker(latlng, { icon }).addTo(this.recepLayer);
+    m.bindPopup(
+      `<b>Receptor</b><br>${res.hoursYear.toFixed(1)} h/año · ${res.maxMinDay} min/día<br>` +
+      `${res.daysAffected} días afectados<br>` +
+      `<span style="color:${col}">${ok ? '✓ Cumple' : '✗ Excede'}</span> (≤${FLICKER_LIMITS.hoursYear} h · ≤${FLICKER_LIMITS.minDay} min)<br>` +
+      `<a href="#" class="rcp-del">Quitar</a>`
+    ).openPopup();
+    m.on('popupopen', (ev) => { const a = ev.popup.getElement()?.querySelector('.rcp-del'); a && a.addEventListener('click', (x) => { x.preventDefault(); this.recepLayer.removeLayer(m); }); });
+    return res;
+  }
+
+  clearReceptors() { this.recepLayer?.clearLayers(); }
 
   // (Re)crea los marcadores desde la flota viva (lat/lon por estructura).
   setStructures() {
@@ -121,6 +146,7 @@ export class MapView {
     const L = window.L; if (!L || !this.map) return;
     this.sunMode = !!on;
     this.el.classList.toggle('mv-sun', this.sunMode);                          // atenúa el basemap (CSS)
+    if (!this.sunMode) this.clearReceptors();                                  // los receptores son del estudio de sol
     if (this.markersLayer) { this.sunMode ? this.map.removeLayer(this.markersLayer) : this.markersLayer.addTo(this.map); }
     if (!this.shadowLayer) this.shadowLayer = L.layerGroup();
     this.sunMode ? this.shadowLayer.addTo(this.map) : this.map.removeLayer(this.shadowLayer);
