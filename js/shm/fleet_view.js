@@ -7,10 +7,11 @@
 // ─────────────────────────────────────────────────────────────────────────────
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
-import { createTurbine, TOWER_H } from './turbine_mesh.js?v=214';
-import { createSubstationTower, groundCable, overheadLine } from './structures.js?v=214';
-import { toScene } from './parks_data_caman.js?v=214';
-import { CAMAN_ROADS } from './caman_roads.js?v=214';
+import { createTurbine, TOWER_H } from './turbine_mesh.js?v=215';
+import { createSubstationTower, groundCable, overheadLine } from './structures.js?v=215';
+import { toScene, CAMAN_CENTER } from './parks_data_caman.js?v=215';
+import { CAMAN_ROADS } from './caman_roads.js?v=215';
+import { solarPosition, dateFromLocal, sunSceneDir } from './solar.js?v=215';
 
 const SPACING = 235;
 const TOWER_SCALE = 2.2;   // agranda las torres (vista esquemática) para que destaquen sobre el relieve
@@ -73,8 +74,12 @@ export class FleetView {
     this.renderer.setSize(w, h);
     this.renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
     this.renderer.localClippingEnabled = true;   // planos de corte por material (avance 4D)
+    this.renderer.shadowMap.enabled = true;       // sombras (Frente 2: sol/sombras). El sol sólo proyecta en modo Sol.
+    this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
     container.appendChild(this.renderer.domElement);
     this.constructionMode = true;                 // 4D: torres «llenándose» según su avance
+    this.sunMode = false;                          // análisis de sombras (sol móvil) — apagado por defecto
+    this._sunTime = { doy: 172, hour: 13 };        // día del año + hora local (172 ≈ 21-jun)
 
     this.controls = new OrbitControls(this.camera, this.renderer.domElement);
     this.controls.enableDamping = true;
@@ -93,13 +98,100 @@ export class FleetView {
   }
 
   _lights() {
-    this.scene.add(new THREE.HemisphereLight(0xeaf3fb, 0x9aa7b5, 1.15));
-    const sun = new THREE.DirectionalLight(0xffffff, 1.0);
-    sun.position.set(250, 350, 180);
-    this.scene.add(sun);
-    const fill = new THREE.DirectionalLight(0xcfe4f5, 0.6);
-    fill.position.set(-200, 160, -180);
-    this.scene.add(fill);
+    this.hemi = new THREE.HemisphereLight(0xeaf3fb, 0x9aa7b5, 1.15);
+    this.scene.add(this.hemi);
+    this.sun = new THREE.DirectionalLight(0xffffff, 1.0);
+    this.sun.position.set(250, 350, 180);
+    this.sun.target = new THREE.Object3D();
+    this.scene.add(this.sun, this.sun.target);
+    this.fill = new THREE.DirectionalLight(0xcfe4f5, 0.6);
+    this.fill.position.set(-200, 160, -180);
+    this.scene.add(this.fill);
+  }
+
+  // ── Sol / sombras (Frente 2: shadow flicker + visualización) ─────────────────
+  // Enciende el sol móvil: proyección de sombras + iluminación direccional por la
+  // posición solar real (efemérides) en la hora/día elegidos. Apagado restaura la
+  // iluminación estática del visor.
+  setSunEnabled(on) {
+    this.sunMode = !!on;
+    if (on) {
+      this._setupSunShadow();
+      this._setReceiveShadows(true);
+      this._ensureCatcher();
+      this.applySunTime();
+    } else {
+      this.sun.castShadow = false;
+      this._setReceiveShadows(false);
+      this._updateShadowReceivers();
+      this.sun.position.set(250, 350, 180); this.sun.intensity = 1.0; this.sun.color.setHex(0xffffff);
+      this.hemi.intensity = 1.15;
+      this._sunInfo = null;
+    }
+  }
+
+  // Visibilidad de los receptores de sombra: el relieve recibe sombra cuando está
+  // visible; si no, el plano «cazador» sobre el suelo plano. Sólo en modo Sol.
+  _updateShadowReceivers() {
+    if (this._catcher) this._catcher.visible = this.sunMode && !this.terrainOn;
+    if (this.terrain?.shadowMesh) this.terrain.shadowMesh.visible = this.sunMode && this.terrainOn;
+  }
+
+  setSunTime(t) { this._sunTime = { ...this._sunTime, ...t }; if (this.sunMode) this.applySunTime(); }
+  getSunInfo() { return this._sunInfo || null; }
+
+  // Posiciona el sol (dirección, intensidad y color) según la efeméride del parque.
+  applySunTime() {
+    const { doy, hour } = this._sunTime;
+    const d = new Date(new Date().getFullYear(), 0, 1 + doy);
+    const date = dateFromLocal(d.getFullYear(), d.getMonth(), d.getDate(), hour, -4);   // Camán: UTC−4
+    const sp = solarPosition(date, CAMAN_CENTER.lat, CAMAN_CENTER.lon);
+    this._sunInfo = sp;
+    const dir = sunSceneDir(sp.elevation, sp.azimuth);
+    const { center, radius } = this._extent();
+    const dist = Math.max(radius * 3, 3000);
+    this.sun.target.position.copy(center); this.sun.target.updateMatrixWorld();
+    this.sun.position.set(center.x + dir.x * dist, Math.max(center.y + dir.y * dist, center.y + 5), center.z + dir.z * dist);
+    const e = sp.elevation;
+    if (e <= 0) { this.sun.intensity = 0; this.hemi.intensity = 0.45; }   // sol bajo el horizonte → noche tenue
+    else {
+      this.sun.intensity = 0.45 + 0.95 * Math.min(e / 40, 1);
+      this.hemi.intensity = 0.6 + 0.5 * Math.min(e / 40, 1);
+      const warm = Math.max(0, 1 - e / 12);                                // tinte cálido cerca del horizonte
+      this.sun.color.setRGB(1, 1 - 0.32 * warm, 1 - 0.62 * warm);
+    }
+  }
+
+  _setupSunShadow() {
+    this.sun.castShadow = true;
+    const sh = this.sun.shadow, { radius } = this._extent();
+    sh.mapSize.set(2048, 2048);
+    const d = Math.max(radius * 1.6, 1200), c = sh.camera;   // amplio: cubre sombras largas (sol bajo) sobre el relieve
+    c.left = -d; c.right = d; c.top = d; c.bottom = -d; c.near = 1; c.far = Math.max(radius * 6, 8000);
+    c.updateProjectionMatrix();
+    sh.bias = -0.0006; sh.normalBias = 1.2;
+  }
+
+  // Las mallas sólidas reciben sombra (fuste recibe la sombra de las aspas, etc.).
+  _setReceiveShadows(on) {
+    for (const st of this.structures) st.group.traverse(o => {
+      if (o.isMesh && o.material && !o.material.transparent) { o.receiveShadow = on; o.material.needsUpdate = true; }
+    });
+  }
+
+  // Plano «cazador de sombras» (ShadowMaterial): muestra la sombra sobre el suelo
+  // plano. Se oculta con el relieve activo (las torres quedan elevadas sobre la cota).
+  _ensureCatcher() {
+    if (!this._catcher) {
+      const g = new THREE.PlaneGeometry(1, 1); g.rotateX(-Math.PI / 2);
+      const m = new THREE.ShadowMaterial({ opacity: 0.3 });
+      this._catcher = new THREE.Mesh(g, m); this._catcher.receiveShadow = true; this._catcher.renderOrder = 1;
+      this.scene.add(this._catcher);
+    }
+    const { center, radius } = this._extent(), s = Math.max(radius * 3, 1500);
+    this._catcher.scale.set(s, 1, s);
+    this._catcher.position.set(center.x, 0.06, center.z);
+    this._updateShadowReceivers();
   }
 
   // Sin suelo ni cielo: solo la grilla del PÓRTICO original (color del tema).
@@ -114,10 +206,11 @@ export class FleetView {
   // ── Relieve conceptual (capa de terreno) ─────────────────────────────────────
   // Carga el DEM vendorizado y añade la malla (oculta hasta activarla).
   async loadTerrain(url) {
-    const { Terrain } = await import('./terrain.js?v=214');
+    const { Terrain } = await import('./terrain.js?v=215');
     const dem = await (await fetch(url)).json();
     this.terrain = new Terrain(dem, { vex: 1.5 });   // relieve exagerado (esquemático)
     this.scene.add(this.terrain.mesh);
+    if (this.terrain.shadowMesh) this.scene.add(this.terrain.shadowMesh);   // receptor de sombras del relieve
     this.terrainOn = true;
     this.applyElevation();                            // las torres SIEMPRE quedan a la cota
     return this.terrain;
@@ -139,6 +232,7 @@ export class FleetView {
     this.terrainOn = !!on && !!this.terrain;
     if (this.terrain) this.terrain.mesh.visible = this.terrainOn;
     if (this.grid) this.grid.visible = true;   // el grid genérico queda siempre (el relieve se asienta encima; no se ve «pelao»)
+    this._updateShadowReceivers();             // el receptor de sombra sigue al relieve/suelo plano
   }
 
   // Cota del terreno en (x,z) si está cargado (independiente de su visibilidad).

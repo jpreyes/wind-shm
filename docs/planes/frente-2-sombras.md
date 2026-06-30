@@ -39,11 +39,15 @@ Mitigación: módulos de parada (shutdown). Open-source emergente: WIMBY SF.
 ---
 
 ## Plan por fases (mapeo al código actual)
-1. **Efemérides solares** — módulo JS puro (azimut/elevación por fecha/hora/lat-lon),
-   verificable en Node. (`js/shm/solar.js` nuevo.)
-2. **Sombras visuales 3D** — sol = luz direccional en `fleet_view.js`
-   (`castShadow`/`receiveShadow` en torres + terreno), **slider día/año + animación**.
-   *(Victoria visual rápida; Three.js ya soporta sombras.)*
+1. ✅ **Efemérides solares** (v215) — `js/shm/solar.js`: algoritmo NOAA (azimut/elevación por
+   fecha/hora/lat-lon), `sunSceneDir` al sistema de la escena, verificado en Node
+   (`node js/shm/solar.js` → solsticios exactos, sol al norte en hemisferio sur).
+2. ✅ **Sombras visuales 3D** (v215) — sol = `DirectionalLight` posicionado por la efeméride en
+   `fleet_view.js` (`setSunEnabled`/`applySunTime`), PCF soft, intensidad/tinte cálido por
+   elevación, noche bajo el horizonte. **Sombras SOBRE el relieve** vía malla receptora que
+   comparte la geometría del DEM con `ShadowMaterial` (el ShaderMaterial conceptual no recibe
+   sombras); cazador plano de respaldo con el relieve apagado. **Botón «Sol» en la barra lateral
+   izquierda** + panel flotante con sliders **Hora/Día** + animación del día + lectura alt/az.
 3. **Worst-case cuantitativo** — proyección del disco del rotor a puntos receptores →
    horas/año, min/día; **ráster de flicker** sobre el terreno.
 4. **Real-case estadístico** — % de sol + rosa de vientos + horas de operación.

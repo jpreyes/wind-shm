@@ -6,8 +6,8 @@
 // Click en un marcador → conmuta a la vista 3D enfocando esa estructura (onPick).
 // Leaflet se carga como global (window.L) desde lib/leaflet/leaflet.js.
 // ─────────────────────────────────────────────────────────────────────────────
-import { CAMAN_CENTER } from './parks_data_caman.js?v=214';
-import { CAMAN_ROADS } from './caman_roads.js?v=214';
+import { CAMAN_CENTER } from './parks_data_caman.js?v=215';
+import { CAMAN_ROADS } from './caman_roads.js?v=215';
 
 // Color del marcador según el avance de obra (coherente con el 4D / panel).
 function colorFor(st) {

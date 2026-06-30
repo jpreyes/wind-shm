@@ -8,15 +8,15 @@
 //   inspecciones y señal temporal EN VIVO desde un Web Worker (DataSource).
 // Recortes (modelado) los hace shm.css ocultando, no borrando.
 // ─────────────────────────────────────────────────────────────────────────────
-import { FleetView } from './fleet_view.js?v=214';
-import { DataSource } from './data_source.js?v=214';
-import { computeTwin } from './digital_twin.js?v=214';
-import { ParkManager, loadParksStore } from './parks.js?v=214';
-import { MapView } from './map_view.js?v=214';
-import { defaultStages, builtFromStages } from './parks_data_caman.js?v=214';
+import { FleetView } from './fleet_view.js?v=215';
+import { DataSource } from './data_source.js?v=215';
+import { computeTwin } from './digital_twin.js?v=215';
+import { ParkManager, loadParksStore } from './parks.js?v=215';
+import { MapView } from './map_view.js?v=215';
+import { defaultStages, builtFromStages } from './parks_data_caman.js?v=215';
 
 const F1_BASE = { turbine: 0.283, hv: 1.6 };
-const REWIND_VER = 'v214';   // versión visible del build (subir junto al cache-bust)
+const REWIND_VER = 'v215';   // versión visible del build (subir junto al cache-bust)
 const FS = 62.5;   // frecuencia de muestreo de la señal (Hz), igual que shm_worker.js
 // Clasificador ML de daño (0..4)
 const CLS = ['Sin daño', 'Leve', 'Moderado', 'Alto', 'Muy alto'];
@@ -185,7 +185,7 @@ async function boot() {
   // ── Relieve conceptual del terreno (DEM vendorizado) — encendido por defecto ─
   setLoad(88, 'Cargando relieve…'); await delay(40);
   try {
-    await fleet.loadTerrain('data/caman_dem.json?v=214');
+    await fleet.loadTerrain('data/caman_dem.json?v=215');
     fleet.setTerrainVisible(true);
     document.getElementById('shm-relieve-tool')?.classList.add('active');
   } catch (e) { console.warn('[shm] relieve no disponible', e); }
@@ -244,6 +244,11 @@ function buildToolbar(toolbar, fleet, getPM = () => null) {
   const relieve = mk('shm-relieve-tool', 'Mostrar/ocultar el relieve del terreno',
     `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M3 20 L9 8 L13 15 L16 10 L21 20 Z"/></svg>`,
     'Relieve', () => { const on = !fleet.terrainOn; fleet.setTerrainVisible(on); relieve.classList.toggle('active', on); });
+  // Sol y sombras (análisis de sombra según hora/día — Frente 2).
+  const sunCtl = buildSunControl(fleet);
+  const sol = mk('shm-sun-tool', 'Sol y sombras: ver la sombra de las torres según la hora y el día',
+    `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><circle cx="12" cy="12" r="4.2"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3M4.9 4.9l2.1 2.1M17 17l2.1 2.1M19.1 4.9 17 7M7 17l-2.1 2.1"/></svg>`,
+    'Sol', () => { const on = !fleet.sunMode; fleet.setSunEnabled(on); sol.classList.toggle('active', on); sunCtl.setOpen(on); });
   // El botón «Editar» es el interruptor maestro del modo edición: con él activo se
   // pueden crear, borrar y mover estructuras; apagado, sólo se monitorea.
   // TODO(perfiles): condicionar la visibilidad de «Editar» al rol del usuario.
@@ -255,7 +260,7 @@ function buildToolbar(toolbar, fleet, getPM = () => null) {
   const edit = mk('shm-edit-tool', 'Activar/desactivar el modo edición (crear · borrar · mover)',
     `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 20 L4 16 L15 5 L19 9 L8 20 Z"/><line x1="13" y1="7" x2="17" y2="11"/></svg>`,
     'Editar', () => setEditing(!fleet.editMode));
-  toolbar.append(sep, pause, edit, avance, relieve, add, hv, del);
+  toolbar.append(sep, pause, edit, avance, relieve, sol, add, hv, del);
   // Conmutador de vista: mapa 2D (Leaflet) ⇄ parque 3D.
   const mapBtn = mk('shm-map-tool', 'Mostrar/ocultar el mini-mapa 2D del parque',
     `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M9 4 L3 6 V20 L9 18 L15 20 L21 18 V4 L15 6 L9 4 Z"/><path d="M9 4 V18 M15 6 V20"/></svg>`,
@@ -278,6 +283,41 @@ function buildToolbar(toolbar, fleet, getPM = () => null) {
     e.preventDefault();
     fleet.removeStructure(fleet.selected.id);
   });
+}
+
+// ── Control de Sol/sombras (hora + día + animación) ──────────────────────────
+function buildSunControl(fleet) {
+  const wrap = document.getElementById('viewport-wrap') || document.body;
+  const el = document.createElement('div');
+  el.id = 'shm-sun'; el.className = 'shm-sun';
+  const today = new Date();
+  const doy0 = Math.floor((Date.UTC(today.getFullYear(), today.getMonth(), today.getDate()) - Date.UTC(today.getFullYear(), 0, 0)) / 86400000);
+  el.innerHTML = `
+    <div class="sun-head"><span class="sun-title">Sol y sombras</span><span class="sun-read" id="sun-read">—</span></div>
+    <label class="sun-ctl"><span>Hora</span><input type="range" id="sun-hour" min="0" max="24" step="0.25" value="13"><b id="sun-hh">13:00</b></label>
+    <label class="sun-ctl"><span>Día</span><input type="range" id="sun-day" min="1" max="365" step="1" value="${doy0}"><b id="sun-dd">—</b></label>
+    <div class="sun-foot"><button id="sun-play" class="sun-btn" type="button">▶ Animar el día</button></div>`;
+  wrap.appendChild(el);
+  const hourEl = el.querySelector('#sun-hour'), dayEl = el.querySelector('#sun-day');
+  const hh = el.querySelector('#sun-hh'), dd = el.querySelector('#sun-dd'), read = el.querySelector('#sun-read'), playBtn = el.querySelector('#sun-play');
+  const MES = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic'];
+  const fmtH = (h) => `${String(Math.floor(h)).padStart(2, '0')}:${String(Math.round((h % 1) * 60) % 60).padStart(2, '0')}`;
+  const apply = () => {
+    const hour = +hourEl.value, doy = +dayEl.value - 1;
+    fleet.setSunTime({ doy, hour });
+    hh.textContent = fmtH(hour);
+    const d = new Date(today.getFullYear(), 0, 1 + doy);
+    dd.textContent = `${d.getDate()} ${MES[d.getMonth()]}`;
+    const sp = fleet.getSunInfo();
+    read.textContent = sp ? (sp.elevation > 0 ? `alt ${sp.elevation.toFixed(0)}° · az ${sp.azimuth.toFixed(0)}°` : '☾ noche') : '';
+  };
+  hourEl.addEventListener('input', apply);
+  dayEl.addEventListener('input', apply);
+  let raf = null, last = 0;
+  const stop = () => { if (raf) cancelAnimationFrame(raf); raf = null; playBtn.textContent = '▶ Animar el día'; };
+  const tick = (ts) => { if (!last) last = ts; const dt = (ts - last) / 1000; last = ts; let h = +hourEl.value + dt * 2; if (h >= 24) h -= 24; hourEl.value = h.toFixed(2); apply(); raf = requestAnimationFrame(tick); };
+  playBtn.addEventListener('click', () => { if (raf) stop(); else { last = 0; playBtn.textContent = '⏸ Pausar'; raf = requestAnimationFrame(tick); } });
+  return { setOpen(on) { el.classList.toggle('show', on); if (on) apply(); else stop(); } };
 }
 
 // ── Nameplate (cuadro con el nombre sobre la vista) ──────────────────────────

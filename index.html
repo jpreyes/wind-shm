@@ -29,10 +29,10 @@
       window.dispatchEvent(new Event('pwa-installed'));
     });
   </script>
-  <link rel="stylesheet" href="lib/leaflet/leaflet.css?v=214">
-  <link rel="stylesheet" href="style.css?v=214">
-  <link rel="stylesheet" href="ui-v2.css?v=214">
-  <link rel="stylesheet" href="shm.css?v=214">
+  <link rel="stylesheet" href="lib/leaflet/leaflet.css?v=215">
+  <link rel="stylesheet" href="style.css?v=215">
+  <link rel="stylesheet" href="ui-v2.css?v=215">
+  <link rel="stylesheet" href="shm.css?v=215">
   <script type="importmap">
   {
     "imports": {
@@ -184,7 +184,7 @@ setTimeout(function () { window.__rewindCloseLanding(); }, 25000);   // fallback
 <!-- numeric.js para el gemelo digital (solver modal/estático) -->
 <script src="lib/numeric.js"></script>
 <!-- Leaflet (vista 2D del parque en ReWind) — global window.L, antes de los módulos -->
-<script src="lib/leaflet/leaflet.js?v=214"></script>
+<script src="lib/leaflet/leaflet.js?v=215"></script>
 <!-- Toggle de tema (claro/oscuro). Antes lo cableaba app.js (PÓRTICO); ReWind lo hace aquí. -->
 <script>
   (function () {
@@ -200,7 +200,7 @@ setTimeout(function () { window.__rewindCloseLanding(); }, 25000);   // fallback
   })();
 </script>
 <!-- ReWind: SHM de torres eólicas (se auto-bootea sobre el shell) -->
-<script type="module" src="js/shm/shm_mode.js?v=214"></script>
+<script type="module" src="js/shm/shm_mode.js?v=215"></script>
 
 <!-- PWA: registrar el service worker (offline). Solo en contexto seguro
      (https o localhost); el navegador deja navigator.serviceWorker undefined

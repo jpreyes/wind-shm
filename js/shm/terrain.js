@@ -9,7 +9,7 @@
 // torres y drapear caminos sobre el relieve.
 // ─────────────────────────────────────────────────────────────────────────────
 import * as THREE from 'three';
-import { CAMAN_CENTER, LAYOUT_SCALE, toScene } from './parks_data_caman.js?v=214';
+import { CAMAN_CENTER, LAYOUT_SCALE, toScene } from './parks_data_caman.js?v=215';
 
 const M_PER_DEG_LAT = 111320;
 const M_PER_DEG_LON = 111320 * Math.cos(CAMAN_CENTER.lat * Math.PI / 180);
@@ -108,10 +108,20 @@ export class Terrain {
     });
     const mesh = new THREE.Mesh(geo, mat);
     mesh.receiveShadow = true; mesh.renderOrder = -1; mesh.name = 'terrain';
+
+    // Malla receptora de sombras (comparte la geometría del relieve): el
+    // ShaderMaterial conceptual no recibe sombras, así que superponemos un
+    // ShadowMaterial que SÓLO dibuja la sombra translúcida sobre la superficie del
+    // terreno (Frente 2: sombras sobre el relieve). polygonOffset evita z-fighting.
+    const shMat = new THREE.ShadowMaterial({ opacity: 0.34 });
+    shMat.polygonOffset = true; shMat.polygonOffsetFactor = -1; shMat.polygonOffsetUnits = -1; shMat.depthWrite = false;
+    const shadowMesh = new THREE.Mesh(geo, shMat);
+    shadowMesh.receiveShadow = true; shadowMesh.renderOrder = 0; shadowMesh.visible = false; shadowMesh.name = 'terrain-shadow';
+    this.shadowMesh = shadowMesh;
     return mesh;
   }
 
-  dispose() { this.mesh.geometry.dispose(); this.mesh.material.dispose(); }
+  dispose() { this.mesh.geometry.dispose(); this.mesh.material.dispose(); this.shadowMesh?.material.dispose(); }
 }
 
 // Carga el DEM vendorizado y devuelve un Terrain listo para añadir a la escena.

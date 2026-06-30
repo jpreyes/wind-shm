@@ -360,3 +360,21 @@ body.shm #shm-banner.show { display: flex; animation: shm-blink 0.8s steps(1) in
 #shm-panel .empty { color: var(--text-muted); font-size: 13px; text-align: center; margin-top: 30px; line-height: 1.6; }
 #shm-panel canvas.sig { width: 100%; height: 90px; background: var(--bg); border: 1px solid var(--border); border-radius: var(--radius-sm); display: block; margin-bottom: 6px; }
 #shm-panel .note { font-size: 11px; color: var(--text-muted); margin-top: 10px; line-height: 1.5; }
+
+/* ── Control de Sol / sombras (Frente 2) ─────────────────────────────────── */
+.shm-sun { position: absolute; left: 64px; top: 14px; z-index: 30; width: 232px; display: none;
+  background: var(--panel); color: var(--text); border: 1px solid var(--border2);
+  border-radius: var(--radius, 10px); padding: 10px 12px; box-shadow: var(--shadow, 0 6px 20px rgba(0,0,0,.35));
+  font-size: 12px; }
+.shm-sun.show { display: block; }
+.shm-sun .sun-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; }
+.shm-sun .sun-title { font-weight: 600; }
+.shm-sun .sun-read { font-variant-numeric: tabular-nums; color: var(--text-muted); }
+.shm-sun .sun-ctl { display: flex; align-items: center; gap: 8px; margin: 7px 0; }
+.shm-sun .sun-ctl span { width: 32px; color: var(--text-muted); }
+.shm-sun .sun-ctl input[type=range] { flex: 1; min-width: 0; accent-color: var(--accent); }
+.shm-sun .sun-ctl b { width: 50px; text-align: right; font-weight: 500; font-variant-numeric: tabular-nums; }
+.shm-sun .sun-foot { margin-top: 8px; }
+.shm-sun .sun-btn { width: 100%; padding: 6px; cursor: pointer; border-radius: var(--radius-sm, 6px);
+  background: var(--bg4); color: var(--text); border: 1px solid var(--border2); }
+.shm-sun .sun-btn:hover { filter: brightness(1.15); }
