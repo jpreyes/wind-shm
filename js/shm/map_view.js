@@ -6,11 +6,11 @@
 // Click en un marcador → conmuta a la vista 3D enfocando esa estructura (onPick).
 // Leaflet se carga como global (window.L) desde lib/leaflet/leaflet.js.
 // ─────────────────────────────────────────────────────────────────────────────
-import { CAMAN_CENTER } from './parks_data_caman.js?v=239';
-import { CAMAN_ROADS } from './caman_roads.js?v=239';
-import { compassRoseSVG } from './compass.js?v=239';
-import { annualFlicker, flickerOK, FLICKER_LIMITS, REAL_CASE_FACTOR, flickerMap, criticalWindow, interTurbineShading } from './shadow_flicker.js?v=239';
-import { realCaseWeight, METEO_CAMAN } from './meteo_caman.js?v=239';
+import { CAMAN_CENTER } from './parks_data_caman.js?v=240';
+import { CAMAN_ROADS } from './caman_roads.js?v=240';
+import { compassRoseSVG } from './compass.js?v=240';
+import { annualFlicker, flickerOK, FLICKER_LIMITS, REAL_CASE_FACTOR, flickerMap, criticalWindow, interTurbineShading } from './shadow_flicker.js?v=240';
+import { realCaseWeight, METEO_CAMAN } from './meteo_caman.js?v=240';
 
 const REAL_W = (month, antiAz) => realCaseWeight(month, antiAz, METEO_CAMAN);   // ponderador meteo del sitio
 
@@ -42,7 +42,7 @@ const iconFor = (st) => st.type === 'hv' ? atIcon(colorFor(st)) : turbineIcon(co
 const M_PER_DEG_LAT = 111320;
 const MES_INI = ['E', 'F', 'M', 'A', 'M', 'J', 'J', 'A', 'S', 'O', 'N', 'D'];
 
-// Calendario de parpadeo mes×hora (la gráfica «de facto» de WindPRO/WindFarmer):
+// Calendario de parpadeo mes×hora (la gráfica «de facto» del software del rubro):
 // celdas coloreadas por minutos/año de sombra → revela la ventana crítica del receptor.
 // Tema claro (el informe se abre en ventana blanca imprimible).
 function shadowCalendarSVG(cal) {
@@ -155,7 +155,7 @@ export class MapView {
 
   clearReceptors() { this.recepLayer?.clearLayers(); this._receptors = []; window.shmDash?.refreshShadow?.(); }
 
-  // Mapa de flicker (horas/año) sobre el área — salida estilo WindPRO. Toggle.
+  // Mapa de flicker (horas/año) sobre el área — salida estilo software del rubro. Toggle.
   toggleFlickerMap() {
     const L = window.L; if (!L || !this.map) return false;
     if (this._flickerOverlay) { this.map.removeLayer(this._flickerOverlay); this._flickerOverlay = null; this.fleet.clearFlickerSurface?.(); return false; }
@@ -185,7 +185,7 @@ export class MapView {
   clearFlickerMap() { if (this._flickerOverlay) { this.map.removeLayer(this._flickerOverlay); this._flickerOverlay = null; } this.fleet.clearFlickerSurface?.(); }
 
   // Mapa de iso-sombra del parque (heatmap h/año + turbinas + receptores + N + escala)
-  // como PNG dataURL para incrustar en el informe — la lámina típica de WindPRO.
+  // como PNG dataURL para incrustar en el informe — la lámina típica del rubro.
   _siteMapDataURL(receptors) {
     const lats = [], lons = [];
     for (const t of this.fleet.structures) { if (t.lat != null && t.type !== 'hv') { lats.push(t.lat); lons.push(t.lon); } }
@@ -249,7 +249,7 @@ export class MapView {
     return cv.toDataURL('image/png');
   }
 
-  // Informe COMPLETO de shadow-flicker estilo software de la industria (WindPRO):
+  // Informe COMPLETO de shadow-flicker estilo software de la industria:
   // resumen ejecutivo, parámetros, mapa de iso-sombra, ficha por receptor con
   // calendario mes×hora, tabla de cumplimiento y programa de turbinas → imprimible.
   flickerReport() {
@@ -267,7 +267,7 @@ export class MapView {
     const badge = (ok) => `<span class="badge ${ok ? 'ok' : 'bad'}">${ok ? '✓ Cumple' : '✗ Excede'}</span>`;
     const calLegend = `<div class="leg"><span><i style="background:#bee678"></i>&lt;30</span><span><i style="background:#fde047"></i>30–120</span><span><i style="background:#fb923c"></i>120–300</span><span><i style="background:#ef4444"></i>≥300 min/año</span></div>`;
 
-    // Ficha por receptor (la sección rica de WindPRO)
+    // Ficha por receptor (la sección rica del informe)
     const cards = rs.map(r => {
       const top = [...r.res.byTurbine.entries()].sort((a, b) => b[1] - a[1]).slice(0, 5)
         .map(([id, min]) => `${labelById.get(id)} (${(min / 60).toFixed(1)} h)`).join(', ') || '—';
@@ -389,7 +389,7 @@ export class MapView {
 
         <footer>
           <b>Metodología.</b> El parpadeo de sombra se evalúa minuto a minuto durante un año astronómico. La sombra del buje (altura H) cae a distancia H/tan(elevación) en el azimut anti-solar; el rotor (radio R) la ensancha a la banda [(H−R)/tanθ, (H+R)/tanθ] y a un semiángulo atan(R/d). Un receptor se contabiliza cuando su rumbo desde la turbina coincide con el anti-solar y su distancia cae en la banda. El «caso real» pondera cada instante por la estadística de sol despejado, la operación del rotor y la orientación según la rosa de vientos del sitio (${METEO_CAMAN.source}).<br><br>
-          <b>Alcance.</b> Documento técnico de apoyo generado por ReWind. El worst-case es conservador (cota superior); el cumplimiento normativo definitivo debe verificarse con datos meteorológicos medidos (TMY/estación) y la curva de operación real del aerogenerador. Referencias: norma LAI (Alemania) · módulo SHADOW de WindPRO (EMD International).
+          <b>Alcance.</b> Documento técnico de apoyo generado por ReWind. El worst-case es conservador (cota superior); el cumplimiento normativo definitivo debe verificarse con datos meteorológicos medidos (TMY/estación) y la curva de operación real del aerogenerador. Referencia normativa: directriz LAI (Alemania) sobre inmisión de sombra intermitente.
         </footer>
       </div></html>`;
     this._openReport(html, 'informe_shadow_flicker_caman.html');

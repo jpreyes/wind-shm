@@ -8,16 +8,16 @@
 //   inspecciones y señal temporal EN VIVO desde un Web Worker (DataSource).
 // Recortes (modelado) los hace shm.css ocultando, no borrando.
 // ─────────────────────────────────────────────────────────────────────────────
-import { FleetView } from './fleet_view.js?v=239';
-import { DataSource } from './data_source.js?v=239';
-import { computeTwin } from './digital_twin.js?v=239';
-import { ParkManager, loadParksStore } from './parks.js?v=239';
-import { MapView } from './map_view.js?v=239';
-import { defaultStages, builtFromStages } from './parks_data_caman.js?v=239';
-import { compassRoseSVG } from './compass.js?v=239';
+import { FleetView } from './fleet_view.js?v=240';
+import { DataSource } from './data_source.js?v=240';
+import { computeTwin } from './digital_twin.js?v=240';
+import { ParkManager, loadParksStore } from './parks.js?v=240';
+import { MapView } from './map_view.js?v=240';
+import { defaultStages, builtFromStages } from './parks_data_caman.js?v=240';
+import { compassRoseSVG } from './compass.js?v=240';
 
 const F1_BASE = { turbine: 0.283, hv: 1.6 };
-const REWIND_VER = 'v239';   // versión visible del build (subir junto al cache-bust)
+const REWIND_VER = 'v240';   // versión visible del build (subir junto al cache-bust)
 const FS = 62.5;   // frecuencia de muestreo de la señal (Hz), igual que shm_worker.js
 // Clasificador ML de daño (0..4)
 const CLS = ['Sin daño', 'Leve', 'Moderado', 'Alto', 'Muy alto'];
@@ -245,7 +245,7 @@ async function boot() {
   // ── Relieve conceptual del terreno (DEM vendorizado) — encendido por defecto ─
   setLoad(88, 'Cargando relieve…'); await delay(40);
   try {
-    await fleet.loadTerrain('data/caman_dem.json?v=239');
+    await fleet.loadTerrain('data/caman_dem.json?v=240');
     fleet.setTerrainVisible(true);
     document.getElementById('shm-relieve-tool')?.classList.add('active');
   } catch (e) { console.warn('[shm] relieve no disponible', e); }
@@ -709,7 +709,7 @@ function buildDashboard(panel, fleet, actions) {
       <div class="ssh-actions">
         <button id="ssh-fmap" class="sun-btn js-fmap ${mv?._flickerOverlay ? 'active' : ''}" type="button">🗺️ Mapa de flicker (h/año)</button>
         <div class="sun-legend"><span><i style="background:#bee678"></i>1–5</span><span><i style="background:#fde047"></i>5–15</span><span><i style="background:#fb923c"></i>15–30</span><span><i style="background:#ef4444"></i>≥30 ✗</span></div>
-        <button id="ssh-report" class="sun-btn" type="button">📄 Informe completo (WindPRO)</button>
+        <button id="ssh-report" class="sun-btn" type="button">📄 Informe completo</button>
         <button id="ssh-inter" class="sun-btn" type="button">🌀 Sombreado entre torres</button>
       </div>
       <div class="ssh-rcp-h">Receptores (viviendas) · ${rcp.length}${rcp.length ? ` · ${nEx} excede(n)` : ''}</div>

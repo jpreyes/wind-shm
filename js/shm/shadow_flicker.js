@@ -14,7 +14,7 @@
 //
 // Módulo ES puro (Node + navegador). Verificable: `node js/shm/shadow_flicker.js`.
 // ─────────────────────────────────────────────────────────────────────────────
-import { solarPosition } from './solar.js?v=239';
+import { solarPosition } from './solar.js?v=240';
 
 const M_PER_DEG_LAT = 111320;
 export const FLICKER_LIMITS = { hoursYear: 30, minDay: 30 };   // referencia LAI (Alemania)
@@ -126,7 +126,7 @@ export function flickerOK(res, lim = FLICKER_LIMITS) {
 
 /**
  * Mapa de parpadeo de sombra (worst-case) sobre un área — la salida típica del
- * software de la industria (p.ej. WindPRO): horas/año en una grilla. Rasteriza la
+ * software de la industria: horas/año en una grilla. Rasteriza la
  * franja de sombra de cada turbina operativa minuto a minuto del año, deduplicando
  * por celda en cada instante (una celda suma ≤1 paso por minuto, la golpee 1 o N
  * turbinas).
