@@ -6,6 +6,13 @@ sensores, avance de obra 4D, dashboard e informe de estado estructural por torre
 
 Estado: ⬜ pendiente · 🟡 en curso · ✅ hecho. Los ítems se numeran `R-*`.
 
+> **▶ Foco inmediato (en lo que trabajamos ahora):**
+> 1. **`R-18` — Etapas constructivas / avance de obra** (ventana de avance completa).
+> 2. **`R-19` — Análisis de sombras** de los aerogeneradores según el sol.
+> 3. **`R-31` — Gemelo de construcción** (frecuencia predicha-vs-medida por etapa; el buque insignia, encaja con Camán en construcción).
+>
+> Los tres se apoyan en el modelo 4D que ya estamos modificando.
+
 > **Base FEM heredada (gemelo digital).** ReWind nació como fork de
 > **PÓRTICO** (`structweb3d`), una app de análisis estructural FEM 3D. Tras la
 > limpieza **`R-20`** el repo es **solo ReWind**: del motor FEM se conservan solo
@@ -79,10 +86,14 @@ revisiones de extensión de vida).*
 
 ## Secuencia sugerida
 
-1. **`R-21` OMA desde la señal medida** — alto valor, bajo costo; demuestra que esto es SHM real **y habilita el buque insignia** (la base modal viva).
-2. **🌟 `R-31` gemelo de construcción** — *el mejor encaje hoy*: Camán se construye ahora, ya trabajamos el 4D, no necesita fatiga de 20 años → valor inmediato. Reusa `R-21` + el 4D.
-3. **`R-18` ventana de avance de obra** — soporte natural del `R-31` (es lo que el cliente ve hoy).
-4. **`R-22` fatiga / DEL** → **🌟 `R-30` gemelo de cargas / extensión de vida** — la jugada operacional de alto valor (madura cuando haya horas de operación).
-5. **`R-10` `DataSource` + `R-23` alarmas** — habilitan la conexión industrial y el resto.
-6. **`R-8`/`R-16` quitar marca/arranque PÓRTICO** y **`R-6` i18n** — pulido de producto.
-7. Mayores: `R-11` (Electron + InfluxDB), `R-19` (sombras), `R-25`–`R-29` (predictivo, flota, drivetrain).
+**Foco inmediato (los tres, apoyados en el 4D):**
+1. **`R-18` etapas constructivas / ventana de avance** — es lo que el cliente ve hoy (parque en construcción).
+2. **`R-19` análisis de sombras** — visual, autocontenido, reusa el relieve y las torres ya en escena.
+3. **🌟 `R-31` gemelo de construcción** — frecuencia predicha-vs-medida por etapa; el mejor encaje hoy. Se beneficia de `R-21` (OMA) para la f₁ medida.
+
+**Después:**
+4. **`R-21` OMA desde la señal medida** — habilita el sensado virtual (base modal viva).
+5. **`R-22` fatiga / DEL** → **🌟 `R-30` gemelo de cargas / extensión de vida** — jugada operacional de alto valor (madura cuando haya horas de operación).
+6. **`R-10` `DataSource` + `R-23` alarmas** — habilitan la conexión industrial y el resto.
+7. **`R-8`/`R-16` quitar marca/arranque PÓRTICO** y **`R-6` i18n** — pulido de producto.
+8. Mayores: `R-11` (Electron + InfluxDB), `R-25`–`R-29` (predictivo, flota, drivetrain).
