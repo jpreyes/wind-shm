@@ -6,11 +6,11 @@
 // Click en un marcador → conmuta a la vista 3D enfocando esa estructura (onPick).
 // Leaflet se carga como global (window.L) desde lib/leaflet/leaflet.js.
 // ─────────────────────────────────────────────────────────────────────────────
-import { CAMAN_CENTER } from './parks_data_caman.js?v=237';
-import { CAMAN_ROADS } from './caman_roads.js?v=237';
-import { compassRoseSVG } from './compass.js?v=237';
-import { annualFlicker, flickerOK, FLICKER_LIMITS, REAL_CASE_FACTOR, flickerMap, criticalWindow, interTurbineShading } from './shadow_flicker.js?v=237';
-import { realCaseWeight, METEO_CAMAN } from './meteo_caman.js?v=237';
+import { CAMAN_CENTER } from './parks_data_caman.js?v=238';
+import { CAMAN_ROADS } from './caman_roads.js?v=238';
+import { compassRoseSVG } from './compass.js?v=238';
+import { annualFlicker, flickerOK, FLICKER_LIMITS, REAL_CASE_FACTOR, flickerMap, criticalWindow, interTurbineShading } from './shadow_flicker.js?v=238';
+import { realCaseWeight, METEO_CAMAN } from './meteo_caman.js?v=238';
 
 const REAL_W = (month, antiAz) => realCaseWeight(month, antiAz, METEO_CAMAN);   // ponderador meteo del sitio
 
@@ -38,6 +38,29 @@ function atIcon(color) {
       <path d="M6 31 L9.5 4 M18 31 L14.5 4 M9.5 4 H14.5 M7.2 24 H16.8 M8.2 17 H15.8 M9.2 11 H14.8 M3 21 L9.5 13 M21 21 L14.5 13"/></svg>` });
 }
 const iconFor = (st) => st.type === 'hv' ? atIcon(colorFor(st)) : turbineIcon(colorFor(st));
+
+const M_PER_DEG_LAT = 111320;
+const MES_INI = ['E', 'F', 'M', 'A', 'M', 'J', 'J', 'A', 'S', 'O', 'N', 'D'];
+
+// Calendario de parpadeo mes×hora (la gráfica «de facto» de WindPRO/WindFarmer):
+// celdas coloreadas por minutos/año de sombra → revela la ventana crítica del receptor.
+// Tema claro (el informe se abre en ventana blanca imprimible).
+function shadowCalendarSVG(cal) {
+  let h0 = 24, h1 = -1;
+  for (let mo = 0; mo < 12; mo++) for (let h = 0; h < 24; h++) { if (cal[mo * 24 + h] > 0) { if (h < h0) h0 = h; if (h > h1) h1 = h; } }
+  if (h1 < 0) return '<p class="muted">Sin parpadeo: ninguna turbina proyecta sombra sobre este receptor.</p>';
+  h0 = Math.max(0, h0 - 1); h1 = Math.min(23, h1 + 1);
+  const cw = 30, chh = 15, mx = 42, my = 22, rows = h1 - h0 + 1, W = mx + 12 * cw + 8, H = my + rows * chh + 8;
+  const color = (v) => v <= 0 ? '#eef2f7' : v >= 300 ? '#ef4444' : v >= 120 ? '#fb923c' : v >= 30 ? '#fde047' : '#bee678';
+  let s = '';
+  for (let mo = 0; mo < 12; mo++) s += `<text x="${mx + mo * cw + cw / 2}" y="${my - 6}" text-anchor="middle" font-size="10" fill="#64748b">${MES_INI[mo]}</text>`;
+  for (let h = h0; h <= h1; h++) {
+    const y = my + (h - h0) * chh;
+    s += `<text x="${mx - 7}" y="${y + chh - 4}" text-anchor="end" font-size="9" fill="#64748b">${String(h).padStart(2, '0')}h</text>`;
+    for (let mo = 0; mo < 12; mo++) s += `<rect x="${mx + mo * cw}" y="${y}" width="${cw - 1.5}" height="${chh - 1.5}" rx="1.5" fill="${color(cal[mo * 24 + h])}"/>`;
+  }
+  return `<svg width="${W}" height="${H}" viewBox="0 0 ${W} ${H}" xmlns="http://www.w3.org/2000/svg" style="max-width:100%">${s}</svg>`;
+}
 
 export class MapView {
   /** @param {HTMLElement} el  @param {object} fleet  @param {object} o {onPick} */
@@ -161,26 +184,215 @@ export class MapView {
   }
   clearFlickerMap() { if (this._flickerOverlay) { this.map.removeLayer(this._flickerOverlay); this._flickerOverlay = null; } this.fleet.clearFlickerSurface?.(); }
 
-  // Informe de cumplimiento de shadow-flicker (todos los receptores) → ventana imprimible.
+  // Mapa de iso-sombra del parque (heatmap h/año + turbinas + receptores + N + escala)
+  // como PNG dataURL para incrustar en el informe — la lámina típica de WindPRO.
+  _siteMapDataURL(receptors) {
+    const lats = [], lons = [];
+    for (const t of this.fleet.structures) { if (t.lat != null && t.type !== 'hv') { lats.push(t.lat); lons.push(t.lon); } }
+    for (const r of receptors) { lats.push(r.lat); lons.push(r.lon); }
+    if (!lats.length) return null;
+    const pad = 0.012;
+    const bbox = { lat0: Math.min(...lats) - pad, lat1: Math.max(...lats) + pad, lon0: Math.min(...lons) - pad, lon1: Math.max(...lons) + pad };
+    let fm = null;
+    try { fm = flickerMap(this.fleet.structures, bbox, { nx: 150, ny: 105, stepMin: 20 }); } catch (e) { console.warn('[shm] flickerMap para informe falló', e); }
+    const latC = (bbox.lat0 + bbox.lat1) / 2, mLon = M_PER_DEG_LAT * Math.cos(latC * Math.PI / 180);
+    const W = 780, hM = (bbox.lat1 - bbox.lat0) * M_PER_DEG_LAT, wM = (bbox.lon1 - bbox.lon0) * mLon;
+    const Hc = Math.max(220, Math.round(W * hM / wM));
+    const cv = document.createElement('canvas'); cv.width = W; cv.height = Hc;
+    const ctx = cv.getContext('2d');
+    ctx.fillStyle = '#eef3f8'; ctx.fillRect(0, 0, W, Hc);
+    if (fm) {
+      const off = document.createElement('canvas'); off.width = fm.nx; off.height = fm.ny;
+      const octx = off.getContext('2d'), img = octx.createImageData(fm.nx, fm.ny);
+      for (let i = 0; i < fm.hours.length; i++) {
+        const h = fm.hours[i]; let r = 0, g = 0, b = 0, a = 0;
+        if (h >= 30) { r = 239; g = 68; b = 68; a = 200; } else if (h >= 15) { r = 251; g = 146; b = 60; a = 170; }
+        else if (h >= 5) { r = 253; g = 224; b = 71; a = 145; } else if (h >= 1) { r = 190; g = 230; b = 120; a = 115; }
+        const k = i * 4; img.data[k] = r; img.data[k + 1] = g; img.data[k + 2] = b; img.data[k + 3] = a;
+      }
+      octx.putImageData(img, 0, 0); ctx.imageSmoothingEnabled = true; ctx.drawImage(off, 0, 0, W, Hc);
+    }
+    const px = (lat, lon) => [(lon - bbox.lon0) / (bbox.lon1 - bbox.lon0) * W, (bbox.lat1 - lat) / (bbox.lat1 - bbox.lat0) * Hc];
+    // Caminos (tenues)
+    ctx.strokeStyle = 'rgba(120,90,40,.35)'; ctx.lineWidth = 2;
+    for (const seg of CAMAN_ROADS) { ctx.beginPath(); seg.forEach(([lo, la], i) => { const [x, y] = px(la, lo); i ? ctx.lineTo(x, y) : ctx.moveTo(x, y); }); ctx.stroke(); }
+    // Turbinas (triángulo, color por avance)
+    for (const t of this.fleet.structures) {
+      if (t.lat == null || t.type === 'hv') continue;
+      const [x, y] = px(t.lat, t.lon), b = t.built ?? 1;
+      ctx.fillStyle = b >= 0.97 ? '#15803d' : b <= 0.02 ? '#64748b' : '#d97706'; ctx.strokeStyle = '#fff'; ctx.lineWidth = 1.2;
+      ctx.beginPath(); ctx.moveTo(x, y - 6); ctx.lineTo(x - 5, y + 4); ctx.lineTo(x + 5, y + 4); ctx.closePath(); ctx.fill(); ctx.stroke();
+    }
+    // Receptores (círculo verde/rojo + etiqueta)
+    ctx.font = 'bold 12px system-ui, sans-serif';
+    for (const r of receptors) {
+      const [x, y] = px(r.lat, r.lon);
+      ctx.fillStyle = r.ok ? '#16a34a' : '#dc2626'; ctx.strokeStyle = '#fff'; ctx.lineWidth = 1.6;
+      ctx.beginPath(); ctx.arc(x, y, 6, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+      ctx.lineWidth = 3; ctx.strokeStyle = '#fff'; ctx.strokeText('#' + r.n, x + 8, y + 4);
+      ctx.fillStyle = '#0b1018'; ctx.fillText('#' + r.n, x + 8, y + 4);
+    }
+    ctx.strokeStyle = '#94a3b8'; ctx.lineWidth = 1; ctx.strokeRect(0.5, 0.5, W - 1, Hc - 1);
+    // Norte
+    ctx.save(); ctx.translate(W - 28, 36); ctx.fillStyle = '#1b2533';
+    ctx.beginPath(); ctx.moveTo(0, -16); ctx.lineTo(6, 8); ctx.lineTo(0, 2); ctx.lineTo(-6, 8); ctx.closePath(); ctx.fill();
+    ctx.font = 'bold 12px system-ui'; ctx.textAlign = 'center'; ctx.fillText('N', 0, -19); ctx.restore();
+    // Barra de escala
+    const mPerPx = wM / W, nice = [100, 200, 500, 1000, 2000, 5000];
+    const targetM = nice.reduce((a, b) => Math.abs(b / mPerPx - 110) < Math.abs(a / mPerPx - 110) ? b : a, nice[0]);
+    const barPx = targetM / mPerPx;
+    ctx.fillStyle = 'rgba(255,255,255,.82)'; ctx.fillRect(12, Hc - 32, barPx + 16, 24);
+    ctx.strokeStyle = '#1b2533'; ctx.lineWidth = 2; ctx.beginPath();
+    ctx.moveTo(20, Hc - 13); ctx.lineTo(20 + barPx, Hc - 13); ctx.moveTo(20, Hc - 17); ctx.lineTo(20, Hc - 9); ctx.moveTo(20 + barPx, Hc - 17); ctx.lineTo(20 + barPx, Hc - 9); ctx.stroke();
+    ctx.fillStyle = '#1b2533'; ctx.font = '11px system-ui'; ctx.textAlign = 'left';
+    ctx.fillText(targetM >= 1000 ? (targetM / 1000) + ' km' : targetM + ' m', 24, Hc - 19);
+    return cv.toDataURL('image/png');
+  }
+
+  // Informe COMPLETO de shadow-flicker estilo software de la industria (WindPRO):
+  // resumen ejecutivo, parámetros, mapa de iso-sombra, ficha por receptor con
+  // calendario mes×hora, tabla de cumplimiento y programa de turbinas → imprimible.
   flickerReport() {
     const rs = this._receptors || [];
-    if (!rs.length) { alert('Agrega receptores (clic en el mapa con el Sol activo) para generar el informe.'); return; }
-    const nEx = rs.filter(r => !r.ok).length;
-    const rows = rs.map(r =>
-      `<tr style="background:${r.ok ? '#eafaf0' : '#fdeaea'}"><td>${r.n}</td><td>${r.lat.toFixed(5)}, ${r.lon.toFixed(5)}</td>` +
-      `<td style="text-align:right">${r.res.hoursYear.toFixed(1)}</td><td style="text-align:right">${r.res.maxMinDay}</td>` +
-      `<td style="text-align:right">${r.res.hoursYearReal.toFixed(1)}</td>` +
+    if (!rs.length) { alert('Agrega receptores (clic en el mapa 2D con Shadow activo) para generar el informe.'); return; }
+    const nEx = rs.filter(r => !r.ok).length, nOk = rs.length - nEx;
+    const verdict = nEx ? { t: `NO CUMPLE — ${nEx} de ${rs.length} receptor(es) excede(n) el límite`, c: 'bad' }
+                        : { t: `CUMPLE — ${rs.length}/${rs.length} receptor(es) bajo el límite`, c: 'ok' };
+    const turbs = this.fleet.structures.filter(t => t.lat != null && t.type !== 'hv');
+    const nOp = turbs.filter(t => (t.built ?? 1) >= 0.97).length;
+    const labelById = new Map(this.fleet.structures.map(s => [s.id, s.label || s.id]));
+    const gen = new Date().toLocaleString('es-CL');
+    const siteImg = this._siteMapDataURL(rs);
+
+    const badge = (ok) => `<span class="badge ${ok ? 'ok' : 'bad'}">${ok ? '✓ Cumple' : '✗ Excede'}</span>`;
+    const calLegend = `<div class="leg"><span><i style="background:#bee678"></i>&lt;30</span><span><i style="background:#fde047"></i>30–120</span><span><i style="background:#fb923c"></i>120–300</span><span><i style="background:#ef4444"></i>≥300 min/año</span></div>`;
+
+    // Ficha por receptor (la sección rica de WindPRO)
+    const cards = rs.map(r => {
+      const top = [...r.res.byTurbine.entries()].sort((a, b) => b[1] - a[1]).slice(0, 5)
+        .map(([id, min]) => `${labelById.get(id)} (${(min / 60).toFixed(1)} h)`).join(', ') || '—';
+      const win = r.win ? `${r.win.months} · ${r.win.hours} (pico ${r.win.peak.month} ${r.win.peak.hour})` : '—';
+      return `<div class="card">
+        <div class="card-h"><b>Receptor #${r.n}</b> ${badge(r.ok)}<span class="muted">${r.lat.toFixed(5)}, ${r.lon.toFixed(5)}</span></div>
+        <div class="stats">
+          <div class="stat"><div class="sv ${r.res.hoursYear > 30 ? 'over' : ''}">${r.res.hoursYear.toFixed(1)}</div><div class="sk">h/año worst-case</div></div>
+          <div class="stat"><div class="sv ${r.res.maxMinDay > 30 ? 'over' : ''}">${r.res.maxMinDay}</div><div class="sk">min/día máx</div></div>
+          <div class="stat"><div class="sv">${r.res.daysAffected}</div><div class="sk">días afectados</div></div>
+          <div class="stat"><div class="sv">${r.res.hoursYearReal.toFixed(1)}</div><div class="sk">h/año real (meteo)</div></div>
+        </div>
+        <div class="cal-wrap"><div class="cal-t">Calendario de parpadeo (mes × hora local — minutos/año)</div>${shadowCalendarSVG(r.res.cal)}${calLegend}</div>
+        <table class="kv"><tr><td>Ventana crítica / parada sugerida</td><td>${win}</td></tr>
+          <tr><td>Turbinas que más contribuyen</td><td>${top}</td></tr></table>
+      </div>`;
+    }).join('');
+
+    const sumRows = rs.map(r =>
+      `<tr class="${r.ok ? 'rok' : 'rbad'}"><td>${r.n}</td><td>${r.lat.toFixed(5)}, ${r.lon.toFixed(5)}</td>` +
+      `<td class="num">${r.res.hoursYear.toFixed(1)}</td><td class="num">${r.res.maxMinDay}</td>` +
+      `<td class="num">${r.res.daysAffected}</td><td class="num">${r.res.hoursYearReal.toFixed(1)}</td>` +
       `<td>${r.win ? r.win.months + ' · ' + r.win.hours : '—'}</td>` +
-      `<td style="text-align:center;color:${r.ok ? '#15803d' : '#b91c1c'};font-weight:600">${r.ok ? 'Cumple' : 'Excede'}</td></tr>`).join('');
-    const html = `<!doctype html><meta charset=utf-8><title>Informe de shadow-flicker — Camán I</title>
-      <style>body{font:14px system-ui,sans-serif;margin:32px;color:#1b2533}h1{font-size:19px}table{border-collapse:collapse;width:100%;margin-top:12px;font-size:13px}
-      th,td{border:1px solid #cbd5e1;padding:6px 9px}th{background:#f1f5f9;text-align:left}.muted{color:#64748b;font-size:12px;line-height:1.5}</style>
-      <h1>Informe de parpadeo de sombra (shadow-flicker) — Camán I</h1>
-      <p class="muted">${rs.length} receptor(es) · ${nEx} excede(n) el límite · Generado ${new Date().toLocaleString('es-CL')}<br>
-      Worst-case astronómico (norma LAI: sol siempre despejado, rotor siempre girando). Límite: ≤30 h/año y ≤30 min/día.
-      «Real (meteo)» = caso esperado ponderando estadística de sol, operación del rotor y rosa de vientos del sitio (${METEO_CAMAN.source}).</p>
-      <table><thead><tr><th>#</th><th>Coordenadas (lat, lon)</th><th>h/año (worst)</th><th>min/día (worst)</th><th>h/año (real≈)</th><th>Parada sugerida (mes · hora)</th><th>Cumplimiento</th></tr></thead><tbody>${rows}</tbody></table>`;
-    this._openReport(html, 'informe_sombras_caman.html');
+      `<td class="ctr">${badge(r.ok)}</td></tr>`).join('');
+
+    const schedRows = turbs.map(t => {
+      const b = t.built ?? 1, st = b >= 0.97 ? 'Operativa' : b <= 0.02 ? 'Fundación' : `Montaje ${(b * 100) | 0}%`;
+      return `<tr><td>${t.label || t.id}</td><td class="num">${t.lat.toFixed(5)}</td><td class="num">${t.lon.toFixed(5)}</td><td>${st}</td></tr>`;
+    }).join('');
+
+    const html = `<!doctype html><html lang="es"><meta charset="utf-8">
+      <title>Informe de shadow-flicker — Parque Camán I</title>
+      <style>
+        :root{--ink:#1b2533;--mut:#64748b;--line:#cbd5e1;--bg:#f8fafc;--ok:#15803d;--bad:#b91c1c}
+        *{box-sizing:border-box}
+        body{font:14px/1.5 -apple-system,system-ui,Segoe UI,Roboto,sans-serif;margin:0;color:var(--ink);background:#fff}
+        .wrap{max-width:900px;margin:0 auto;padding:0 34px 48px}
+        .hero{background:linear-gradient(120deg,#0e7490,#155e75);color:#fff;padding:26px 34px;margin-bottom:24px}
+        .hero .brand{font-size:12px;letter-spacing:2px;text-transform:uppercase;opacity:.85}
+        .hero h1{font-size:25px;margin:6px 0 4px}
+        .hero .sub{opacity:.9;font-size:13px}
+        h2{font-size:16px;border-bottom:2px solid var(--line);padding-bottom:5px;margin:30px 0 12px}
+        .muted{color:var(--mut);font-size:12px}
+        .verdict{padding:13px 16px;border-radius:8px;font-weight:700;font-size:15px;margin:6px 0 4px;border:1px solid}
+        .verdict.ok{background:#eafaf0;color:var(--ok);border-color:#a7e3bf}
+        .verdict.bad{background:#fdeaea;color:var(--bad);border-color:#f3b4b4}
+        .kpis{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin:14px 0}
+        .kpi{background:var(--bg);border:1px solid var(--line);border-radius:8px;padding:12px 14px}
+        .kpi .v{font-size:24px;font-weight:800}.kpi .k{font-size:11px;color:var(--mut);text-transform:uppercase;letter-spacing:.4px}
+        table{border-collapse:collapse;width:100%;font-size:12.5px;margin-top:8px}
+        th,td{border:1px solid var(--line);padding:6px 9px;text-align:left}th{background:#f1f5f9}
+        td.num,th.num{text-align:right;font-variant-numeric:tabular-nums}td.ctr{text-align:center}
+        tr.rbad{background:#fdeaea}tr.rok{background:#f3fbf6}
+        .params{display:grid;grid-template-columns:1fr 1fr;gap:8px 26px;background:var(--bg);border:1px solid var(--line);border-radius:8px;padding:14px 18px}
+        .params div{display:flex;justify-content:space-between;border-bottom:1px dashed #d8e0ea;padding:4px 0;font-size:13px}
+        .params b{font-weight:600}
+        figure{margin:10px 0 0}figure img{width:100%;border:1px solid var(--line);border-radius:8px;display:block}
+        figcaption{font-size:11.5px;color:var(--mut);margin-top:6px}
+        .maplegend{display:flex;flex-wrap:wrap;gap:8px 16px;font-size:11.5px;color:var(--mut);margin-top:8px}
+        .maplegend span{display:flex;align-items:center;gap:5px}.maplegend i{width:14px;height:10px;border-radius:2px;display:inline-block}
+        .card{border:1px solid var(--line);border-radius:10px;padding:16px 18px;margin:14px 0;page-break-inside:avoid}
+        .card-h{display:flex;align-items:center;gap:10px;font-size:15px;margin-bottom:10px}
+        .card-h .muted{margin-left:auto}
+        .badge{font-size:11px;font-weight:700;padding:2px 9px;border-radius:999px}
+        .badge.ok{background:#dcfce7;color:var(--ok)}.badge.bad{background:#fee2e2;color:var(--bad)}
+        .stats{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:12px}
+        .stat{background:var(--bg);border:1px solid var(--line);border-radius:8px;padding:9px 10px;text-align:center}
+        .stat .sv{font-size:20px;font-weight:800}.stat .sv.over{color:var(--bad)}.stat .sk{font-size:10.5px;color:var(--mut)}
+        .cal-wrap{margin:6px 0 10px}.cal-t{font-size:12px;color:var(--mut);margin-bottom:6px}
+        .leg{display:flex;flex-wrap:wrap;gap:7px 14px;font-size:11px;color:var(--mut);margin-top:7px}
+        .leg span{display:flex;align-items:center;gap:5px}.leg i{width:13px;height:11px;border-radius:2px;display:inline-block}
+        table.kv td:first-child{color:var(--mut);width:42%}
+        footer{margin-top:34px;border-top:1px solid var(--line);padding-top:14px;font-size:11.5px;color:var(--mut);line-height:1.6}
+        footer a{color:#0e7490}
+        @media print{.hero{-webkit-print-color-adjust:exact;print-color-adjust:exact}.card{break-inside:avoid}}
+      </style>
+      <div class="hero"><div class="brand">ReWind · SHM de parques eólicos</div>
+        <h1>Informe de parpadeo de sombra (shadow-flicker)</h1>
+        <div class="sub">Parque eólico Camán I · Generado ${gen}</div></div>
+      <div class="wrap">
+        <h2>1 · Resumen ejecutivo</h2>
+        <div class="verdict ${verdict.c}">${verdict.c === 'ok' ? '✓' : '✗'} ${verdict.t}</div>
+        <p class="muted">Evaluación según el criterio worst-case astronómico (norma alemana LAI, el que acepta la autoridad): sol siempre despejado y rotor siempre girando con las aspas perpendiculares al observador. Límites de referencia: <b>≤30 h/año</b> y <b>≤30 min/día</b>.</p>
+        <div class="kpis">
+          <div class="kpi"><div class="v">${nOp}</div><div class="k">Turbinas operativas</div></div>
+          <div class="kpi"><div class="v">${rs.length}</div><div class="k">Receptores evaluados</div></div>
+          <div class="kpi"><div class="v" style="color:var(--ok)">${nOk}</div><div class="k">Cumplen</div></div>
+          <div class="kpi"><div class="v" style="color:var(--bad)">${nEx}</div><div class="k">Exceden</div></div>
+        </div>
+
+        <h2>2 · Parámetros del estudio</h2>
+        <div class="params">
+          <div><span>Altura de buje</span><b>90 m</b></div>
+          <div><span>Diámetro de rotor</span><b>84 m (R = 42 m)</b></div>
+          <div><span>Límite horas/año</span><b>30 h</b></div>
+          <div><span>Límite minutos/día</span><b>30 min</b></div>
+          <div><span>Elevación solar mínima</span><b>3°</b></div>
+          <div><span>Alcance máximo</span><b>1.500 m</b></div>
+          <div><span>Paso temporal (receptor)</span><b>2 min · 365 días</b></div>
+          <div><span>Efemérides</span><b>NOAA (azimut/elevación)</b></div>
+          <div><span>Caso real (meteo)</span><b>sol·operación·rosa de vientos</b></div>
+          <div><span>Fuente meteo</span><b>${METEO_CAMAN.source}</b></div>
+        </div>
+
+        <h2>3 · Mapa de iso-sombra del parque</h2>
+        ${siteImg ? `<figure><img src="${siteImg}" alt="Mapa de parpadeo de sombra del parque Camán I">
+          <figcaption>Horas/año de parpadeo de sombra (worst-case) sobre el área. ▲ turbinas (verde=operativa, ámbar=montaje, gris=fundación) · ● receptores (verde=cumple, rojo=excede). Norte arriba.</figcaption></figure>
+          <div class="maplegend"><span><i style="background:#bee678"></i>1–5</span><span><i style="background:#fde047"></i>5–15</span><span><i style="background:#fb923c"></i>15–30</span><span><i style="background:#ef4444"></i>≥30 h/año (excede)</span></div>`
+          : '<p class="muted">Mapa no disponible (sin turbinas operativas).</p>'}
+
+        <h2>4 · Análisis por receptor</h2>
+        ${cards}
+
+        <h2>5 · Tabla de cumplimiento</h2>
+        <table><thead><tr><th>#</th><th>Coordenadas (lat, lon)</th><th class="num">h/año worst</th><th class="num">min/día</th><th class="num">días</th><th class="num">h/año real</th><th>Parada sugerida</th><th class="ctr">Estado</th></tr></thead><tbody>${sumRows}</tbody></table>
+
+        <h2>6 · Programa de turbinas</h2>
+        <table><thead><tr><th>Turbina</th><th class="num">Latitud</th><th class="num">Longitud</th><th>Estado de obra</th></tr></thead><tbody>${schedRows}</tbody></table>
+
+        <footer>
+          <b>Metodología.</b> El parpadeo de sombra se evalúa minuto a minuto durante un año astronómico. La sombra del buje (altura H) cae a distancia H/tan(elevación) en el azimut anti-solar; el rotor (radio R) la ensancha a la banda [(H−R)/tanθ, (H+R)/tanθ] y a un semiángulo atan(R/d). Un receptor se contabiliza cuando su rumbo desde la turbina coincide con el anti-solar y su distancia cae en la banda. El «caso real» pondera cada instante por la estadística de sol despejado, la operación del rotor y la orientación según la rosa de vientos del sitio (${METEO_CAMAN.source}).<br><br>
+          <b>Alcance.</b> Documento técnico de apoyo generado por ReWind. El worst-case es conservador (cota superior); el cumplimiento normativo definitivo debe verificarse con datos meteorológicos medidos (TMY/estación) y la curva de operación real del aerogenerador. Referencias: norma LAI (Alemania) · módulo SHADOW de WindPRO (EMD International).
+        </footer>
+      </div></html>`;
+    this._openReport(html, 'informe_shadow_flicker_caman.html');
   }
 
   // Informe de sombreado ENTRE turbinas (proxy de pérdida por sombra mutua).

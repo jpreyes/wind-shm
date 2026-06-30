@@ -463,7 +463,28 @@ body.shm #shm-banner.show { display: flex; animation: shm-blink 0.8s steps(1) in
 .shm-shadow .ssh-rcp.bad { border-left-color: var(--danger, #ef4444); }
 .shm-shadow .ssh-n { font-weight: 700; color: var(--text-muted); flex: 0 0 auto; }
 .shm-shadow .ssh-v { flex: 1; line-height: 1.35; color: var(--text); }
-.shm-shadow .ssh-st { font-size: 11px; color: var(--text-muted); }
+.shm-shadow .ssh-st { display: block; font-size: 11px; color: var(--text-muted); }
+.shm-shadow .ssh-sub { color: var(--text-muted); font-weight: 400; }
+/* Banner de cumplimiento */
+.shm-shadow .ssh-banner { padding: 9px 11px; border-radius: var(--radius-sm, 6px); font-weight: 700; font-size: 13px; line-height: 1.3;
+  display: flex; flex-direction: column; gap: 3px; border: 1px solid var(--border2); }
+.shm-shadow .ssh-banner.ok { background: color-mix(in srgb, #22c55e 16%, var(--bg3)); border-color: color-mix(in srgb, #22c55e 45%, var(--border2)); color: var(--success, #22c55e); }
+.shm-shadow .ssh-banner.bad { background: color-mix(in srgb, #ef4444 16%, var(--bg3)); border-color: color-mix(in srgb, #ef4444 45%, var(--border2)); color: var(--danger, #ef4444); }
+.shm-shadow .ssh-banner.na { background: var(--bg3); color: var(--text-muted); }
+.shm-shadow .ssh-banner-sub { font-weight: 400; font-size: 11px; color: var(--text-muted); }
+/* KPIs */
+.shm-shadow .ssh-kpis { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+.shm-shadow .ssh-kpi { background: var(--bg3); border: 1px solid var(--border); border-radius: var(--radius-sm, 6px); padding: 7px 9px; }
+.shm-shadow .ssh-kpi.wide { grid-column: 1 / -1; }
+.shm-shadow .ssh-kpi .k { font-size: 10.5px; color: var(--text-muted); text-transform: uppercase; letter-spacing: .4px; }
+.shm-shadow .ssh-kpi .v { font-size: 16px; font-weight: 700; color: var(--text); }
+/* Parámetros del estudio */
+.shm-shadow .ssh-params { background: var(--bg3); border: 1px solid var(--border); border-radius: var(--radius-sm, 6px); padding: 4px 10px; }
+.shm-shadow .ssh-prow { display: flex; justify-content: space-between; gap: 10px; padding: 4px 0; font-size: 12px; border-bottom: 1px solid var(--border); }
+.shm-shadow .ssh-prow:last-child { border-bottom: 0; }
+.shm-shadow .ssh-prow span { color: var(--text-muted); }
+.shm-shadow .ssh-prow b { color: var(--text); font-weight: 600; }
+.shm-shadow .ssh-foot { font-size: 11px; color: var(--text-muted); line-height: 1.5; border-top: 1px solid var(--border); padding-top: 9px; }
 .shm-shadow .ssh-del { flex: 0 0 auto; background: none; border: 0; color: var(--text-muted); cursor: pointer; font-size: 14px; padding: 2px 4px; border-radius: 4px; }
 .shm-shadow .ssh-del:hover { color: var(--danger, #ef4444); background: var(--bg4); }
 

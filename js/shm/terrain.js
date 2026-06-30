@@ -9,7 +9,7 @@
 // torres y drapear caminos sobre el relieve.
 // ─────────────────────────────────────────────────────────────────────────────
 import * as THREE from 'three';
-import { CAMAN_CENTER, LAYOUT_SCALE, toScene } from './parks_data_caman.js?v=237';
+import { CAMAN_CENTER, LAYOUT_SCALE, toScene } from './parks_data_caman.js?v=238';
 
 const M_PER_DEG_LAT = 111320;
 const M_PER_DEG_LON = 111320 * Math.cos(CAMAN_CENTER.lat * Math.PI / 180);
@@ -92,8 +92,9 @@ export class Terrain {
         void main(){
           float t = clamp((vH - uMin) / max(uMax - uMin, 1.0), 0.0, 1.0);
           vec3 col = ramp(t);
-          float sh = 0.68 + 0.32 * clamp(dot(normalize(vN), uLight), 0.0, 1.0);  // relieve sombreado por el sol (tenue, mucho menos que la sombra de torres)
-          col *= sh;
+          float lit = clamp(dot(normalize(vN), uLight), 0.0, 1.0);                // 0 = ladera en sombra, 1 = al sol
+          col *= 0.62 + 0.38 * lit;                                               // contraste de sombra (un poco más marcado)
+          col = mix(col, vec3(0.16, 0.21, 0.46), (1.0 - lit) * 0.34);            // tinte ÍNDIGO en lo sombreado (como la sombra de torres, no gris)
           float e = vH / uInterval;                                              // curvas de nivel finas
           float d = abs(fract(e - 0.5) - 0.5) / max(fwidth(e), 1e-4);
           float line = 1.0 - clamp(d, 0.0, 1.0);                                 // ~1 px
