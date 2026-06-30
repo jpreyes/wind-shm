@@ -14,7 +14,7 @@
 //
 // Módulo ES puro (Node + navegador). Verificable: `node js/shm/shadow_flicker.js`.
 // ─────────────────────────────────────────────────────────────────────────────
-import { solarPosition } from './solar.js?v=234';
+import { solarPosition } from './solar.js?v=235';
 
 const M_PER_DEG_LAT = 111320;
 export const FLICKER_LIMITS = { hoursYear: 30, minDay: 30 };   // referencia LAI (Alemania)
@@ -51,6 +51,9 @@ export function annualFlicker(turbines, recep, opt = {}) {
   const cal = new Float32Array(12 * 24);   // minutos de flicker por mes × hora local (calendario de parada)
   if (!turb.length) return { hoursYear: 0, maxMinDay: 0, daysAffected: 0, hoursYearReal: 0, byTurbine, cal };
 
+  // real-case riguroso: si llega un ponderador meteo (sol·operación·orientación)
+  // se acumulan minutos ESPERADOS; si no, se cae al factor fijo (estimación).
+  const realWeightFn = opt.realWeightFn || null; let realMin = 0;
   let totalMin = 0, maxDay = 0, days = 0;
   const start = Date.UTC(year, 0, 1);
   for (let d = 0; d < 365; d++) {
@@ -72,11 +75,15 @@ export function annualFlicker(turbines, recep, opt = {}) {
           hit = true;
         }
       }
-      if (hit) { dayMin += stepMin; cal[month * 24 + ((m / 60) | 0)] += stepMin; }
+      if (hit) {
+        dayMin += stepMin; cal[month * 24 + ((m / 60) | 0)] += stepMin;
+        if (realWeightFn) realMin += stepMin * realWeightFn(month, anti);
+      }
     }
     totalMin += dayMin; if (dayMin > maxDay) maxDay = dayMin; if (dayMin > 0) days++;
   }
-  return { hoursYear: totalMin / 60, maxMinDay: maxDay, daysAffected: days, hoursYearReal: (totalMin / 60) * realFactor, byTurbine, cal };
+  const hoursYearReal = realWeightFn ? realMin / 60 : (totalMin / 60) * realFactor;
+  return { hoursYear: totalMin / 60, maxMinDay: maxDay, daysAffected: days, hoursYearReal, byTurbine, cal };
 }
 
 const MESES = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic'];

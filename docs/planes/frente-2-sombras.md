@@ -79,8 +79,12 @@ Mitigación: módulos de parada (shutdown). Open-source emergente: WIMBY SF.
    horas/año en que el rotor de cada turbina cae en la sombra de otra (proxy de pérdida por sombra
    mutua; aproxima el buje como receptor). Informe ordenado por turbina. *La pérdida energética fina
    requiere curva de potencia + viento (futuro).*
-8. ⬜ **Real-case estadístico riguroso** — rosa de vientos + % de sol horario; requiere meteo del
-   sitio (`R-10`). Hoy se cubre con la estimación por factor (ítem 5).
+8. ✅ **Real-case estadístico riguroso** (v235) — `js/shm/meteo_caman.js` (primer trozo de `R-10`:
+   una fuente de datos meteo del sitio) aporta % de sol mensual + rosa de vientos + operación.
+   `annualFlicker(opt.realWeightFn)` pondera cada instante por **sol·operación·orientación del rotor**
+   (cara hacia la línea sol→receptor según el viento) → `hoursYearReal` esperado. Reemplaza al factor
+   fijo en los receptores (popup «Real (meteo)» + informe). *Datos estimados; refinar con TMY/estación
+   (camino industrial de `R-10`).* Verificado en Node (worst 43.5 → real 5.9 h/año).
 
 ## Dependencias
 - Receptores (viviendas) como capa de datos del parque.

@@ -6,10 +6,13 @@
 // Click en un marcador → conmuta a la vista 3D enfocando esa estructura (onPick).
 // Leaflet se carga como global (window.L) desde lib/leaflet/leaflet.js.
 // ─────────────────────────────────────────────────────────────────────────────
-import { CAMAN_CENTER } from './parks_data_caman.js?v=234';
-import { CAMAN_ROADS } from './caman_roads.js?v=234';
-import { compassRoseSVG } from './compass.js?v=234';
-import { annualFlicker, flickerOK, FLICKER_LIMITS, REAL_CASE_FACTOR, flickerMap, criticalWindow, interTurbineShading } from './shadow_flicker.js?v=234';
+import { CAMAN_CENTER } from './parks_data_caman.js?v=235';
+import { CAMAN_ROADS } from './caman_roads.js?v=235';
+import { compassRoseSVG } from './compass.js?v=235';
+import { annualFlicker, flickerOK, FLICKER_LIMITS, REAL_CASE_FACTOR, flickerMap, criticalWindow, interTurbineShading } from './shadow_flicker.js?v=235';
+import { realCaseWeight, METEO_CAMAN } from './meteo_caman.js?v=235';
+
+const REAL_W = (month, antiAz) => realCaseWeight(month, antiAz, METEO_CAMAN);   // ponderador meteo del sitio
 
 // Color del marcador según el avance de obra (coherente con el 4D / panel).
 function colorFor(st) {
@@ -94,7 +97,7 @@ export class MapView {
   // Agrega un receptor (vivienda) y calcula su parpadeo de sombra anual worst-case.
   addReceptor(latlng) {
     const L = window.L; if (!L) return;
-    const res = annualFlicker(this.fleet.structures, { lat: latlng.lat, lon: latlng.lng }, { stepMin: 2 });
+    const res = annualFlicker(this.fleet.structures, { lat: latlng.lat, lon: latlng.lng }, { stepMin: 2, realWeightFn: REAL_W });
     const ok = flickerOK(res);
     const col = ok ? '#22c55e' : '#ef4444';
     const icon = L.divIcon({ className: 'rcp-icon', iconSize: [22, 22], iconAnchor: [11, 11],
@@ -107,7 +110,7 @@ export class MapView {
     this._receptors.push(entry);
     m.bindPopup(
       `<b>Receptor ${n}</b><br>Worst-case: <b>${res.hoursYear.toFixed(1)} h/año</b> · ${res.maxMinDay} min/día<br>` +
-      `Estimación real ≈ ${res.hoursYearReal.toFixed(1)} h/año<br>` +
+      `Real (meteo) ≈ <b>${res.hoursYearReal.toFixed(1)} h/año</b><br>` +
       `${res.daysAffected} días afectados<br>` +
       (win ? `Parada sugerida: <b>${win.months}</b>, <b>${win.hours}</b><br>` : '') +
       `<span style="color:${col}">${ok ? '✓ Cumple' : '✗ Excede'}</span> (≤${FLICKER_LIMITS.hoursYear} h · ≤${FLICKER_LIMITS.minDay} min, worst-case)<br>` +
@@ -165,7 +168,7 @@ export class MapView {
       <h1>Informe de parpadeo de sombra (shadow-flicker) — Camán I</h1>
       <p class="muted">${rs.length} receptor(es) · ${nEx} excede(n) el límite · Generado ${new Date().toLocaleString('es-CL')}<br>
       Worst-case astronómico (norma LAI: sol siempre despejado, rotor siempre girando). Límite: ≤30 h/año y ≤30 min/día.
-      «Real ≈» = estimación con factor de probabilidad (${(REAL_CASE_FACTOR * 100).toFixed(0)}%); refinar con meteo del sitio.</p>
+      «Real (meteo)» = caso esperado ponderando estadística de sol, operación del rotor y rosa de vientos del sitio (${METEO_CAMAN.source}).</p>
       <table><thead><tr><th>#</th><th>Coordenadas (lat, lon)</th><th>h/año (worst)</th><th>min/día (worst)</th><th>h/año (real≈)</th><th>Parada sugerida (mes · hora)</th><th>Cumplimiento</th></tr></thead><tbody>${rows}</tbody></table>`;
     this._openReport(html, 'informe_sombras_caman.html');
   }
