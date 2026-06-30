@@ -95,6 +95,26 @@ Mitigación: módulos de parada (shutdown). Open-source emergente: WIMBY SF.
    sombreado entre torres y la **lista viva de receptores** (worst/real + quitar). Los controles de
    hora/fecha quedan en el HUD flotante sobre el visor. Activar «Shadow» abre la pestaña; agregar/
    quitar receptores en el 2D la refresca (`map_view.removeReceptor` + `window.shmDash.refreshShadow`).
+11. ✅ **Informe completo + panel enriquecido + sombra de relieve con color** (v238) — informe
+   imprimible con portada, resumen ejecutivo (veredicto + KPIs), parámetros, **mapa de iso-sombra**
+   (heatmap h/año + turbinas + receptores + N + escala, canvas→PNG), ficha por receptor con
+   **calendario mes×hora** + ventana crítica + turbinas que más contribuyen, tabla de cumplimiento y
+   programa de turbinas. Panel derecho con banner de veredicto, KPIs y parámetros. Sombra del relieve
+   con **tinte índigo** (no gris) y más contraste. Botón de flicker también de vuelta en el HUD.
+12. ✅ **Modo Shadow: sin avance + selección = receptor** (v239) — en Shadow se ocultan el 4D de obra
+   y la ficha de avance (torres completas, escenario operativo; se restaura al salir). Seleccionar una
+   torre en 3D coloca un **receptor** ahí (como el clic en 2D): abre la pestaña Shadow y muestra el
+   parpadeo en una ficha-informe (clampada al viewport) con acceso al informe completo; sin zoom
+   cinemático (vista amplia).
+13. ✅ **Sin marca de terceros** (v240) — se quitó «WindPRO/WindFarmer/EMD» del botón, del informe (pie
+   = sólo directriz LAI) y de los comentarios, por prudencia legal.
+
+## Estado
+**Frente 2 (sombras) — funcionalmente completo (v240).** Cubre visualización 3D/2D de sombras sobre el
+relieve, estudio horario/diario, worst-case y real-case (meteo) cuantitativos, mapa de flicker (2D+3D),
+informe imprimible tipo industria, calendario de parada y sombreado inter-turbinas. **Pendiente sólo lo
+opcional/futuro:** datos meteo medidos reales (TMY/estación → `R-10`) e importación de receptores
+(KMZ/CSV) en vez de clic manual.
 
 ## Dependencias
 - Receptores (viviendas) como capa de datos del parque.
