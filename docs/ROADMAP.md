@@ -1,7 +1,20 @@
-# PÓRTICO — Roadmap de mejoras
+# ReWind — Roadmap
 
-Plan de mejoras detectadas en uso práctico (análisis y diseño), agrupadas por
-similaridad. `[#]` referencia el pedido original. Estado: ⬜ pendiente · 🟡 en curso · ✅ hecho.
+> **Este repo es ReWind (`wind-shm`)**, herramienta de **SHM de parques eólicos**.
+> **El plan vivo es el grupo `G24 · ReWind` (ítems `R-*`)** — buscar «## G24» más abajo.
+> Los grupos **G1–G23 de más abajo son el histórico de PÓRTICO** (la base FEM
+> heredada de `structweb3d`); se conservan como registro de la ingeniería que hoy
+> vive **solo como gemelo digital** (modal/estático para f₁ y deformadas). Tras la
+> limpieza **R-20** el código es solo-ReWind; gran parte de lo descrito en G1–G23
+> ya **no existe** en este deploy (mallador, diseño, espectro, no-lineal, UI de
+> modelado, asistente LLM) — ver `[R-20]`.
+
+Plan de mejoras agrupadas por similaridad. `[#]`/`[R-]` referencia el pedido
+original. Estado: ⬜ pendiente · 🟡 en curso · ✅ hecho.
+
+---
+
+## (Histórico PÓRTICO — base FEM heredada)
 
 > **Estado actual (v183).** Completos: **G1–G8, G10, G11, G14, G15, G16, G17, G20, G21**;
 > G12 lineal cerrado (modal, espectro, time-history de pórtico **y de áreas** `[#51]`);
@@ -268,10 +281,22 @@ similaridad. `[#]` referencia el pedido original. Estado: ⬜ pendiente · 🟡 
 - ⬜ **Persistencia/`DataSource` industrial + API publicada** `[R-10]`: que la herramienta sirva a la industria conectándose a una **base de datos de torres del parque** o funcionando de forma **autónoma**. Capas: `localStorage` (demo) → IndexedDB/SQLite local (autónomo, garantiza operación sin red) → base de datos del parque. **Publicar una API** (esquema común `DataSource` simulado ↔ en vivo) para que terceros consuman la misma telemetría.
 - ⬜ **Empaquetado Electron + serie temporal InfluxDB + estándares eólicos** `[R-11]`: llevar ReWind a **Electron** (app de escritorio para el centro de control del parque). Decidir el **stack de ingesta de InfluxDB** (cliente desde **Python / C++ / Rust** — definir el lenguaje base del backend) y alinear el modelo de datos con los **estándares internacionales de torres eólicas** (p.ej. IEC 61400, OPC-UA/IEC 61850 para la subestación). *(Decisión de arquitectura pendiente: Electron + servicio de ingesta + InfluxDB + API `[R-10]`.)*
 - ⬜ **Quitar el render/pantalla inicial heredado de PÓRTICO** `[R-16]`: lo primero que se ve al abrir aún corresponde a PÓRTICO (landing/splash y el shell de modelado antes de que monte ReWind). Reemplazarlo por un arranque propio de ReWind (sin que asome el modelador). *(Relacionado con `[R-8]`.)*
-- ⬜ **Modelado de cargas móviles ferroviarias (frenado y arranque) en puentes de alta velocidad** `[R-17]`: análisis dinámico de trenes sobre puentes — fuerzas de **frenado y aceleración** (longitudinales) además del paso de cargas móviles, para puentes de **tren de alta velocidad**. Base reutilizable: el motor time-history (`[#G12]`, integración por Duhamel) y el solver de PÓRTICO. *(Funcionalidad de ingeniería estructural, fuera del alcance SHM de ReWind; evaluar como módulo aparte.)*
 - ⬜ **Gestión de avance de obra completa (ventana dedicada)** `[R-18]`: el parque está en **etapa constructiva**, así que el seguimiento de avance debe crecer más allá de la pestaña «Avance» actual (etapas + % por torre). Abrir una **ventana completa** con mayores capacidades: cronograma/Gantt por torre y por zona, hitos y fechas reales (inicio/fin planificado vs. real), responsables, **fotografías** de obra (requiere BD, ver `[R-10]`), curva-S de avance del parque, % por componente (fundación, fuste, góndola, rotor, cableado/colectora), filtros y exportación de reportes de obra. *(Hoy: `built` + etapas editables con % por estructura, persistidas en localStorage.)*
 - ⬜ **Análisis de sombras de los aerogeneradores según la posición del sol** `[R-19]`: evaluar **visualmente** la proyección de sombras del rotor/fuste según la **posición solar** (fecha, hora, latitud/longitud — ya georreferenciado) sobre el terreno y entre torres. Útil para *shadow flicker* (parpadeo de sombra hacia viviendas/vecinos) y sombreado entre máquinas. En 3D: luz direccional = sol (azimut/elevación por efemérides) + sombras proyectadas; control de fecha/hora con animación del día. *(Three.js ya tiene `castShadow`/`receiveShadow`; el relieve y las torres ya están en escena.)*
 - ✅ **Depurar del código todo lo que no sea de ReWind (no solo ocultarlo)** `[R-20]` (v213): se eliminaron `js/app.js` (ReWind se auto-bootea), `js/design/`, `js/io/`, `js/ui/`, `js/utils/`, el mallador (`mesh_*`, `mesher`, `discretize`, `macromodel`, `matching`, `model_ops`), `js/api/`, los solvers no usados por el gemelo (geometric, spectrum, formfind, nl_*, buckling, subspace, staged, tendon, moving_load, timehistory, sparse, linsolve + workers), `worker/asistente.js` y el markup PÓRTICO de `index.html` (menús, barra de modelado, panel FE, overlays/modales/ayuda) — ~24.900 líneas. Se conserva el closure de ReWind (`js/shm/*` + model/serializer/macro_registry/macros.turbine + 10 solvers del gemelo + `asistente/generador.js`). El resize del panel se repuso en `shm_mode.js`. *(Histórico, ahora obsoleto:)* ~~hoy gran parte de PÓRTICO sigue presente y sólo se **oculta vía CSS**~~ (`shm.css`) — el **mallador**, la barra de modelado (crear nodos/elementos/áreas/apoyos), diafragmas rígidos, combinaciones de carga, espectro de respuesta, edición CSV de geometría, paneles FE, menús de Análisis/Diseño, etc. siguen en el bundle y a veces **asoman**. Eliminarlos realmente del código (HTML/JS/CSS) dejando solo lo específico de SHM/GIS eólico, conservando internamente solo el **núcleo de cálculo** que ReWind use como gemelo digital (modal/estático para f₁ y deformadas). Más profundo que `[R-8]` (marca/textos) y `[R-16]` (arranque): apunta a **quitar la funcionalidad** heredada, no a esconderla. *(Reduce peso, superficie de bugs y confusión del usuario.)*
+
+**⬜ Capacidades SHM que tienen las plataformas comerciales y a ReWind le faltan**
+*(Detectadas comparando con Bachmann SHM.Webportal, HBK/Brüel & Kjær, Romax Insight,
+fos4X/Wölfel, Onyx InSight, ROMO Wind, SkySpecs. Ordenadas por valor/esfuerzo.)*
+- ⬜ **OMA — identificación modal desde la señal MEDIDA** `[R-21]` *(alto valor, bajo costo — SIGUIENTE recomendado)*: extraer f₁, f₂, amortiguamiento (y forma modal con 2 sensores) **de los acelerómetros**, no del gemelo teórico, y **seguir su deriva en el tiempo**. El corrimiento de frecuencias es la señal temprana de daño / aflojamiento de pernos / asentamiento de fundación. Reusa el núcleo eigen del gemelo (`digital_twin.js`) y los 2 nodos MEMS por torre. *Es la prueba de que esto es SHM real y no una maqueta.*
+- ⬜ **Consumo de vida a fatiga / cargas equivalentes (DEL)** `[R-22]`: conteo **rainflow** + curvas S-N → daño acumulado y vida remanente del fuste/uniones. Entregable estrella de Romax/Onyx. Núcleo numérico acotado y autónomo (verificable en Node).
+- ⬜ **Alarmas y umbrales configurables** `[R-23]`: umbrales por métrica (RMS, f₁, tilt, viento) con estados activo/aviso/crítico y notificación (email/SMS/push). Depende del `DataSource` (`[R-10]`).
+- ⬜ **Inclinómetro / tilt del fuste y asentamiento de fundación** `[R-24]`: seguimiento del desplome y del settlement en el tiempo (complementa OMA para diagnóstico de fundación).
+- ⬜ **Mantenimiento predictivo + vida útil remanente (RUL) por componente** `[R-25]`: curva de salud por torre/componente y estimación de RUL a partir de fatiga `[R-22]` + tendencias `[R-21]`.
+- ⬜ **SHM poblacional (benchmarking de flota)** `[R-26]`: comparar torres entre sí para detectar la anómala (la población como referencia). Ya está como meta en `CLAUDE.md`; falta implementarlo (clustering / z-score de la flota).
+- ⬜ **Desempeño: curva de potencia y disponibilidad** `[R-27]`: curva de potencia medida vs. garantizada, pérdidas por viento, disponibilidad. *(Requiere SCADA — encaja con `[R-10]`/`[R-11]`.)*
+- ⬜ **Reportes programados + export automático** `[R-28]`: informes periódicos (PDF/Excel) por torre, zona y parque, agendados.
+- ⬜ **Componentes más allá del fuste (drivetrain/palas)** `[R-29]` *(grande, requiere más sensórica)*: vibración de orden de caja/rodamientos y monitoreo de palas (grietas, hielo, desbalance) — opcionalmente inspección por dron/IA. Hoy ReWind monitorea solo la torre.
 
 ---
 

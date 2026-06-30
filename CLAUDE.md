@@ -6,69 +6,80 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 This repo (`jpreyes/wind-shm`) is a **fork of structweb3d/PÓRTICO** being repurposed into a **Structural Health Monitoring (SHM) tool for wind turbines**. `origin` → `wind-shm`, `upstream` → `structweb3d` (pull PÓRTICO improvements from upstream; ship SHM work to origin). The shared base below still applies verbatim — same vanilla-JS + Three.js engine, no build step, Spanish UI/commits.
 
-**The pivot, in one line:** stop *building* models; start *monitoring a fleet*. Plan:
-- **Keep & reuse** (already in the codebase, useful as the physics-based **digital twin**): static, dynamic/time-history (feed measured accelerograms), modal (`subspace.js` is the OMA-ready eigen core), nonlinear P-Delta (`geometric.js`) and nonlinear compression (`nl_lite.js`). The new commit `#86` added a **pluggable MACROMODELOS registry** — that is the intended hook for the wind-turbine model.
-- **Add:** a `Turbine` macro-model (mast + nacelle + spinning blades + wind); a multi-turbine field (`InstancedMesh` + LOD + frustum culling → ~100 turbines at 60fps); cinematic select-and-zoom (others dimmed); a **liveness layer** (sensors + gateways as one `THREE.Points`/instanced layer, blink = heartbeat via shader time-uniform + per-instance phase, color = active/stale/offline — must show for **all on-screen turbines**, not just the selected one); an SHM dashboard in the right panel (Señal · Datos · Estado estructural · Movimiento · Avanzado); ML across the fleet (population-based SHM); a hybrid **`DataSource`** abstraction (`SimulatedSource` ↔ `LiveSource`, same schema) with the real path being gateway → Cloudflare Worker + Durable Object → WebSocket → browser.
-- **Remove later** (Juan Patricio will specify which): modeling toolbar (node/element/area/mesh/support creation), response spectrum, rigid diaphragms, load combinations, CSV geometry editing.
+**The pivot, in one line:** stop *building* models; start *monitoring a fleet*. The pivot is **done** — the repo was purged to ReWind-only in R-20 (see below). What ReWind is today:
+- **Keeps & reuses** the FEM engine as the physics-based **digital twin**: static + modal (frequencies f₁/f₂ and deformed shapes from the measured displacements). Only the 10 solver modules the twin needs survive in `js/solver/` (see below).
+- **Adds:** a `Turbine` macro-model (mast + nacelle + spinning blades); a georeferenced multi-turbine fleet on a **conceptual 3D relief** (contour lines + hypsometric tint, no satellite imagery) + roads; a **2D Leaflet map** (PiP / fullscreen); **4D construction progress** (each structure fills bottom-up by % via clipping planes; editable stages); a **liveness layer** (sensors + gateways blinking, color = active/stale/offline); an SHM dashboard in the right panel (Señal · Datos · Estado estructural · Movimiento) + a structural-state report; a lateral tree Parque ▸ Zona ▸ Torre; a hybrid **`DataSource`** abstraction (`SimulatedSource` ↔ `LiveSource`, same schema) with the real path being ESP32 → MQTT → InfluxDB → features backend → browser (see `bridge/`).
 
-> **⚠️ Limpieza R-20 (hecha, v213+):** el repo ya se purgó a **solo ReWind**. Se eliminó `js/app.js` (ReWind se auto-bootea desde `js/shm/shm_mode.js`), todo `js/design/`, `js/io/`, `js/ui/`, `js/utils/`, el mallador (`js/model/mesh_*`, `mesher`, `discretize`, `macromodel`, `matching`, `model_ops`), `js/api/`, los solvers no usados por el gemelo (geometric, spectrum, formfind, nl_*, buckling, subspace, staged, tendon, moving_load, timehistory, sparse, linsolve y sus *workers*), `worker/asistente.js`, y el markup PÓRTICO de `index.html` (menús, barra de modelado, panel FE, overlays/modales/ayuda).
-> **Lo que QUEDA (closure de ReWind):** `js/shm/*`; de `js/model/` solo `model.js`, `serializer.js`, `macro_registry.js`, `macros/turbine.js`; de `js/solver/` solo los 10 del **gemelo digital** (`assembler`, `timoshenko`, `static_solver`, `modal_solver`, `modal_results`, `postprocess`, `membrane`, `plate`, `diaphragm`, `links`); `asistente/generador.js` (+ `cargas.js`) para la celosía de torres AT; libs `three`, `numeric.js`, `leaflet`. Las secciones de Arquitectura más abajo describen el PÓRTICO original (base histórica) — varias de esas piezas ya no existen aquí.
+> **✅ Limpieza R-20 (hecha, v213+):** el repo está purgado a **solo ReWind**. Se eliminó `js/app.js` (ReWind se auto-bootea desde `js/shm/shm_mode.js`), todo `js/design/`, `js/io/`, `js/ui/`, `js/utils/`, el mallador (`js/model/mesh_*`, `mesher`, `discretize`, `macromodel`, `matching`, `model_ops`), `js/api/`, los solvers no usados por el gemelo (geometric, spectrum, formfind, nl_*, buckling, subspace, staged, tendon, moving_load, timehistory, sparse, linsolve y sus *workers*), `worker/asistente.js`, y el markup PÓRTICO de `index.html` (menús, barra de modelado, panel FE, overlays/modales/ayuda).
+> **Lo que QUEDA (closure de ReWind):** `js/shm/*`; de `js/model/` solo `model.js`, `serializer.js`, `macro_registry.js`, `macros/turbine.js`; de `js/solver/` solo los 10 del **gemelo digital** (`assembler`, `timoshenko`, `static_solver`, `modal_solver`, `modal_results`, `postprocess`, `membrane`, `plate`, `diaphragm`, `links`); `asistente/generador.js` (+ `cargas.js`) para la celosía de torres AT; libs `three`, `numeric.js`, `leaflet`. **Las secciones de Arquitectura más abajo ya describen esta realidad ReWind**, no el PÓRTICO original.
 
 Each turbine carries **2 MEMS accelerometers** (top + mid mast) + a gateway → the 2-node config is intentional (enough for the first 2 bending modes + an ML feature vector).
 
-## What this is (shared base from structweb3d)
+## What this is (the running app)
 
-**PÓRTICO** — a browser-based 3D structural analysis (FEM) + teaching app for the Instituto de Obras Civiles, Universidad Austral de Chile (Dr. Juan Patricio Reyes). Vanilla JS ES modules + Three.js + a small `numeric.js`. **No build step, no bundler, no framework, no `package.json`** — `index.html` loads `js/app.js` directly via an importmap. UI text, code comments, and git commit messages are in **Spanish**; match that.
+**ReWind** — a browser-based SHM tool for wind farms, built on the FEM engine inherited from PÓRTICO (Instituto de Obras Civiles, Universidad Austral de Chile, Dr. Juan Patricio Reyes). Vanilla JS ES modules + Three.js + Leaflet + a small `numeric.js`. **No build step, no bundler, no framework, no `package.json`** — `index.html` boots ReWind via an importmap; the app **self-boots** from `js/shm/shm_mode.js` (`startBoot()` on `load`), there is **no `app.js`** anymore.
 
-The app must run from a static server with no install, and is a PWA (installable/offline). **This fork (`wind-shm`) is published on GitHub Pages** (static hosting) from `main` — it is a purely static site, so there is **no Cloudflare Worker** in this deploy and the server-side LLM assistant API is not available on Pages. *(Upstream `structweb3d`/PÓRTICO does deploy as a Cloudflare Worker that serves the assets + assistant API; the `wrangler.jsonc` and `worker/` in this repo are inherited base and are not part of the GitHub Pages deploy.)*
+The app must run from a static server with no install, and is a PWA (installable/offline). **This fork (`wind-shm`) is published on GitHub Pages** (static hosting) from `main` — it is a purely static site, so there is **no Cloudflare Worker / no server-side API** in this deploy. *(Upstream `structweb3d`/PÓRTICO deploys as a Cloudflare Worker; the inherited `wrangler.jsonc`/`worker/` are not part of the ReWind GitHub Pages deploy. The real-time telemetry backend lives in `bridge/` and is separate from the static site.)*
 
 ## Commands
 
 - **Run locally:** `python serve.py [port]` (default 8765) — a no-cache static server that sets correct UTF-8 / `.webmanifest` MIME types. `python -m http.server 8765` also works but lacks those headers.
 - **Syntax-check an ES module:** `node --input-type=module --check < js/path/file.js`. **Do NOT use plain `node --check file.js`** — it treats `.js` as CommonJS and silently passes invalid ESM (e.g. bad `import`s).
-- **Run a verification test:** tests are standalone Node scripts, e.g. `node test_plate.mjs`, `node test_shell.mjs`, `node test_buckling.mjs` (subespacio vs Euler), `node test_formfind.mjs` (FDM acotado), `node asistente/test_generador.mjs`. They import solver/generator modules directly and assert against **analytical solutions / global equilibrium** (ΣReactions = ΣLoads). There is no test runner — each file is its own entry point. (Los `test_*.mjs` de la raíz no están versionados en git, sólo los de `asistente/`.)
-- **Deploy (GitHub Pages):** `wind-shm` se publica en **GitHub Pages** desde `main` (sitio estático, sin build): al hacer `git push` a `main`, GitHub Pages republica el sitio automáticamente. No usa Cloudflare ni `wrangler` (eso es de upstream `structweb3d`). Como es estático puro, la API del asistente LLM (`worker/asistente.js`) **no** se sirve en Pages. *(Cuidado con rutas absolutas: bajo Pages el sitio puede colgar de un subpath `…github.io/wind-shm/`, por eso los imports usan rutas relativas `./…`.)*
+- **Run a verification test:** tests are standalone Node scripts that import the generator/solver modules directly and assert against **analytical solutions / global equilibrium** (ΣReactions = ΣLoads). The versioned ones live in `asistente/`: `node asistente/test_generador.mjs`, `node asistente/test_torre.mjs` (celosía 3D de torre AT). The root `test_*.mjs` (e.g. `test_turbine.mjs`) are ad-hoc and **not** versioned in git. There is no test runner — each file is its own entry point.
+- **Deploy (GitHub Pages):** `wind-shm` se publica en **GitHub Pages** desde `main` (sitio estático, sin build): al hacer `git push` a `main`, GitHub Pages republica el sitio automáticamente. No usa Cloudflare ni `wrangler` (eso es de upstream `structweb3d`); ReWind no tiene API de servidor. *(Cuidado con rutas absolutas: bajo Pages el sitio puede colgar de un subpath `…github.io/wind-shm/`, por eso los imports usan rutas relativas `./…`.)*
 
 ## Versioned imports — the cache-busting convention (important)
 
-Every internal import and worker URL carries a query string, e.g. `import { Model } from './model/model.js?v=199'`. This is a **global app version** used to bust browser/SW caches. When you ship a change to shipped JS/CSS, **bump it across all files at once** (current version: **v199**):
+Every internal import and worker URL carries a query string, e.g. `import { Model } from './model/model.js?v=214'`. This is a **global app version** used to bust browser/SW caches. When you ship a change to shipped JS/CSS, **bump it across all files at once** (current version: **v214**):
 
 ```bash
-files=$(grep -rl "v=199" --include=*.js --include=*.html js index.html sw.js)
-for f in $files; do sed -i 's/v=199/v=200/g' "$f"; done   # ~20 files
+files=$(grep -rl "v=214" --include=*.js --include=*.html js index.html sw.js)
+for f in $files; do sed -i 's/v=214/v=215/g' "$f"; done
 ```
 
 Gotchas:
-- The bare integer `cx="104"` in `index.html` (an SVG coordinate) is **not** a version — `sed 's/v=106/.../'` only matches `v=NNN`, so it's safe; never blanket-replace the raw number.
-- `js/solver/modal_worker.js` and other worker scripts are loaded by URL with `?v=` from `app.js` — they must be bumped too.
-- `sw.js` also has its own `CACHE_VERSION` constant (network-first SW); bump it on release per the comment in that file.
+- The bare integer `cx="104"` in `index.html` (an SVG coordinate) is **not** a version — `sed 's/v=NNN/.../'` only matches `v=NNN`, so it's safe; never blanket-replace the raw number.
+- `js/shm/shm_worker.js` is loaded by URL with `?v=` from `shm_mode.js` — it must be bumped too.
+- **`REWIND_VER`** constant in `js/shm/shm_mode.js` (shown in the UI) — bump it to the same `vNNN` on release.
+- `sw.js` also has its own **independent** `CACHE_VERSION` constant (network-first SW); bump it on release per the comment in that file.
 
 ## Architecture
 
-**`js/app.js`** is the central `App` orchestrator (very large). It owns `this.model`, wires the UI, and drives every analysis. UI is split into three pieces it coordinates:
-- **`js/model/model.js`** — the in-memory `Model`: `Map`s of nodes, elements, areas, materials, sections, diaphragms, loadCases, combinations. Plain data; `Serializer` round-trips it to the `.s3d` JSON format (and CSV).
-- **`js/ui/viewport.js`** — Three.js scene, picking, modes (select/node/elem/area/support/pan), result rendering (deformed shape, force diagrams, mode shapes).
-- **`js/ui/properties.js`** — right-hand panel: super-tabs (Modelo / Asistente / Resultados / Diseño) and their sub-tabs; `js/ui/menu.js` is the top menu + left toolbar.
+ReWind **self-boots**: `index.html` imports `js/shm/shm_mode.js`, which on `load` runs `startBoot()` — builds the toolbar, dashboard, status bar, the `FleetView` (Three.js) and the `MapView` (Leaflet). There is **no `App` orchestrator** and no `window.app` PÓRTICO instance.
 
-**Solver pipeline** (`js/solver/`):
-- `assembler.js` assembles global `K` (and mass `M`); `timoshenko.js` holds the element stiffness/mass, local-axis transforms, end-release condensation, and `fixedEndForces` for distributed loads.
-- `static_solver.js` (`StaticSolver.solve` → returns a `Results`), `modal_solver.js`, `spectrum_solver.js`. Heavy solves run in **Web Workers** (`static_worker.js`, `modal_worker.js`, `buckling_worker.js`) to keep the UI responsive; `app.js` also calls `StaticSolver` directly in some paths.
-- `postprocess.js` — `Results` class: nodal disps/reactions, element end forces, and `getDiagramData`/`getElemAtXi` for N/V/M(x) along members. **This is the source of truth for internal-force diagrams; never infer loads from end shears.**
-- **Autovalores por iteración de subespacio (Bathe):** `subspace.js` es el **núcleo compartido** (`smallGenEig` q×q + helpers de banda). El **modal** lo usa vía `modal_worker.js`; el **pandeo** vía `buckling.js` (`solveBuckling`, resuelve `(K+λKg)φ=0` reduciendo con Cholesky sobre `Kᵣ` SPD porque `−Kg` es indefinida) + `buckling_worker.js`. Verificado equivalente a Euler (`test_buckling.mjs`).
-- Specialized physics: `membrane.js` + `plate.js` (CST/QUAD membrane, MITC4 + DKT plate bending, shell = membrane+plate), `geometric.js` (Kg / P-Delta / buckling; `assembleKg` devuelve `{Kg, Nmax, Nby}` con el axial por elemento), `nl_lite.js` (nonlinear/cables, plastic hinges, displacement control), `formfind.js` (FDM, acepta `axes` para acotar a la vertical), `diaphragm.js` (rigid diaphragm constraints + floor CR), `sparse.js`/`linsolve.js` (banded Cholesky). Docs por funcionalidad en `docs/` (`form-finding.md`, `pushover.md`).
+**ReWind app (`js/shm/`):**
+- **`shm_mode.js`** — the entry point + UI glue: toolbar (Mapa/Avance/Relieve…), right-panel dashboard with lateral tabs (Parque ▸ árbol / Selección ▸ Datos·Estado·Movimiento), the Avance (4D progress) editor, the floating tower card, the status bar, panel resize, theming, `REWIND_VER`.
+- **`fleet_view.js`** — the Three.js scene: fleet of turbines, picking (via invisible hitboxes carrying `turbineId`), camera, terrain mesh + grid, roads, the 4D construction clipping planes, floating-card screen projection, the render loop (`_animate` → `onFrame`, operational-only spin, sensor heartbeat).
+- **`turbine_mesh.js`** / **`structures.js`** — turbine Group (mast + nacelle + rotor + ghost head + 2 sensors + gateway) and AT-tower / foundation meshes; ghost vs solid materials for 4D.
+- **`terrain.js`** — conceptual 3D relief: `Terrain` ShaderMaterial (hypsometric tint + contour lines + hillshade + edge fade) over a zero-based heightmap (`data/caman_dem.json`).
+- **`map_view.js`** + **`caman_roads.js`** — Leaflet 2D map (Esri imagery / OpenTopoMap, PiP/fullscreen, scale bar, turbine/AT divIcons, roads).
+- **`parks.js`** + **`parks_data_caman.js`** — multi-park store (Parque ▸ Zona ▸ Torre), tree UI with inline rename + delete, `localStorage` persistence; Camán I real data (`toScene(lon,lat)`, turbines/HV towers, editable `stages`, `built`).
+- **`data_source.js`** — the `DataSource` abstraction (`SimulatedSource` now; `LiveSource` later, same schema).
+- **`digital_twin.js`** — wires the kept FEM solvers as the physics-based twin (assembles a turbine/tower model, runs static + modal → f₁/f₂ and deformed shape).
+- **`shm_worker.js`** — Web Worker for the per-turbine SHM summaries (RMS, f₁, wind, ML class), loaded by URL `?v=` from `shm_mode.js`.
 
-**Assistant subsystem** (LLM-backed, deterministic execution):
-- `worker/asistente.js` (Cloudflare Worker) exposes `POST /api/asistente` (NL description → *ficha* JSON via OpenAI/OpenRouter cascade → model) and `POST /api/asistente/modificar` (NL order → structured **operations**). The LLM only produces structured data; **the model is always built/mutated client-side by deterministic code**, which is what makes the LLM path safe.
-- `asistente/generador.js` — pure ES module that turns a *ficha* into a `.s3d` model (geometry, sections, NCh loads, combos). Reusable in Node + browser + Worker; tested in `asistente/test_generador.mjs`.
-- `js/model/model_ops.js` — `aplicarOperaciones(model, ops, ctx)` executes assistant operations on the existing model (`add_load`, `add_story`, `add_bay`, `set_modifiers`, `set_mass`); `app.js` `aplicarOperacionesModelo` applies and refreshes.
+**Model layer (`js/model/`, kept):**
+- **`model.js`** — in-memory `Model`: `Map`s of nodes, elements, areas, materials, sections, diaphragms, loadCases. **`serializer.js`** round-trips `.s3d` JSON.
+- **`macro_registry.js`** + **`macros/turbine.js`** — the pluggable macro-model registry and the wind-turbine macro the twin builds from.
+
+**Digital-twin solver pipeline (`js/solver/`, exactly 10 modules):**
+- `assembler.js` assembles global `K` (and mass `M`); `timoshenko.js` holds the element stiffness/mass, local-axis transforms, end-release condensation, and `fixedEndForces`.
+- `static_solver.js` (`StaticSolver.solve` → `Results`) and `modal_solver.js` + `modal_results.js` (frequencies, mode shapes, participation).
+- `postprocess.js` — `Results`: nodal disps/reactions, element end forces, `getDiagramData`/`getElemAtXi` for N/V/M(x). **Source of truth for internal-force diagrams; never infer loads from end shears.**
+- `membrane.js` + `plate.js` (CST/QUAD membrane, MITC4 + DKT plate, shell = membrane+plate), `diaphragm.js` (rigid-diaphragm constraints + floor CR), `links.js` (rigid links / constraints).
+- *(Removed in R-20: subspace/buckling/geometric/nl_lite/formfind/spectrum/sparse/linsolve and all their workers — not used by the twin.)*
+
+**AT-tower generator (`asistente/`, kept — no LLM):**
+- `asistente/generador.js` — pure ES module that turns a *ficha* (`tipologia:"torre"`) into a `.s3d` lattice model (4 tapered legs, panels, X-bracing, crossarms, wind/cable+ice loads). Reusable in Node + browser; tested in `asistente/test_torre.mjs` / `asistente/test_generador.mjs`. `asistente/cargas.js` holds the normative load magnitudes (NCh) it uses.
+- *(Removed in R-20: the LLM path — `worker/asistente.js`, n8n flow, and `js/model/model_ops.js`. The generator is invoked by ReWind directly with a ficha, not via an LLM.)*
 
 ## Engineering conventions (read before touching the solver)
 
 - **Coordinates:** Z-up, matching SAP2000/ETABS. Three.js mapping is `model(x,y,z) → three(x, z, y)`.
 - **Element DOF order (12):** `[ux1,uy1,uz1,rx1,ry1,rz1, ux2,uy2,uz2,rx2,ry2,rz2]`. Element `releases` is a 12-array of 0/1 (1 = released hinge at that DOF).
 - **Distributed load `dir`:** `'gravity'` and legacy `'globalZ'` both mean global −Z (`w>0` = downward), with axial projection for inclined/vertical members; also `globalX/Y`, `localY/Z/X`. Trapezoidal loads carry an optional `w2` (intensity at the j-end).
-- **Section stiffness modifiers** live on `sec.mod = {A, Iy, Iz, J}` (cracked-section factors). To modify a subset of elements, clone the section (see `model_ops.js`) so you don't affect others sharing it.
-- Validate any solver change against an analytical case (the `test_*.mjs` pattern), not just that it runs.
+- **Section stiffness modifiers** live on `sec.mod = {A, Iy, Iz, J}` (cracked-section factors). To modify a subset of elements, clone the section so you don't affect others sharing it.
+- Validate any solver/generator change against an analytical case (the `test_*.mjs` pattern), not just that it runs.
 
 ## Browser verification workflow
 
@@ -86,4 +97,4 @@ Use the preview tools to verify UI/solver changes (serve on 8765). **The PWA ser
 
 ## Roadmap
 
-`docs/ROADMAP.md` is the live, group-based (G1–G11) plan of improvements detected in real use, mapped to user requests with ✅/🟡/⬜ status. Update it when closing items.
+`docs/ROADMAP.md` is the live, group-based plan. **Groups G1–G23 are the inherited PÓRTICO history** (historical record of the FEM base). **The live ReWind plan is group G24 with items `R-*`** (R-6 i18n, R-7 native SHM menu, R-8/R-16 drop PÓRTICO branding/landing, R-10/R-11 industrial `DataSource`+API / Electron+InfluxDB, R-18 full construction window, R-19 shadow analysis, R-21+ SHM analytics: OMA from measured signal, fatigue/DEL, alarms). Update it when closing items.

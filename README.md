@@ -1,39 +1,96 @@
-# PÓRTICO — Laboratorio Virtual de Análisis Estructural 3D
+# ReWind — Monitoreo de Salud Estructural (SHM) de parques eólicos
 
-Material docente desarrollado por **Dr. Juan Patricio Reyes C.** —
-Instituto de Obras Civiles, Facultad de Ciencias de la Ingeniería,
-Universidad Austral de Chile.
+Herramienta web para **monitorear la salud estructural** de un parque de
+aerogeneradores (y sus torres de alta tensión asociadas): una flota viva en 3D,
+georreferenciada sobre el relieve real, con capa de sensores, seguimiento del
+**avance de obra (4D)** e informe de estado estructural por torre.
 
-Para estudiantes de **Arquitectura**, **Construcción** e
-**Ingeniería Civil en Obras Civiles**.
+Desarrollada por **Dr. Juan Patricio Reyes C.** — Instituto de Obras Civiles,
+Facultad de Ciencias de la Ingeniería, Universidad Austral de Chile.
 
-Aplicación web de análisis estructural tridimensional para docencia.  
+> **Parque de referencia:** *Camán I* (Región de Los Ríos, Chile), en etapa
+> constructiva. Datos reales de coordenadas y trazado de caminos; el avance de
+> obra y la telemetría de sensores son por ahora **sintéticos editables**.
+
 No requiere instalación — solo un navegador moderno (Chrome, Edge, Firefox).
+
+---
+
+## Qué es ReWind
+
+ReWind nace como **fork de PÓRTICO** (`structweb3d`, análisis estructural FEM 3D
+para docencia) y lo **repurposa** a una herramienta de *Structural Health
+Monitoring* de torres eólicas. El motor FEM original se conserva **solo como
+gemelo digital** (modal/estático para frecuencias f₁ y deformadas); todo el
+flujo de modelado manual de PÓRTICO se eliminó del código (ver
+`docs/ROADMAP.md` → R-20).
+
+Cada torre lleva **2 acelerómetros MEMS** (tope + centro del fuste) + un gateway.
+La configuración de 2 nodos es intencional: alcanza para los **2 primeros modos
+de flexión** + un vector de características para ML.
+
+### Capacidades hoy
+
+- **Flota 3D** del parque con turbinas reconocibles (góndola + rotor); las
+  operativas giran, las no construidas se muestran como silueta «fantasma».
+- **Georreferenciación** (lon/lat → ENU local) sobre un **relieve conceptual 3D**
+  (curvas de nivel, tinte hipsométrico, sin paisaje satelital) + caminos.
+- **Mapa 2D** estilo Google Earth liviano (Leaflet) en ventana PiP /
+  pantalla completa, con íconos de torre eólica y torre AT.
+- **Avance de obra 4D**: cada estructura se «llena» de abajo hacia arriba según
+  su porcentaje; etapas editables con % y fecha por torre.
+- **Árbol lateral** Parque ▸ Zona ▸ Torre (CRUD, renombrar inline, eliminar).
+- **Dashboard SHM** en el panel derecho (Señal · Datos · Estado estructural ·
+  Movimiento) + **informe** de vibración con deformada medida y velocímetro de
+  estado (clasificación ML 0–4).
+- **Capa de vida**: sensores y gateways parpadeantes (heartbeat) coloreados por
+  estado (activo / rezagado / fuera de línea).
 
 ---
 
 ## Cómo abrir la aplicación
 
-**Opción A — Servidor local (recomendado):**
+**Servidor local (recomendado):**
 
 ```bash
-# En la carpeta del proyecto, ejecutar una vez:
-python -m http.server 8765
+python serve.py 8765
 ```
 
-Luego abrir **http://localhost:8765** en el navegador.
+Luego abrir **http://localhost:8765** en el navegador. `serve.py` es un servidor
+estático sin caché que fija los MIME correctos (`UTF-8`, `.webmanifest`);
+`python -m http.server 8765` también funciona pero sin esos encabezados.
 
-> En Windows puede usar el símbolo del sistema o PowerShell. Python 3 viene preinstalado en la mayoría de los equipos; si no, descargarlo desde python.org.
-
-**Opción B — Desde URL (si el profesor la publica):**
-
-Abrir directamente la dirección que indique el profesor. No se requiere nada más.
+**En producción:** ReWind se publica en **GitHub Pages** desde la rama `main`
+(sitio estático puro, sin build). Cada `git push` a `main` republica el sitio.
 
 ---
 
-## Convención de coordenadas
+## Arquitectura (resumen)
 
-El programa usa el mismo sistema que SAP2000 y ETABS:
+Vanilla JS (ES modules) + Three.js + Leaflet + un pequeño `numeric.js`.
+**Sin build, sin bundler, sin framework, sin `package.json`** en la app:
+`index.html` carga los módulos por importmap con cache-busting `?v=NNN`. PWA
+instalable/offline. UI, comentarios y commits **en español**.
+
+```
+js/shm/            ← toda la app ReWind (flota, relieve, mapa, dashboard, gemelo)
+js/model/          ← model.js, serializer.js, macro_registry.js, macros/turbine.js
+js/solver/         ← 10 módulos del gemelo digital (assembler, timoshenko,
+                     static/modal, postprocess, membrane, plate, diaphragm, links)
+asistente/         ← generador.js (genera la celosía 3D de las torres AT)
+lib/               ← three, numeric.js, leaflet (vendorizados)
+bridge/            ← (futuro) ESP32 → MQTT → InfluxDB para telemetría real
+data/              ← parque Camán I + DEM (heightmap) — no versionado
+```
+
+Detalle completo de convenciones y arquitectura en **`CLAUDE.md`**.
+Plan de trabajo y estado en **`docs/ROADMAP.md`** (grupo G24 · ReWind, ítems `R-*`).
+
+---
+
+## Convención de coordenadas (gemelo digital)
+
+El motor FEM usa el mismo sistema que SAP2000/ETABS:
 
 | Eje | Dirección |
 |-----|-----------|
@@ -41,328 +98,74 @@ El programa usa el mismo sistema que SAP2000 y ETABS:
 | **Y** | Norte – Sur |
 | **Z** | Vertical (arriba) |
 
+Mapeo a Three.js: `model(x,y,z) → three(x, z, y)`.
+Georreferenciación: lon/lat (WGS84) → ENU local en metros desde el centro del
+parque × factor de escala de layout.
+
 ---
 
-## Interfaz de usuario
+## Desarrollo
+
+- **Verificar sintaxis de un módulo ES:** `node --input-type=module --check < js/ruta/archivo.js`
+  (no usar `node --check archivo.js`: trata `.js` como CommonJS y deja pasar ESM inválido).
+- **Tests del generador:** `node asistente/test_generador.mjs`,
+  `node asistente/test_torre.mjs` — comparan contra equilibrio global y
+  soluciones analíticas. No hay runner; cada archivo es su propio entrypoint.
+- **Versionado / deploy:** al publicar un cambio en JS/CSS, subir el `?v=NNN` en
+  todos los archivos a la vez + `REWIND_VER` (`js/shm/shm_mode.js`) +
+  `CACHE_VERSION` (`sw.js`, independiente). Luego `git push` a `main`.
+
+---
+
+## Generador de torres AT (`asistente/`)
+
+Las **torres de alta tensión** del parque se generan como celosía 3D a partir de
+una *ficha* JSON, por un generador **determinista** (sin LLM):
+
+- **`asistente/generador.js`** — módulo ES puro (Node + navegador). Una ficha
+  `tipologia:"torre"` (`torre:{altura_m, base_m, cima_m, paneles, arriostramiento,
+  crucetas:[…]}`) → modelo `.s3d`: 4 patas cónicas en *n* paneles, anillos
+  horizontales, diagonales en X por cara, crucetas/ménsulas para los conductores,
+  apoyos en la base y cargas de viento/cable+hielo.
+- **`asistente/cargas.js`** — magnitudes normativas (NCh) que usa el generador.
+- **Tests:** `node asistente/test_torre.mjs` (geometría + estabilidad + ΣFz) y
+  `node asistente/test_generador.mjs`. Validan contra equilibrio global / solución
+  analítica.
+
+> El módulo es heredado de PÓRTICO y aún sabe generar edificios completos, pero en
+> ReWind **solo se usa la rama de torres AT**. El camino LLM/n8n (worker + lenguaje
+> natural) se eliminó en R-20.
+
+---
+
+## Datos en vivo — bridge ESP32 → InfluxDB (`bridge/`, futuro)
+
+Hoy la app consume datos **simulados** vía la abstracción `DataSource`
+(`js/shm/data_source.js`). El camino **en vivo** respeta el mismo esquema y vive
+en `bridge/` (paquete aislado con su propio `package.json`; no afecta al sitio
+estático). Cadena planificada:
 
 ```
-┌─────────────────────────────────────────────────────────────┐
-│  Menú:  Archivo  Editar  Vista  Análisis         Unidades   │
-├──────┬──────────────────────────────────────┬───────────────┤
-│      │                                      │               │
-│ Herr │           Ventana 3D                 │  Panel dcha.  │
-│ amie │                                      │  Sel. / Mat.  │
-│ ntas │   (rotar: botón dcho. ratón)         │  Sec. / Diaf. │
-│      │   (zoom:  rueda)                     │               │
-│      │   (pan:   botón medio)               │               │
-├──────┴──────────────────────────────────────┴───────────────┤
-│  Modo: Seleccionar  │  Coords  │  Selección  │  Modelo      │
-└─────────────────────────────────────────────────────────────┘
+ESP32 (100 Hz, int16 por lotes) --MQTT binario--> Mosquitto/EMQX
+   --> mqtt_influx_bridge.mjs --> InfluxDB (serie cruda)
+   --> backend de features (RMS·f₁·FFT·ML) --tick--> navegador
 ```
 
-### Barra de herramientas (izquierda)
+**Trama binaria** (`bridge/accel_frame.mjs`, mismo layout en el firmware C):
+cabecera 20 B + `2·n` muestras `i16 LE` (mili-g). Campos: `magic 0xA5`, `version`,
+`sensor`, `fs` (u16), `seq` (u32), `t0_us` (u64 epoch µs), `n` (u16). La
+**estructura** va en el topic `rewind/accel/<structId>`; el **sensor**, en la trama.
 
-| Botón | Tecla | Acción |
-|-------|-------|--------|
-| Sel. | `S` | Seleccionar nodos y elementos |
-| Nodo | `N` | Crear nodo haciendo clic en la grilla |
-| Elem. | `E` | Crear elemento (clic en nodo origen → nodo destino) |
-| Apoyo | `R` | Asignar restricciones a un nodo |
-| Ext. | `Home` | Ajustar zoom a todo el modelo |
-| ▶ | `F5` | Ejecutar análisis estático |
-
----
-
-## Construcción del modelo
-
-### 1. Definir materiales
-
-En el panel derecho, pestaña **Mat.**:
-- Clic en **＋ Agregar Material**
-- Ingresar: nombre, E (módulo de elasticidad), G (módulo de corte), ν (Poisson), ρ (densidad)
-
-Ejemplo concreto H30 (kN-m):
-
-| E | G | ν | ρ |
-|---|---|---|---|
-| 28 700 000 | 11 960 000 | 0.20 | 2.5 |
-
-### 2. Definir secciones
-
-Pestaña **Sec.** → **＋ Agregar Sección**  
-Ingresar propiedades geométricas numéricas:
-
-| Propiedad | Descripción |
-|-----------|-------------|
-| A | Área de la sección [m²] |
-| Iz | Momento de inercia respecto a z [m⁴] |
-| Iy | Momento de inercia respecto a y [m⁴] |
-| J | Constante de torsión [m⁴] |
-| Avy | Área de cortante en y (= κy × A) [m²] |
-| Avz | Área de cortante en z (= κz × A) [m²] |
-
-**Columna 30×30 cm** (ejemplo):
-`A=0.09, Iz=6.75e-4, Iy=6.75e-4, J=1.13e-4, Avy=0.075, Avz=0.075`
-
-**Viga 30×50 cm** (ejemplo):
-`A=0.15, Iz=3.125e-3, Iy=5.625e-4, J=1.30e-4, Avy=0.125, Avz=0.075`
-
-### 3. Crear nodos
-
-Activar modo **Nodo** (`N`).  
-Usar el campo **Z piso** (esquina superior izquierda) para definir el nivel de inserción.  
-Hacer clic en la grilla para crear el nodo en esa posición.
-
-> El campo **Snap** controla el tamaño de la grilla de ajuste (default 0.5 m).
-
-### 4. Crear elementos
-
-Activar modo **Elem.** (`E`).  
-Clic en el **nodo de inicio** → clic en el **nodo de destino**.  
-El programa asigna automáticamente el primer material y sección disponibles; luego se editan en el panel.
-
-> Presionar `Esc` para cancelar la creación a mitad de camino.
-
-### 5. Asignar apoyos
-
-Activar modo **Apoyo** (`R`) y hacer clic en el nodo.  
-En el panel aparecerán los 6 grados de libertad (✓ = restringido):
-
-| DOF | Significado |
-|-----|-------------|
-| Ux, Uy, Uz | Traslaciones |
-| Rx, Ry, Rz | Rotaciones |
-
-Botones rápidos:
-- **Empotrado** → todos los 6 DOF restringidos (color rojo)
-- **Pin** → solo traslaciones restringidas (color naranja)
-- **Libre** → sin restricciones (color azul)
-
----
-
-## Cargas
-
-Al seleccionar un **nodo** en modo Seleccionar, aparece la sección de cargas:  
-Ingresar Fx, Fy, Fz, Mx, My, Mz y hacer clic en **Aplicar**.
-
-Al seleccionar un **elemento**, se puede asignar una carga distribuida:  
-Elegir dirección (globalZ, localY, etc.) e ingresar la magnitud `w` [kN/m].
-
-Las cargas se asignan al **caso de carga activo** (selector en la esquina superior derecha de la ventana).  
-Para agregar casos, clic en **＋** junto al selector.
-
----
-
-## Análisis estático
-
-**`F5`** → Ejecutar análisis (caso de carga activo)  
-**Análisis → Ejecutar + Peso Propio** → suma el peso propio de los elementos
-
-Después de ejecutar:
-- El modelo muestra la **deformada** amplificada
-- Usar el selector **Vista** para cambiar entre: Deformada / N / Vy / Vz / T / My / Mz
-- El control **Escala** ajusta la amplificación visual
-- Hacer clic en un nodo o elemento para ver los valores en el panel derecho
-
----
-
-## Diafragmas rígidos
-
-Representan losas rígidas en cada piso (movimiento en planta solidario).
-
-**Pestaña Diaf.** en el panel derecho:
-
-1. Clic **⚡ Auto-detectar Pisos** — agrupa nodos automáticamente por nivel Z
-2. En cada diafragma, asignar:
-   - **Masa m** [ton]: masa traslacional del piso
-   - **Icm** [ton·m²]: momento de inercia másico respecto al CM
-   - **CM (x, y)**: coordenadas del centro de masa
-   - **ex, ey**: excentricidad accidental (para análisis sísmico)
-
-El CM del piso aparece en la vista 3D como un marcador naranja.
-
----
-
-## Análisis modal
-
-**`F6`** → Análisis Modal
-
-Al presionar F6, el programa pide el **número de modos** a extraer (default 10).
-
-**Resultados en la ventana:**
-- Selector de modo → muestra la forma deformada del modo seleccionado
-- Frecuencia `f` [Hz] y período `T` [s] del modo
-- **▶ Play** → anima la oscilación
-- Deslizador **Vel.** → velocidad de animación
-- Campo **Amp.** → amplitud visual
-
-**Tabla de Participación** (botón en el overlay):
-
-| Columna | Significado |
-|---------|-------------|
-| f [Hz] | Frecuencia natural |
-| T [s] | Período natural |
-| meff X (%) | Masa efectiva en dirección X |
-| Acum X | Acumulado — debe llegar a ≥ 90% |
-
-> **Criterio sísmico:** la suma de masas participantes debe ser ≥ 90% en cada dirección de análisis. Las celdas en verde indican que se alcanzó el umbral.
-
----
-
-## Espectro de Respuesta (CQC / SRSS)
-
-**`F7`** → Espectro de Respuesta  
-*(Requiere haber ejecutado el análisis modal primero)*
-
-Se abre un diálogo con los siguientes parámetros:
-
-| Campo | Descripción |
-|-------|-------------|
-| Dirección sísmica | X, Y o Z |
-| Combinación | **CQC** (recomendado) o SRSS |
-| Amortiguamiento ζ | Fracción crítica (default 0.05 = 5%) |
-| Unidades Sa | g, m/s², cm/s², ft/s² |
-| Tabla espectro | Pares T [s], Sa [unidad] — una pareja por línea |
-
-**Formato del espectro:**
+**Correr** (sin hardware, simulador):
+```bash
+cd bridge
+npm install
+INFLUX_TOKEN=xxxx npm run bridge   # puente MQTT → InfluxDB
+npm run sim                         # simula el ESP32 a 100 Hz (FAULT=WT-05/2 fuerza falla)
 ```
-0.00, 0.20
-0.10, 0.45
-0.50, 0.40
-1.00, 0.28
-2.00, 0.14
-4.00, 0.07
-```
+Variables: `MQTT_URL`, `INFLUX_URL`, `INFLUX_ORG`, `INFLUX_BUCKET`, `INFLUX_TOKEN`.
 
-Los resultados aparecen como envolventes (valores absolutos). Se pueden ver los diagramas de fuerzas N, V, M usando el selector de vista normal.
-
----
-
-## Importar modelo desde CSV
-
-**Archivo → Importar CSV…**
-
-Formato de una sola tabla con columna TYPE:
-
-```csv
-TYPE,      ID,  nombre,      E,          G,        nu,    rho
-MATERIAL,   1,  Concreto,    28700000,   11960000, 0.20,  2.5
-
-TYPE,      ID,  nombre,   A,     Iz,      Iy,      J,       Avy,   Avz
-SECTION,    1,  Col30,    0.09,  6.75e-4, 6.75e-4, 1.13e-4, 0.075, 0.075
-
-TYPE,  ID,  x,    y,    z,    ux, uy, uz, rx, ry, rz
-NODE,   1,  0.0,  0.0,  0.0,   1,  1,  1,  1,  1,  1
-NODE,   2,  5.0,  0.0,  0.0,   1,  1,  1,  1,  1,  1
-NODE,   3,  0.0,  0.0,  3.5,   0,  0,  0,  0,  0,  0
-NODE,   4,  5.0,  0.0,  3.5,   0,  0,  0,  0,  0,  0
-
-# Sin rótulas (columnas de liberación omitidas → todas en 0):
-TYPE,     ID,  n1, n2, matId, secId
-ELEMENT,   1,   1,  3,     1,     1
-ELEMENT,   2,   2,  4,     1,     1
-
-# Con rótulas Mz en ambos extremos (DOF r5 y r11 = rz1 y rz2):
-# TYPE,    ID,  n1, n2, matId, secId, r0,r1,r2,r3,r4,r5, r6,r7,r8,r9,r10,r11
-ELEMENT,   3,   3,  4,     1,     1,  0, 0, 0, 0, 0, 1,  0, 0, 0, 0,  0,  1
-```
-
-**Orden de los 12 DOFs de liberación:** `[ux1, uy1, uz1, rx1, ry1, rz1, ux2, uy2, uz2, rx2, ry2, rz2]`  
-`1 = libera ese grado de libertad (rótula), 0 = fijo`
-
-Casos habituales:
-- Rótula Mz en extremo 1: columna 6 = 1 → `…, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0`
-- Rótula Mz en extremo 2: columna 12 = 1 → `…, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1`
-- Viga biarticualda (Mz en ambos): → `…, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 1`
-
-Las columnas de liberación son **opcionales** — si se omiten, el elemento es empotrado-empotrado.
-
-Descargar plantilla: **Archivo → Descargar Plantilla CSV**
-
----
-
-## Guardar y cargar modelos
-
-| Acción | Tecla |
-|--------|-------|
-| Nuevo | `Ctrl+N` |
-| Abrir | `Ctrl+O` |
-| Guardar | `Ctrl+S` |
-| Guardar como | — |
-
-Los archivos se guardan con extensión `.s3d` (formato JSON).
-
----
-
-## Teclas de acceso rápido
-
-| Tecla | Acción |
-|-------|--------|
-| `S` | Modo Seleccionar |
-| `N` | Modo Nodo |
-| `E` | Modo Elemento |
-| `R` | Modo Apoyo |
-| `F5` | Ejecutar análisis estático |
-| `F6` | Análisis modal |
-| `F7` | Espectro de respuesta |
-| `Del` | Eliminar selección |
-| `Ctrl+Z` | Deshacer |
-| `Ctrl+Y` | Rehacer |
-| `Home` | Zoom a extensión |
-| `I` | Vista isométrica |
-| `T` | Vista planta (XY) |
-| `F` | Vista frontal (XZ) |
-| `L` | Vista lateral (YZ) |
-| `G` | Mostrar/ocultar grilla |
-
----
-
-## Unidades disponibles
-
-Seleccionables en la esquina superior derecha:
-
-| Sistema | Fuerza | Longitud | Notas |
-|---------|--------|----------|-------|
-| **kN-m** | kN | m | Estándar para diseño en Chile |
-| ton-m | ton | m | |
-| kip-ft | kip | ft | Sistema imperial |
-
-> El sistema de unidades afecta cómo se interpretan los valores ingresados. Mantenerlo consistente con las propiedades de materiales y secciones.
-
----
-
-## Preguntas frecuentes
-
-**¿Por qué no carga la página?**  
-La aplicación requiere ser servida por HTTP. No funciona si se abre directamente como archivo (`file://`). Use `python -m http.server 8765`.
-
-**¿El análisis me dice "modelo no estable"?**  
-El modelo debe tener al menos un nodo completamente restringido (empotrado o con las tres traslaciones restringidas). Verifique que tiene apoyos asignados.
-
-**¿El análisis modal no encuentra modos?**  
-Se requiere masa en el modelo. Defina densidad (ρ) en los materiales **o** asigne masas a los diafragmas de piso.
-
-**¿Cómo calculo Icm del piso?**  
-Para un piso rectangular de dimensiones `a × b` con masa total `m`:  
-`Icm = m × (a² + b²) / 12`
-
-**¿Qué valor de ζ usar?**  
-Para estructuras de hormigón armado: **5%** (ζ = 0.05).  
-Para estructuras de acero: **2-3%** (ζ = 0.02–0.03).
-
----
-
-## Resumen del flujo de trabajo sísmico
-
-```
-1. Definir geometría (nodos, elementos, materiales, secciones)
-2. Asignar apoyos
-3. Definir diafragmas de piso con masas (⚡ Auto-detectar)
-4. [Opcional] Cargas de gravedad (CM, CV) y análisis estático → F5
-5. Análisis modal → F6
-   └─ Verificar ≥ 90% participación en X e Y
-6. Espectro de respuesta → F7
-   └─ Ingresar espectro, dirección X, CQC, ζ=0.05
-   └─ Repetir para dirección Y
-7. Exportar resultados → Análisis → Exportar...
-```
+**Falta** (siguiente paso): el *backend de features* que consulta ventanas de
+InfluxDB, calcula RMS/f₁/FFT/clase ML y emite los `tick` agregados que ya consume
+`js/shm/data_source.js` (hoy lo cubre el stub `tools/virtual_sensor.mjs`). Ver los
+ítems `R-10`/`R-11`/`R-21`/`R-22` del roadmap.
