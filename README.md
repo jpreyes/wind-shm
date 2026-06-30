@@ -18,12 +18,10 @@ No requiere instalación — solo un navegador moderno (Chrome, Edge, Firefox).
 
 ## Qué es ReWind
 
-ReWind nace como **fork de PÓRTICO** (`structweb3d`, análisis estructural FEM 3D
-para docencia) y lo **repurposa** a una herramienta de *Structural Health
-Monitoring* de torres eólicas. El motor FEM original se conserva **solo como
-gemelo digital** (modal/estático para frecuencias f₁ y deformadas); todo el
-flujo de modelado manual de PÓRTICO se eliminó del código (ver
-`docs/ROADMAP.md` → R-20).
+ReWind monitorea la salud estructural de un parque eólico. Combina una **flota
+viva en 3D** con un **gemelo digital** físico por torre: un motor de elementos
+finitos (modal/estático) que calcula las frecuencias propias f₁/f₂ y la deformada
+a partir de los desplazamientos medidos.
 
 Cada torre lleva **2 acelerómetros MEMS** (tope + centro del fuste) + un gateway.
 La configuración de 2 nodos es intencional: alcanza para los **2 primeros modos
@@ -84,13 +82,11 @@ data/              ← parque Camán I + DEM (heightmap) — no versionado
 ```
 
 Detalle completo de convenciones y arquitectura en **`CLAUDE.md`**.
-Plan de trabajo y estado en **`docs/ROADMAP.md`** (grupo G24 · ReWind, ítems `R-*`).
+Plan de trabajo y estado en **`docs/ROADMAP.md`** (ítems `R-*`).
 
 ---
 
-## Convención de coordenadas (gemelo digital)
-
-El motor FEM usa el mismo sistema que SAP2000/ETABS:
+## Convención de coordenadas
 
 | Eje | Dirección |
 |-----|-----------|
@@ -131,10 +127,6 @@ una *ficha* JSON, por un generador **determinista** (sin LLM):
 - **Tests:** `node asistente/test_torre.mjs` (geometría + estabilidad + ΣFz) y
   `node asistente/test_generador.mjs`. Validan contra equilibrio global / solución
   analítica.
-
-> El módulo es heredado de PÓRTICO y aún sabe generar edificios completos, pero en
-> ReWind **solo se usa la rama de torres AT**. El camino LLM/n8n (worker + lenguaje
-> natural) se eliminó en R-20.
 
 ---
 
