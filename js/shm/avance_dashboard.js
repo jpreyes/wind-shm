@@ -6,7 +6,7 @@
 // (acumulado plan vs real por mes), % por componente y ranking de torres atrasadas.
 // Render en DOM/SVG (verificable) + informe imprimible. Módulo de presentación.
 // ─────────────────────────────────────────────────────────────────────────────
-import { enrichStages, TURBINE_COMPONENTS } from './parks_data_caman.js?v=250';
+import { enrichStages, TURBINE_COMPONENTS } from './parks_data_caman.js?v=251';
 
 const DAY = 864e5;
 const fmtPct = (x) => `${Math.round(x * 100)}%`;
@@ -128,8 +128,30 @@ function ganttSVG(structures) {
   return `<svg viewBox="0 0 ${W} ${H}" style="width:100%;height:auto;aspect-ratio:${W}/${H};display:block;min-width:280px" xmlns="http://www.w3.org/2000/svg">${grid}${todayLine}${body}</svg>`;
 }
 
-// Render del dashboard en un host del panel derecho.
-export function renderAvance(host, structures) {
+// Editor de partidas de la torre seleccionada (se muestra arriba del dashboard).
+function towerEditor(selected) {
+  if (!selected || selected.type !== 'turbine') return '';
+  const sts = enrichStages(selected.stages, 'turbine', selected.id); selected.stages = sts;
+  const built = sts.reduce((a, s) => a + (s.pct || 0), 0) / (sts.length * 100);
+  const rows = sts.map((s, i) => `
+    <div class="avt-row">
+      <span class="avt-nm">${s.label || s.name}</span>
+      <input type="number" class="avt-pp" data-i="${i}" min="0" max="100" step="5" value="${s.pct || 0}" title="% de avance de la partida">
+      <span class="avt-u">%</span>
+      <span class="avt-bar"><i class="${statusCol2(s.pct)}" style="width:${s.pct || 0}%"></i></span>
+    </div>`).join('');
+  return `<div class="avt-card">
+    <div class="avt-h">${selected.label} · avance <b>${Math.round(built * 100)}%</b></div>
+    <div class="avt-rows">${rows}</div>
+    <div class="av-mut" style="margin-top:4px">Ajusta el % de cada partida; el llenado 3D y los indicadores se recalculan.</div>
+  </div>`;
+}
+const statusCol2 = (pct) => pct >= 100 ? 'done' : pct > 0 ? 'wip' : 'pend';
+
+// Render del dashboard en un host del panel derecho. `selected` (opcional) =
+// estructura enfocada → se antepone su editor de partidas. `apply(struct)` aplica
+// los cambios (avance 3D + persistencia) y se vuelve a renderizar.
+export function renderAvance(host, structures, selected, apply) {
   const d = computeParkAvance(structures);
   const behind = d.planPct - d.realPct;   // + = el parque va atrasado
   const verdict = behind > 0.05 ? { c: 'bad', t: `Atrasado ${Math.round(behind * 100)} pts vs plan` }
@@ -145,6 +167,7 @@ export function renderAvance(host, structures) {
     : '<div class="av-mut">Ninguna torre atrasada respecto al plan. 👍</div>';
 
   host.innerHTML = `
+    ${towerEditor(selected)}
     <div class="av-hdr">Avance de obra · Camán I</div>
     <div class="av-banner ${verdict.c}">${verdict.c === 'ok' ? '✓' : '✗'} ${verdict.t}</div>
     <div class="av-kpis">
@@ -165,6 +188,16 @@ export function renderAvance(host, structures) {
     <div class="av-leg"><span><i class="g-done"></i>Completada</span><span><i class="g-wip"></i>En ejecución</span><span><i class="g-pend"></i>Pendiente</span><span><i class="today"></i>Hoy</span></div>
     <button id="av-report" class="av-btn" type="button">📄 Informe de avance (DPR)</button>`;
   host.querySelector('#av-report')?.addEventListener('click', () => avanceReport(structures));
+  // Editor de partidas de la torre seleccionada
+  if (selected && selected.type === 'turbine') {
+    host.querySelectorAll('.avt-pp').forEach(inp => inp.addEventListener('change', () => {
+      const i = +inp.dataset.i; selected.stages[i].pct = Math.max(0, Math.min(100, +inp.value || 0));
+      const s = selected.stages[i];
+      if (s.pct >= 100 && !s.actualEnd) s.actualEnd = new Date().toISOString().slice(0, 10);
+      apply?.(selected);
+      renderAvance(host, structures, selected, apply);   // re-render (3D + indicadores actualizados)
+    }));
+  }
 }
 
 // ── Informe de avance imprimible (DPR resumido) ──────────────────────────────
