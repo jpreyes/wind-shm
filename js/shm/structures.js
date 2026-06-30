@@ -7,7 +7,7 @@
 // Los miembros se dibujan con un cilindro unitario reescalado (1 geometría).
 // ─────────────────────────────────────────────────────────────────────────────
 import * as THREE from 'three';
-import { generarTorre } from '../../asistente/generador.js?v=274';
+import { generarTorre } from '../../asistente/generador.js?v=275';
 
 const UNIT_CYL = new THREE.CylinderGeometry(1, 1, 1, 6);
 const _up = new THREE.Vector3(0, 1, 0);

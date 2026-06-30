@@ -8,21 +8,21 @@
 //   inspecciones y señal temporal EN VIVO desde un Web Worker (DataSource).
 // Recortes (modelado) los hace shm.css ocultando, no borrando.
 // ─────────────────────────────────────────────────────────────────────────────
-import { FleetView } from './fleet_view.js?v=274';
-import { DataSource } from './data_source.js?v=274';
-import { computeTwin } from './digital_twin.js?v=274';
-import { ParkManager, loadParksStore } from './parks.js?v=274';
-import { MapView } from './map_view.js?v=274';
-import { defaultStages, builtFromStages } from './parks_data_caman.js?v=274';
-import { compassRoseSVG } from './compass.js?v=274';
-import { buildAvanceHUD } from './avance_hud.js?v=274';
-import { renderAvance } from './avance_dashboard.js?v=274';
-import * as Insp from './inspection.js?v=274';
-import * as Fat from './fatigue.js?v=274';
-import { t, getLang, setLang } from './i18n.js?v=274';
+import { FleetView } from './fleet_view.js?v=275';
+import { DataSource } from './data_source.js?v=275';
+import { computeTwin } from './digital_twin.js?v=275';
+import { ParkManager, loadParksStore } from './parks.js?v=275';
+import { MapView } from './map_view.js?v=275';
+import { defaultStages, builtFromStages } from './parks_data_caman.js?v=275';
+import { compassRoseSVG } from './compass.js?v=275';
+import { buildAvanceHUD } from './avance_hud.js?v=275';
+import { renderAvance } from './avance_dashboard.js?v=275';
+import * as Insp from './inspection.js?v=275';
+import * as Fat from './fatigue.js?v=275';
+import { t, getLang, setLang } from './i18n.js?v=275';
 
 const F1_BASE = { turbine: 0.283, hv: 1.6 };
-const REWIND_VER = 'v274';   // versión visible del build (subir junto al cache-bust)
+const REWIND_VER = 'v275';   // versión visible del build (subir junto al cache-bust)
 const FS = 62.5;   // frecuencia de muestreo de la señal (Hz), igual que shm_worker.js
 // Clasificador ML de daño (0..4)
 const CLS = ['Sin daño', 'Leve', 'Moderado', 'Alto', 'Muy alto'];
@@ -268,7 +268,7 @@ async function boot() {
   // ── Relieve conceptual del terreno (DEM vendorizado) — encendido por defecto ─
   setLoad(88, 'Cargando relieve…'); await delay(40);
   try {
-    await fleet.loadTerrain('data/caman_dem.json?v=274');
+    await fleet.loadTerrain('data/caman_dem.json?v=275');
     fleet.setTerrainVisible(true);
     document.getElementById('shm-relieve-tool')?.classList.add('active');
   } catch (e) { console.warn('[shm] relieve no disponible', e); }
@@ -1129,9 +1129,12 @@ function buildDashboard(panel, fleet, actions) {
       }
       startSig();
     } else if (pane === 'sensores') {
+      const gwRow = o.gateway?.mesh
+        ? `<div class="shm-sensor"><span class="dot ok"></span><span style="flex:1">📶 ${t('ahud.gateway')} <span class="ins-mut" style="font-size:10px">(${t('ahud.gwRoleV')})</span></span><b style="color:var(--success)">${t('ahud.gwOnline')}</b></div>`
+        : '';
       body.innerHTML = o.sensors.map(se =>
         `<div class="shm-sensor"><span class="dot ${se.status}"></span><span style="flex:1">${se.id}</span><b class="s-rms" data-sid="${se.id}">—</b></div>`
-      ).join('') + `<div class="note">${t('sens.note')}</div>`;
+      ).join('') + gwRow + `<div class="note">${t('sens.note')}</div>`;
     } else if (pane === 'fatiga') {
       const a = assessFatigueFor(o, sum);
       const st = Fat.fatigueState(a.Delapsed);
