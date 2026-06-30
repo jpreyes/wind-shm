@@ -146,6 +146,20 @@ body.shm.view-2d #viewport-container {
 }
 body.shm.view-2d #shm-compass, body.shm.view-2d #shm-nameplate, body.shm.view-2d #shm-banner { display: none; }
 body.shm.view-2d .mv-resize { display: none; }
+/* Controles del PiP del 3D (sólo cuando el 2D es principal): maximizar + redimensionar */
+.vp-pip-full, .vp-pip-resize { display: none; }
+body.shm.view-2d .vp-pip-full {
+  display: block; position: absolute; top: 6px; right: 6px; z-index: 8; width: 28px; height: 28px;
+  font-size: 16px; line-height: 26px; text-align: center; cursor: pointer; padding: 0;
+  background: var(--bg3); color: var(--text); border: 1px solid var(--border2); border-radius: 6px;
+}
+.vp-pip-full:hover { filter: brightness(1.15); }
+body.shm.view-2d .vp-pip-resize {
+  display: block; position: absolute; top: 0; left: 0; width: 18px; height: 18px; z-index: 8;
+  cursor: nwse-resize; background:
+    linear-gradient(135deg, var(--accent) 0 38%, transparent 38%); border-top-left-radius: 8px; opacity: .85;
+}
+.vp-pip-resize:hover { opacity: 1; }
 .leaflet-container { font: inherit; }
 /* Tirador de redimensión del PiP (esquina superior-izquierda) */
 .mv-resize { position: absolute; top: 0; left: 0; width: 18px; height: 18px; z-index: 1100;
@@ -374,7 +388,7 @@ body.shm #shm-banner.show { display: flex; animation: shm-blink 0.8s steps(1) in
 
 /* ── Control de Sol / sombras (Frente 2) ─────────────────────────────────── */
 .shm-sun { position: absolute; left: 64px; top: 14px; z-index: 30; width: 232px; display: none;
-  background: var(--panel); color: var(--text); border: 1px solid var(--border2);
+  background: var(--bg3); color: var(--text); border: 1px solid var(--border2);   /* --bg3 sólido: contrasta sobre el mapa */
   border-radius: var(--radius, 10px); padding: 10px 12px; box-shadow: var(--shadow, 0 6px 20px rgba(0,0,0,.35));
   font-size: 12px; }
 .shm-sun.show { display: block; }

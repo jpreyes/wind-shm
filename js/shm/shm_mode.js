@@ -8,16 +8,16 @@
 //   inspecciones y señal temporal EN VIVO desde un Web Worker (DataSource).
 // Recortes (modelado) los hace shm.css ocultando, no borrando.
 // ─────────────────────────────────────────────────────────────────────────────
-import { FleetView } from './fleet_view.js?v=227';
-import { DataSource } from './data_source.js?v=227';
-import { computeTwin } from './digital_twin.js?v=227';
-import { ParkManager, loadParksStore } from './parks.js?v=227';
-import { MapView } from './map_view.js?v=227';
-import { defaultStages, builtFromStages } from './parks_data_caman.js?v=227';
-import { compassRoseSVG } from './compass.js?v=227';
+import { FleetView } from './fleet_view.js?v=228';
+import { DataSource } from './data_source.js?v=228';
+import { computeTwin } from './digital_twin.js?v=228';
+import { ParkManager, loadParksStore } from './parks.js?v=228';
+import { MapView } from './map_view.js?v=228';
+import { defaultStages, builtFromStages } from './parks_data_caman.js?v=228';
+import { compassRoseSVG } from './compass.js?v=228';
 
 const F1_BASE = { turbine: 0.283, hv: 1.6 };
-const REWIND_VER = 'v227';   // versión visible del build (subir junto al cache-bust)
+const REWIND_VER = 'v228';   // versión visible del build (subir junto al cache-bust)
 const FS = 62.5;   // frecuencia de muestreo de la señal (Hz), igual que shm_worker.js
 // Clasificador ML de daño (0..4)
 const CLS = ['Sin daño', 'Leve', 'Moderado', 'Alto', 'Muy alto'];
@@ -148,11 +148,15 @@ async function boot() {
 
   // Vista 2D del parque (Leaflet): click en un marcador → vuelve al 3D enfocando la torre.
   // Intercambia cuál vista es principal (3D ⇄ 2D): la otra queda como PiP en la esquina.
+  const vc3d = document.getElementById('viewport-container');
   const swapViews = () => {
     document.body.classList.add('map-pip');                 // el 2D debe estar presente
     const v2 = document.body.classList.toggle('view-2d');
     document.getElementById('shm-map-tool')?.classList.add('active');
-    const apply = () => { fleet.resize(); mapView.invalidate(); mapView.map?.invalidateSize(); };
+    const apply = () => {
+      if (!document.body.classList.contains('view-2d') && vc3d) { vc3d.style.width = ''; vc3d.style.height = ''; }   // 3D principal → tamaño completo
+      fleet.resize(); mapView.invalidate(); mapView.map?.invalidateSize();
+    };
     apply(); setTimeout(apply, 80);                          // síncrono (reflow) + fallback
     return v2;
   };
@@ -163,10 +167,19 @@ async function boot() {
   window.shmMap = mapView;
   window.shmSwapViews = swapViews;
   mapView.setStructures();
-  // Doble-clic en el PiP del 3D (cuando el 2D es principal) → promover el 3D.
-  document.getElementById('viewport-container')?.addEventListener('dblclick', () => {
-    if (document.body.classList.contains('view-2d')) swapViews();
-  });
+  // Controles del PiP del 3D (cuando el 2D es principal): maximizar (⤢) + redimensionar.
+  if (vc3d) {
+    const full = document.createElement('button');
+    full.type = 'button'; full.className = 'vp-pip-full'; full.title = 'Maximizar el 3D'; full.textContent = '⤢';
+    full.addEventListener('click', (e) => { e.stopPropagation(); swapViews(); });
+    const h = document.createElement('div'); h.className = 'vp-pip-resize'; h.title = 'Arrastra para redimensionar';
+    let s = null;
+    const onMove = (e) => { if (!s) return; vc3d.style.width = Math.max(180, s.w + (s.x - e.clientX)) + 'px'; vc3d.style.height = Math.max(140, s.h + (s.y - e.clientY)) + 'px'; fleet.resize(); };
+    const onUp = () => { s = null; removeEventListener('pointermove', onMove); removeEventListener('pointerup', onUp); };
+    h.addEventListener('pointerdown', (e) => { e.preventDefault(); e.stopPropagation(); const r = vc3d.getBoundingClientRect(); s = { x: e.clientX, y: e.clientY, w: r.width, h: r.height }; addEventListener('pointermove', onMove); addEventListener('pointerup', onUp); });
+    vc3d.append(full, h);
+    vc3d.addEventListener('dblclick', () => { if (document.body.classList.contains('view-2d')) swapViews(); });   // doble-clic en el PiP → promover el 3D
+  }
 
   // Árbol lateral Parque ▸ Zona ▸ Torre
   pm = new ParkManager({ el: document.getElementById('park-tree'), fleet, store, onSync: syncData });
@@ -201,7 +214,7 @@ async function boot() {
   // ── Relieve conceptual del terreno (DEM vendorizado) — encendido por defecto ─
   setLoad(88, 'Cargando relieve…'); await delay(40);
   try {
-    await fleet.loadTerrain('data/caman_dem.json?v=227');
+    await fleet.loadTerrain('data/caman_dem.json?v=228');
     fleet.setTerrainVisible(true);
     document.getElementById('shm-relieve-tool')?.classList.add('active');
   } catch (e) { console.warn('[shm] relieve no disponible', e); }
@@ -289,7 +302,10 @@ function buildToolbar(toolbar, fleet, getPM = () => null) {
       const on = document.body.classList.toggle('map-pip');
       if (!on) document.body.classList.remove('view-2d');     // al cerrar el mapa, vuelve el 3D a principal
       mapBtn.classList.toggle('active', on);
-      const apply = () => { fleet.resize(); if (on) { window.shmMap?.invalidate(); window.shmMap?.refresh(); } };
+      const apply = () => {
+        if (!document.body.classList.contains('view-2d')) { const vc = document.getElementById('viewport-container'); if (vc) { vc.style.width = ''; vc.style.height = ''; } }
+        fleet.resize(); if (on) { window.shmMap?.invalidate(); window.shmMap?.refresh(); }
+      };
       apply(); setTimeout(apply, 80);
     });
   // «Árbol» va ARRIBA DE TODO, sobre la flecha de selección (1.er control de la barra).
