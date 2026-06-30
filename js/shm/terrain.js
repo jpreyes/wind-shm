@@ -9,7 +9,7 @@
 // torres y drapear caminos sobre el relieve.
 // ─────────────────────────────────────────────────────────────────────────────
 import * as THREE from 'three';
-import { CAMAN_CENTER, LAYOUT_SCALE, toScene } from './parks_data_caman.js?v=268';
+import { CAMAN_CENTER, LAYOUT_SCALE, toScene } from './parks_data_caman.js?v=269';
 
 const M_PER_DEG_LAT = 111320;
 const M_PER_DEG_LON = 111320 * Math.cos(CAMAN_CENTER.lat * Math.PI / 180);
@@ -71,6 +71,7 @@ export class Terrain {
         uInterval: { value: 50 * LAYOUT_SCALE * this.vex },   // curvas cada 50 m (menos densas)
         uLight: { value: new THREE.Vector3(0.5, 0.85, 0.3).normalize() },
         uDim: { value: 0.0 },                                 // oscurece al seleccionar una torre (no se vuelve blanco)
+        uShadow: { value: 0.0 },                              // modo Shadow: aclara el relieve para que la sombra proyectada resalte
       },
       vertexShader: `
         varying float vH; varying vec3 vN; varying vec2 vUv;
@@ -79,7 +80,7 @@ export class Terrain {
       fragmentShader: `
         precision highp float;
         varying float vH; varying vec3 vN; varying vec2 vUv;
-        uniform float uMin, uMax, uInterval, uDim; uniform vec3 uLight;
+        uniform float uMin, uMax, uInterval, uDim, uShadow; uniform vec3 uLight;
         vec3 ramp(float t){                       // rampa pálida, bajo contraste
           vec3 c0 = vec3(0.80, 0.85, 0.78);
           vec3 c1 = vec3(0.86, 0.85, 0.74);
@@ -93,8 +94,10 @@ export class Terrain {
           float t = clamp((vH - uMin) / max(uMax - uMin, 1.0), 0.0, 1.0);
           vec3 col = ramp(t);
           float lit = clamp(dot(normalize(vN), uLight), 0.0, 1.0);                // 0 = ladera en sombra, 1 = al sol
-          col *= 0.62 + 0.38 * lit;                                               // contraste de sombra (un poco más marcado)
-          col = mix(col, vec3(0.16, 0.21, 0.46), (1.0 - lit) * 0.34);            // tinte ÍNDIGO en lo sombreado (como la sombra de torres, no gris)
+          float hs = mix(0.62, 0.84, uShadow);                                    // modo Shadow: hillshade más suave (relieve más plano/claro)
+          col *= hs + (1.0 - hs) * lit;
+          col = mix(col, vec3(0.16, 0.21, 0.46), (1.0 - lit) * 0.34 * (1.0 - 0.75 * uShadow)); // menos tinte índigo en modo Shadow
+          col = mix(col, clamp(col * 1.18 + 0.05, 0.0, 1.0), uShadow);            // y un realce general → la sombra proyectada (oscura) resalta
           float e = vH / uInterval;                                              // curvas de nivel finas
           float d = abs(fract(e - 0.5) - 0.5) / max(fwidth(e), 1e-4);
           float line = 1.0 - clamp(d, 0.0, 1.0);                                 // ~1 px
