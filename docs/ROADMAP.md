@@ -7,9 +7,9 @@ sensores, avance de obra 4D, dashboard e informe de estado estructural por torre
 Estado: ⬜ pendiente · 🟡 en curso · ✅ hecho. Los ítems se numeran `R-*`.
 
 > **▶ Foco inmediato (en lo que trabajamos ahora):** planes detallados en [`docs/planes/`](planes/).
-> 1. **`R-18` — Etapas constructivas / avance de obra** (HUD tipo Stark + dashboard de parque) — [plan](planes/frente-1-avance-obra.md).
-> 2. **`R-19` — Análisis de sombras** de los aerogeneradores según el sol — [plan](planes/frente-2-sombras.md).
-> 3. **`R-31` — Gemelo de construcción** (frecuencia predicha-vs-medida por etapa; el buque insignia, encaja con Camán en construcción) — [plan](planes/frente-3-gemelo-construccion.md).
+> 1. ✅ **`R-18` — Etapas constructivas / avance de obra** (HUD tipo Stark + 4D por componente + dashboard de parque con curva-S/Gantt) — **hecho (v250)** — [plan](planes/frente-1-avance-obra.md).
+> 2. ✅ **`R-19` — Análisis de sombras** de los aerogeneradores según el sol — **hecho (v241)** — [plan](planes/frente-2-sombras.md).
+> 3. **`R-31` — Gemelo de construcción** (frecuencia predicha-vs-medida por etapa; el buque insignia, encaja con Camán en construcción) — **SIGUIENTE** — [plan](planes/frente-3-gemelo-construccion.md).
 >
 > Los tres se apoyan en el modelo 4D que ya estamos modificando.
 
@@ -32,6 +32,8 @@ Estado: ⬜ pendiente · 🟡 en curso · ✅ hecho. Los ítems se numeran `R-*`
 - ✅ **Árbol lateral multiparque Parque ▸ Zona ▸ Torre** `[R-4]` (v208): `js/shm/parks.js` (store + UI) — varios parques (cada uno con su flota y layout), zonas dentro de cada parque (enfoque con atenuación + encuadre), asignación de torres a zonas, CRUD, persistencia en `localStorage`.
 - ✅ **Torres AT seleccionables, movibles y borrables** `[R-5]` (v208): el picking sube por el árbol de la escena → las torres AT se seleccionan, arrastran y borran como las turbinas.
 - ✅ **Desactivar (por ahora) la Configuración** `[R-9]` (v209): el botón ⚙ se oculta en ReWind hasta rehacerlo específico para SHM. *(También se movió el botón «Árbol» al tope del toolbar.)*
+- ✅ **Avance de obra / etapas constructivas (HUD tipo Stark + dashboard de parque)** `[R-18]` (v242–v251): modelo de **partidas por componente** (fundación·fuste·góndola·rotor·cableado) con cronograma sintético editable (plan/real, responsable, fotos mockup, crosslink al gemelo); **HUD «Stark»** (callouts ancladas con línea-guía + semáforo/% + giro de cámara + «Abrir partida» con galería/bitácora/informe; auto-despliegue, layout compacto); **llenado 4D por componente** en la malla; **pestaña «Obra»** con editor por torre + dashboard de parque (veredicto, KPIs, **curva-S**, % por componente, atrasos, **Gantt por torre**, informe DPR). → [plan](planes/frente-1-avance-obra.md).
+- ✅ **Análisis de sombras (shadow-flicker)** `[R-19]` (v215–v241): efemérides NOAA + sombras 3D sobre el relieve y 2D en el mapa; estudio horario/diario; worst-case y real-case (meteo del sitio) cuantitativos; **mapa de flicker** (2D+3D); receptores por clic o **importados (CSV/KML/KMZ/GeoJSON/SHP)**; **informe imprimible** con mapa de iso-sombra y calendario mes×hora; sombreado inter-turbinas; pestaña «Shadow flicker». → [plan](planes/frente-2-sombras.md).
 - ✅ **Depurar del código todo lo que no sea de ReWind (no solo ocultarlo)** `[R-20]` (v213): se eliminaron `js/app.js` (ReWind se auto-bootea), `js/design/`, `js/io/`, `js/ui/`, `js/utils/`, el mallador (`mesh_*`, `mesher`, `discretize`, `macromodel`, `matching`, `model_ops`), `js/api/`, los solvers no usados por el gemelo (geometric, spectrum, formfind, nl_*, buckling, subspace, staged, tendon, moving_load, timehistory, sparse, linsolve + workers), `worker/asistente.js` y el markup PÓRTICO de `index.html` (menús, barra de modelado, panel FE, overlays/modales/ayuda) — **~24.900 líneas**. Se conserva el closure de ReWind (`js/shm/*` + `model`/`serializer`/`macro_registry`/`macros.turbine` + 10 solvers del gemelo + `asistente/generador.js`). El resize del panel se repuso en `shm_mode.js`.
 
 ---
@@ -44,8 +46,13 @@ Estado: ⬜ pendiente · 🟡 en curso · ✅ hecho. Los ítems se numeran `R-*`
 - 🟡 **Persistencia/`DataSource` industrial + API publicada** `[R-10]`: que la herramienta sirva a la industria conectándose a una **base de datos de torres del parque** o funcionando de forma **autónoma**. Capas: `localStorage` (demo) → IndexedDB/SQLite local (autónomo, sin red) → BD del parque. **Publicar una API** (esquema común `DataSource` simulado ↔ en vivo) para que terceros consuman la misma telemetría. *(Primer trozo hecho v235: `js/shm/meteo_caman.js` — fuente de datos meteo del sitio —sol mensual, rosa de vientos, operación— que consume el real-case de sombra; falta la BD/API/telemetría industrial.)*
 - ⬜ **Empaquetado Electron + serie temporal InfluxDB + estándares eólicos** `[R-11]`: llevar ReWind a **Electron** (app de escritorio para el centro de control del parque). Decidir el **stack de ingesta de InfluxDB** (cliente Python / C++ / Rust — definir el lenguaje base del backend) y alinear el modelo de datos con los **estándares eólicos** (IEC 61400, OPC-UA/IEC 61850 para la subestación). *(Ver `bridge/` para la cadena ESP32 → MQTT → InfluxDB ya prototipada.)*
 - ⬜ **Quitar el render/pantalla inicial heredado de PÓRTICO** `[R-16]`: lo primero que se ve aún corresponde a PÓRTICO (landing/splash antes de que monte ReWind). Reemplazarlo por un arranque propio de ReWind. *(Relacionado con `[R-8]`.)*
-- ⬜ **Gestión de avance de obra completa (ventana dedicada)** `[R-18]`: el parque está en **etapa constructiva**, así que el seguimiento debe crecer más allá de la pestaña «Avance» actual (etapas + % por torre). Abrir una **ventana completa**: cronograma/Gantt por torre y zona, hitos y fechas reales (planificado vs. real), responsables, **fotografías** de obra (requiere BD, ver `[R-10]`), curva-S de avance del parque, % por componente (fundación, fuste, góndola, rotor, cableado/colectora), filtros y exportación de reportes. **Diseño acordado: visor HUD tipo «Stark» por torre** (callouts ancladas en 3D con flecha por partida + giro de cámara al clic + ventana expandible con datos/fotos/informe y **botón «Abrir partida»**) **+ dashboard de avance de parque**. → **[plan completo](planes/frente-1-avance-obra.md)**.
-- ⬜ **Análisis de sombras de los aerogeneradores según la posición del sol** `[R-19]`: proyección de sombras del rotor/fuste según la **posición solar** (fecha, hora, lat/lon — ya georreferenciado) sobre el terreno y entre torres. Útil para *shadow flicker* (parpadeo hacia viviendas/vecinos) y sombreado entre máquinas. En 3D: luz direccional = sol (azimut/elevación por efemérides) + sombras proyectadas; control de fecha/hora con animación del día. *(Three.js ya tiene `castShadow`/`receiveShadow`.)* → **[plan completo](planes/frente-2-sombras.md)**.
+- ⬜ **Inspección como micro-sistema de gestión (CMMS ligero) + histórico de evaluación rico** `[R-32]`: hoy la pestaña **Inspección** tiene lo básico (última/próxima inspección, observación) + un histórico de evaluación del estado estructural simple. Convertirla en un **mini management system** de inspección y mantenimiento por torre y parque:
+  - **Histórico de evaluación rico:** línea de tiempo navegable con eventos fechados (inspección visual, OMA/medición, cambio de clasificación, reparación), severidad, adjuntos y nota; no solo la banda de clasificación ML.
+  - **Órdenes de trabajo / hallazgos (work orders):** crear hallazgo → asignar responsable → estado (abierto/en curso/cerrado) → prioridad → vencimiento; checklist de inspección por tipo de estructura.
+  - **Calendario / vencimientos:** próximas inspecciones y mantenimientos programados, alertas de vencido (encaja con `[R-23]`).
+  - **Adjuntos:** fotos, informes y notas por evento/hallazgo (requiere almacenamiento, `[R-10]`).
+  - **Reportes:** ficha de inspección por torre + resumen de hallazgos abiertos por parque (encaja con `[R-28]`).
+  *Distinguir siempre **evaluación de inspección** (manual/periódica) del **estado por sensores** (live, pestaña SHM).* Depende de `[R-10]` para persistencia real.
 
 ---
 
@@ -86,10 +93,10 @@ revisiones de extensión de vida).*
 
 ## Secuencia sugerida
 
-**Foco inmediato (los tres, apoyados en el 4D):**
-1. **`R-18` etapas constructivas / ventana de avance** — es lo que el cliente ve hoy (parque en construcción).
-2. **`R-19` análisis de sombras** — visual, autocontenido, reusa el relieve y las torres ya en escena.
-3. **🌟 `R-31` gemelo de construcción** — frecuencia predicha-vs-medida por etapa; el mejor encaje hoy. Se beneficia de `R-21` (OMA) para la f₁ medida.
+**Foco inmediato (apoyados en el 4D):**
+1. ✅ **`R-18` etapas constructivas / avance de obra** — hecho (HUD + 4D por componente + dashboard).
+2. ✅ **`R-19` análisis de sombras** — hecho.
+3. **🌟 `R-31` gemelo de construcción** — **SIGUIENTE**: frecuencia predicha-vs-medida por etapa; el mejor encaje hoy. Se beneficia de `R-21` (OMA) para la f₁ medida.
 
 **Después:**
 4. **`R-21` OMA desde la señal medida** — habilita el sensado virtual (base modal viva).
