@@ -7,11 +7,11 @@
 // ─────────────────────────────────────────────────────────────────────────────
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
-import { createTurbine, TOWER_H } from './turbine_mesh.js?v=218';
-import { createSubstationTower, groundCable, overheadLine } from './structures.js?v=218';
-import { toScene, CAMAN_CENTER, LAYOUT_SCALE } from './parks_data_caman.js?v=218';
-import { CAMAN_ROADS } from './caman_roads.js?v=218';
-import { solarPosition, dateFromLocal, sunSceneDir } from './solar.js?v=218';
+import { createTurbine, TOWER_H } from './turbine_mesh.js?v=219';
+import { createSubstationTower, groundCable, overheadLine } from './structures.js?v=219';
+import { toScene, CAMAN_CENTER, LAYOUT_SCALE } from './parks_data_caman.js?v=219';
+import { CAMAN_ROADS } from './caman_roads.js?v=219';
+import { solarPosition, dateFromLocal, sunSceneDir } from './solar.js?v=219';
 
 const SPACING = 235;
 const TOWER_SCALE = 2.2;   // agranda las torres (vista esquemática) para que destaquen sobre el relieve
@@ -218,7 +218,7 @@ export class FleetView {
     c.left = -d; c.right = d; c.top = d; c.bottom = -d; c.near = 1; c.far = radius * 6 + 4000;
     c.updateProjectionMatrix();
     sh.bias = -0.0004; sh.normalBias = 2.0;                 // evita el acne del auto-sombreado del terreno
-    sh.autoUpdate = false; sh.needsUpdate = true;           // recalcula la sombra sólo al mover el sol (no cada frame)
+    sh.autoUpdate = true;                                    // recalcula cada frame → la sombra de las aspas gira fluida
   }
 
   // Las mallas sólidas reciben sombra (fuste recibe la sombra de las aspas, etc.).
@@ -255,7 +255,7 @@ export class FleetView {
   // ── Relieve conceptual (capa de terreno) ─────────────────────────────────────
   // Carga el DEM vendorizado y añade la malla (oculta hasta activarla).
   async loadTerrain(url) {
-    const { Terrain } = await import('./terrain.js?v=218');
+    const { Terrain } = await import('./terrain.js?v=219');
     this._TerrainClass = Terrain;                     // para reconstruir al cambiar de escala
     const dem = await (await fetch(url)).json();
     this.terrain = new Terrain(dem, { vex: 1.5 });   // relieve exagerado (esquemático)
