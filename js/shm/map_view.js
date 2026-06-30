@@ -6,9 +6,9 @@
 // Click en un marcador → conmuta a la vista 3D enfocando esa estructura (onPick).
 // Leaflet se carga como global (window.L) desde lib/leaflet/leaflet.js.
 // ─────────────────────────────────────────────────────────────────────────────
-import { CAMAN_CENTER } from './parks_data_caman.js?v=223';
-import { CAMAN_ROADS } from './caman_roads.js?v=223';
-import { compassRoseSVG } from './compass.js?v=223';
+import { CAMAN_CENTER } from './parks_data_caman.js?v=224';
+import { CAMAN_ROADS } from './caman_roads.js?v=224';
+import { compassRoseSVG } from './compass.js?v=224';
 
 // Color del marcador según el avance de obra (coherente con el 4D / panel).
 function colorFor(st) {
@@ -58,7 +58,7 @@ export class MapView {
     L.control.scale({ imperial: false, position: 'bottomleft' }).addTo(this.map);   // barra de escala (métrica)
     // Rosa de los vientos (fija, norte-arriba: el mapa no rota).
     const RoseCtl = L.Control.extend({ onAdd() { const d = L.DomUtil.create('div', 'mv-rose'); d.innerHTML = compassRoseSVG(); return d; } });
-    this.map.addControl(new RoseCtl({ position: 'bottomright' }));
+    this.map.addControl(new RoseCtl({ position: 'bottomleft' }));   // sobre la barra de escala; no choca con la atribución (bottomright)
 
     // Botón de pantalla completa / restaurar (ventana auxiliar PiP ⇄ completa).
     const self = this;

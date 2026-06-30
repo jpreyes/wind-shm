@@ -387,13 +387,19 @@ body.shm #shm-banner.show { display: flex; animation: shm-blink 0.8s steps(1) in
 /* Estudio de sol en el mapa 2D: atenúa el basemap para que la sombra contraste */
 .mv-sun .leaflet-tile-pane { filter: brightness(0.5) saturate(0.65); }
 
-/* ── Rosa de los vientos (3D flotante + 2D control) ───────────────────────── */
-#shm-compass { position: absolute; right: 14px; bottom: 16px; z-index: 25; width: 62px; height: 62px; pointer-events: none; }
+/* ── Rosa de los vientos (3D flotante arriba-derecha + 2D control) ─────────── */
+#shm-compass { position: absolute; right: 14px; top: 14px; z-index: 25; width: 58px; height: 58px; pointer-events: none; }
+#shm-compass, .mv-rose {                       /* disco «glass» moderno */
+  border-radius: 50%; background: var(--glass);
+  -webkit-backdrop-filter: blur(7px); backdrop-filter: blur(7px);
+  border: 1px solid var(--border2); box-shadow: 0 4px 16px rgba(0,0,0,.30);
+}
+.mv-rose { width: 50px; height: 50px; }
 #shm-compass svg, .mv-rose svg { width: 100%; height: 100%; display: block; }
-.mv-rose { width: 52px; height: 52px; }
-.cmp-bg { fill: var(--panel); fill-opacity: 0.72; stroke: var(--border2); stroke-width: 1.5; }
-.cmp-pt { fill: var(--text-muted); }
-.cmp-n { fill: #e23b3b; }
+.cmp-rim { fill: none; stroke: var(--border2); stroke-width: 1; opacity: .55; }
+.cmp-tk  { stroke: var(--text-muted); stroke-width: 2; stroke-linecap: round; }
+.cmp-tkm { stroke: var(--text-muted); stroke-width: 1.2; stroke-linecap: round; opacity: .55; }
+.cmp-n { fill: var(--accent); }                /* aguja Norte = acento (cohesivo con la UI) */
+.cmp-s { fill: var(--text-muted); opacity: .7; }
 .cmp-hub { fill: var(--text); }
-.cmp-lbl { fill: var(--text); font: 600 13px var(--font, system-ui, sans-serif); text-anchor: middle; dominant-baseline: central; }
-.cmp-nl { fill: #e23b3b; }
+.cmp-nl { fill: var(--accent); font: 600 15px var(--font, system-ui, sans-serif); text-anchor: middle; dominant-baseline: central; }
