@@ -8,21 +8,21 @@
 //   inspecciones y señal temporal EN VIVO desde un Web Worker (DataSource).
 // Recortes (modelado) los hace shm.css ocultando, no borrando.
 // ─────────────────────────────────────────────────────────────────────────────
-import { FleetView } from './fleet_view.js?v=262';
-import { DataSource } from './data_source.js?v=262';
-import { computeTwin } from './digital_twin.js?v=262';
-import { ParkManager, loadParksStore } from './parks.js?v=262';
-import { MapView } from './map_view.js?v=262';
-import { defaultStages, builtFromStages } from './parks_data_caman.js?v=262';
-import { compassRoseSVG } from './compass.js?v=262';
-import { buildAvanceHUD } from './avance_hud.js?v=262';
-import { renderAvance } from './avance_dashboard.js?v=262';
-import * as Insp from './inspection.js?v=262';
-import * as Fat from './fatigue.js?v=262';
-import { t, getLang, setLang } from './i18n.js?v=262';
+import { FleetView } from './fleet_view.js?v=263';
+import { DataSource } from './data_source.js?v=263';
+import { computeTwin } from './digital_twin.js?v=263';
+import { ParkManager, loadParksStore } from './parks.js?v=263';
+import { MapView } from './map_view.js?v=263';
+import { defaultStages, builtFromStages } from './parks_data_caman.js?v=263';
+import { compassRoseSVG } from './compass.js?v=263';
+import { buildAvanceHUD } from './avance_hud.js?v=263';
+import { renderAvance } from './avance_dashboard.js?v=263';
+import * as Insp from './inspection.js?v=263';
+import * as Fat from './fatigue.js?v=263';
+import { t, getLang, setLang } from './i18n.js?v=263';
 
 const F1_BASE = { turbine: 0.283, hv: 1.6 };
-const REWIND_VER = 'v262';   // versión visible del build (subir junto al cache-bust)
+const REWIND_VER = 'v263';   // versión visible del build (subir junto al cache-bust)
 const FS = 62.5;   // frecuencia de muestreo de la señal (Hz), igual que shm_worker.js
 // Clasificador ML de daño (0..4)
 const CLS = ['Sin daño', 'Leve', 'Moderado', 'Alto', 'Muy alto'];
@@ -263,7 +263,7 @@ async function boot() {
   // ── Relieve conceptual del terreno (DEM vendorizado) — encendido por defecto ─
   setLoad(88, 'Cargando relieve…'); await delay(40);
   try {
-    await fleet.loadTerrain('data/caman_dem.json?v=262');
+    await fleet.loadTerrain('data/caman_dem.json?v=263');
     fleet.setTerrainVisible(true);
     document.getElementById('shm-relieve-tool')?.classList.add('active');
   } catch (e) { console.warn('[shm] relieve no disponible', e); }
@@ -563,13 +563,13 @@ function buildCompass(vpwrap, fleet) {
 function buildNameplate(vpwrap) {
   const el = document.createElement('div');
   el.id = 'shm-nameplate';
-  el.innerHTML = `<span class="np-dot"></span><span class="np-name">—</span><span class="np-type">—</span><span class="np-alarm">⚠ Anomalía detectada</span>`;
+  el.innerHTML = `<span class="np-dot"></span><span class="np-name">—</span><span class="np-type">—</span><span class="np-alarm">${t('np.anom')}</span>`;
   (vpwrap || document.body).appendChild(el);
   return {
     show(obj) {
       if (!obj) { el.classList.remove('show'); return; }
       el.querySelector('.np-name').textContent = obj.label;
-      el.querySelector('.np-type').textContent = obj.type === 'hv' ? 'Torre de alta tensión' : `Aerogenerador · ${obj.power || ''}`;
+      el.querySelector('.np-type').textContent = obj.type === 'hv' ? t('det.typeHV') : `${t('det.typeTurbine')} · ${obj.power || ''}`;
       el.classList.add('show');
     },
     alarm(on) { el.classList.toggle('alarm', !!on); },
@@ -587,7 +587,7 @@ function buildBanner(vpwrap) {
       if (!labels.length) { el.classList.remove('show'); return; }
       const n = labels.length;
       el.querySelector('.b-txt').textContent =
-        `ANOMALÍA DETECTADA — ${labels.slice(0, 3).join(', ')}${n > 3 ? ` y ${n - 3} más` : ''}`;
+        `${t('banner.anom')} — ${labels.slice(0, 3).join(', ')}${n > 3 ? t('banner.more', n - 3) : ''}`;
       el.classList.add('show');
     },
   };
@@ -1041,22 +1041,22 @@ function buildDashboard(panel, fleet, actions) {
     $('#shm-detail').innerHTML = `
       <div id="shm-alarmbar" style="display:none"></div>
       <div class="shm-body">
-        <div class="row"><span>Estructura</span><b>${o.label}</b></div>
-        <div class="row"><span>Tipo</span><b>${o.type === 'hv' ? 'Torre de alta tensión' : 'Aerogenerador'}</b></div>
-        <div class="row"><span>Altura</span><b>${o.height} m</b></div>
-        ${o.type === 'turbine' ? `<div class="row"><span>Potencia</span><b>~3 MW</b></div>` : ''}
-        <div class="row"><span>Sensores</span><b id="d-ns">—</b></div>
-        <div class="row"><span>f₁ gemelo digital</span><b>${twin ? twin.toFixed(3) + ' Hz' : '… calculando'}</b></div>
-        <div class="row"><span>f₁ actual</span><b id="d-f1">—</b></div>
-        <div class="row"><span>Velocidad del viento</span><b id="d-wind">—</b></div>
-        <div class="row"><span>Temperatura</span><b id="d-temp">—</b></div>
+        <div class="row"><span>${t('det.structure')}</span><b>${o.label}</b></div>
+        <div class="row"><span>${t('det.type')}</span><b>${o.type === 'hv' ? t('det.typeHV') : t('det.typeTurbine')}</b></div>
+        <div class="row"><span>${t('det.height')}</span><b>${o.height} m</b></div>
+        ${o.type === 'turbine' ? `<div class="row"><span>${t('det.power')}</span><b>~3 MW</b></div>` : ''}
+        <div class="row"><span>${t('det.sensors')}</span><b id="d-ns">—</b></div>
+        <div class="row"><span>${t('det.f1twin')}</span><b>${twin ? twin.toFixed(3) + ' Hz' : t('det.calc')}</b></div>
+        <div class="row"><span>${t('det.f1now')}</span><b id="d-f1">—</b></div>
+        <div class="row"><span>${t('det.wind')}</span><b id="d-wind">—</b></div>
+        <div class="row"><span>${t('det.temp')}</span><b id="d-temp">—</b></div>
         <div class="yaw-ctrl">
-          <label>Orientación <b id="yaw-val"></b></label>
+          <label>${t('det.orient')} <b id="yaw-val"></b></label>
           <input type="range" id="yaw-slider" min="0" max="359" step="1">
         </div>
-        <div class="note" style="font-size:10px">Estado por sensores → pestaña <b>SHM</b> · evaluación e inspección → <b>Inspección</b> · avance de obra → <b>Obra</b>.</div>
+        <div class="note" style="font-size:10px">${t('det.note')}</div>
       </div>
-      <div class="shm-detail-foot"><button id="shm-tower-report">📄 Informe de esta torre</button></div>`;
+      <div class="shm-detail-foot"><button id="shm-tower-report">${t('det.report')}</button></div>`;
     _abKey = ''; updateAlarmBar();
     const sl = $('#yaw-slider'), vv = $('#yaw-val');
     const deg0 = Math.round(((fleet.getYaw(o.id) * 180 / Math.PI) % 360 + 360) % 360);
@@ -1091,13 +1091,13 @@ function buildDashboard(panel, fleet, actions) {
     if (pane === 'estado') {
       const dmg = sum ? Math.round((sum.dmg || 0) * 100) : 0;
       body.innerHTML = `
-        <div class="row"><span>Clasificación (sensores)</span><b id="sh-cls">…</b></div>
-        <div class="row"><span>Índice de daño</span><b id="sh-dmg">${dmg}%</b></div>
-        <div class="row"><span>Sensores OK</span><b id="sh-ns">—</b></div>
-        <div class="row"><span>f₁ actual</span><b id="sh-f1">—</b></div>
-        <div class="note" style="font-size:10px">Estado/clasificación EN VIVO del servicio ML que vigila los sensores. Es distinto de la <b>evaluación de inspección</b> (pestaña Inspección).</div>`;
+        <div class="row"><span>${t('sh.cls')}</span><b id="sh-cls">…</b></div>
+        <div class="row"><span>${t('sh.dmg')}</span><b id="sh-dmg">${dmg}%</b></div>
+        <div class="row"><span>${t('sh.sensOk')}</span><b id="sh-ns">—</b></div>
+        <div class="row"><span>${t('sh.f1now')}</span><b id="sh-f1">—</b></div>
+        <div class="note" style="font-size:10px">${t('sh.note')}</div>`;
     } else if (pane === 'senal') {
-      body.innerHTML = `<div class="note" style="margin-top:0">Señal de aceleración en vivo (se mueve en tiempo real):</div><div id="sig-wrap"></div>`;
+      body.innerHTML = `<div class="note" style="margin-top:0">${t('sig.note')}</div><div id="sig-wrap"></div>`;
       const wrap = body.querySelector('#sig-wrap');
       for (const se of o.sensors) {
         const lab = document.createElement('div'); lab.className = 'row'; lab.style.border = '0';
@@ -1109,48 +1109,49 @@ function buildDashboard(panel, fleet, actions) {
     } else if (pane === 'sensores') {
       body.innerHTML = o.sensors.map(se =>
         `<div class="shm-sensor"><span class="dot ${se.status}"></span><span style="flex:1">${se.id}</span><b class="s-rms" data-sid="${se.id}">—</b></div>`
-      ).join('') + `<div class="note">Verde = operativo · Rojo = en falla. Estado y RMS en vivo desde el gateway (sim).</div>`;
+      ).join('') + `<div class="note">${t('sens.note')}</div>`;
     } else if (pane === 'fatiga') {
       const a = assessFatigueFor(o, sum);
       const st = Fat.fatigueState(a.Delapsed);
-      const rulLab = !isFinite(a.rul) ? '∞' : a.rul <= 0 ? '0 a ⚠' : `${a.rul.toFixed(0)} a`;
-      const lifeLab = !isFinite(a.lifeYears) ? '∞' : `${a.lifeYears.toFixed(0)} a`;
+      const yr = t('units.years');
+      const rulLab = !isFinite(a.rul) ? '∞' : a.rul <= 0 ? `0 ${yr} ⚠` : `${a.rul.toFixed(0)} ${yr}`;
+      const lifeLab = !isFinite(a.lifeYears) ? '∞' : `${a.lifeYears.toFixed(0)} ${yr}`;
       body.innerHTML = `
         <div class="fat-kpis">
-          <div class="fat-kpi"><div class="k">Vida consumida</div><div class="v ${st.key}">${(a.Delapsed * 100).toFixed(0)}%</div></div>
-          <div class="fat-kpi"><div class="k">Vida remanente</div><div class="v ${a.rul <= 2 ? 'critica' : ''}">${rulLab}</div></div>
-          <div class="fat-kpi"><div class="k">Daño / año</div><div class="v">${a.Dyear.toExponential(1)}</div></div>
+          <div class="fat-kpi"><div class="k">${t('fat.lifeUsed')}</div><div class="v ${st.key}">${(a.Delapsed * 100).toFixed(0)}%</div></div>
+          <div class="fat-kpi"><div class="k">${t('fat.rul')}</div><div class="v ${a.rul <= 2 ? 'critica' : ''}">${rulLab}</div></div>
+          <div class="fat-kpi"><div class="k">${t('fat.dmgYear')}</div><div class="v">${a.Dyear.toExponential(1)}</div></div>
           <div class="fat-kpi"><div class="k">DEL (m=3)</div><div class="v">${a.del3.toFixed(0)}<small> MPa</small></div></div>
         </div>
-        <div class="row"><span>Estado de fatiga</span><b class="${st.key}">${st.label}</b></div>
-        <div class="row"><span>Vida de diseño estimada</span><b>${lifeLab}</b></div>
-        <div class="row"><span>Años en servicio (sim.)</span><b>${a.yearsInService} a</b></div>
-        <div class="row" style="border:0"><span>Categoría de detalle</span><b>EN 1993-1-9 · ΔσC ${a.detail}</b></div>
-        <div class="shm-sub2">Espectro de carga (rainflow · ciclos/año)</div>
+        <div class="row"><span>${t('fat.state')}</span><b class="${st.key}">${t('fat.state.' + st.key)}</b></div>
+        <div class="row"><span>${t('fat.designLife')}</span><b>${lifeLab}</b></div>
+        <div class="row"><span>${t('fat.yis')}</span><b>${a.yearsInService} ${yr}</b></div>
+        <div class="row" style="border:0"><span>${t('fat.detail')}</span><b>EN 1993-1-9 · ΔσC ${a.detail}</b></div>
+        <div class="shm-sub2">${t('fat.spectrum')}</div>
         ${fatigueSpectrumSVG(a)}
-        <div class="note" style="font-size:10px">Conteo <b>rainflow</b> (ASTM E1049) + S-N <b>EN 1993-1-9</b> + daño de <b>Miner</b> → vida remanente y <b>DEL</b>. Historia de tensiones <b>sintética</b> (turbulencia de banda baja + armónicos 1P/3P del rotor) hasta conectar la galga/acelerómetro real. Distinto del índice de daño por sensores (pestaña Estado).</div>`;
+        <div class="note" style="font-size:10px">${t('fat.note')}</div>`;
     } else if (pane === 'avz') {
       const nvm = o.type === 'turbine'
-        ? `<div class="note">Diagramas del gemelo digital — fuste bajo viento + peso propio:</div>
+        ? `<div class="note">${t('avz.nvmNote')}</div>
            <div id="nvm-wrap" style="display:flex;gap:6px">
              <canvas class="sig nvm" data-k="N" style="height:130px;flex:1"></canvas>
              <canvas class="sig nvm" data-k="V" style="height:130px;flex:1"></canvas>
              <canvas class="sig nvm" data-k="M" style="height:130px;flex:1"></canvas>
            </div>
            <div class="row" style="border:0"><span>N · V · M (base)</span><b id="nvm-info">…</b></div>`
-        : `<div class="note">Esfuerzo axial del reticulado (gemelo, bajo viento):</div>
-           <div class="row"><span>Axial máx · tracción</span><b id="hv-t">…</b></div>
-           <div class="row"><span>Axial máx · compresión</span><b id="hv-c">…</b></div>`;
+        : `<div class="note">${t('avz.axialNote')}</div>
+           <div class="row"><span>${t('avz.axialT')}</span><b id="hv-t">…</b></div>
+           <div class="row"><span>${t('avz.axialC')}</span><b id="hv-c">…</b></div>`;
       body.innerHTML = `
-        <div class="note" style="margin-top:0">Espectro de frecuencias (FFT) del acelerómetro superior:</div>
+        <div class="note" style="margin-top:0">${t('avz.fftNote')}</div>
         <canvas class="sig" id="fft-canvas" style="height:110px"></canvas>
-        <div class="row" style="border:0"><span>Pico dominante</span><b id="fft-peak">—</b></div>
-        <div class="note">Espectrograma (frecuencia–tiempo) del acelerómetro superior:</div>
+        <div class="row" style="border:0"><span>${t('avz.fftPeak')}</span><b id="fft-peak">—</b></div>
+        <div class="note">${t('avz.specNote')}</div>
         <canvas class="sig" id="spec-canvas" style="height:90px"></canvas>
-        <div class="note">Seguimiento de la frecuencia natural f₁ (vs. línea base del gemelo):</div>
+        <div class="note">${t('avz.freqNote')}</div>
         <canvas class="sig" id="freq-canvas" style="height:80px"></canvas>
         ${nvm}
-        <div class="note">f₁ a la baja = pérdida de rigidez (daño). Diagramas del solver FEM del gemelo digital.</div>`;
+        <div class="note">${t('avz.note')}</div>`;
       if (o.type === 'hv') {
         const ax = window.shmTwin?.hvAxial;
         if (ax) { $('#hv-t').textContent = `${ax.tMax.toFixed(0)} kN`; $('#hv-c').textContent = `${ax.cMax.toFixed(0)} kN`; }
@@ -1203,8 +1204,8 @@ function buildDashboard(panel, fleet, actions) {
       ${bars}${vline(dsL, 'ΔσL', '#94a3b8')}${vline(dsD, 'ΔσD', '#f59e0b')}
       <line x1="${ml}" y1="${mt + ph}" x2="${ml + pw}" y2="${mt + ph}" stroke="var(--border,#28384a)" stroke-width="0.7"/>
       ${yticks}${xticks}
-      <text x="${ml + pw / 2}" y="${H - 3}" font-size="8" fill="var(--text-muted,#93a6b8)" text-anchor="middle">rango Δσ (MPa)</text>
-      <text x="9" y="${mt + ph / 2}" font-size="8" fill="var(--text-muted,#93a6b8)" text-anchor="middle" transform="rotate(-90 9 ${mt + ph / 2})">ciclos/año (log)</text>
+      <text x="${ml + pw / 2}" y="${H - 3}" font-size="8" fill="var(--text-muted,#93a6b8)" text-anchor="middle">${t('fat.xaxis')}</text>
+      <text x="9" y="${mt + ph / 2}" font-size="8" fill="var(--text-muted,#93a6b8)" text-anchor="middle" transform="rotate(-90 9 ${mt + ph / 2})">${t('fat.yaxis')}</text>
     </svg>`;
   }
 
@@ -1464,7 +1465,7 @@ function buildDashboard(panel, fleet, actions) {
     set('d-wind', sum.wind != null ? `${sum.wind.toFixed(1)} m/s` : '—'); set('d-temp', `${sum.temp.toFixed(1)} °C`);
     // SHM · Estado (por sensores)
     set('sh-ns', `${ok}/${ns} OK`); set('sh-f1', `${sum.f1.toFixed(3)} Hz`); set('sh-dmg', `${Math.round((sum.dmg || 0) * 100)} %`);
-    set('sh-cls', CLS[sum.cls || 0], CLS_COL[sum.cls || 0]);
+    set('sh-cls', t('cls.' + (sum.cls || 0)), CLS_COL[sum.cls || 0]);
     // SHM · Sensores (lista + RMS)
     for (const se of sum.sensors) {
       const n = el.querySelector(`.s-rms[data-sid="${se.id}"]`);
