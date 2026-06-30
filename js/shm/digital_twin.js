@@ -6,12 +6,12 @@
 // macromodelo `turbine`; la torre de alta tensión usa el generador de torres de
 // PÓRTICO (celosía 3D). Requiere numeric.js (presente en el navegador).
 // ─────────────────────────────────────────────────────────────────────────────
-import { Model } from '../model/model.js?v=246';
-import { Serializer } from '../model/serializer.js?v=246';
-import { insertTurbine } from '../model/macros/turbine.js?v=246';
-import { ModalSolver } from '../solver/modal_solver.js?v=246';
-import { StaticSolver } from '../solver/static_solver.js?v=246';
-import { generarTorre } from '../../asistente/generador.js?v=246';
+import { Model } from '../model/model.js?v=247';
+import { Serializer } from '../model/serializer.js?v=247';
+import { insertTurbine } from '../model/macros/turbine.js?v=247';
+import { ModalSolver } from '../solver/modal_solver.js?v=247';
+import { StaticSolver } from '../solver/static_solver.js?v=247';
+import { generarTorre } from '../../asistente/generador.js?v=247';
 
 // f₁ del aerogenerador (macromodelo: fuste cónico + RNA + resortes de fundación).
 export function turbineF1() {

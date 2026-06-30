@@ -30,11 +30,11 @@ The app must run from a static server with no install, and is a PWA (installable
 
 ## Versioned imports — the cache-busting convention (important)
 
-Every internal import and worker URL carries a query string, e.g. `import { Model } from './model/model.js?v=216'`. This is a **global app version** used to bust browser/SW caches. When you ship a change to shipped JS/CSS, **bump it across all files at once** (current version: **v246**):
+Every internal import and worker URL carries a query string, e.g. `import { Model } from './model/model.js?v=216'`. This is a **global app version** used to bust browser/SW caches. When you ship a change to shipped JS/CSS, **bump it across all files at once** (current version: **v247**):
 
 ```bash
-files=$(grep -rl "v=246" --include=*.js --include=*.html js index.html sw.js)
-for f in $files; do sed -i 's/v=246/v=247/g' "$f"; done
+files=$(grep -rl "v=247" --include=*.js --include=*.html js index.html sw.js)
+for f in $files; do sed -i 's/v=247/v=248/g' "$f"; done
 ```
 
 Gotchas:
