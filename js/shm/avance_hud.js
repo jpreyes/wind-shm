@@ -9,9 +9,10 @@
 // más un botón «Abrir partida» (vista completa). Sólo DOM/overlay; el 3D lo provee
 // fleet_view (anchorScreenAt / focusComponent).
 // ─────────────────────────────────────────────────────────────────────────────
-import { TURBINE_COMPONENTS, HV_COMPONENTS, enrichStages } from './parks_data_caman.js?v=272';
-import * as CTwin from './construction_twin.js?v=272';
-import * as Insp from './inspection.js?v=272';
+import { TURBINE_COMPONENTS, HV_COMPONENTS, enrichStages } from './parks_data_caman.js?v=273';
+import * as CTwin from './construction_twin.js?v=273';
+import * as Insp from './inspection.js?v=273';
+import { t, getLang } from './i18n.js?v=273';
 
 const fmt = (iso) => { if (!iso) return '—'; const [y, m, d] = iso.split('-'); return `${d}/${m}/${y.slice(2)}`; };
 
@@ -27,7 +28,7 @@ const LOC_MAP = [
 ];
 const compOfLocation = (loc) => { const n = _norm(loc); for (const [re, c] of LOC_MAP) if (re.test(n)) return c; return 'fuste'; };
 const sevClass = (sev) => { const n = _norm(sev); if (/muy alta|alta/.test(n)) return 'bad'; if (/media|moderad/.test(n)) return 'wip'; return 'ok'; };
-const sensorLabel = (se) => { const id = se.id || ''; if (/top|tope|sup/.test(id)) return 'Acelerómetro tope'; if (/mid|cent|med/.test(id)) return 'Acelerómetro centro'; return 'Sensor ' + id; };
+const sensorLabel = (se) => { const id = se.id || ''; if (/top|tope|sup/.test(id)) return t('ahud.accTop'); if (/mid|cent|med/.test(id)) return t('ahud.accMid'); return t('ahud.sensor', id); };
 
 // ── Foto MOCKUP por componente (SVG → data URI) ──────────────────────────────
 // Hasta tener fotos reales (R-10), inventa una «foto de obra» plausible por
@@ -69,7 +70,7 @@ function photosFor(comp, stage) {
 }
 const daysBetween = (a, b) => (!a || !b) ? null : Math.round((Date.parse(b) - Date.parse(a)) / 864e5);
 // Semáforo por estado de la partida.
-const sema = (s) => s.pct >= 100 ? { c: 'done', t: 'Completada' } : s.pct > 0 ? { c: 'wip', t: 'En ejecución' } : { c: 'pend', t: 'Pendiente' };
+const sema = (s) => s.pct >= 100 ? { c: 'done', t: t('ahud.done') } : s.pct > 0 ? { c: 'wip', t: t('ahud.wip') } : { c: 'pend', t: t('ahud.pend') };
 // Atraso real vs plan (fin): + = atrasada.
 const slipDays = (s) => s.actualEnd ? daysBetween(s.plannedEnd, s.actualEnd) : (s.pct > 0 ? daysBetween(s.plannedEnd, new Date().toISOString().slice(0, 10)) : null);
 
@@ -179,7 +180,7 @@ export function buildAvanceHUD(vpwrap, fleet) {
     for (const co of callouts) {
       const s = co.stage, sm = sema(s), open = expanded === co.comp.component;
       const slip = slipDays(s);
-      const slipTxt = slip == null ? '' : slip > 0 ? `<span class="ah-slip late">+${slip} d</span>` : `<span class="ah-slip ok">${slip <= 0 ? 'en plazo' : ''}</span>`;
+      const slipTxt = slip == null ? '' : slip > 0 ? `<span class="ah-slip late">${t('ahud.slipLate', slip)}</span>` : `<span class="ah-slip ok">${slip <= 0 ? t('ahud.onTime') : ''}</span>`;
       co.el.classList.toggle('open', open);
       co.el.innerHTML = `
         <div class="ah-head">
@@ -194,16 +195,16 @@ export function buildAvanceHUD(vpwrap, fleet) {
         <div class="ah-body">
           <div class="ah-state ${sm.c}">${sm.t}${slipTxt}</div>
           <table class="ah-kv">
-            <tr><td>Plan</td><td>${fmt(s.plannedStart)} → ${fmt(s.plannedEnd)}</td></tr>
-            <tr><td>Real</td><td>${fmt(s.actualStart)} → ${fmt(s.actualEnd)}</td></tr>
-            <tr><td>Responsable</td><td>${s.responsable || '—'}</td></tr>
-            <tr><td>Gemelo (R-31)</td><td>${co.twin ? `f₁ ${co.twin.f1.toFixed(3)} Hz · ${co.twin.enBanda ? 'concuerda ✓' : 'bajo lo predicho ✗'}` : '<span class="ah-mut">pendiente</span>'}</td></tr>
+            <tr><td>${t('ahud.plan')}</td><td>${fmt(s.plannedStart)} → ${fmt(s.plannedEnd)}</td></tr>
+            <tr><td>${t('ahud.real')}</td><td>${fmt(s.actualStart)} → ${fmt(s.actualEnd)}</td></tr>
+            <tr><td>${t('ahud.resp')}</td><td>${s.responsable || '—'}</td></tr>
+            <tr><td>${t('ahud.twin')}</td><td>${co.twin ? (co.twin.enBanda ? t('ahud.twinOk', co.twin.f1.toFixed(3)) : t('ahud.twinBad', co.twin.f1.toFixed(3))) : `<span class="ah-mut">${t('ahud.twinPending')}</span>`}</td></tr>
           </table>
-          <div class="ah-foto-h">Fotos <span class="ah-mut">(${co.photos.length})</span></div>
+          <div class="ah-foto-h">${t('ahud.photos')} <span class="ah-mut">(${co.photos.length})</span></div>
           ${co.photos.length
             ? `<div class="ah-hero" style="background-image:url('${co.photos[0]}')"></div>`
-            : '<div class="ah-mut ah-foto-note">Sin fotos aún · se cargarán con el almacenamiento (R-10)</div>'}
-          <button class="ah-open" type="button">Abrir partida ›</button>
+            : `<div class="ah-mut ah-foto-note">${t('ahud.noPhotos')}</div>`}
+          <button class="ah-open" type="button">${t('ahud.openPartida')}</button>
         </div>` : ''}`;
       if (open) co.el.querySelector('.ah-open')?.addEventListener('click', (e) => { e.stopPropagation(); openPartida(co); });
     }
@@ -218,7 +219,7 @@ export function buildAvanceHUD(vpwrap, fleet) {
         : ds.some(d => sevClass(d.severity) === 'wip') ? 'wip' : 'ok';
       const open = expanded === co.comp.component;
       co.el.classList.toggle('open', open);
-      const rows = ds.map(d => `<div class="ah-find"><span class="ah-dot ${sevClass(d.severity)}"></span><b>${d.damage_type}</b> <span class="ah-mut">${d.severity}${d.damage_cause ? ' · ' + d.damage_cause : ''}</span></div>`).join('') || '<div class="ah-mut">Sin hallazgos en esta zona.</div>';
+      const rows = ds.map(d => `<div class="ah-find"><span class="ah-dot ${sevClass(d.severity)}"></span><b>${d.damage_type}</b> <span class="ah-mut">${d.severity}${d.damage_cause ? ' · ' + d.damage_cause : ''}</span></div>`).join('') || `<div class="ah-mut">${t('ahud.noFind')}</div>`;
       co.el.innerHTML = `
         <div class="ah-head">
           <span class="ah-dot ${cls}"></span><span class="ah-ico">${co.comp.icon}</span>
@@ -226,7 +227,7 @@ export function buildAvanceHUD(vpwrap, fleet) {
           <span class="ah-pct">${n ? n + '⚐' : '✓'}</span>
           <span class="ah-chev">${open ? '▾' : '▸'}</span>
         </div>
-        ${open ? `<div class="ah-body"><div class="ah-finds">${rows}</div><button class="ah-open" type="button">Ver inspección ›</button></div>` : ''}`;
+        ${open ? `<div class="ah-body"><div class="ah-finds">${rows}</div><button class="ah-open" type="button">${t('ahud.seeInsp')}</button></div>` : ''}`;
       if (open) co.el.querySelector('.ah-open')?.addEventListener('click', (e) => { e.stopPropagation(); window.shmDash?.showInsp?.(); });
     }
   }
@@ -244,15 +245,15 @@ export function buildAvanceHUD(vpwrap, fleet) {
         <div class="ah-head">
           <span class="ah-dot ${fault ? 'bad' : 'done'}"></span><span class="ah-ico">${co.comp.icon}</span>
           <span class="ah-name">${co.comp.label}</span>
-          <span class="ah-pct ah-live-rms">${fault ? 'FALLA' : rms}</span>
+          <span class="ah-pct ah-live-rms">${fault ? t('ahud.faultUp') : rms}</span>
           <span class="ah-chev">${open ? '▾' : '▸'}</span>
         </div>
         ${open ? `<div class="ah-body"><table class="ah-kv">
-          <tr><td>Estado</td><td>${fault ? '<b class="late">en falla</b>' : 'operativo'}</td></tr>
-          <tr><td>RMS</td><td class="ah-live-rms">${rms}</td></tr>
-          <tr><td>f₁ actual</td><td>${sum?.f1 != null ? sum.f1.toFixed(3) + ' Hz' : '—'}</td></tr>
-          <tr><td>Temperatura</td><td>${sum?.temp != null ? sum.temp.toFixed(1) + ' °C' : '—'}</td></tr>
-        </table><button class="ah-open" type="button">Ver SHM ›</button></div>` : ''}`;
+          <tr><td>${t('ahud.state')}</td><td>${fault ? `<b class="late">${t('ahud.fault')}</b>` : t('ahud.op')}</td></tr>
+          <tr><td>${t('ahud.rms')}</td><td class="ah-live-rms">${rms}</td></tr>
+          <tr><td>${t('ahud.f1now')}</td><td>${sum?.f1 != null ? sum.f1.toFixed(3) + ' Hz' : '—'}</td></tr>
+          <tr><td>${t('ahud.temp')}</td><td>${sum?.temp != null ? sum.temp.toFixed(1) + ' °C' : '—'}</td></tr>
+        </table><button class="ah-open" type="button">${t('ahud.seeShm')}</button></div>` : ''}`;
       if (open) co.el.querySelector('.ah-open')?.addEventListener('click', (e) => { e.stopPropagation(); window.shmDash?.showSHM?.(); });
     }
   }
@@ -264,7 +265,7 @@ export function buildAvanceHUD(vpwrap, fleet) {
       const se = (sum?.sensors || []).find(s => s.id === co.comp.component);
       const fault = se?.status === 'fault';
       const rms = se && se.rms != null ? (se.rms * 1000).toFixed(1) + ' mg' : '—';
-      co.el.querySelectorAll('.ah-live-rms').forEach(n => n.textContent = fault ? 'FALLA' : rms);
+      co.el.querySelectorAll('.ah-live-rms').forEach(n => n.textContent = fault ? t('ahud.faultUp') : rms);
       const dot = co.el.querySelector('.ah-head .ah-dot'); if (dot) dot.className = `ah-dot ${fault ? 'bad' : 'done'}`;
     }
   }
@@ -339,10 +340,10 @@ export function buildAvanceHUD(vpwrap, fleet) {
   function openPartida(co) {
     const s = co.stage, sm = sema(s), slip = slipDays(s);
     const bitacora = [
-      s.plannedStart && `Inicio planificado: ${fmt(s.plannedStart)}`,
-      s.actualStart && `Inicio real: ${fmt(s.actualStart)}`,
-      s.pct > 0 && s.pct < 100 && `Avance actual: ${s.pct}%`,
-      s.actualEnd && `Término real: ${fmt(s.actualEnd)}`,
+      s.plannedStart && t('ahud.bPlanStart', fmt(s.plannedStart)),
+      s.actualStart && t('ahud.bRealStart', fmt(s.actualStart)),
+      s.pct > 0 && s.pct < 100 && t('ahud.bProgress', s.pct),
+      s.actualEnd && t('ahud.bRealEnd', fmt(s.actualEnd)),
     ].filter(Boolean);
     const m = document.createElement('div');
     m.className = 'ah-modal';
@@ -352,29 +353,29 @@ export function buildAvanceHUD(vpwrap, fleet) {
           <span class="ah-ico">${co.comp.icon}</span>
           <b>${cur.label} · ${co.comp.label}</b>
           <span class="ah-dot ${sm.c}"></span><span class="ah-mut">${sm.t}</span>
-          <button class="ah-x" type="button" title="Cerrar">✕</button>
+          <button class="ah-x" type="button" title="${t('ahud.close')}">✕</button>
         </div>
         <div class="ah-modal-body">
           <div class="ah-prog"><div class="ah-prog-pct">${s.pct}%</div><div class="ah-barwrap big"><i class="ah-bar ${sm.c}" style="width:${s.pct}%"></i></div></div>
           <div class="ah-cols">
             <table class="ah-kv">
-              <tr><td>Plan</td><td>${fmt(s.plannedStart)} → ${fmt(s.plannedEnd)}</td></tr>
-              <tr><td>Real</td><td>${fmt(s.actualStart)} → ${fmt(s.actualEnd)}</td></tr>
-              <tr><td>Desviación</td><td>${slip == null ? '—' : (slip > 0 ? `<b class="late">+${slip} días</b>` : 'en plazo')}</td></tr>
-              <tr><td>Responsable</td><td>${s.responsable || '—'}</td></tr>
-              <tr><td>Verificación gemelo</td><td>${co.twin ? `f₁ ${co.twin.f1.toFixed(3)} Hz · ${co.twin.enBanda ? 'concuerda ✓' : 'bajo lo predicho ✗'}` : '<span class="ah-mut">pendiente (R-31)</span>'}</td></tr>
+              <tr><td>${t('ahud.plan')}</td><td>${fmt(s.plannedStart)} → ${fmt(s.plannedEnd)}</td></tr>
+              <tr><td>${t('ahud.real')}</td><td>${fmt(s.actualStart)} → ${fmt(s.actualEnd)}</td></tr>
+              <tr><td>${t('ahud.deviation')}</td><td>${slip == null ? '—' : (slip > 0 ? `<b class="late">${t('ahud.slipDays', slip)}</b>` : t('ahud.onTime'))}</td></tr>
+              <tr><td>${t('ahud.resp')}</td><td>${s.responsable || '—'}</td></tr>
+              <tr><td>${t('ahud.twinVerif')}</td><td>${co.twin ? (co.twin.enBanda ? t('ahud.twinOk', co.twin.f1.toFixed(3)) : t('ahud.twinBad', co.twin.f1.toFixed(3))) : `<span class="ah-mut">${t('ahud.twinPendR31')}</span>`}</td></tr>
             </table>
-            <div class="ah-bitacora"><div class="ah-sub">Bitácora</div><ul>${bitacora.map(b => `<li>${b}</li>`).join('') || '<li class="ah-mut">Sin eventos</li>'}</ul></div>
+            <div class="ah-bitacora"><div class="ah-sub">${t('ahud.bitacora')}</div><ul>${bitacora.map(b => `<li>${b}</li>`).join('') || `<li class="ah-mut">${t('ahud.noEvents')}</li>`}</ul></div>
           </div>
-          <div class="ah-sub">Galería de fotos <span class="ah-mut">(${co.photos.length})</span></div>
+          <div class="ah-sub">${t('ahud.gallery')} <span class="ah-mut">(${co.photos.length})</span></div>
           ${co.photos.length
             ? `<div class="ah-gallery">${co.photos.map(p => `<div class="ah-foto has-img" style="background-image:url('${p}')"></div>`).join('')}</div>
-               ${s.fotos?.length ? '' : '<div class="ah-mut" style="margin-top:6px">Imágenes de referencia (mockup) — las fotos reales se integran con el almacenamiento (R-10).</div>'}`
-            : '<div class="ah-mut">Sin fotos aún (partida sin avance). La carga real llega con el almacenamiento (R-10).</div>'}
+               ${s.fotos?.length ? '' : `<div class="ah-mut" style="margin-top:6px">${t('ahud.mockNote')}</div>`}`
+            : `<div class="ah-mut">${t('ahud.noPhotosTask')}</div>`}
         </div>
         <div class="ah-modal-foot">
-          <button class="ah-report" type="button">📄 Ficha de partida</button>
-          <button class="ah-x2" type="button">Cerrar</button>
+          <button class="ah-report" type="button">${t('ahud.taskSheet')}</button>
+          <button class="ah-x2" type="button">${t('ahud.close')}</button>
         </div>
       </div>`;
     const close = () => m.remove();
@@ -385,22 +386,23 @@ export function buildAvanceHUD(vpwrap, fleet) {
 
   function partidaReport(co) {
     const s = co.stage, sm = sema(s), slip = slipDays(s);
-    const html = `<!doctype html><meta charset=utf-8><title>Ficha de partida — ${cur.label} · ${co.comp.label}</title>
+    const lc = getLang() === 'en' ? 'en-GB' : 'es-CL';
+    const html = `<!doctype html><html lang="${getLang()}"><meta charset=utf-8><title>${t('ahud.repTitle')} — ${cur.label} · ${co.comp.label}</title>
       <style>body{font:14px/1.5 system-ui,sans-serif;margin:34px;color:#1b2533}h1{font-size:19px;margin:0 0 2px}
       .mut{color:#64748b}table{border-collapse:collapse;margin-top:12px}td{border:1px solid #cbd5e1;padding:6px 10px}
       td:first-child{color:#64748b;background:#f8fafc}.bar{height:12px;background:#e2e8f0;border-radius:6px;overflow:hidden;width:280px;margin:10px 0}
       .bar i{display:block;height:100%;background:#0e7490}</style>
-      <h1>Ficha de partida — ${co.comp.label}</h1>
-      <div class="mut">${cur.label} · Parque Camán I · ${sm.t} · Generado ${new Date().toLocaleString('es-CL')}</div>
+      <h1>${t('ahud.repTitle')} — ${co.comp.label}</h1>
+      <div class="mut">${cur.label} · ${t('rep.park')} · ${sm.t} · ${t('rep.gen')} ${new Date().toLocaleString(lc)}</div>
       <div class="bar"><i style="width:${s.pct}%"></i></div><b>${s.pct}%</b>
       <table>
-        <tr><td>Plan (inicio → fin)</td><td>${fmt(s.plannedStart)} → ${fmt(s.plannedEnd)}</td></tr>
-        <tr><td>Real (inicio → fin)</td><td>${fmt(s.actualStart)} → ${fmt(s.actualEnd)}</td></tr>
-        <tr><td>Desviación</td><td>${slip == null ? '—' : (slip > 0 ? '+' + slip + ' días (atrasada)' : 'en plazo')}</td></tr>
-        <tr><td>Responsable</td><td>${s.responsable || '—'}</td></tr>
-        <tr><td>Verificación gemelo</td><td>${co.twin ? 'f₁ ' + co.twin.f1.toFixed(3) + ' Hz · ' + (co.twin.enBanda ? 'concuerda' : 'bajo lo predicho') : 'pendiente (R-31)'}</td></tr>
+        <tr><td>${t('ahud.repPlanRange')}</td><td>${fmt(s.plannedStart)} → ${fmt(s.plannedEnd)}</td></tr>
+        <tr><td>${t('ahud.repRealRange')}</td><td>${fmt(s.actualStart)} → ${fmt(s.actualEnd)}</td></tr>
+        <tr><td>${t('ahud.deviation')}</td><td>${slip == null ? '—' : (slip > 0 ? t('ahud.repSlipLate', slip) : t('ahud.onTime'))}</td></tr>
+        <tr><td>${t('ahud.resp')}</td><td>${s.responsable || '—'}</td></tr>
+        <tr><td>${t('ahud.twinVerif')}</td><td>${co.twin ? (co.twin.enBanda ? t('ahud.twinOkShort', co.twin.f1.toFixed(3)) : t('ahud.twinBadShort', co.twin.f1.toFixed(3))) : t('ahud.twinPendR31')}</td></tr>
       </table>
-      <p class="mut" style="margin-top:18px">Documento de avance generado por ReWind. Datos de cronograma sintéticos/editables; las fotos e informes reales se integran con el almacenamiento (R-10).</p>`;
+      <p class="mut" style="margin-top:18px">${t('ahud.repFoot')}</p>`;
     const w = window.open('', '_blank');
     if (w) { w.document.write(html); w.document.close(); }
   }
