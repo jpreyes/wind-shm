@@ -9,9 +9,48 @@
 // más un botón «Abrir partida» (vista completa). Sólo DOM/overlay; el 3D lo provee
 // fleet_view (anchorScreenAt / focusComponent).
 // ─────────────────────────────────────────────────────────────────────────────
-import { TURBINE_COMPONENTS, HV_COMPONENTS, enrichStages } from './parks_data_caman.js?v=242';
+import { TURBINE_COMPONENTS, HV_COMPONENTS, enrichStages } from './parks_data_caman.js?v=243';
 
 const fmt = (iso) => { if (!iso) return '—'; const [y, m, d] = iso.split('-'); return `${d}/${m}/${y.slice(2)}`; };
+
+// ── Foto MOCKUP por componente (SVG → data URI) ──────────────────────────────
+// Hasta tener fotos reales (R-10), inventa una «foto de obra» plausible por
+// partida: cielo + cerros + faena con la silueta del componente en construcción.
+function compScene(component) {
+  const crane = `<g stroke='#e0a93f' stroke-width='2.4' fill='none'><path d='M196 162 V70 M196 74 L240 74 M196 80 L168 74'/><line x1='232' y1='74' x2='232' y2='92' stroke-dasharray='3 3'/></g>`;
+  switch (component) {
+    case 'fundacion': return `<rect x='112' y='150' width='70' height='14' fill='#6e6457'/><g stroke='#c3ccd4' stroke-width='1.4'>${[120, 132, 144, 156, 168].map(x => `<line x1='${x}' y1='150' x2='${x}' y2='140'/>`).join('')}<line x1='118' y1='144' x2='172' y2='144'/></g><rect x='108' y='162' width='80' height='6' fill='#534a3b'/>`;
+    case 'fuste': return `${crane}<polygon points='133,162 147,162 144,96 136,96' fill='#cdd9e4'/>`;
+    case 'gondola': return `${crane}<polygon points='133,162 147,162 143,74 137,74' fill='#cdd9e4'/><rect x='128' y='64' width='26' height='11' rx='2' fill='#e6f1fb'/>`;
+    case 'rotor': return `<polygon points='133,162 147,162 143,74 137,74' fill='#cdd9e4'/><rect x='128' y='64' width='26' height='11' rx='2' fill='#e6f1fb'/><g stroke='#eef4fa' stroke-width='3' stroke-linecap='round'><line x1='156' y1='69' x2='156' y2='40'/><line x1='156' y1='69' x2='182' y2='84'/><line x1='156' y1='69' x2='130' y2='84'/></g><circle cx='156' cy='69' r='3' fill='#9fb3c6'/>`;
+    case 'cableado': return `<rect x='56' y='168' width='208' height='9' fill='#5b4f3a'/><path d='M64 173 Q140 166 256 173' stroke='#cf8f3c' stroke-width='2' fill='none'/><path d='M64 176 Q140 170 256 176' stroke='#b06a2a' stroke-width='2' fill='none'/>`;
+    default: return `${crane}<polygon points='134,162 146,162 143,90 137,90' fill='#cdd9e4'/>`;
+  }
+}
+function mockPhoto(component, caption) {
+  const svg = `<svg xmlns='http://www.w3.org/2000/svg' width='320' height='200' viewBox='0 0 320 200'>
+    <defs><linearGradient id='s' x1='0' y1='0' x2='0' y2='1'><stop offset='0' stop-color='#9ec6e8'/><stop offset='1' stop-color='#e3edf3'/></linearGradient></defs>
+    <rect width='320' height='200' fill='url(#s)'/>
+    <circle cx='266' cy='38' r='15' fill='#fff2bf' opacity='0.9'/>
+    <path d='M0 150 L70 118 L150 144 L230 112 L320 138 V200 H0 Z' fill='#aebf9c'/>
+    <rect y='160' width='320' height='40' fill='#9b8b6b'/>
+    ${compScene(component)}
+    <rect x='0' y='176' width='320' height='24' fill='rgba(10,16,24,0.58)'/>
+    <text x='9' y='192' fill='#e6edf3' font-family='sans-serif' font-size='12'>📷 ${caption}</text>
+    <text x='312' y='192' text-anchor='end' fill='#a9bccd' font-family='sans-serif' font-size='10'>Camán I</text>
+  </svg>`;
+  // %27 para las comillas simples del SVG → seguro dentro de url('…') en CSS.
+  return 'data:image/svg+xml,' + encodeURIComponent(svg).replace(/'/g, '%27');
+}
+// Fotos de una partida: reales si existen; si no y hay avance, mockups (término+avance
+// si está completa, solo avance si está en ejecución). Pendiente sin avance = sin foto.
+function photosFor(comp, stage) {
+  if (stage.fotos?.length) return stage.fotos;
+  if (!stage.pct) return [];
+  const d = fmt(stage.actualEnd || stage.actualStart || stage.plannedStart);
+  const caps = stage.pct >= 100 ? [`${comp.label} — término · ${d}`, `${comp.label} — avance · ${d}`] : [`${comp.label} — avance · ${d}`];
+  return caps.map(c => mockPhoto(comp.component, c));
+}
 const daysBetween = (a, b) => (!a || !b) ? null : Math.round((Date.parse(b) - Date.parse(a)) / 864e5);
 // Semáforo por estado de la partida.
 const sema = (s) => s.pct >= 100 ? { c: 'done', t: 'Completada' } : s.pct > 0 ? { c: 'wip', t: 'En ejecución' } : { c: 'pend', t: 'Pendiente' };
@@ -27,6 +66,7 @@ export function buildAvanceHUD(vpwrap, fleet) {
   const svg = root.querySelector('.ah-lines');
 
   let cur = null, comps = [], stages = [], callouts = [], expanded = null;
+  const lastExp = {};   // recuerda la última partida abierta por torre (id → component)
 
   function clear() {
     callouts.forEach(c => c.el.remove());
@@ -48,7 +88,8 @@ export function buildAvanceHUD(vpwrap, fleet) {
       const el = document.createElement('div');
       el.className = `ah-callout side-${side}`;
       el.dataset.component = c.component;
-      callouts.push({ el, comp: c, stage, side });
+      const photos = photosFor(c, stage);               // reales o mockups (no se persisten)
+      callouts.push({ el, comp: c, stage, side, photos });
       el.addEventListener('click', (e) => { if (!e.target.closest('.ah-open')) toggle(c.component); });
       const line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
       line.setAttribute('class', 'ah-line');
@@ -56,6 +97,14 @@ export function buildAvanceHUD(vpwrap, fleet) {
       callouts[callouts.length - 1].line = line;
       root.appendChild(el);
     });
+    // Auto-despliegue: la última abierta de esta torre → la que se está EJECUTANDO
+    // (parcial) → el frente actual (primera incompleta) → la última si todo está hecho.
+    // (Sin «girito» automático; el giro sólo al clic del usuario.)
+    const wip = comps.find((c, i) => stages[i] && stages[i].pct > 0 && stages[i].pct < 100);
+    const front = comps.find((c, i) => stages[i] && stages[i].pct < 100);
+    const pick = (lastExp[st.id] && comps.some(c => c.component === lastExp[st.id]) ? lastExp[st.id] : null)
+      || wip?.component || front?.component || comps[comps.length - 1]?.component;
+    expanded = pick || null;
     renderCallouts();
     tick();
   }
@@ -84,9 +133,10 @@ export function buildAvanceHUD(vpwrap, fleet) {
             <tr><td>Responsable</td><td>${s.responsable || '—'}</td></tr>
             <tr><td>Gemelo (R-31)</td><td>${s.twinCheck ? `f₁ ${s.twinCheck.f1} Hz · ${s.twinCheck.enBanda ? 'en banda ✓' : 'fuera ✗'}` : '<span class="ah-mut">pendiente</span>'}</td></tr>
           </table>
-          <div class="ah-foto-h">Fotos <span class="ah-mut">(${s.fotos?.length || 0})</span></div>
-          <div class="ah-fotos">${(s.fotos?.length ? s.fotos : [0, 0, 0]).map(() => '<div class="ah-foto"></div>').join('')}</div>
-          ${s.fotos?.length ? '' : '<div class="ah-mut ah-foto-note">Sin fotos · se cargarán con el almacenamiento (R-10)</div>'}
+          <div class="ah-foto-h">Fotos <span class="ah-mut">(${co.photos.length})</span></div>
+          ${co.photos.length
+            ? `<div class="ah-hero" style="background-image:url('${co.photos[0]}')"></div>`
+            : '<div class="ah-mut ah-foto-note">Sin fotos aún · se cargarán con el almacenamiento (R-10)</div>'}
           <button class="ah-open" type="button">Abrir partida ›</button>
         </div>` : ''}`;
       if (open) co.el.querySelector('.ah-open')?.addEventListener('click', (e) => { e.stopPropagation(); openPartida(co); });
@@ -95,6 +145,7 @@ export function buildAvanceHUD(vpwrap, fleet) {
 
   function toggle(component) {
     expanded = expanded === component ? null : component;
+    if (cur) lastExp[cur.id] = expanded;                 // recuerda lo dejado abierto
     if (expanded) { const co = callouts.find(c => c.comp.component === component); if (co) fleet.focusComponent?.(cur, co.comp.yFrac); }   // «el girito»
     renderCallouts(); tick();
   }
@@ -165,9 +216,11 @@ export function buildAvanceHUD(vpwrap, fleet) {
             </table>
             <div class="ah-bitacora"><div class="ah-sub">Bitácora</div><ul>${bitacora.map(b => `<li>${b}</li>`).join('') || '<li class="ah-mut">Sin eventos</li>'}</ul></div>
           </div>
-          <div class="ah-sub">Galería de fotos <span class="ah-mut">(${s.fotos?.length || 0})</span></div>
-          <div class="ah-gallery">${(s.fotos?.length ? s.fotos : [0, 0, 0, 0, 0, 0]).map(() => '<div class="ah-foto"></div>').join('')}</div>
-          ${s.fotos?.length ? '' : '<div class="ah-mut">La carga de fotos e informes reales llega con el almacenamiento (R-10).</div>'}
+          <div class="ah-sub">Galería de fotos <span class="ah-mut">(${co.photos.length})</span></div>
+          ${co.photos.length
+            ? `<div class="ah-gallery">${co.photos.map(p => `<div class="ah-foto has-img" style="background-image:url('${p}')"></div>`).join('')}</div>
+               ${s.fotos?.length ? '' : '<div class="ah-mut" style="margin-top:6px">Imágenes de referencia (mockup) — las fotos reales se integran con el almacenamiento (R-10).</div>'}`
+            : '<div class="ah-mut">Sin fotos aún (partida sin avance). La carga real llega con el almacenamiento (R-10).</div>'}
         </div>
         <div class="ah-modal-foot">
           <button class="ah-report" type="button">📄 Ficha de partida</button>
