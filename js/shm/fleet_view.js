@@ -7,11 +7,11 @@
 // ─────────────────────────────────────────────────────────────────────────────
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
-import { createTurbine, TOWER_H } from './turbine_mesh.js?v=222';
-import { createSubstationTower, groundCable, overheadLine } from './structures.js?v=222';
-import { toScene, CAMAN_CENTER, LAYOUT_SCALE } from './parks_data_caman.js?v=222';
-import { CAMAN_ROADS } from './caman_roads.js?v=222';
-import { solarPosition, dateFromLocal, sunSceneDir } from './solar.js?v=222';
+import { createTurbine, TOWER_H } from './turbine_mesh.js?v=223';
+import { createSubstationTower, groundCable, overheadLine } from './structures.js?v=223';
+import { toScene, CAMAN_CENTER, LAYOUT_SCALE } from './parks_data_caman.js?v=223';
+import { CAMAN_ROADS } from './caman_roads.js?v=223';
+import { solarPosition, dateFromLocal, sunSceneDir } from './solar.js?v=223';
 
 const SPACING = 235;
 const TOWER_SCALE = 2.2;   // agranda las torres (vista esquemática) para que destaquen sobre el relieve
@@ -261,7 +261,7 @@ export class FleetView {
   // ── Relieve conceptual (capa de terreno) ─────────────────────────────────────
   // Carga el DEM vendorizado y añade la malla (oculta hasta activarla).
   async loadTerrain(url) {
-    const { Terrain } = await import('./terrain.js?v=222');
+    const { Terrain } = await import('./terrain.js?v=223');
     this._TerrainClass = Terrain;                     // para reconstruir al cambiar de escala
     const dem = await (await fetch(url)).json();
     this.terrain = new Terrain(dem, { vex: 1.5 });   // relieve exagerado (esquemático)
@@ -302,6 +302,16 @@ export class FleetView {
     const v = new THREE.Vector3(p.x, p.y + h * 0.92, p.z).project(this.camera);
     const r = this.renderer.domElement.getBoundingClientRect();
     return { x: (v.x * 0.5 + 0.5) * r.width + r.left, y: (-v.y * 0.5 + 0.5) * r.height + r.top, behind: v.z > 1 };
+  }
+
+  // Ángulo (grados, sentido horario CSS) hacia el que apunta el Norte de la escena
+  // (−Z) proyectado en pantalla → para girar la rosa de los vientos en 3D.
+  northScreenAngle() {
+    const c = this.controls.target;
+    const v0 = new THREE.Vector3(c.x, c.y, c.z).project(this.camera);
+    const v1 = new THREE.Vector3(c.x, c.y, c.z - 1).project(this.camera);   // 1 u al Norte
+    const dx = v1.x - v0.x, dy = -(v1.y - v0.y);                            // NDC (y arriba) → pantalla (y abajo)
+    return Math.atan2(dy, dx) * 180 / Math.PI + 90;
   }
 
   // Caminos del parque (KMZ): polilíneas drapeadas sobre el terreno (o a ras si plano).

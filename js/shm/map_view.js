@@ -6,8 +6,9 @@
 // Click en un marcador → conmuta a la vista 3D enfocando esa estructura (onPick).
 // Leaflet se carga como global (window.L) desde lib/leaflet/leaflet.js.
 // ─────────────────────────────────────────────────────────────────────────────
-import { CAMAN_CENTER } from './parks_data_caman.js?v=222';
-import { CAMAN_ROADS } from './caman_roads.js?v=222';
+import { CAMAN_CENTER } from './parks_data_caman.js?v=223';
+import { CAMAN_ROADS } from './caman_roads.js?v=223';
+import { compassRoseSVG } from './compass.js?v=223';
 
 // Color del marcador según el avance de obra (coherente con el 4D / panel).
 function colorFor(st) {
@@ -55,6 +56,9 @@ export class MapView {
     this.map = L.map(this.el, { center: [CAMAN_CENTER.lat, CAMAN_CENTER.lon], zoom: 12, layers: [sat], zoomControl: true, maxZoom: 20 });
     L.control.layers({ 'Satélite': sat, 'Topográfico': topo }, null, { position: 'topright' }).addTo(this.map);
     L.control.scale({ imperial: false, position: 'bottomleft' }).addTo(this.map);   // barra de escala (métrica)
+    // Rosa de los vientos (fija, norte-arriba: el mapa no rota).
+    const RoseCtl = L.Control.extend({ onAdd() { const d = L.DomUtil.create('div', 'mv-rose'); d.innerHTML = compassRoseSVG(); return d; } });
+    this.map.addControl(new RoseCtl({ position: 'bottomright' }));
 
     // Botón de pantalla completa / restaurar (ventana auxiliar PiP ⇄ completa).
     const self = this;

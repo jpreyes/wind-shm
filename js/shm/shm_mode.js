@@ -8,15 +8,16 @@
 //   inspecciones y señal temporal EN VIVO desde un Web Worker (DataSource).
 // Recortes (modelado) los hace shm.css ocultando, no borrando.
 // ─────────────────────────────────────────────────────────────────────────────
-import { FleetView } from './fleet_view.js?v=222';
-import { DataSource } from './data_source.js?v=222';
-import { computeTwin } from './digital_twin.js?v=222';
-import { ParkManager, loadParksStore } from './parks.js?v=222';
-import { MapView } from './map_view.js?v=222';
-import { defaultStages, builtFromStages } from './parks_data_caman.js?v=222';
+import { FleetView } from './fleet_view.js?v=223';
+import { DataSource } from './data_source.js?v=223';
+import { computeTwin } from './digital_twin.js?v=223';
+import { ParkManager, loadParksStore } from './parks.js?v=223';
+import { MapView } from './map_view.js?v=223';
+import { defaultStages, builtFromStages } from './parks_data_caman.js?v=223';
+import { compassRoseSVG } from './compass.js?v=223';
 
 const F1_BASE = { turbine: 0.283, hv: 1.6 };
-const REWIND_VER = 'v222';   // versión visible del build (subir junto al cache-bust)
+const REWIND_VER = 'v223';   // versión visible del build (subir junto al cache-bust)
 const FS = 62.5;   // frecuencia de muestreo de la señal (Hz), igual que shm_worker.js
 // Clasificador ML de daño (0..4)
 const CLS = ['Sin daño', 'Leve', 'Moderado', 'Alto', 'Muy alto'];
@@ -164,7 +165,8 @@ async function boot() {
   fleet.onChange = syncData;        // re-sincroniza telemetría al agregar
   fleet.onLayoutChange = saveLayout; // persiste el orden al mover/agregar
   const towerCard = buildTowerCard(vpwrap, fleet, { onShowAvance: () => dash.showPane('avance') });
-  fleet.onFrame = towerCard.tick;     // la ficha se reposiciona con el bucle de render
+  const compass = buildCompass(vpwrap, fleet);   // rosa de los vientos (gira con la cámara)
+  fleet.onFrame = () => { towerCard.tick(); compass.update(); };   // reposiciona ficha + brújula con el render
   fleet.onSelect = (obj) => { dash.select(obj); nameplate.show(obj); towerCard.setData(obj); statusBar.setSelected(obj); ds.focus(obj ? obj.id : null); };
 
   // Mapa 2D (PiP) visible por defecto.
@@ -185,7 +187,7 @@ async function boot() {
   // ── Relieve conceptual del terreno (DEM vendorizado) — encendido por defecto ─
   setLoad(88, 'Cargando relieve…'); await delay(40);
   try {
-    await fleet.loadTerrain('data/caman_dem.json?v=222');
+    await fleet.loadTerrain('data/caman_dem.json?v=223');
     fleet.setTerrainVisible(true);
     document.getElementById('shm-relieve-tool')?.classList.add('active');
   } catch (e) { console.warn('[shm] relieve no disponible', e); }
@@ -323,6 +325,16 @@ function buildSunControl(fleet) {
   const tick = (ts) => { if (!last) last = ts; const dt = (ts - last) / 1000; last = ts; let h = +hourEl.value + dt * 2; if (h >= 24) h -= 24; hourEl.value = h.toFixed(2); apply(); raf = requestAnimationFrame(tick); };
   playBtn.addEventListener('click', () => { if (raf) stop(); else { last = 0; playBtn.textContent = '⏸ Pausar'; raf = requestAnimationFrame(tick); } });
   return { setOpen(on) { el.classList.toggle('show', on); if (on) { realEl.checked = fleet.realScale; apply(); } else stop(); } };
+}
+
+// ── Rosa de los vientos (3D): gira con la cámara para indicar el Norte ────────
+function buildCompass(vpwrap, fleet) {
+  const el = document.createElement('div');
+  el.id = 'shm-compass'; el.title = 'Rosa de los vientos · Norte';
+  el.innerHTML = compassRoseSVG();
+  (vpwrap || document.body).appendChild(el);
+  const rose = el.querySelector('.cmp-rose');
+  return { update() { if (rose) rose.setAttribute('transform', `rotate(${fleet.northScreenAngle().toFixed(1)})`); } };
 }
 
 // ── Nameplate (cuadro con el nombre sobre la vista) ──────────────────────────
