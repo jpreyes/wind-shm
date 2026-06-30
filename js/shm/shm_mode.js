@@ -8,17 +8,18 @@
 //   inspecciones y señal temporal EN VIVO desde un Web Worker (DataSource).
 // Recortes (modelado) los hace shm.css ocultando, no borrando.
 // ─────────────────────────────────────────────────────────────────────────────
-import { FleetView } from './fleet_view.js?v=247';
-import { DataSource } from './data_source.js?v=247';
-import { computeTwin } from './digital_twin.js?v=247';
-import { ParkManager, loadParksStore } from './parks.js?v=247';
-import { MapView } from './map_view.js?v=247';
-import { defaultStages, builtFromStages } from './parks_data_caman.js?v=247';
-import { compassRoseSVG } from './compass.js?v=247';
-import { buildAvanceHUD } from './avance_hud.js?v=247';
+import { FleetView } from './fleet_view.js?v=248';
+import { DataSource } from './data_source.js?v=248';
+import { computeTwin } from './digital_twin.js?v=248';
+import { ParkManager, loadParksStore } from './parks.js?v=248';
+import { MapView } from './map_view.js?v=248';
+import { defaultStages, builtFromStages } from './parks_data_caman.js?v=248';
+import { compassRoseSVG } from './compass.js?v=248';
+import { buildAvanceHUD } from './avance_hud.js?v=248';
+import { renderAvance } from './avance_dashboard.js?v=248';
 
 const F1_BASE = { turbine: 0.283, hv: 1.6 };
-const REWIND_VER = 'v247';   // versión visible del build (subir junto al cache-bust)
+const REWIND_VER = 'v248';   // versión visible del build (subir junto al cache-bust)
 const FS = 62.5;   // frecuencia de muestreo de la señal (Hz), igual que shm_worker.js
 // Clasificador ML de daño (0..4)
 const CLS = ['Sin daño', 'Leve', 'Moderado', 'Alto', 'Muy alto'];
@@ -251,7 +252,7 @@ async function boot() {
   // ── Relieve conceptual del terreno (DEM vendorizado) — encendido por defecto ─
   setLoad(88, 'Cargando relieve…'); await delay(40);
   try {
-    await fleet.loadTerrain('data/caman_dem.json?v=247');
+    await fleet.loadTerrain('data/caman_dem.json?v=248');
     fleet.setTerrainVisible(true);
     document.getElementById('shm-relieve-tool')?.classList.add('active');
   } catch (e) { console.warn('[shm] relieve no disponible', e); }
@@ -623,9 +624,11 @@ function buildDashboard(panel, fleet, actions) {
     <div class="shm-toptabs">
       <button class="shm-toptab active" data-v="parque">Parque</button>
       <button class="shm-toptab" data-v="seleccion">Selección</button>
+      <button class="shm-toptab" data-v="obra">Obra</button>
       <button class="shm-toptab" data-v="shadow">Shadow flicker</button>
     </div>
     <div class="shm-views">
+    <div class="shm-view" id="view-obra" style="display:none"><div class="shm-avance" id="shm-avance"></div></div>
     <div class="shm-view" id="view-shadow" style="display:none"><div class="shm-shadow" id="shm-shadow"></div></div>
     <div class="shm-view" id="view-parque">
       <div class="shm-fleet">
@@ -653,9 +656,11 @@ function buildDashboard(panel, fleet, actions) {
   function setTopView(v) {
     $('#view-parque').style.display = v === 'parque' ? '' : 'none';
     $('#view-seleccion').style.display = v === 'seleccion' ? '' : 'none';
+    $('#view-obra').style.display = v === 'obra' ? '' : 'none';
     $('#view-shadow').style.display = v === 'shadow' ? '' : 'none';
     el.querySelectorAll('.shm-toptab').forEach(t => t.classList.toggle('active', t.dataset.v === v));
     if (v === 'shadow') renderShadow();
+    if (v === 'obra') { try { renderAvance($('#shm-avance'), fleet.structures); } catch (e) { console.warn('[shm] avance', e); } }
   }
   el.querySelectorAll('.shm-toptab').forEach(t => t.addEventListener('click', () => setTopView(t.dataset.v)));
 

@@ -519,6 +519,40 @@ body.shm #shm-banner.show { display: flex; animation: shm-blink 0.8s steps(1) in
 .shm-sun .sun-legend span { display: flex; align-items: center; gap: 4px; }
 .shm-sun .sun-legend i { width: 11px; height: 11px; border-radius: 2px; display: inline-block; }
 
+/* ── Pestaña «Obra» del panel derecho (avance de obra del parque) ──────────── */
+.shm-avance { flex: 1; min-height: 0; overflow-y: auto; padding: 12px; display: flex; flex-direction: column; gap: 10px; }
+.shm-avance .av-hdr { font-size: 13px; font-weight: 700; color: var(--text); }
+.shm-avance .av-banner { padding: 9px 11px; border-radius: var(--radius-sm, 6px); font-weight: 700; font-size: 13px; border: 1px solid var(--border2); }
+.shm-avance .av-banner.ok { background: color-mix(in srgb, #22c55e 16%, var(--bg3)); border-color: color-mix(in srgb, #22c55e 45%, var(--border2)); color: var(--success, #22c55e); }
+.shm-avance .av-banner.bad { background: color-mix(in srgb, #ef4444 16%, var(--bg3)); border-color: color-mix(in srgb, #ef4444 45%, var(--border2)); color: var(--danger, #ef4444); }
+.shm-avance .av-kpis { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+.shm-avance .av-kpi { background: var(--bg3); border: 1px solid var(--border); border-radius: var(--radius-sm, 6px); padding: 7px 9px; }
+.shm-avance .av-kpi .k { font-size: 10.5px; color: var(--text-muted); text-transform: uppercase; letter-spacing: .4px; }
+.shm-avance .av-kpi .v { font-size: 17px; font-weight: 700; color: var(--text); }
+.shm-avance .av-kpi .v.late { color: var(--danger, #ef4444); }
+.shm-avance .av-sub { font-size: 12px; font-weight: 700; color: var(--text-muted); border-top: 1px solid var(--border); padding-top: 9px; }
+.shm-avance .av-curve { width: 100%; height: auto; background: var(--bg3); border: 1px solid var(--border); border-radius: var(--radius-sm, 6px); }
+.shm-avance .av-leg { display: flex; gap: 14px; font-size: 11px; color: var(--text-muted); }
+.shm-avance .av-leg span { display: flex; align-items: center; gap: 5px; }
+.shm-avance .av-leg i { width: 16px; height: 0; display: inline-block; }
+.shm-avance .av-leg i.dash { border-top: 2px dashed var(--text-muted); }
+.shm-avance .av-leg i.solid { border-top: 2px solid var(--accent, #38bdf8); }
+.shm-avance .av-leg i.today { border-top: 2px dashed #ff5e3a; }
+.shm-avance .av-comps { display: flex; flex-direction: column; gap: 5px; }
+.shm-avance .av-comp { display: flex; align-items: center; gap: 8px; font-size: 11.5px; }
+.shm-avance .av-comp-l { flex: 0 0 96px; color: var(--text); }
+.shm-avance .av-comp-bar { flex: 1; height: 8px; background: rgba(127,127,127,.2); border-radius: 4px; overflow: hidden; }
+.shm-avance .av-comp-bar i { display: block; height: 100%; background: var(--accent, #38bdf8); }
+.shm-avance .av-comp-p { flex: 0 0 34px; text-align: right; font-variant-numeric: tabular-nums; color: var(--text-muted); }
+.shm-avance .av-lates { display: flex; flex-direction: column; gap: 5px; }
+.shm-avance .av-late { background: var(--bg3); border-left: 3px solid var(--danger, #ef4444); border-radius: var(--radius-sm, 6px); padding: 6px 9px; font-size: 11.5px; }
+.shm-avance .av-late-n { font-weight: 700; color: var(--text); }
+.shm-avance .av-late-v { display: block; color: var(--text-muted); }
+.shm-avance .av-behind { color: var(--danger, #ef4444); }
+.shm-avance .av-mut { font-size: 11.5px; color: var(--text-muted); }
+.shm-avance .av-btn { margin-top: 4px; cursor: pointer; background: var(--bg4); color: var(--text); border: 1px solid var(--border2); border-radius: var(--radius-sm, 6px); padding: 7px; font-family: inherit; font-size: 12px; font-weight: 600; }
+.shm-avance .av-btn:hover { filter: brightness(1.15); border-color: var(--accent); }
+
 /* ── Pestaña «Shadow flicker» del panel derecho (análisis de sombras) ───────── */
 .shm-shadow { flex: 1; min-height: 0; overflow-y: auto; padding: 12px; display: flex; flex-direction: column; gap: 10px; }
 .shm-shadow .ssh-off { color: var(--text-muted); font-size: 13px; line-height: 1.6; padding: 14px 4px; }
