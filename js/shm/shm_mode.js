@@ -8,18 +8,18 @@
 //   inspecciones y señal temporal EN VIVO desde un Web Worker (DataSource).
 // Recortes (modelado) los hace shm.css ocultando, no borrando.
 // ─────────────────────────────────────────────────────────────────────────────
-import { FleetView } from './fleet_view.js?v=249';
-import { DataSource } from './data_source.js?v=249';
-import { computeTwin } from './digital_twin.js?v=249';
-import { ParkManager, loadParksStore } from './parks.js?v=249';
-import { MapView } from './map_view.js?v=249';
-import { defaultStages, builtFromStages } from './parks_data_caman.js?v=249';
-import { compassRoseSVG } from './compass.js?v=249';
-import { buildAvanceHUD } from './avance_hud.js?v=249';
-import { renderAvance } from './avance_dashboard.js?v=249';
+import { FleetView } from './fleet_view.js?v=250';
+import { DataSource } from './data_source.js?v=250';
+import { computeTwin } from './digital_twin.js?v=250';
+import { ParkManager, loadParksStore } from './parks.js?v=250';
+import { MapView } from './map_view.js?v=250';
+import { defaultStages, builtFromStages } from './parks_data_caman.js?v=250';
+import { compassRoseSVG } from './compass.js?v=250';
+import { buildAvanceHUD } from './avance_hud.js?v=250';
+import { renderAvance } from './avance_dashboard.js?v=250';
 
 const F1_BASE = { turbine: 0.283, hv: 1.6 };
-const REWIND_VER = 'v249';   // versión visible del build (subir junto al cache-bust)
+const REWIND_VER = 'v250';   // versión visible del build (subir junto al cache-bust)
 const FS = 62.5;   // frecuencia de muestreo de la señal (Hz), igual que shm_worker.js
 // Clasificador ML de daño (0..4)
 const CLS = ['Sin daño', 'Leve', 'Moderado', 'Alto', 'Muy alto'];
@@ -220,6 +220,9 @@ async function boot() {
       return;
     }
     dash.select(obj); nameplate.show(obj); statusBar.setSelected(obj); ds.focus(obj ? obj.id : null); if (obj) mapView?.focus(obj);
+    // Ruteo de pestaña del panel según el MODO activo:
+    //  · Avance (4D) → «Obra»  · (Shadow se maneja arriba)  · ninguno → «Selección»  · sin selección → «Parque»
+    if (obj && fleet.constructionMode) dash.showObra();
     // Detalle de torre = HUD de avance (Frente 1): la ficha SHM mini cede ante el HUD,
     // los datos SHM viven en la pestaña «Selección» del panel.
     if (obj) { towerCard.setData(null); avanceHUD.show(obj); } else { towerCard.setData(null); avanceHUD.hide(); }
@@ -252,7 +255,7 @@ async function boot() {
   // ── Relieve conceptual del terreno (DEM vendorizado) — encendido por defecto ─
   setLoad(88, 'Cargando relieve…'); await delay(40);
   try {
-    await fleet.loadTerrain('data/caman_dem.json?v=249');
+    await fleet.loadTerrain('data/caman_dem.json?v=250');
     fleet.setTerrainVisible(true);
     document.getElementById('shm-relieve-tool')?.classList.add('active');
   } catch (e) { console.warn('[shm] relieve no disponible', e); }
@@ -280,7 +283,6 @@ function buildToolbar(toolbar, fleet, getPM = () => null) {
     b.addEventListener('click', () => onclick(b));
     return b;
   };
-  const sep = document.createElement('div'); sep.className = 'tool-sep';
   // Interruptor del árbol lateral (Parque ▸ Zona ▸ Torre).
   const tree = mk('shm-tree-tool', 'Mostrar/ocultar el árbol de parques y zonas',
     `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M5 4 v16 M5 8 h6 M5 14 h6"/><rect x="11" y="5" width="8" height="6" rx="1"/><rect x="11" y="13" width="8" height="6" rx="1"/></svg>`,
@@ -332,7 +334,6 @@ function buildToolbar(toolbar, fleet, getPM = () => null) {
   const pan = mk('shm-pan-tool', 'Mover la vista (PAN): arrastra con el botón izquierdo',
     `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M9 11V5.5a1.5 1.5 0 0 1 3 0V11M12 10.5V4.5a1.5 1.5 0 0 1 3 0V11M15 11V6.5a1.5 1.5 0 0 1 3 0V14a6 6 0 0 1-6 6h-1.5a6 6 0 0 1-4.6-2.2L5 16c-1-1.2-.6-2.4.6-2.9.8-.3 1.6 0 2.1.6L9 15V6.5a1.5 1.5 0 0 1 3 0"/></svg>`,
     'Mover', () => { const on = !fleet.panMode; if (on && fleet.editMode) setEditing(false); fleet.setPanMode(on); pan.classList.toggle('active', on); });
-  toolbar.append(sep, pause, pan, edit, avance, relieve, sol, add, hv, del);
   // Conmutador de vista: mapa 2D (Leaflet) ⇄ parque 3D.
   const mapBtn = mk('shm-map-tool', 'Mostrar/ocultar el mini-mapa 2D del parque',
     `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M9 4 L3 6 V20 L9 18 L15 20 L21 18 V4 L15 6 L9 4 Z"/><path d="M9 4 V18 M15 6 V20"/></svg>`,
@@ -350,9 +351,18 @@ function buildToolbar(toolbar, fleet, getPM = () => null) {
   const panelTool = mk('shm-panel-tool', 'Mostrar/ocultar el panel de datos',
     `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M14 4v16M17 9h1M17 13h1"/></svg>`,
     'Datos', () => { const on = document.body.classList.toggle('panel-open'); if (on) document.body.classList.remove('tree-open'); panelTool.classList.toggle('active', on); });
-  // «Árbol» va ARRIBA DE TODO, sobre la flecha de selección (1.er control de la barra).
-  const topSep = document.createElement('div'); topSep.className = 'tool-sep';
-  toolbar.prepend(tree, mapBtn, panelTool, topSep);
+  // Barra organizada en SECCIONES (separadas por divisores):
+  //  · Vista: Árbol · Mapa · Relieve · Datos   (Relieve pertenece a la sección del mapa)
+  //  · Interacción: Detener · Mover · Editar
+  //  · Modos/análisis: Avance · Shadow
+  //  · Crear: Torre · Torre AT · Borrar
+  const sepEl = () => { const d = document.createElement('div'); d.className = 'tool-sep'; return d; };
+  toolbar.append(
+    tree, mapBtn, relieve, panelTool, sepEl(),
+    pause, pan, edit, sepEl(),
+    avance, sol, sepEl(),
+    add, hv, del,
+  );
   if (document.body.classList.contains('tree-open')) tree.classList.add('active');
 
   // Supr/Delete borra la estructura seleccionada (sólo en modo edición).
@@ -1552,7 +1562,7 @@ ${detalle}${compilado}
 
   // Abre una sub-pestaña de la estructura seleccionada (p. ej. desde la ficha flotante).
   function showPane(p) { if (!current) return; pane = p; setTopView('seleccion'); renderDetail(); }
-  return { setStructures, select, onTick, setAlarms, showPane, showShadow, refreshShadow: renderShadow, refresh: () => { if (current) renderPane(); } };
+  return { setStructures, select, onTick, setAlarms, showPane, showShadow, showObra: () => setTopView('obra'), refreshShadow: renderShadow, refresh: () => { if (current) renderPane(); } };
 }
 
 function startBoot() { boot().catch(e => { console.error('[shm] boot', e); window.__rewindCloseLanding?.(); }); }

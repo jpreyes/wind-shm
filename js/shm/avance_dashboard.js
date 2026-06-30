@@ -6,7 +6,7 @@
 // (acumulado plan vs real por mes), % por componente y ranking de torres atrasadas.
 // Render en DOM/SVG (verificable) + informe imprimible. Módulo de presentación.
 // ─────────────────────────────────────────────────────────────────────────────
-import { enrichStages, TURBINE_COMPONENTS } from './parks_data_caman.js?v=249';
+import { enrichStages, TURBINE_COMPONENTS } from './parks_data_caman.js?v=250';
 
 const DAY = 864e5;
 const fmtPct = (x) => `${Math.round(x * 100)}%`;
@@ -95,6 +95,39 @@ function curveSVG(curve) {
   </svg>`;
 }
 
+// ── Gantt por torre (plan + estado por componente) ───────────────────────────
+const statusCol = (pct) => pct >= 100 ? '#22c55e' : pct > 0 ? '#f59e0b' : '#94a3b8';
+function ganttSVG(structures) {
+  const turbs = (structures || []).filter(s => s.type !== 'hv');
+  const rows = turbs.map(t => ({ label: t.label || t.id, sts: enrichStages(t.stages, 'turbine', t.id) }));
+  let min = Infinity, max = -Infinity;
+  rows.forEach(r => r.sts.forEach(s => { min = Math.min(min, Date.parse(s.plannedStart)); max = Math.max(max, Date.parse(s.plannedEnd)); }));
+  if (!isFinite(min) || !rows.length) return '<div class="av-mut">Sin cronograma.</div>';
+  const today = Date.now();
+  const labW = 44, W = 280, rh = 12, gap = 2, headH = 16, padR = 6, trackW = W - labW - padR;
+  const X = (ms) => labW + (ms - min) / (max - min || 1) * trackW;
+  const H = headH + rows.length * (rh + gap) + 4;
+  let grid = '';
+  const d0 = new Date(min); d0.setDate(1);
+  for (let d = new Date(d0); d.getTime() <= max; d.setMonth(d.getMonth() + 1)) {
+    const x = X(d.getTime());
+    grid += `<line x1="${x.toFixed(1)}" y1="${headH}" x2="${x.toFixed(1)}" y2="${H}" stroke="var(--border,#28384a)" stroke-width="0.4"/>`;
+    grid += `<text x="${(x + 1).toFixed(1)}" y="10" font-size="7" fill="var(--text-muted,#93a6b8)">${monKey(d.getTime())}</text>`;
+  }
+  const tX = X(Math.min(Math.max(today, min), max));
+  const todayLine = `<line x1="${tX.toFixed(1)}" y1="${headH - 3}" x2="${tX.toFixed(1)}" y2="${H}" stroke="#ff5e3a" stroke-width="1" stroke-dasharray="3 2"/><text x="${(tX + 1).toFixed(1)}" y="${headH - 4}" font-size="7" fill="#ff5e3a">hoy</text>`;
+  let body = '';
+  rows.forEach((r, ri) => {
+    const y = headH + ri * (rh + gap);
+    body += `<text x="2" y="${(y + rh - 2.5).toFixed(1)}" font-size="7.5" fill="var(--text,#e6eef6)">${r.label}</text>`;
+    r.sts.forEach(s => {
+      const x1 = X(Date.parse(s.plannedStart)), x2 = X(Date.parse(s.plannedEnd)), w = Math.max(1.6, x2 - x1);
+      body += `<rect x="${x1.toFixed(1)}" y="${(y + 1).toFixed(1)}" width="${w.toFixed(1)}" height="${rh - 2}" rx="1.4" fill="${statusCol(s.pct)}" opacity="${s.pct > 0 ? 0.95 : 0.3}"/>`;
+    });
+  });
+  return `<svg viewBox="0 0 ${W} ${H}" style="width:100%;height:auto;aspect-ratio:${W}/${H};display:block;min-width:280px" xmlns="http://www.w3.org/2000/svg">${grid}${todayLine}${body}</svg>`;
+}
+
 // Render del dashboard en un host del panel derecho.
 export function renderAvance(host, structures) {
   const d = computeParkAvance(structures);
@@ -127,6 +160,9 @@ export function renderAvance(host, structures) {
     <div class="av-comps">${compBars}</div>
     <div class="av-sub">Torres atrasadas <span class="av-mut">(real &lt; plan)</span></div>
     <div class="av-lates">${lateRows}</div>
+    <div class="av-sub">Gantt por torre <span class="av-mut">(plan · color = estado)</span></div>
+    <div class="av-gantt">${ganttSVG(structures)}</div>
+    <div class="av-leg"><span><i class="g-done"></i>Completada</span><span><i class="g-wip"></i>En ejecución</span><span><i class="g-pend"></i>Pendiente</span><span><i class="today"></i>Hoy</span></div>
     <button id="av-report" class="av-btn" type="button">📄 Informe de avance (DPR)</button>`;
   host.querySelector('#av-report')?.addEventListener('click', () => avanceReport(structures));
 }
