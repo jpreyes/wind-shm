@@ -9,7 +9,7 @@
 // más un botón «Abrir partida» (vista completa). Sólo DOM/overlay; el 3D lo provee
 // fleet_view (anchorScreenAt / focusComponent).
 // ─────────────────────────────────────────────────────────────────────────────
-import { TURBINE_COMPONENTS, HV_COMPONENTS, enrichStages } from './parks_data_caman.js?v=244';
+import { TURBINE_COMPONENTS, HV_COMPONENTS, enrichStages } from './parks_data_caman.js?v=245';
 
 const fmt = (iso) => { if (!iso) return '—'; const [y, m, d] = iso.split('-'); return `${d}/${m}/${y.slice(2)}`; };
 
@@ -106,8 +106,12 @@ export function buildAvanceHUD(vpwrap, fleet) {
       || wip?.component || front?.component || comps[comps.length - 1]?.component;
     expanded = pick || null;
     renderCallouts();
+    // En modo compacto, encuadra la torre corrida a la derecha para que la columna
+    // izquierda de callouts no la tape (deja espacio a la torre).
+    if (isCompact()) fleet.frameStructureRight?.(st);
     tick();
   }
+  const isCompact = () => wrap.getBoundingClientRect().width < 720;
 
   function renderCallouts() {
     for (const co of callouts) {
@@ -146,7 +150,7 @@ export function buildAvanceHUD(vpwrap, fleet) {
   function toggle(component) {
     expanded = expanded === component ? null : component;
     if (cur) lastExp[cur.id] = expanded;                 // recuerda lo dejado abierto
-    if (expanded) { const co = callouts.find(c => c.comp.component === component); if (co) fleet.focusComponent?.(cur, co.comp.yFrac); }   // «el girito»
+    if (expanded) { const co = callouts.find(c => c.comp.component === component); if (co) fleet.focusComponent?.(cur, co.comp.yFrac, isCompact() ? 0.2 : 0); }   // «el girito» (corrido a la derecha si compacto)
     renderCallouts(); tick();
   }
 

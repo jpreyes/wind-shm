@@ -8,7 +8,7 @@
 // El ParkManager mantiene el store, sincroniza con el FleetView y pinta el árbol.
 // ─────────────────────────────────────────────────────────────────────────────
 
-import { buildCamanPark } from './parks_data_caman.js?v=244';
+import { buildCamanPark } from './parks_data_caman.js?v=245';
 
 const KEY = 'rewind-parks';
 const SEED = 'caman-i-v6';      // sello de siembra; al cambiarlo se re-siembra el store (v6: etapas con % de avance)

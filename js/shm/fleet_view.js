@@ -7,11 +7,11 @@
 // ─────────────────────────────────────────────────────────────────────────────
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
-import { createTurbine, TOWER_H } from './turbine_mesh.js?v=244';
-import { createSubstationTower, groundCable, overheadLine } from './structures.js?v=244';
-import { toScene, CAMAN_CENTER, LAYOUT_SCALE } from './parks_data_caman.js?v=244';
-import { CAMAN_ROADS } from './caman_roads.js?v=244';
-import { solarPosition, dateFromLocal, sunSceneDir } from './solar.js?v=244';
+import { createTurbine, TOWER_H } from './turbine_mesh.js?v=245';
+import { createSubstationTower, groundCable, overheadLine } from './structures.js?v=245';
+import { toScene, CAMAN_CENTER, LAYOUT_SCALE } from './parks_data_caman.js?v=245';
+import { CAMAN_ROADS } from './caman_roads.js?v=245';
+import { solarPosition, dateFromLocal, sunSceneDir } from './solar.js?v=245';
 
 const SPACING = 235;
 const TOWER_SCALE = 2.2;   // agranda las torres (vista esquemática) para que destaquen sobre el relieve
@@ -269,7 +269,7 @@ export class FleetView {
   // ── Relieve conceptual (capa de terreno) ─────────────────────────────────────
   // Carga el DEM vendorizado y añade la malla (oculta hasta activarla).
   async loadTerrain(url) {
-    const { Terrain } = await import('./terrain.js?v=244');
+    const { Terrain } = await import('./terrain.js?v=245');
     this._TerrainClass = Terrain;                     // para reconstruir al cambiar de escala
     const dem = await (await fetch(url)).json();
     this.terrain = new Terrain(dem, { vex: 1.5 });   // relieve exagerado (esquemático)
@@ -356,16 +356,43 @@ export class FleetView {
     };
   }
 
+  // Desplaza la vista para que el objetivo quede a la DERECHA (biasX>0), dejando la
+  // izquierda libre para el HUD compacto. Devuelve el offset (world) a sumar a
+  // cámara y target — pan en el plano de pantalla, sin rotar.
+  _viewBias(tgt, pos, biasX) {
+    if (!biasX) return new THREE.Vector3();
+    const dir = new THREE.Vector3().subVectors(tgt, pos);
+    const dist = dir.length(); if (dist < 1e-3) return new THREE.Vector3(); dir.normalize();
+    const right = new THREE.Vector3().crossVectors(dir, this.camera.up).normalize();
+    const worldH = 2 * dist * Math.tan(this.camera.fov * Math.PI / 360);
+    return right.multiplyScalar(-biasX * worldH * this.camera.aspect);   // negativo = contenido a la derecha
+  }
+
   // Encuadra suavemente un COMPONENTE de una estructura (a la fracción yFrac de su
   // altura), girando un poco la cámara para que se note el movimiento. Frente 1.
-  focusComponent(st, yFrac) {
+  // biasX>0 = corre la vista a la derecha (HUD compacto en columna izquierda).
+  focusComponent(st, yFrac, biasX = 0) {
     if (!st) return;
     const h = (st.height || TOWER_H) * (st.group.scale.y || 1), p = st.group.position;
     const tgt = new THREE.Vector3(p.x, p.y + h * yFrac, p.z);
     const dist = h * 0.85 + 60 * this.scaleK;
     const ang = Math.atan2(this.camera.position.x - p.x, this.camera.position.z - p.z) + 0.55;   // gira ~0.55 rad
     const pos = new THREE.Vector3(p.x + Math.sin(ang) * dist, tgt.y + h * 0.22, p.z + Math.cos(ang) * dist);
-    this.cameraTo(tgt, pos, 680);
+    const off = this._viewBias(tgt, pos, biasX);
+    this.cameraTo(tgt.add(off), pos.add(off), 680);
+  }
+
+  // Encuadra la torre COMPLETA corrida a la derecha (para el HUD compacto: la columna
+  // de callouts queda a la izquierda y la torre con su espacio a la derecha).
+  frameStructureRight(st, biasX = 0.2) {
+    if (!st) return;
+    const h = (st.height || TOWER_H) * (st.group.scale.y || 1), p = st.group.position;
+    const tgt = new THREE.Vector3(p.x, p.y + h * 0.55, p.z);
+    const dist = h * 1.45 + 80 * this.scaleK;
+    const ang = Math.atan2(this.camera.position.x - p.x, this.camera.position.z - p.z);
+    const pos = new THREE.Vector3(p.x + Math.sin(ang) * dist, tgt.y + h * 0.45, p.z + Math.cos(ang) * dist);
+    const off = this._viewBias(tgt, pos, biasX);
+    this.cameraTo(tgt.add(off), pos.add(off), 640);
   }
 
   // Ángulo (grados, sentido horario CSS) hacia el que apunta el Norte de la escena
