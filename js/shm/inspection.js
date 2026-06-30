@@ -142,7 +142,8 @@ export function addInspection(structId, fields = {}) {
     location: fields.location || '',
     summary: fields.summary || '',
     condition: fields.condition || 'operativa',
-    damages: [], tests: [], documents: [],
+    damages: [], tests: [], documents: [], photos: [], workOrders: [],
+    nextDate: fields.nextDate || addDays(fields.date || new Date().toISOString().slice(0, 10), 180),
     created: Date.now(),
   };
   list.push(insp); setInspections(structId, list);
@@ -154,6 +155,49 @@ export function updateInspection(structId, insp) {
 }
 export function removeInspection(structId, inspId) {
   setInspections(structId, (loadAll()[structId] || []).filter(i => i.id !== inspId));
+}
+
+// ── Órdenes de trabajo + calendario (vencimientos) ───────────────────────────
+export const WO_STATUS = ['abierto', 'en curso', 'cerrado'];
+export const WO_PRIORITY = ['baja', 'media', 'alta'];
+export const addDays = (iso, n) => new Date((Date.parse(iso) || Date.now()) + n * 864e5).toISOString().slice(0, 10);
+/** Estado de un vencimiento: {overdue, soon} (soon = ≤30 días, no vencido). */
+export function dueState(iso, soonDays = 30) {
+  if (!iso) return { overdue: false, soon: false };
+  const d = Math.round((Date.parse(iso) - Date.now()) / 864e5);
+  return { overdue: d < 0, soon: d >= 0 && d <= soonDays, days: d };
+}
+/** Prioridad sugerida de OT a partir de la severidad del hallazgo. */
+export const priorityFromSeverity = (sev) => (sev === 'Muy Alta' || sev === 'Alta') ? 'alta' : sev === 'Media' ? 'media' : 'baja';
+
+// ── Ensayos genéricos: el TIPO determina si es ensayo no destructivo (NDT) ────
+const NDT_KEYS = ['ultrason', 'radiograf', 'magnetic', 'penetrant', 'esclerom', 'termograf', 'acustic', 'eddy', 'foucault', 'georradar', 'rebote', 'rebound', 'impact', 'potencial', 'resistivid', 'pull-off', 'pull off', 'pacometr', 'carbonatac'];
+/** Clasifica un ensayo por su tipo: {ndt, label}. NDT = no destructivo. */
+export function classifyTest(type) {
+  const t = norm(type);
+  const ndt = NDT_KEYS.some(k => t.includes(k));
+  return { ndt, label: ndt ? 'NDT' : 'Ensayo' };
+}
+
+// ── Foto → thumbnail (data URI) reescalado, para no inflar localStorage ───────
+export function imageToThumb(file, maxW = 760, quality = 0.72) {
+  return new Promise((resolve, reject) => {
+    const fr = new FileReader();
+    fr.onerror = reject;
+    fr.onload = () => {
+      const img = new Image();
+      img.onerror = reject;
+      img.onload = () => {
+        const scale = Math.min(1, maxW / img.width);
+        const w = Math.round(img.width * scale), h = Math.round(img.height * scale);
+        const c = document.createElement('canvas'); c.width = w; c.height = h;
+        c.getContext('2d').drawImage(img, 0, 0, w, h);
+        resolve(c.toDataURL('image/jpeg', quality));
+      };
+      img.src = fr.result;
+    };
+    fr.readAsDataURL(file);
+  });
 }
 
 // ── Autoverificación (node js/shm/inspection.js) ──────────────────────────────

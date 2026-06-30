@@ -19,8 +19,8 @@
 //   4. Update x ← y / ‖y‖_M ,  Rayleigh quotient ωᵢ² = xᵀKx.
 //   5. Repeat until ‖Δω²‖/ω² < 1e-7.
 // ──────────────────────────────────────────────────────────────────────────────
-import { buildNodeIndex, assembleK, getNodeDOFs } from './assembler.js?v=252';
-import { ModalResults } from './modal_results.js?v=252';
+import { buildNodeIndex, assembleK, getNodeDOFs } from './assembler.js?v=253';
+import { ModalResults } from './modal_results.js?v=253';
 
 export class ModalSolver {
   /**

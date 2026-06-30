@@ -8,19 +8,19 @@
 //   inspecciones y señal temporal EN VIVO desde un Web Worker (DataSource).
 // Recortes (modelado) los hace shm.css ocultando, no borrando.
 // ─────────────────────────────────────────────────────────────────────────────
-import { FleetView } from './fleet_view.js?v=252';
-import { DataSource } from './data_source.js?v=252';
-import { computeTwin } from './digital_twin.js?v=252';
-import { ParkManager, loadParksStore } from './parks.js?v=252';
-import { MapView } from './map_view.js?v=252';
-import { defaultStages, builtFromStages } from './parks_data_caman.js?v=252';
-import { compassRoseSVG } from './compass.js?v=252';
-import { buildAvanceHUD } from './avance_hud.js?v=252';
-import { renderAvance } from './avance_dashboard.js?v=252';
-import * as Insp from './inspection.js?v=252';
+import { FleetView } from './fleet_view.js?v=253';
+import { DataSource } from './data_source.js?v=253';
+import { computeTwin } from './digital_twin.js?v=253';
+import { ParkManager, loadParksStore } from './parks.js?v=253';
+import { MapView } from './map_view.js?v=253';
+import { defaultStages, builtFromStages } from './parks_data_caman.js?v=253';
+import { compassRoseSVG } from './compass.js?v=253';
+import { buildAvanceHUD } from './avance_hud.js?v=253';
+import { renderAvance } from './avance_dashboard.js?v=253';
+import * as Insp from './inspection.js?v=253';
 
 const F1_BASE = { turbine: 0.283, hv: 1.6 };
-const REWIND_VER = 'v252';   // versión visible del build (subir junto al cache-bust)
+const REWIND_VER = 'v253';   // versión visible del build (subir junto al cache-bust)
 const FS = 62.5;   // frecuencia de muestreo de la señal (Hz), igual que shm_worker.js
 // Clasificador ML de daño (0..4)
 const CLS = ['Sin daño', 'Leve', 'Moderado', 'Alto', 'Muy alto'];
@@ -256,7 +256,7 @@ async function boot() {
   // ── Relieve conceptual del terreno (DEM vendorizado) — encendido por defecto ─
   setLoad(88, 'Cargando relieve…'); await delay(40);
   try {
-    await fleet.loadTerrain('data/caman_dem.json?v=252');
+    await fleet.loadTerrain('data/caman_dem.json?v=253');
     fleet.setTerrainVisible(true);
     document.getElementById('shm-relieve-tool')?.classList.add('active');
   } catch (e) { console.warn('[shm] relieve no disponible', e); }
@@ -1008,7 +1008,7 @@ function buildDashboard(panel, fleet, actions) {
     if (!inspSel || !inspections.some(i => i.id === inspSel)) inspSel = inspections[0].id;
     const sel = inspections.find(i => i.id === inspSel);
     const score = Insp.inspectionScore(sel.damages), band = Insp.scoreBand(score);
-    const latest = inspections[0], lscore = Insp.inspectionScore(latest.damages);
+    const latest = inspections[0];
     const hist = inspections.slice().sort((a, b) => (a.date || '').localeCompare(b.date || '')).map(i => ({ date: i.date, score: Insp.inspectionScore(i.damages) }));
     const opt = (arr, v) => arr.map(x => `<option ${x === v ? 'selected' : ''}>${x}</option>`).join('');
     const condOpt = Insp.CONDITIONS.map(c => `<option value="${c.key}" ${c.key === sel.condition ? 'selected' : ''}>${c.label}</option>`).join('');
@@ -1018,6 +1018,7 @@ function buildDashboard(panel, fleet, actions) {
       return `<div class="ins-dmg">
         <span class="ins-dmg-sc ${b.cls}">${sc.toFixed(0)}</span>
         <span class="ins-dmg-v"><b>${d.damage_type}</b><br><span class="ins-mut">${d.severity} · ${d.damage_cause}${d.extent ? ' · ' + d.extent : ''}${d.location ? ' · ' + d.location : ''}</span></span>
+        <button class="ins-ot" data-ot="${d.id}" title="Crear orden de trabajo">→ OT</button>
         <button class="ins-x" data-del-dmg="${d.id}" title="Quitar hallazgo">✕</button></div>`;
     }).join('') : '<div class="ins-mut">Sin hallazgos. Agrega uno abajo.</div>';
 
@@ -1026,18 +1027,27 @@ function buildDashboard(panel, fleet, actions) {
       return `<button class="ins-row ${i.id === inspSel ? 'active' : ''}" data-insp="${i.id}">
         <span class="ins-dot ${Insp.conditionFromScore(sc)}"></span>
         <span class="ins-row-d">${i.date}</span><span class="ins-row-i">${i.inspector}</span>
+        <span class="ins-row-h" title="hallazgos">${i.damages.length}⚐</span>
         <span class="ins-row-s ${b.cls}">${sc.toFixed(0)}</span></button>`;
     }).join('');
 
     host.innerHTML = `
       <div class="shm-body ins-body">
         <div class="ins-head">Inspección · ${o.label}
-          <span class="ins-cond ${latest.condition}">${Insp.conditionLabel(latest.condition)}</span></div>
+          <span class="ins-cond ${sel.condition}">${Insp.conditionLabel(sel.condition)}</span></div>
         <div class="ins-kpis">
           <div class="ins-kpi"><div class="k">Inspecciones</div><div class="v">${inspections.length}</div></div>
-          <div class="ins-kpi"><div class="k">Último score</div><div class="v ${Insp.scoreBand(lscore).cls}">${lscore.toFixed(0)}</div></div>
+          <div class="ins-kpi"><div class="k">Score (sel.)</div><div class="v ${band.cls}">${score.toFixed(0)}</div></div>
           <div class="ins-kpi"><div class="k">Hallazgos</div><div class="v">${sel.damages.length}</div></div>
+          <div class="ins-kpi"><div class="k">Ensayos</div><div class="v">${sel.tests.length}</div></div>
         </div>
+        ${(() => {
+          const due = Insp.dueState(sel.nextDate), ow = (sel.workOrders || []).filter(w => w.status !== 'cerrado'), odw = ow.filter(w => Insp.dueState(w.due).overdue).length;
+          const m = [];
+          if (due.overdue) m.push('inspección vencida'); else if (due.soon) m.push('inspección por vencer');
+          if (odw) m.push(`${odw} OT vencida(s)`); if (ow.length) m.push(`${ow.length} OT abierta(s)`);
+          return m.length ? `<div class="ins-alert ${due.overdue || odw ? 'bad' : 'warn'}">⚠ ${m.join(' · ')}</div>` : '';
+        })()}
         <div class="shm-sub2">Histórico de evaluación del estado estructural</div>
         ${evalHistorySVG(hist)}
         <div class="ins-actrow"><button id="ins-new" class="ins-btn">＋ Nueva inspección</button></div>
@@ -1051,8 +1061,14 @@ function buildDashboard(panel, fleet, actions) {
             <label>Inspector<input type="text" id="ins-insp" value="${sel.inspector}"></label>
             <label>Condición<select id="ins-cond">${condOpt}</select></label>
             <label>Ubicación<input type="text" id="ins-loc" value="${sel.location || ''}"></label>
+            <label>Próxima inspección<input type="date" id="ins-next" value="${sel.nextDate || ''}"></label>
           </div>
           <label class="ins-sumlbl">Resumen<textarea id="ins-sum" rows="2">${sel.summary || ''}</textarea></label>
+
+          <div class="shm-sub2">Fotografías · ${(sel.photos || []).length}</div>
+          <div class="ins-photos">${(sel.photos || []).map(p => `<div class="ins-photo" data-photo="${p.id}" style="background-image:url('${p.url}')"><button class="ins-px" data-del-photo="${p.id}" title="Quitar foto">✕</button></div>`).join('') || '<div class="ins-mut">Sin fotos.</div>'}</div>
+          <input type="file" id="ins-photo-file" accept="image/*" style="display:none">
+          <button id="ins-addphoto" class="ins-mini-btn">＋ Foto</button>
 
           <div class="shm-sub2">Hallazgos (daños) · score auto</div>
           <div class="ins-dmgs">${dmgRows}</div>
@@ -1067,13 +1083,20 @@ function buildDashboard(panel, fleet, actions) {
             <button id="nd-add" class="ins-btn">＋ Agregar hallazgo</button>
           </div>
 
-          <div class="shm-sub2">Ensayos (NDT) · ${sel.tests.length}</div>
-          <div class="ins-mini">${sel.tests.map(t => `<div class="ins-li">🔬 <b>${t.test_type}</b> — ${t.result_summary || '—'} <button class="ins-x" data-del-test="${t.id}">✕</button></div>`).join('') || '<div class="ins-mut">Sin ensayos.</div>'}</div>
+          <div class="shm-sub2">Ensayos · ${sel.tests.length}</div>
+          <div class="ins-mini">${sel.tests.map(t => { const c = Insp.classifyTest(t.test_type); return `<div class="ins-li"><span class="ins-tbadge ${c.ndt ? 'ndt' : ''}">${c.label}</span> <b>${t.test_type}</b> — ${t.result_summary || '—'} <button class="ins-x" data-del-test="${t.id}">✕</button></div>`; }).join('') || '<div class="ins-mut">Sin ensayos.</div>'}</div>
           <button id="ins-addtest" class="ins-mini-btn">＋ Ensayo</button>
 
           <div class="shm-sub2">Documentos · ${sel.documents.length}</div>
           <div class="ins-mini">${sel.documents.map(dc => `<div class="ins-li">📎 <b>${dc.title}</b> <span class="ins-mut">(${dc.category})</span> <button class="ins-x" data-del-doc="${dc.id}">✕</button></div>`).join('') || '<div class="ins-mut">Sin documentos.</div>'}</div>
           <button id="ins-adddoc" class="ins-mini-btn">＋ Documento</button>
+
+          <div class="shm-sub2">Órdenes de trabajo · ${(sel.workOrders || []).length}</div>
+          <div class="ins-mini">${(sel.workOrders || []).map(w => { const dd = Insp.dueState(w.due); return `<div class="ins-wo">
+            <button class="ins-wost s-${w.status.replace(/ /g, '')}" data-wo="${w.id}" title="Cambiar estado">${w.status}</button>
+            <span class="ins-wo-v"><b>${w.title}</b><br><span class="ins-mut">${w.assignee || 'sin asignar'} · prio ${w.priority}${w.due ? ` · vence ${w.due}${dd.overdue ? ' ⚠' : ''}` : ''}</span></span>
+            <button class="ins-x" data-del-wo="${w.id}">✕</button></div>`; }).join('') || '<div class="ins-mut">Sin órdenes de trabajo.</div>'}</div>
+          <button id="ins-addwo" class="ins-mini-btn">＋ Orden de trabajo</button>
 
           <div class="ins-foot"><button id="ins-report" class="ins-btn">📄 Informe de inspección</button>
             <button id="ins-del" class="ins-del">🗑 Eliminar</button></div>
@@ -1090,6 +1113,7 @@ function buildDashboard(panel, fleet, actions) {
     host.querySelector('#ins-loc').addEventListener('change', (e) => { sel.location = e.target.value; save(false); });
     host.querySelector('#ins-sum').addEventListener('change', (e) => { sel.summary = e.target.value; save(false); });
     host.querySelector('#ins-cond').addEventListener('change', (e) => { sel.condition = e.target.value; save(); });
+    host.querySelector('#ins-next').addEventListener('change', (e) => { sel.nextDate = e.target.value; save(); });
     host.querySelectorAll('[data-del-dmg]').forEach(b => b.addEventListener('click', () => { sel.damages = sel.damages.filter(d => d.id !== b.dataset.delDmg); sel.condition = Insp.conditionFromScore(Insp.inspectionScore(sel.damages)); save(); }));
     host.querySelector('#nd-add').addEventListener('click', () => {
       sel.damages.push({ id: Insp.uid(), damage_type: $('#nd-type').value, damage_cause: $('#nd-cause').value, severity: $('#nd-sev').value, extent: $('#nd-ext').value.trim(), location: $('#nd-loc').value.trim(), comments: '' });
@@ -1099,14 +1123,40 @@ function buildDashboard(panel, fleet, actions) {
     host.querySelector('#ins-adddoc').addEventListener('click', () => { const t = (prompt('Título del documento:', '') || '').trim(); if (!t) return; const c = (prompt('Categoría (informe/fotografía/ensayo/otro):', 'informe') || 'otro').trim(); sel.documents.push({ id: Insp.uid(), title: t, category: c, issued_at: new Date().toISOString().slice(0, 10) }); save(); });
     host.querySelectorAll('[data-del-test]').forEach(b => b.addEventListener('click', () => { sel.tests = sel.tests.filter(t => t.id !== b.dataset.delTest); save(); }));
     host.querySelectorAll('[data-del-doc]').forEach(b => b.addEventListener('click', () => { sel.documents = sel.documents.filter(d => d.id !== b.dataset.delDoc); save(); }));
+    // Órdenes de trabajo
+    host.querySelector('#ins-addwo').addEventListener('click', () => {
+      const title = (prompt('Título de la orden de trabajo:', '') || '').trim(); if (!title) return;
+      const assignee = (prompt('Responsable:', '') || '').trim();
+      const priority = (prompt('Prioridad (baja/media/alta):', 'media') || 'media').trim().toLowerCase();
+      (sel.workOrders ||= []).push({ id: Insp.uid(), title, assignee, priority: Insp.WO_PRIORITY.includes(priority) ? priority : 'media', status: 'abierto', due: sel.nextDate || '' });
+      save();
+    });
+    host.querySelectorAll('[data-wo]').forEach(b => b.addEventListener('click', () => { const w = (sel.workOrders || []).find(x => x.id === b.dataset.wo); if (w) { w.status = Insp.WO_STATUS[(Insp.WO_STATUS.indexOf(w.status) + 1) % Insp.WO_STATUS.length]; save(); } }));
+    host.querySelectorAll('[data-del-wo]').forEach(b => b.addEventListener('click', () => { sel.workOrders = (sel.workOrders || []).filter(w => w.id !== b.dataset.delWo); save(); }));
+    host.querySelectorAll('[data-ot]').forEach(b => b.addEventListener('click', () => {
+      const d = sel.damages.find(x => x.id === b.dataset.ot); if (!d) return;
+      (sel.workOrders ||= []).push({ id: Insp.uid(), title: 'Reparar: ' + d.damage_type, assignee: '', priority: Insp.priorityFromSeverity(d.severity), status: 'abierto', due: sel.nextDate || '', damageId: d.id });
+      save();
+    }));
     host.querySelector('#ins-report').addEventListener('click', () => inspectionReport(o, sel, score));
+    // Fotos
+    const pf = host.querySelector('#ins-photo-file');
+    host.querySelector('#ins-addphoto').addEventListener('click', () => pf.click());
+    pf.addEventListener('change', async (e) => {
+      const f = e.target.files?.[0]; e.target.value = ''; if (!f) return;
+      try { const url = await Insp.imageToThumb(f); (sel.photos ||= []).push({ id: Insp.uid(), url }); save(); }
+      catch (err) { alert('No se pudo procesar la foto: ' + (err?.message || err)); }
+    });
+    host.querySelectorAll('[data-del-photo]').forEach(b => b.addEventListener('click', (e) => { e.stopPropagation(); sel.photos = (sel.photos || []).filter(p => p.id !== b.dataset.delPhoto); save(); }));
+    host.querySelectorAll('.ins-photo').forEach(d => d.addEventListener('click', (e) => { if (e.target.closest('.ins-px')) return; const p = (sel.photos || []).find(x => x.id === d.dataset.photo); if (p) { const w = window.open('', '_blank'); if (w) w.document.write(`<img src="${p.url}" style="max-width:100%">`); } }));
   }
 
   // Informe de inspección imprimible.
   function inspectionReport(o, insp, score) {
     const band = Insp.scoreBand(score);
     const rows = insp.damages.map(d => `<tr><td>${d.damage_type}</td><td>${d.severity}</td><td>${d.damage_cause}</td><td>${d.extent || '—'}</td><td>${d.location || '—'}</td><td style="text-align:right">${Insp.scoreDamage(d).toFixed(0)}</td></tr>`).join('') || '<tr><td colspan="6" style="color:#15803d">Sin hallazgos.</td></tr>';
-    const tests = insp.tests.map(t => `<tr><td>${t.test_type}</td><td>${t.result_summary || '—'}</td><td>${t.executed_at || '—'}</td></tr>`).join('') || '<tr><td colspan="3" style="color:#64748b">Sin ensayos.</td></tr>';
+    const tests = insp.tests.map(t => `<tr><td>${Insp.classifyTest(t.test_type).label}</td><td>${t.test_type}</td><td>${t.result_summary || '—'}</td><td>${t.executed_at || '—'}</td></tr>`).join('') || '<tr><td colspan="4" style="color:#64748b">Sin ensayos.</td></tr>';
+    const wos = (insp.workOrders || []).map(w => `<tr><td>${w.title}</td><td>${w.assignee || '—'}</td><td>${w.priority}</td><td>${w.status}</td><td>${w.due || '—'}</td></tr>`).join('') || '<tr><td colspan="5" style="color:#64748b">Sin órdenes de trabajo.</td></tr>';
     const html = `<!doctype html><html lang="es"><meta charset="utf-8"><title>Inspección — ${o.label}</title>
       <style>body{font:14px/1.5 system-ui,sans-serif;margin:0;color:#1b2533}.wrap{max-width:820px;margin:0 auto;padding:0 32px 40px}
       .hero{background:linear-gradient(120deg,#0e7490,#155e75);color:#fff;padding:24px 32px;margin-bottom:22px}.hero h1{margin:4px 0;font-size:21px}
@@ -1122,8 +1172,10 @@ function buildDashboard(panel, fleet, actions) {
         <h2>Hallazgos (${insp.damages.length})</h2>
         <table><thead><tr><th>Tipo</th><th>Gravedad</th><th>Causa</th><th>Extensión</th><th>Ubicación</th><th style="text-align:right">Score</th></tr></thead><tbody>${rows}</tbody></table>
         <h2>Ensayos (${insp.tests.length})</h2>
-        <table><thead><tr><th>Ensayo</th><th>Resultado</th><th>Fecha</th></tr></thead><tbody>${tests}</tbody></table>
-        <p class="mut" style="margin-top:18px">Generado ${new Date().toLocaleString('es-CL')} · ReWind. La evaluación de inspección es independiente del estado en vivo por sensores (SHM).</p>
+        <table><thead><tr><th>Clase</th><th>Ensayo</th><th>Resultado</th><th>Fecha</th></tr></thead><tbody>${tests}</tbody></table>
+        <h2>Órdenes de trabajo (${(insp.workOrders || []).length})</h2>
+        <table><thead><tr><th>Orden</th><th>Responsable</th><th>Prioridad</th><th>Estado</th><th>Vence</th></tr></thead><tbody>${wos}</tbody></table>
+        <p class="mut" style="margin-top:18px">Próxima inspección: <b>${insp.nextDate || '—'}</b> · Generado ${new Date().toLocaleString('es-CL')} · ReWind. La evaluación de inspección es independiente del estado en vivo por sensores (SHM).</p>
       </div></html>`;
     const w = window.open('', '_blank'); if (w) { w.document.write(html); w.document.close(); }
   }
