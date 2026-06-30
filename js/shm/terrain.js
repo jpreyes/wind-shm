@@ -9,7 +9,7 @@
 // torres y drapear caminos sobre el relieve.
 // ─────────────────────────────────────────────────────────────────────────────
 import * as THREE from 'three';
-import { CAMAN_CENTER, LAYOUT_SCALE, toScene } from './parks_data_caman.js?v=235';
+import { CAMAN_CENTER, LAYOUT_SCALE, toScene } from './parks_data_caman.js?v=236';
 
 const M_PER_DEG_LAT = 111320;
 const M_PER_DEG_LON = 111320 * Math.cos(CAMAN_CENTER.lat * Math.PI / 180);
@@ -74,7 +74,7 @@ export class Terrain {
       },
       vertexShader: `
         varying float vH; varying vec3 vN; varying vec2 vUv;
-        void main(){ vH = position.y; vN = normalize(normalMatrix * normal); vUv = uv;
+        void main(){ vH = position.y; vN = normalize(normal); vUv = uv;   // normal en MUNDO (el relieve no rota) → hillshade sigue al sol
           gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }`,
       fragmentShader: `
         precision highp float;
@@ -92,7 +92,7 @@ export class Terrain {
         void main(){
           float t = clamp((vH - uMin) / max(uMax - uMin, 1.0), 0.0, 1.0);
           vec3 col = ramp(t);
-          float sh = 0.78 + 0.22 * clamp(dot(normalize(vN), uLight), 0.0, 1.0);  // hillshade muy suave
+          float sh = 0.68 + 0.32 * clamp(dot(normalize(vN), uLight), 0.0, 1.0);  // relieve sombreado por el sol (tenue, mucho menos que la sombra de torres)
           col *= sh;
           float e = vH / uInterval;                                              // curvas de nivel finas
           float d = abs(fract(e - 0.5) - 0.5) / max(fwidth(e), 1e-4);
@@ -106,16 +106,15 @@ export class Terrain {
         }`,
       side: THREE.DoubleSide, transparent: true,
     });
-    mat.shadowSide = THREE.FrontSide;   // la cara superior del relieve es la que proyecta sombra
     const mesh = new THREE.Mesh(geo, mat);
-    mesh.receiveShadow = true; mesh.castShadow = true;   // los cerros proyectan sombra (sobre el valle y otras torres)
+    mesh.receiveShadow = true; mesh.castShadow = false;   // el relieve NO castea al mapa (su sombra = hillshade, tenue); sólo recibe la de las torres
     mesh.renderOrder = -1; mesh.name = 'terrain';
 
     // Malla receptora de sombras (comparte la geometría del relieve): el
     // ShaderMaterial conceptual no recibe sombras, así que superponemos un
     // ShadowMaterial que SÓLO dibuja la sombra translúcida sobre la superficie del
     // terreno (Frente 2: sombras sobre el relieve). polygonOffset evita z-fighting.
-    const shMat = new THREE.ShadowMaterial({ opacity: 0.36, color: 0x1b2e6b });   // sombra azul/índigo, tenue (un solo color para torres y cerros)
+    const shMat = new THREE.ShadowMaterial({ opacity: 0.44, color: 0x1b2e6b });   // sombra de TORRES sobre el relieve (prominente; el relieve ya no castea)
     shMat.polygonOffset = true; shMat.polygonOffsetFactor = -1; shMat.polygonOffsetUnits = -1; shMat.depthWrite = false;
     const shadowMesh = new THREE.Mesh(geo, shMat);
     shadowMesh.receiveShadow = true; shadowMesh.renderOrder = 0; shadowMesh.visible = false; shadowMesh.name = 'terrain-shadow';
