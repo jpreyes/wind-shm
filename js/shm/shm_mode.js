@@ -8,21 +8,21 @@
 //   inspecciones y señal temporal EN VIVO desde un Web Worker (DataSource).
 // Recortes (modelado) los hace shm.css ocultando, no borrando.
 // ─────────────────────────────────────────────────────────────────────────────
-import { FleetView } from './fleet_view.js?v=265';
-import { DataSource } from './data_source.js?v=265';
-import { computeTwin } from './digital_twin.js?v=265';
-import { ParkManager, loadParksStore } from './parks.js?v=265';
-import { MapView } from './map_view.js?v=265';
-import { defaultStages, builtFromStages } from './parks_data_caman.js?v=265';
-import { compassRoseSVG } from './compass.js?v=265';
-import { buildAvanceHUD } from './avance_hud.js?v=265';
-import { renderAvance } from './avance_dashboard.js?v=265';
-import * as Insp from './inspection.js?v=265';
-import * as Fat from './fatigue.js?v=265';
-import { t, getLang, setLang } from './i18n.js?v=265';
+import { FleetView } from './fleet_view.js?v=266';
+import { DataSource } from './data_source.js?v=266';
+import { computeTwin } from './digital_twin.js?v=266';
+import { ParkManager, loadParksStore } from './parks.js?v=266';
+import { MapView } from './map_view.js?v=266';
+import { defaultStages, builtFromStages } from './parks_data_caman.js?v=266';
+import { compassRoseSVG } from './compass.js?v=266';
+import { buildAvanceHUD } from './avance_hud.js?v=266';
+import { renderAvance } from './avance_dashboard.js?v=266';
+import * as Insp from './inspection.js?v=266';
+import * as Fat from './fatigue.js?v=266';
+import { t, getLang, setLang } from './i18n.js?v=266';
 
 const F1_BASE = { turbine: 0.283, hv: 1.6 };
-const REWIND_VER = 'v265';   // versión visible del build (subir junto al cache-bust)
+const REWIND_VER = 'v266';   // versión visible del build (subir junto al cache-bust)
 const FS = 62.5;   // frecuencia de muestreo de la señal (Hz), igual que shm_worker.js
 // Clasificador ML de daño (0..4)
 const CLS = ['Sin daño', 'Leve', 'Moderado', 'Alto', 'Muy alto'];
@@ -263,7 +263,7 @@ async function boot() {
   // ── Relieve conceptual del terreno (DEM vendorizado) — encendido por defecto ─
   setLoad(88, 'Cargando relieve…'); await delay(40);
   try {
-    await fleet.loadTerrain('data/caman_dem.json?v=265');
+    await fleet.loadTerrain('data/caman_dem.json?v=266');
     fleet.setTerrainVisible(true);
     document.getElementById('shm-relieve-tool')?.classList.add('active');
   } catch (e) { console.warn('[shm] relieve no disponible', e); }
@@ -1229,7 +1229,7 @@ function buildDashboard(panel, fleet, actions) {
 
   // Mini-gráfico de evolución del score de inspección (histórico de evaluación).
   function evalHistorySVG(hist) {
-    if (hist.length < 2) return '<div class="ins-mut">Una sola evaluación; el histórico aparece al registrar más inspecciones.</div>';
+    if (hist.length < 2) return `<div class="ins-mut">${t('ins.histSingle')}</div>`;
     const W = 280, H = 70, ml = 22, mb = 14, mt = 6, pw = W - ml - 8, ph = H - mt - mb;
     const X = (i) => ml + (i / (hist.length - 1)) * pw, Y = (v) => mt + (1 - v / 100) * ph;
     const pts = hist.map((p, i) => `${X(i).toFixed(1)},${Y(p.score).toFixed(1)}`).join(' ');
@@ -1422,33 +1422,34 @@ function buildDashboard(panel, fleet, actions) {
   // Informe de inspección imprimible.
   function inspectionReport(o, insp, score) {
     const band = Insp.scoreBand(score);
-    const rows = insp.damages.map(d => `<tr><td>${d.damage_type}</td><td>${d.severity}</td><td>${d.damage_cause}</td><td>${d.extent || '—'}</td><td>${d.location || '—'}</td><td style="text-align:right">${Insp.scoreDamage(d).toFixed(0)}</td></tr>`).join('') || '<tr><td colspan="6" style="color:#15803d">Sin hallazgos.</td></tr>';
-    const tests = insp.tests.map(t => `<tr><td>${Insp.classifyTest(t.test_type).label}</td><td>${t.test_type}</td><td>${t.result_summary || '—'}</td><td>${t.executed_at || '—'}</td></tr>`).join('') || '<tr><td colspan="4" style="color:#64748b">Sin ensayos.</td></tr>';
-    const wos = (insp.workOrders || []).map(w => `<tr><td>${w.title}</td><td>${w.assignee || '—'}</td><td>${w.priority}</td><td>${w.status}</td><td>${w.due || '—'}</td></tr>`).join('') || '<tr><td colspan="5" style="color:#64748b">Sin órdenes de trabajo.</td></tr>';
+    const rows = insp.damages.map(d => `<tr><td>${d.damage_type}</td><td>${d.severity}</td><td>${d.damage_cause}</td><td>${d.extent || '—'}</td><td>${d.location || '—'}</td><td style="text-align:right">${Insp.scoreDamage(d).toFixed(0)}</td></tr>`).join('') || `<tr><td colspan="6" style="color:#15803d">${t('irep.noFindings')}</td></tr>`;
+    const tests = insp.tests.map(tt => `<tr><td>${Insp.classifyTest(tt.test_type).label}</td><td>${tt.test_type}</td><td>${tt.result_summary || '—'}</td><td>${tt.executed_at || '—'}</td></tr>`).join('') || `<tr><td colspan="4" style="color:#64748b">${t('irep.noTests')}</td></tr>`;
+    const wos = (insp.workOrders || []).map(w => `<tr><td>${w.title}</td><td>${w.assignee || '—'}</td><td>${w.priority}</td><td>${w.status}</td><td>${w.due || '—'}</td></tr>`).join('') || `<tr><td colspan="5" style="color:#64748b">${t('irep.noWos')}</td></tr>`;
     const dmgPhotos = insp.damages.filter(d => (d.photos || []).length).map(d =>
       `<div class="dphoto-grp"><div class="mut"><b>${d.damage_type}</b> · ${d.severity}${d.location ? ' · ' + d.location : ''}</div>
         <div class="dphoto-row">${d.photos.map(p => `<img src="${p.url}" alt="${d.damage_type}">`).join('')}</div></div>`).join('');
-    const html = `<!doctype html><html lang="es"><meta charset="utf-8"><title>Inspección — ${o.label}</title>
+    const lc = getLang() === 'en' ? 'en-GB' : 'es-CL';
+    const html = `<!doctype html><html lang="${getLang()}"><meta charset="utf-8"><title>${t('irep.titleDoc')} — ${o.label}</title>
       <style>body{font:14px/1.5 system-ui,sans-serif;margin:0;color:#1b2533}.wrap{max-width:820px;margin:0 auto;padding:0 32px 40px}
       .hero{background:linear-gradient(120deg,#0e7490,#155e75);color:#fff;padding:24px 32px;margin-bottom:22px}.hero h1{margin:4px 0;font-size:21px}
       h2{font-size:15px;border-bottom:2px solid #cbd5e1;padding-bottom:5px;margin:24px 0 10px}.mut{color:#64748b;font-size:12px}
       table{border-collapse:collapse;width:100%;font-size:13px;margin-top:6px}th,td{border:1px solid #cbd5e1;padding:6px 9px;text-align:left}th{background:#f1f5f9}
       .score{display:inline-block;font-size:30px;font-weight:800;padding:6px 16px;border-radius:10px;color:#fff;background:${band.cls === 'critica' ? '#dc2626' : band.cls === 'observacion' ? '#d97706' : '#16a34a'}}
       .dphoto-grp{margin:10px 0}.dphoto-row{display:flex;flex-wrap:wrap;gap:7px;margin-top:4px}.dphoto-row img{width:170px;height:128px;object-fit:cover;border:1px solid #cbd5e1;border-radius:6px}</style>
-      <div class="hero"><div class="mut" style="color:#cfe9f1;letter-spacing:2px;text-transform:uppercase">ReWind · Inspección estructural</div>
-        <h1>Informe de inspección — ${o.label}</h1><div style="opacity:.9;font-size:13px">${insp.date} · ${insp.inspector} · ${Insp.conditionLabel(insp.condition)}</div></div>
+      <div class="hero"><div class="mut" style="color:#cfe9f1;letter-spacing:2px;text-transform:uppercase">${t('irep.kicker')}</div>
+        <h1>${t('irep.title')} — ${o.label}</h1><div style="opacity:.9;font-size:13px">${insp.date} · ${insp.inspector} · ${Insp.conditionLabel(insp.condition)}</div></div>
       <div class="wrap">
-        <h2>Evaluación</h2>
-        <p><span class="score">${score.toFixed(0)}</span> <span class="mut">/100 · ${band.label} (severidad·causa·tipo·extensión, método determinista)</span></p>
-        <p>${insp.summary || '<span class="mut">Sin resumen.</span>'}</p>
-        <h2>Hallazgos (${insp.damages.length})</h2>
-        <table><thead><tr><th>Tipo</th><th>Gravedad</th><th>Causa</th><th>Extensión</th><th>Ubicación</th><th style="text-align:right">Score</th></tr></thead><tbody>${rows}</tbody></table>
-        ${dmgPhotos ? `<h2>Fotografías de hallazgos</h2>${dmgPhotos}` : ''}
-        <h2>Ensayos (${insp.tests.length})</h2>
-        <table><thead><tr><th>Clase</th><th>Ensayo</th><th>Resultado</th><th>Fecha</th></tr></thead><tbody>${tests}</tbody></table>
-        <h2>Órdenes de trabajo (${(insp.workOrders || []).length})</h2>
-        <table><thead><tr><th>Orden</th><th>Responsable</th><th>Prioridad</th><th>Estado</th><th>Vence</th></tr></thead><tbody>${wos}</tbody></table>
-        <p class="mut" style="margin-top:18px">Próxima inspección: <b>${insp.nextDate || '—'}</b> · Generado ${new Date().toLocaleString('es-CL')} · ReWind. La evaluación de inspección es independiente del estado en vivo por sensores (SHM).</p>
+        <h2>${t('irep.hEval')}</h2>
+        <p><span class="score">${score.toFixed(0)}</span> <span class="mut">/100 · ${band.label} ${t('irep.evalSub')}</span></p>
+        <p>${insp.summary || `<span class="mut">${t('irep.noSummary')}</span>`}</p>
+        <h2>${t('irep.hFindings')} (${insp.damages.length})</h2>
+        <table><thead><tr><th>${t('irep.thType')}</th><th>${t('irep.thSev')}</th><th>${t('irep.thCause')}</th><th>${t('irep.thExtent')}</th><th>${t('irep.thLoc')}</th><th style="text-align:right">${t('irep.thScore')}</th></tr></thead><tbody>${rows}</tbody></table>
+        ${dmgPhotos ? `<h2>${t('irep.hPhotos')}</h2>${dmgPhotos}` : ''}
+        <h2>${t('irep.hTests')} (${insp.tests.length})</h2>
+        <table><thead><tr><th>${t('irep.thClass')}</th><th>${t('irep.thTest')}</th><th>${t('irep.thResult')}</th><th>${t('irep.thDate')}</th></tr></thead><tbody>${tests}</tbody></table>
+        <h2>${t('irep.hWos')} (${(insp.workOrders || []).length})</h2>
+        <table><thead><tr><th>${t('irep.thOrder')}</th><th>${t('irep.thAssignee')}</th><th>${t('irep.thPrio')}</th><th>${t('irep.thStatus')}</th><th>${t('irep.thDue')}</th></tr></thead><tbody>${wos}</tbody></table>
+        <p class="mut" style="margin-top:18px">${t('irep.nextLabel')}: <b>${insp.nextDate || '—'}</b> · ${t('rep.gen')} ${new Date().toLocaleString(lc)} · ReWind. ${t('irep.footTail')}</p>
       </div></html>`;
     const w = window.open('', '_blank'); if (w) { w.document.write(html); w.document.close(); }
   }

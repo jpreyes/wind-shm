@@ -6,9 +6,9 @@
 // (acumulado plan vs real por mes), % por componente y ranking de torres atrasadas.
 // Render en DOM/SVG (verificable) + informe imprimible. Módulo de presentación.
 // ─────────────────────────────────────────────────────────────────────────────
-import { enrichStages, TURBINE_COMPONENTS } from './parks_data_caman.js?v=265';
-import * as CTwin from './construction_twin.js?v=265';
-import { t } from './i18n.js?v=265';
+import { enrichStages, TURBINE_COMPONENTS } from './parks_data_caman.js?v=266';
+import * as CTwin from './construction_twin.js?v=266';
+import { t, getLang } from './i18n.js?v=266';
 
 const DAY = 864e5;
 const fmtPct = (x) => `${Math.round(x * 100)}%`;
@@ -209,28 +209,29 @@ export function commissioningReport(selected) {
   const bandOk = CTwin.inBand(f1, win);
   const operational = m.reached >= 6;
   const anyBelow = m.points.some(p => p.below);
-  const verdict = !operational ? { t: 'EN MONTAJE — commissioning pendiente', c: '#d97706' }
-    : (bandOk && !anyBelow) ? { t: 'APTA — f₁ en ventana soft-stiff, sin desviaciones', c: '#16a34a' }
-    : { t: 'CON OBSERVACIONES — revisar antes de poner en marcha', c: '#dc2626' };
-  const rows = pred.map((p, i) => { const me = m.points[i]; return `<tr><td>${p.label}</td><td style="text-align:right">${fmtHz(p.f1)}</td><td style="text-align:right">${me ? fmtHz(me.f1) : '—'}</td><td style="text-align:right;color:${me && me.below ? '#b91c1c' : '#15803d'}">${me ? (me.below ? 'bajo' : 'ok') : '—'}</td></tr>`; }).join('');
-  const html = `<!doctype html><html lang="es"><meta charset="utf-8"><title>Certificado de puesta en marcha — ${selected.label}</title>
+  const verdict = !operational ? { t: t('crep.vMounting'), c: '#d97706' }
+    : (bandOk && !anyBelow) ? { t: t('crep.vApt'), c: '#16a34a' }
+    : { t: t('crep.vObs'), c: '#dc2626' };
+  const rows = pred.map((p, i) => { const me = m.points[i]; return `<tr><td>${p.label}</td><td style="text-align:right">${fmtHz(p.f1)}</td><td style="text-align:right">${me ? fmtHz(me.f1) : '—'}</td><td style="text-align:right;color:${me && me.below ? '#b91c1c' : '#15803d'}">${me ? (me.below ? t('crep.below') : t('crep.okSt')) : '—'}</td></tr>`; }).join('');
+  const lc = getLang() === 'en' ? 'en-GB' : 'es-CL';
+  const html = `<!doctype html><html lang="${getLang()}"><meta charset="utf-8"><title>${t('crep.title')} — ${selected.label}</title>
     <style>body{font:14px/1.5 system-ui,sans-serif;margin:0;color:#1b2533}.wrap{max-width:780px;margin:0 auto;padding:0 32px 40px}
     .hero{background:linear-gradient(120deg,#0e7490,#155e75);color:#fff;padding:24px 32px;margin-bottom:20px}.hero h1{margin:4px 0;font-size:20px}
     h2{font-size:15px;border-bottom:2px solid #cbd5e1;padding-bottom:5px;margin:22px 0 10px}.mut{color:#64748b;font-size:12px}
     table{border-collapse:collapse;width:100%;font-size:13px}th,td{border:1px solid #cbd5e1;padding:6px 9px;text-align:left}th{background:#f1f5f9}
     .verd{display:inline-block;font-weight:800;padding:8px 16px;border-radius:10px;color:#fff;background:${verdict.c}}</style>
-    <div class="hero"><div class="mut" style="color:#cfe9f1;letter-spacing:2px;text-transform:uppercase">ReWind · Gemelo de construcción</div>
-      <h1>Certificado de puesta en marcha — ${selected.label}</h1><div style="opacity:.9;font-size:13px">Parque Camán I · ${new Date().toLocaleDateString('es-CL')}</div></div>
+    <div class="hero"><div class="mut" style="color:#cfe9f1;letter-spacing:2px;text-transform:uppercase">${t('crep.kicker')}</div>
+      <h1>${t('crep.title')} — ${selected.label}</h1><div style="opacity:.9;font-size:13px">${t('rep.park')} · ${new Date().toLocaleDateString(lc)}</div></div>
     <div class="wrap">
-      <h2>Veredicto</h2><p><span class="verd">${verdict.t}</span></p>
-      <h2>Frecuencia natural f₁</h2>
-      <table><tr><td>f₁ torre completa (gemelo FEM)</td><td><b>${fmtHz(f1)} Hz</b></td></tr>
-        <tr><td>Ventana soft-stiff (rpm ${win.rpm})</td><td>${fmtHz(win.lo)}–${fmtHz(win.hi)} Hz · ${bandOk ? 'en banda ✓' : 'fuera ✗'}</td></tr>
+      <h2>${t('crep.hVerdict')}</h2><p><span class="verd">${verdict.t}</span></p>
+      <h2>${t('crep.hF1')}</h2>
+      <table><tr><td>${t('crep.f1Full')}</td><td><b>${fmtHz(f1)} Hz</b></td></tr>
+        <tr><td>${t('ct.kvWin', win.rpm)}</td><td>${fmtHz(win.lo)}–${fmtHz(win.hi)} Hz · ${bandOk ? t('crep.inband') : t('crep.out')}</td></tr>
         <tr><td>1P / 3P</td><td>${fmtHz(win.p1)} / ${fmtHz(win.p3)} Hz</td></tr>
-        <tr><td>Línea base de commissioning</td><td>${operational ? 'capturada (f₁ = ' + fmtHz(f1) + ' Hz)' : 'pendiente'}</td></tr></table>
-      <h2>f₁ predicha vs medida por etapa</h2>
-      <table><thead><tr><th>Etapa</th><th style="text-align:right">Predicha (Hz)</th><th style="text-align:right">Medida (Hz)</th><th style="text-align:right">Estado</th></tr></thead><tbody>${rows}</tbody></table>
-      <p class="mut" style="margin-top:18px">Soft-stiff: la f₁ debe quedar ≥10% sobre 1P (giro del rotor) y ≤10% bajo 3P (paso de aspas). Una f₁ medida bajo la predicha indica base más flexible (pernos de brida sin pretensar, grout deficiente o fundación sin rigidez/curado). Datos de medición simulados hasta integrar OMA (R-21) / telemetría (R-10). Generado por ReWind.</p>
+        <tr><td>${t('crep.baseline')}</td><td>${operational ? t('crep.captured', fmtHz(f1)) : t('crep.pending')}</td></tr></table>
+      <h2>${t('crep.hStage')}</h2>
+      <table><thead><tr><th>${t('crep.thStage')}</th><th style="text-align:right">${t('crep.thPred')}</th><th style="text-align:right">${t('crep.thMeas')}</th><th style="text-align:right">${t('crep.thState')}</th></tr></thead><tbody>${rows}</tbody></table>
+      <p class="mut" style="margin-top:18px">${t('crep.foot')}</p>
     </div></html>`;
   const w = window.open('', '_blank'); if (w) { w.document.write(html); w.document.close(); }
 }
@@ -293,30 +294,32 @@ export function renderAvance(host, structures, selected, apply) {
 export function avanceReport(structures) {
   const d = computeParkAvance(structures);
   const comps = d.perComp.map(p => `<tr><td>${p.label}</td><td style="text-align:right">${fmtPct(p.pct)}</td></tr>`).join('');
-  const late = d.late.length ? d.late.map(l => `<tr><td>${l.label}</td><td style="text-align:right">${fmtPct(l.real)}</td><td style="text-align:right">${fmtPct(l.plan)}</td><td style="text-align:right;color:#b91c1c">−${Math.round(l.behind * 100)} pts</td></tr>`).join('') : '<tr><td colspan="4" style="color:#15803d">Ninguna torre atrasada.</td></tr>';
-  const html = `<!doctype html><html lang="es"><meta charset="utf-8"><title>Informe de avance — Parque Camán I</title>
+  const late = d.late.length ? d.late.map(l => `<tr><td>${l.label}</td><td style="text-align:right">${fmtPct(l.real)}</td><td style="text-align:right">${fmtPct(l.plan)}</td><td style="text-align:right;color:#b91c1c">−${Math.round(l.behind * 100)} pts</td></tr>`).join('') : `<tr><td colspan="4" style="color:#15803d">${t('arep.noLate')}</td></tr>`;
+  const state = Math.abs(d.planPct - d.realPct) < 0.05 ? t('arep.online') : (d.planPct > d.realPct ? t('arep.behind', Math.round((d.planPct - d.realPct) * 100)) : t('arep.ahead', Math.round((d.realPct - d.planPct) * 100)));
+  const lc = getLang() === 'en' ? 'en-GB' : 'es-CL';
+  const html = `<!doctype html><html lang="${getLang()}"><meta charset="utf-8"><title>${t('arep.titleShort')} — ${t('rep.park')}</title>
     <style>body{font:14px/1.5 system-ui,sans-serif;margin:0;color:#1b2533}.wrap{max-width:820px;margin:0 auto;padding:0 32px 40px}
     .hero{background:linear-gradient(120deg,#0e7490,#155e75);color:#fff;padding:24px 32px;margin-bottom:22px}.hero h1{margin:4px 0;font-size:22px}
     h2{font-size:15px;border-bottom:2px solid #cbd5e1;padding-bottom:5px;margin:26px 0 10px}.mut{color:#64748b;font-size:12px}
     .kpis{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin:14px 0}.kpi{background:#f8fafc;border:1px solid #cbd5e1;border-radius:8px;padding:12px}
     .kpi .v{font-size:23px;font-weight:800}.kpi .k{font-size:11px;color:#64748b;text-transform:uppercase}
     table{border-collapse:collapse;width:100%;font-size:13px;margin-top:6px}th,td{border:1px solid #cbd5e1;padding:6px 9px;text-align:left}th{background:#f1f5f9}</style>
-    <div class="hero"><div class="mut" style="color:#cfe9f1;letter-spacing:2px;text-transform:uppercase">ReWind · Avance de obra</div>
-      <h1>Informe de avance (DPR) — Parque Camán I</h1><div style="opacity:.9;font-size:13px">Generado ${new Date().toLocaleString('es-CL')}</div></div>
+    <div class="hero"><div class="mut" style="color:#cfe9f1;letter-spacing:2px;text-transform:uppercase">${t('arep.kicker')}</div>
+      <h1>${t('arep.title')} — ${t('rep.park')}</h1><div style="opacity:.9;font-size:13px">${t('rep.gen')} ${new Date().toLocaleString(lc)}</div></div>
     <div class="wrap">
-      <h2>Resumen</h2>
+      <h2>${t('arep.hSummary')}</h2>
       <div class="kpis">
-        <div class="kpi"><div class="v">${fmtPct(d.realPct)}</div><div class="k">Avance real</div></div>
-        <div class="kpi"><div class="v">${fmtPct(d.planPct)}</div><div class="k">Plan a hoy</div></div>
-        <div class="kpi"><div class="v">${d.slipDays > 0 ? '+' : ''}${d.slipDays} d</div><div class="k">Atraso medio</div></div>
-        <div class="kpi"><div class="v">${d.nOp}/${d.nTurb}</div><div class="k">Operativas</div></div>
+        <div class="kpi"><div class="v">${fmtPct(d.realPct)}</div><div class="k">${t('arep.kReal')}</div></div>
+        <div class="kpi"><div class="v">${fmtPct(d.planPct)}</div><div class="k">${t('arep.kPlan')}</div></div>
+        <div class="kpi"><div class="v">${d.slipDays > 0 ? '+' : ''}${d.slipDays} d</div><div class="k">${t('arep.kSlip')}</div></div>
+        <div class="kpi"><div class="v">${d.nOp}/${d.nTurb}</div><div class="k">${t('arep.kOp')}</div></div>
       </div>
-      <p class="mut">Estado vs plan: el parque va ${Math.abs(d.planPct - d.realPct) < 0.05 ? 'en línea con el plan' : (d.planPct > d.realPct ? `atrasado ${Math.round((d.planPct - d.realPct) * 100)} puntos` : `adelantado ${Math.round((d.realPct - d.planPct) * 100)} puntos`)}. ${d.nOp} operativas · ${d.nWip} en montaje · ${d.nFound} en fundación.</p>
-      <h2>Avance por componente</h2>
-      <table><thead><tr><th>Componente</th><th style="text-align:right">% parque</th></tr></thead><tbody>${comps}</tbody></table>
-      <h2>Torres atrasadas</h2>
-      <table><thead><tr><th>Torre</th><th style="text-align:right">Real</th><th style="text-align:right">Plan a hoy</th><th style="text-align:right">Brecha</th></tr></thead><tbody>${late}</tbody></table>
-      <p class="mut" style="margin-top:18px">Cronograma sintético/editable. El avance real definitivo provendrá de la captura en obra (DataSource / R-10).</p>
+      <p class="mut">${t('arep.statusLine', state, d.nOp, d.nWip, d.nFound)}</p>
+      <h2>${t('arep.hByComp')}</h2>
+      <table><thead><tr><th>${t('arep.thComp')}</th><th style="text-align:right">${t('arep.thPct')}</th></tr></thead><tbody>${comps}</tbody></table>
+      <h2>${t('arep.hLate')}</h2>
+      <table><thead><tr><th>${t('arep.thTower')}</th><th style="text-align:right">${t('arep.thReal')}</th><th style="text-align:right">${t('arep.thPlan')}</th><th style="text-align:right">${t('arep.thGap')}</th></tr></thead><tbody>${late}</tbody></table>
+      <p class="mut" style="margin-top:18px">${t('arep.foot')}</p>
     </div></html>`;
   const w = window.open('', '_blank');
   if (w) { w.document.write(html); w.document.close(); }
