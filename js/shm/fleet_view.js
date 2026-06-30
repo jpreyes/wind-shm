@@ -7,11 +7,11 @@
 // ─────────────────────────────────────────────────────────────────────────────
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
-import { createTurbine, TOWER_H } from './turbine_mesh.js?v=220';
-import { createSubstationTower, groundCable, overheadLine } from './structures.js?v=220';
-import { toScene, CAMAN_CENTER, LAYOUT_SCALE } from './parks_data_caman.js?v=220';
-import { CAMAN_ROADS } from './caman_roads.js?v=220';
-import { solarPosition, dateFromLocal, sunSceneDir } from './solar.js?v=220';
+import { createTurbine, TOWER_H } from './turbine_mesh.js?v=221';
+import { createSubstationTower, groundCable, overheadLine } from './structures.js?v=221';
+import { toScene, CAMAN_CENTER, LAYOUT_SCALE } from './parks_data_caman.js?v=221';
+import { CAMAN_ROADS } from './caman_roads.js?v=221';
+import { solarPosition, dateFromLocal, sunSceneDir } from './solar.js?v=221';
 
 const SPACING = 235;
 const TOWER_SCALE = 2.2;   // agranda las torres (vista esquemática) para que destaquen sobre el relieve
@@ -86,8 +86,14 @@ export class FleetView {
 
     this.controls = new OrbitControls(this.camera, this.renderer.domElement);
     this.controls.enableDamping = true;
+    this.controls.screenSpacePanning = true;          // panear en el plano de pantalla (manito)
     this.controls.target.set(0, TOWER_H * 0.4, 0);
     this.controls.maxPolarAngle = Math.PI * 0.495;   // no bajar del horizonte
+    // Botones por defecto (igual que structweb3d): izq=orbitar, medio=zoom, der=panear.
+    this._MB_ORBIT = { LEFT: THREE.MOUSE.ROTATE, MIDDLE: THREE.MOUSE.DOLLY, RIGHT: THREE.MOUSE.PAN };
+    this._MB_PAN = { LEFT: THREE.MOUSE.PAN, MIDDLE: THREE.MOUSE.DOLLY, RIGHT: THREE.MOUSE.PAN };
+    this.controls.mouseButtons = this._MB_ORBIT;
+    this.panMode = false;
 
     this._lights();
     this._ground();
@@ -255,7 +261,7 @@ export class FleetView {
   // ── Relieve conceptual (capa de terreno) ─────────────────────────────────────
   // Carga el DEM vendorizado y añade la malla (oculta hasta activarla).
   async loadTerrain(url) {
-    const { Terrain } = await import('./terrain.js?v=220');
+    const { Terrain } = await import('./terrain.js?v=221');
     this._TerrainClass = Terrain;                     // para reconstruir al cambiar de escala
     const dem = await (await fetch(url)).json();
     this.terrain = new Terrain(dem, { vex: 1.5 });   // relieve exagerado (esquemático)
@@ -669,6 +675,15 @@ export class FleetView {
 
   setEditMode(b) { this.editMode = !!b; this.renderer.domElement.style.cursor = b ? 'move' : ''; if (!b) this._drag = null; }
 
+  // Modo PAN (manito): arrastrar con la izquierda panea en vez de orbitar; al salir
+  // se restaura el orbit. Igual que en structweb3d (viewport.setMode('pan')).
+  setPanMode(on) {
+    this.panMode = !!on;
+    this.controls.enableRotate = !on;
+    this.controls.mouseButtons = on ? this._MB_PAN : this._MB_ORBIT;
+    this.renderer.domElement.style.cursor = on ? 'grab' : '';
+  }
+
   // Animación de entrada: barrido aéreo que desciende sobre el parque.
   playIntro() {
     const f = this.frame();
@@ -700,7 +715,8 @@ export class FleetView {
       if (!downXY) return;
       const moved = Math.hypot(e.clientX - downXY[0], e.clientY - downXY[1]);
       downXY = null;
-      if (moved > 5) return;          // fue un arrastre (orbitar), no un clic
+      if (moved > 5) return;          // fue un arrastre (orbitar/panear), no un clic
+      if (this.panMode) return;       // en modo PAN el clic no selecciona (es navegación)
       this._pick(e);
     });
   }
