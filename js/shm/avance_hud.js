@@ -9,10 +9,25 @@
 // más un botón «Abrir partida» (vista completa). Sólo DOM/overlay; el 3D lo provee
 // fleet_view (anchorScreenAt / focusComponent).
 // ─────────────────────────────────────────────────────────────────────────────
-import { TURBINE_COMPONENTS, HV_COMPONENTS, enrichStages } from './parks_data_caman.js?v=271';
-import * as CTwin from './construction_twin.js?v=271';
+import { TURBINE_COMPONENTS, HV_COMPONENTS, enrichStages } from './parks_data_caman.js?v=272';
+import * as CTwin from './construction_twin.js?v=272';
+import * as Insp from './inspection.js?v=272';
 
 const fmt = (iso) => { if (!iso) return '—'; const [y, m, d] = iso.split('-'); return `${d}/${m}/${y.slice(2)}`; };
+
+// ── Inspección/sensores: helpers para el HUD multi-modo ──────────────────────
+const _norm = (s) => (s || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
+// Mapea la ubicación de un hallazgo al componente más cercano del HUD.
+const LOC_MAP = [
+  [/fundaci|zapata|losa|pilote|anclaje|grout/, 'fundacion'],
+  [/gondola|nacelle/, 'gondola'],
+  [/rotor|aspa|pala|buje|hub/, 'rotor'],
+  [/cable|colector|subestac/, 'cableado'],
+  [/fuste|torre|brida|perno|base/, 'fuste'],
+];
+const compOfLocation = (loc) => { const n = _norm(loc); for (const [re, c] of LOC_MAP) if (re.test(n)) return c; return 'fuste'; };
+const sevClass = (sev) => { const n = _norm(sev); if (/muy alta|alta/.test(n)) return 'bad'; if (/media|moderad/.test(n)) return 'wip'; return 'ok'; };
+const sensorLabel = (se) => { const id = se.id || ''; if (/top|tope|sup/.test(id)) return 'Acelerómetro tope'; if (/mid|cent|med/.test(id)) return 'Acelerómetro centro'; return 'Sensor ' + id; };
 
 // ── Foto MOCKUP por componente (SVG → data URI) ──────────────────────────────
 // Hasta tener fotos reales (R-10), inventa una «foto de obra» plausible por
@@ -67,6 +82,9 @@ export function buildAvanceHUD(vpwrap, fleet) {
   const svg = root.querySelector('.ah-lines');
 
   let cur = null, comps = [], stages = [], callouts = [], expanded = null;
+  let mode = 'avance';            // 'avance' | 'insp' | 'shm'
+  let inspByComp = null;          // Map component → [hallazgos] (modo insp)
+  let _lastShm = 0;               // throttle de refresco en vivo (modo shm)
   const lastExp = {};   // recuerda la última partida abierta por torre (id → component)
 
   function clear() {
@@ -91,23 +109,37 @@ export function buildAvanceHUD(vpwrap, fleet) {
     };
   }
 
-  function show(st) {
+  function show(st, m = 'avance') {
     clear();
     if (!st || (st.type !== 'turbine' && st.type !== 'hv')) { root.style.display = 'none'; cur = null; return; }
-    cur = st;
-    comps = st.type === 'hv' ? HV_COMPONENTS : TURBINE_COMPONENTS;
-    stages = enrichStages(st.stages, st.type, st.id);
-    st.stages = stages;                                   // persiste el enriquecido en la estructura
+    cur = st; mode = (m === 'insp' || m === 'shm') ? m : 'avance';
     root.style.display = 'block';
-    const twin = st.type === 'turbine' ? buildTwinChecks(st, stages) : null;   // crosslink gemelo de construcción (R-31)
+
+    if (mode === 'shm') {
+      comps = (st.sensors || []).map(se => ({ component: se.id, label: sensorLabel(se), icon: '📡', yFrac: se._hfrac ?? (/mid/.test(se.id) ? 0.5 : 0.92) }));
+    } else {
+      comps = st.type === 'hv' ? HV_COMPONENTS : TURBINE_COMPONENTS;
+      stages = enrichStages(st.stages, st.type, st.id);
+      st.stages = stages;                                 // persiste el enriquecido en la estructura
+    }
+    const twin = (mode === 'avance' && st.type === 'turbine') ? buildTwinChecks(st, stages) : null;   // crosslink gemelo (R-31)
+    if (mode === 'insp') {                                // agrupa los hallazgos de la última inspección por componente
+      inspByComp = new Map(comps.map(c => [c.component, []]));
+      const latest = Insp.getInspections(st.id)[0];
+      for (const d of (latest?.damages || [])) {
+        let cc = compOfLocation(d.location); if (!inspByComp.has(cc)) cc = comps[0]?.component;
+        inspByComp.get(cc)?.push(d);
+      }
+    } else inspByComp = null;
+
     // Lados: base a la izquierda, cuerpo/tope a la derecha (se reparte para no chocar).
     comps.forEach((c, i) => {
-      const stage = stages[i] || { pct: 0 };
+      const stage = mode === 'avance' ? (stages[i] || { pct: 0 }) : {};
       const side = c.yFrac >= 0.45 ? 'right' : 'left';
       const el = document.createElement('div');
       el.className = `ah-callout side-${side}`;
       el.dataset.component = c.component;
-      const photos = photosFor(c, stage);               // reales o mockups (no se persisten)
+      const photos = mode === 'avance' ? photosFor(c, stage) : [];
       callouts.push({ el, comp: c, stage, side, photos, twin: twin ? twin[c.component] : null });
       el.addEventListener('click', (e) => { if (!e.target.closest('.ah-open')) toggle(c.component); });
       const line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
@@ -116,13 +148,22 @@ export function buildAvanceHUD(vpwrap, fleet) {
       callouts[callouts.length - 1].line = line;
       root.appendChild(el);
     });
-    // Auto-despliegue: la última abierta de esta torre → la que se está EJECUTANDO
-    // (parcial) → el frente actual (primera incompleta) → la última si todo está hecho.
-    // (Sin «girito» automático; el giro sólo al clic del usuario.)
-    const wip = comps.find((c, i) => stages[i] && stages[i].pct > 0 && stages[i].pct < 100);
-    const front = comps.find((c, i) => stages[i] && stages[i].pct < 100);
-    const pick = (lastExp[st.id] && comps.some(c => c.component === lastExp[st.id]) ? lastExp[st.id] : null)
-      || wip?.component || front?.component || comps[comps.length - 1]?.component;
+    // Auto-despliegue según el modo: avance → la que está en ejecución; insp → la de
+    // mayor severidad / con hallazgos; shm → el sensor en falla (o el primero).
+    let pick = null;
+    if (mode === 'avance') {
+      const wip = comps.find((c, i) => stages[i] && stages[i].pct > 0 && stages[i].pct < 100);
+      const front = comps.find((c, i) => stages[i] && stages[i].pct < 100);
+      pick = (lastExp[st.id] && comps.some(c => c.component === lastExp[st.id]) ? lastExp[st.id] : null)
+        || wip?.component || front?.component || comps[comps.length - 1]?.component;
+    } else if (mode === 'insp') {
+      pick = (comps.find(c => (inspByComp.get(c.component) || []).some(d => sevClass(d.severity) === 'bad'))
+        || comps.find(c => (inspByComp.get(c.component) || []).length))?.component || null;
+    } else {
+      const sum = window.shmData?.get(st.id);
+      pick = (comps.find(c => ((sum?.sensors || st.sensors || []).find(s => s.id === c.component)?.status) === 'fault')
+        || comps[0])?.component || null;
+    }
     expanded = pick || null;
     renderCallouts();
     // En modo compacto, encuadra la torre corrida a la derecha para que la columna
@@ -133,6 +174,8 @@ export function buildAvanceHUD(vpwrap, fleet) {
   const isCompact = () => wrap.getBoundingClientRect().width < 720;
 
   function renderCallouts() {
+    if (mode === 'insp') return renderInspCallouts();
+    if (mode === 'shm') return renderShmCallouts();
     for (const co of callouts) {
       const s = co.stage, sm = sema(s), open = expanded === co.comp.component;
       const slip = slipDays(s);
@@ -166,6 +209,66 @@ export function buildAvanceHUD(vpwrap, fleet) {
     }
   }
 
+  // Callouts de INSPECCIÓN: hallazgos por componente (cuenta + severidad).
+  function renderInspCallouts() {
+    for (const co of callouts) {
+      const ds = inspByComp?.get(co.comp.component) || [];
+      const n = ds.length;
+      const cls = !n ? 'done' : ds.some(d => sevClass(d.severity) === 'bad') ? 'bad'
+        : ds.some(d => sevClass(d.severity) === 'wip') ? 'wip' : 'ok';
+      const open = expanded === co.comp.component;
+      co.el.classList.toggle('open', open);
+      const rows = ds.map(d => `<div class="ah-find"><span class="ah-dot ${sevClass(d.severity)}"></span><b>${d.damage_type}</b> <span class="ah-mut">${d.severity}${d.damage_cause ? ' · ' + d.damage_cause : ''}</span></div>`).join('') || '<div class="ah-mut">Sin hallazgos en esta zona.</div>';
+      co.el.innerHTML = `
+        <div class="ah-head">
+          <span class="ah-dot ${cls}"></span><span class="ah-ico">${co.comp.icon}</span>
+          <span class="ah-name">${co.comp.label}</span>
+          <span class="ah-pct">${n ? n + '⚐' : '✓'}</span>
+          <span class="ah-chev">${open ? '▾' : '▸'}</span>
+        </div>
+        ${open ? `<div class="ah-body"><div class="ah-finds">${rows}</div><button class="ah-open" type="button">Ver inspección ›</button></div>` : ''}`;
+      if (open) co.el.querySelector('.ah-open')?.addEventListener('click', (e) => { e.stopPropagation(); window.shmDash?.showInsp?.(); });
+    }
+  }
+
+  // Callouts de SENSORES: estado/RMS en vivo por sensor (a su altura real).
+  function renderShmCallouts() {
+    const sum = window.shmData?.get(cur.id);
+    for (const co of callouts) {
+      const se = (sum?.sensors || []).find(s => s.id === co.comp.component) || (cur.sensors || []).find(s => s.id === co.comp.component);
+      const fault = se?.status === 'fault';
+      const rms = se && se.rms != null ? (se.rms * 1000).toFixed(1) + ' mg' : '—';
+      const open = expanded === co.comp.component;
+      co.el.classList.toggle('open', open);
+      co.el.innerHTML = `
+        <div class="ah-head">
+          <span class="ah-dot ${fault ? 'bad' : 'done'}"></span><span class="ah-ico">${co.comp.icon}</span>
+          <span class="ah-name">${co.comp.label}</span>
+          <span class="ah-pct ah-live-rms">${fault ? 'FALLA' : rms}</span>
+          <span class="ah-chev">${open ? '▾' : '▸'}</span>
+        </div>
+        ${open ? `<div class="ah-body"><table class="ah-kv">
+          <tr><td>Estado</td><td>${fault ? '<b class="late">en falla</b>' : 'operativo'}</td></tr>
+          <tr><td>RMS</td><td class="ah-live-rms">${rms}</td></tr>
+          <tr><td>f₁ actual</td><td>${sum?.f1 != null ? sum.f1.toFixed(3) + ' Hz' : '—'}</td></tr>
+          <tr><td>Temperatura</td><td>${sum?.temp != null ? sum.temp.toFixed(1) + ' °C' : '—'}</td></tr>
+        </table><button class="ah-open" type="button">Ver SHM ›</button></div>` : ''}`;
+      if (open) co.el.querySelector('.ah-open')?.addEventListener('click', (e) => { e.stopPropagation(); window.shmDash?.showSHM?.(); });
+    }
+  }
+
+  // Refresca SÓLO los valores en vivo del modo sensores (sin reconstruir el DOM).
+  function refreshShmValues() {
+    const sum = window.shmData?.get(cur.id);
+    for (const co of callouts) {
+      const se = (sum?.sensors || []).find(s => s.id === co.comp.component);
+      const fault = se?.status === 'fault';
+      const rms = se && se.rms != null ? (se.rms * 1000).toFixed(1) + ' mg' : '—';
+      co.el.querySelectorAll('.ah-live-rms').forEach(n => n.textContent = fault ? 'FALLA' : rms);
+      const dot = co.el.querySelector('.ah-head .ah-dot'); if (dot) dot.className = `ah-dot ${fault ? 'bad' : 'done'}`;
+    }
+  }
+
   function toggle(component) {
     expanded = expanded === component ? null : component;
     if (cur) lastExp[cur.id] = expanded;                 // recuerda lo dejado abierto
@@ -177,6 +280,7 @@ export function buildAvanceHUD(vpwrap, fleet) {
   function tick() {
     if (cur && fleet.sunMode) { hide(); return; }      // en modo Shadow el HUD se oculta (manda el estudio de sombra)
     if (!cur || root.style.display === 'none') return;
+    if (mode === 'shm') { const now = performance.now(); if (now - _lastShm > 700) { _lastShm = now; refreshShmValues(); } }
     const wr = wrap.getBoundingClientRect();
     svg.setAttribute('width', wr.width); svg.setAttribute('height', wr.height);
     const off = 96, vis = [];

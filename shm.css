@@ -258,6 +258,12 @@ body.shm.view-2d .vp-pip-resize {
 .ah-dot.done { background: #22c55e; color: #22c55e; }
 .ah-dot.wip { background: #f59e0b; color: #f59e0b; }
 .ah-dot.pend { background: #64748b; color: #64748b; box-shadow: none; }
+.ah-dot.ok { background: #22c55e; color: #22c55e; }
+.ah-dot.bad { background: #ef4444; color: #ef4444; }
+/* HUD · lista de hallazgos (modo inspección) */
+.ah-finds { display: flex; flex-direction: column; gap: 4px; margin-bottom: 7px; }
+.ah-find { display: flex; align-items: center; gap: 6px; font-size: 11px; line-height: 1.3; }
+.ah-find .ah-dot { width: 7px; height: 7px; }
 .ah-barwrap { height: 4px; background: rgba(255,255,255,.12); border-radius: 3px; overflow: hidden; margin-top: 6px; }
 .ah-barwrap.big { height: 10px; flex: 1; }
 .ah-bar { display: block; height: 100%; background: var(--accent, #38bdf8); border-radius: 3px; }
