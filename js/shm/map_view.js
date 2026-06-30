@@ -6,12 +6,13 @@
 // Click en un marcador → conmuta a la vista 3D enfocando esa estructura (onPick).
 // Leaflet se carga como global (window.L) desde lib/leaflet/leaflet.js.
 // ─────────────────────────────────────────────────────────────────────────────
-import { CAMAN_CENTER } from './parks_data_caman.js?v=267';
-import { CAMAN_ROADS } from './caman_roads.js?v=267';
-import { compassRoseSVG } from './compass.js?v=267';
-import { annualFlicker, flickerOK, FLICKER_LIMITS, REAL_CASE_FACTOR, flickerMap, criticalWindow, interTurbineShading } from './shadow_flicker.js?v=267';
-import { realCaseWeight, METEO_CAMAN } from './meteo_caman.js?v=267';
-import { parseReceptorFile } from './receptor_import.js?v=267';
+import { CAMAN_CENTER } from './parks_data_caman.js?v=268';
+import { CAMAN_ROADS } from './caman_roads.js?v=268';
+import { compassRoseSVG } from './compass.js?v=268';
+import { annualFlicker, flickerOK, FLICKER_LIMITS, REAL_CASE_FACTOR, flickerMap, criticalWindow, interTurbineShading } from './shadow_flicker.js?v=268';
+import { realCaseWeight, METEO_CAMAN } from './meteo_caman.js?v=268';
+import { parseReceptorFile } from './receptor_import.js?v=268';
+import { t, getLang } from './i18n.js?v=268';
 
 const REAL_W = (month, antiAz) => realCaseWeight(month, antiAz, METEO_CAMAN);   // ponderador meteo del sitio
 
@@ -41,7 +42,6 @@ function atIcon(color) {
 const iconFor = (st) => st.type === 'hv' ? atIcon(colorFor(st)) : turbineIcon(colorFor(st));
 
 const M_PER_DEG_LAT = 111320;
-const MES_INI = ['E', 'F', 'M', 'A', 'M', 'J', 'J', 'A', 'S', 'O', 'N', 'D'];
 
 // Calendario de parpadeo mes×hora (la gráfica «de facto» del software del rubro):
 // celdas coloreadas por minutos/año de sombra → revela la ventana crítica del receptor.
@@ -49,12 +49,13 @@ const MES_INI = ['E', 'F', 'M', 'A', 'M', 'J', 'J', 'A', 'S', 'O', 'N', 'D'];
 function shadowCalendarSVG(cal) {
   let h0 = 24, h1 = -1;
   for (let mo = 0; mo < 12; mo++) for (let h = 0; h < 24; h++) { if (cal[mo * 24 + h] > 0) { if (h < h0) h0 = h; if (h > h1) h1 = h; } }
-  if (h1 < 0) return '<p class="muted">Sin parpadeo: ninguna turbina proyecta sombra sobre este receptor.</p>';
+  if (h1 < 0) return `<p class="muted">${t('mv.calNone')}</p>`;
   h0 = Math.max(0, h0 - 1); h1 = Math.min(23, h1 + 1);
   const cw = 30, chh = 15, mx = 42, my = 22, rows = h1 - h0 + 1, W = mx + 12 * cw + 8, H = my + rows * chh + 8;
   const color = (v) => v <= 0 ? '#eef2f7' : v >= 300 ? '#ef4444' : v >= 120 ? '#fb923c' : v >= 30 ? '#fde047' : '#bee678';
   let s = '';
-  for (let mo = 0; mo < 12; mo++) s += `<text x="${mx + mo * cw + cw / 2}" y="${my - 6}" text-anchor="middle" font-size="10" fill="#64748b">${MES_INI[mo]}</text>`;
+  const MES = t('months.ini');
+  for (let mo = 0; mo < 12; mo++) s += `<text x="${mx + mo * cw + cw / 2}" y="${my - 6}" text-anchor="middle" font-size="10" fill="#64748b">${MES[mo]}</text>`;
   for (let h = h0; h <= h1; h++) {
     const y = my + (h - h0) * chh;
     s += `<text x="${mx - 7}" y="${y + chh - 4}" text-anchor="end" font-size="9" fill="#64748b">${String(h).padStart(2, '0')}h</text>`;
@@ -82,7 +83,7 @@ export class MapView {
     const topo = L.tileLayer('https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png',
       { maxNativeZoom: 17, maxZoom: 20, attribution: '© OpenTopoMap (CC-BY-SA), © OpenStreetMap' });
     this.map = L.map(this.el, { center: [CAMAN_CENTER.lat, CAMAN_CENTER.lon], zoom: 12, layers: [sat], zoomControl: true, maxZoom: 20 });
-    L.control.layers({ 'Satélite': sat, 'Topográfico': topo }, null, { position: 'topright' }).addTo(this.map);
+    L.control.layers({ [t('mv.satellite')]: sat, [t('mv.topo')]: topo }, null, { position: 'topright' }).addTo(this.map);
     L.control.scale({ imperial: false, position: 'bottomleft' }).addTo(this.map);   // barra de escala (métrica)
     // Rosa de los vientos (fija, norte-arriba: el mapa no rota).
     const RoseCtl = L.Control.extend({ onAdd() { const d = L.DomUtil.create('div', 'mv-rose'); d.innerHTML = compassRoseSVG(); return d; } });
@@ -92,7 +93,7 @@ export class MapView {
     const self = this;
     const FullBtn = L.Control.extend({ onAdd() {
       const b = L.DomUtil.create('button', 'mv-full'); b.type = 'button'; b.innerHTML = '⤢';
-      b.title = 'Pantalla completa / restaurar';
+      b.title = t('mv.fullscreen');
       L.DomEvent.disableClickPropagation(b);
       L.DomEvent.on(b, 'click', (e) => { L.DomEvent.stop(e); self.onToggleFull(); });
       return b;
@@ -136,12 +137,12 @@ export class MapView {
     this._receptors.push(entry);
     if (name) m.bindTooltip(name, { direction: 'top' });
     m.bindPopup(
-      `<b>${name || 'Receptor ' + n}</b><br>Worst-case: <b>${res.hoursYear.toFixed(1)} h/año</b> · ${res.maxMinDay} min/día<br>` +
-      `Real (meteo) ≈ <b>${res.hoursYearReal.toFixed(1)} h/año</b><br>` +
-      `${res.daysAffected} días afectados<br>` +
-      (win ? `Parada sugerida: <b>${win.months}</b>, <b>${win.hours}</b><br>` : '') +
-      `<span style="color:${col}">${ok ? '✓ Cumple' : '✗ Excede'}</span> (≤${FLICKER_LIMITS.hoursYear} h · ≤${FLICKER_LIMITS.minDay} min, worst-case)<br>` +
-      `<a href="#" class="rcp-del">Quitar</a>`
+      `<b>${name || t('ssh.rcpName', n)}</b><br>${t('mv.worst')}: <b>${res.hoursYear.toFixed(1)} ${t('ssh.hYear')}</b> · ${t('ssh.minDay', res.maxMinDay)}<br>` +
+      `${t('mv.popReal', res.hoursYearReal.toFixed(1))}<br>` +
+      `${t('mv.popDays', res.daysAffected)}<br>` +
+      (win ? `${t('mv.popShutdown', win.months, win.hours)}<br>` : '') +
+      `<span style="color:${col}">${ok ? t('frep.badgeOk') : t('frep.badgeBad')}</span>${t('mv.popLimit', FLICKER_LIMITS.hoursYear, FLICKER_LIMITS.minDay)}<br>` +
+      `<a href="#" class="rcp-del">${t('mv.popRemove')}</a>`
     );
     if (!opts.silent) m.openPopup();
     m.on('popupopen', (ev) => { const a = ev.popup.getElement()?.querySelector('.rcp-del'); a && a.addEventListener('click', (x) => { x.preventDefault(); this.recepLayer.removeLayer(m); this._receptors = this._receptors.filter(r => r !== entry); window.shmDash?.refreshShadow?.(); }); });
@@ -153,13 +154,13 @@ export class MapView {
   async importReceptors(file) {
     let pts;
     try { pts = await parseReceptorFile(file); }
-    catch (err) { alert('No se pudo importar: ' + (err.message || err)); return 0; }
-    if (!pts.length) { alert('No se encontraron puntos válidos en ' + file.name + '.'); return 0; }
+    catch (err) { alert(t('mv.impFail', err.message || err)); return 0; }
+    if (!pts.length) { alert(t('mv.impNone', file.name)); return 0; }
     if (!this.sunMode) this.sunMode = true;   // permite importar aunque el clic-receptor esté inactivo
     for (const p of pts) this.addReceptor({ lat: p.lat, lng: p.lon }, { name: p.name, silent: true, stepMin: 5 });
     if (this._receptors?.length) { try { this.map.fitBounds(this._receptors.map(r => [r.lat, r.lon]), { padding: [40, 40] }); } catch {} }
     window.shmDash?.refreshShadow?.();
-    alert(`Importados ${pts.length} receptor(es) desde ${file.name}.`);
+    alert(t('mv.impOk', pts.length, file.name));
     return pts.length;
   }
 
@@ -180,7 +181,7 @@ export class MapView {
     if (this._flickerOverlay) { this.map.removeLayer(this._flickerOverlay); this._flickerOverlay = null; this.fleet.clearFlickerSurface?.(); return false; }
     const lats = [], lons = [];
     for (const t of this.fleet.structures) { if (t.type !== 'hv' && t.lat != null && (t.built ?? 1) >= 0.97) { lats.push(t.lat); lons.push(t.lon); } }
-    if (!lats.length) { alert('No hay turbinas operativas para el mapa de flicker.'); return false; }
+    if (!lats.length) { alert(t('mv.noTurbMap')); return false; }
     const pad = 0.018;
     const bbox = { lat0: Math.min(...lats) - pad, lat1: Math.max(...lats) + pad, lon0: Math.min(...lons) - pad, lon1: Math.max(...lons) + pad };
     const map = flickerMap(this.fleet.structures, bbox, { nx: 160, ny: 110, stepMin: 15 });
@@ -273,35 +274,35 @@ export class MapView {
   // calendario mes×hora, tabla de cumplimiento y programa de turbinas → imprimible.
   flickerReport() {
     const rs = this._receptors || [];
-    if (!rs.length) { alert('Agrega receptores (clic en el mapa 2D con Shadow activo) para generar el informe.'); return; }
+    if (!rs.length) { alert(t('mv.addRcpFirst')); return; }
     const nEx = rs.filter(r => !r.ok).length, nOk = rs.length - nEx;
-    const verdict = nEx ? { t: `NO CUMPLE — ${nEx} de ${rs.length} receptor(es) excede(n) el límite`, c: 'bad' }
-                        : { t: `CUMPLE — ${rs.length}/${rs.length} receptor(es) bajo el límite`, c: 'ok' };
-    const turbs = this.fleet.structures.filter(t => t.lat != null && t.type !== 'hv');
-    const nOp = turbs.filter(t => (t.built ?? 1) >= 0.97).length;
+    const verdict = nEx ? { t: t('frep.verdNo', nEx, rs.length), c: 'bad' }
+                        : { t: t('frep.verdOk', rs.length), c: 'ok' };
+    const turbs = this.fleet.structures.filter(s => s.lat != null && s.type !== 'hv');
+    const nOp = turbs.filter(s => (s.built ?? 1) >= 0.97).length;
     const labelById = new Map(this.fleet.structures.map(s => [s.id, s.label || s.id]));
-    const gen = new Date().toLocaleString('es-CL');
+    const gen = new Date().toLocaleString(getLang() === 'en' ? 'en-GB' : 'es-CL');
     const siteImg = this._siteMapDataURL(rs);
 
-    const badge = (ok) => `<span class="badge ${ok ? 'ok' : 'bad'}">${ok ? '✓ Cumple' : '✗ Excede'}</span>`;
-    const calLegend = `<div class="leg"><span><i style="background:#bee678"></i>&lt;30</span><span><i style="background:#fde047"></i>30–120</span><span><i style="background:#fb923c"></i>120–300</span><span><i style="background:#ef4444"></i>≥300 min/año</span></div>`;
+    const badge = (ok) => `<span class="badge ${ok ? 'ok' : 'bad'}">${ok ? t('frep.badgeOk') : t('frep.badgeBad')}</span>`;
+    const calLegend = `<div class="leg"><span><i style="background:#bee678"></i>&lt;30</span><span><i style="background:#fde047"></i>30–120</span><span><i style="background:#fb923c"></i>120–300</span><span><i style="background:#ef4444"></i>≥300 ${t('frep.calLegUnit')}</span></div>`;
 
     // Ficha por receptor (la sección rica del informe)
     const cards = rs.map(r => {
       const top = [...r.res.byTurbine.entries()].sort((a, b) => b[1] - a[1]).slice(0, 5)
         .map(([id, min]) => `${labelById.get(id)} (${(min / 60).toFixed(1)} h)`).join(', ') || '—';
-      const win = r.win ? `${r.win.months} · ${r.win.hours} (pico ${r.win.peak.month} ${r.win.peak.hour})` : '—';
+      const win = r.win ? `${r.win.months} · ${r.win.hours} (${t('frep.peak')} ${r.win.peak.month} ${r.win.peak.hour})` : '—';
       return `<div class="card">
-        <div class="card-h"><b>${r.name ? r.name + ' (#' + r.n + ')' : 'Receptor #' + r.n}</b> ${badge(r.ok)}<span class="muted">${r.lat.toFixed(5)}, ${r.lon.toFixed(5)}</span></div>
+        <div class="card-h"><b>${r.name ? r.name + ' (#' + r.n + ')' : t('ssh.rcpName', r.n)}</b> ${badge(r.ok)}<span class="muted">${r.lat.toFixed(5)}, ${r.lon.toFixed(5)}</span></div>
         <div class="stats">
-          <div class="stat"><div class="sv ${r.res.hoursYear > 30 ? 'over' : ''}">${r.res.hoursYear.toFixed(1)}</div><div class="sk">h/año worst-case</div></div>
-          <div class="stat"><div class="sv ${r.res.maxMinDay > 30 ? 'over' : ''}">${r.res.maxMinDay}</div><div class="sk">min/día máx</div></div>
-          <div class="stat"><div class="sv">${r.res.daysAffected}</div><div class="sk">días afectados</div></div>
-          <div class="stat"><div class="sv">${r.res.hoursYearReal.toFixed(1)}</div><div class="sk">h/año real (meteo)</div></div>
+          <div class="stat"><div class="sv ${r.res.hoursYear > 30 ? 'over' : ''}">${r.res.hoursYear.toFixed(1)}</div><div class="sk">${t('frep.svWorst')}</div></div>
+          <div class="stat"><div class="sv ${r.res.maxMinDay > 30 ? 'over' : ''}">${r.res.maxMinDay}</div><div class="sk">${t('frep.svMaxDay')}</div></div>
+          <div class="stat"><div class="sv">${r.res.daysAffected}</div><div class="sk">${t('frep.svDays')}</div></div>
+          <div class="stat"><div class="sv">${r.res.hoursYearReal.toFixed(1)}</div><div class="sk">${t('frep.svReal')}</div></div>
         </div>
-        <div class="cal-wrap"><div class="cal-t">Calendario de parpadeo (mes × hora local — minutos/año)</div>${shadowCalendarSVG(r.res.cal)}${calLegend}</div>
-        <table class="kv"><tr><td>Ventana crítica / parada sugerida</td><td>${win}</td></tr>
-          <tr><td>Turbinas que más contribuyen</td><td>${top}</td></tr></table>
+        <div class="cal-wrap"><div class="cal-t">${t('frep.calT')}</div>${shadowCalendarSVG(r.res.cal)}${calLegend}</div>
+        <table class="kv"><tr><td>${t('frep.kvWin')}</td><td>${win}</td></tr>
+          <tr><td>${t('frep.kvTop')}</td><td>${top}</td></tr></table>
       </div>`;
     }).join('');
 
@@ -312,13 +313,13 @@ export class MapView {
       `<td>${r.win ? r.win.months + ' · ' + r.win.hours : '—'}</td>` +
       `<td class="ctr">${badge(r.ok)}</td></tr>`).join('');
 
-    const schedRows = turbs.map(t => {
-      const b = t.built ?? 1, st = b >= 0.97 ? 'Operativa' : b <= 0.02 ? 'Fundación' : `Montaje ${(b * 100) | 0}%`;
-      return `<tr><td>${t.label || t.id}</td><td class="num">${t.lat.toFixed(5)}</td><td class="num">${t.lon.toFixed(5)}</td><td>${st}</td></tr>`;
+    const schedRows = turbs.map(tb => {
+      const b = tb.built ?? 1, st = b >= 0.97 ? t('frep.stOp') : b <= 0.02 ? t('frep.stFound') : t('frep.stMount', (b * 100) | 0);
+      return `<tr><td>${tb.label || tb.id}</td><td class="num">${tb.lat.toFixed(5)}</td><td class="num">${tb.lon.toFixed(5)}</td><td>${st}</td></tr>`;
     }).join('');
 
-    const html = `<!doctype html><html lang="es"><meta charset="utf-8">
-      <title>Informe de shadow-flicker — Parque Camán I</title>
+    const html = `<!doctype html><html lang="${getLang()}"><meta charset="utf-8">
+      <title>${t('frep.title')}</title>
       <style>
         :root{--ink:#1b2533;--mut:#64748b;--line:#cbd5e1;--bg:#f8fafc;--ok:#15803d;--bad:#b91c1c}
         *{box-sizing:border-box}
@@ -363,52 +364,52 @@ export class MapView {
         footer a{color:#0e7490}
         @media print{.hero{-webkit-print-color-adjust:exact;print-color-adjust:exact}.card{break-inside:avoid}}
       </style>
-      <div class="hero"><div class="brand">ReWind · SHM de parques eólicos</div>
-        <h1>Informe de parpadeo de sombra (shadow-flicker)</h1>
-        <div class="sub">Parque eólico Camán I · Generado ${gen}</div></div>
+      <div class="hero"><div class="brand">${t('frep.brand')}</div>
+        <h1>${t('frep.h1')}</h1>
+        <div class="sub">${t('rep.park')} · ${t('rep.gen')} ${gen}</div></div>
       <div class="wrap">
-        <h2>1 · Resumen ejecutivo</h2>
+        <h2>${t('frep.h1Exec')}</h2>
         <div class="verdict ${verdict.c}">${verdict.c === 'ok' ? '✓' : '✗'} ${verdict.t}</div>
-        <p class="muted">Evaluación según el criterio worst-case astronómico (norma alemana LAI, el que acepta la autoridad): sol siempre despejado y rotor siempre girando con las aspas perpendiculares al observador. Límites de referencia: <b>≤30 h/año</b> y <b>≤30 min/día</b>.</p>
+        <p class="muted">${t('frep.execNote')}</p>
         <div class="kpis">
-          <div class="kpi"><div class="v">${nOp}</div><div class="k">Turbinas operativas</div></div>
-          <div class="kpi"><div class="v">${rs.length}</div><div class="k">Receptores evaluados</div></div>
-          <div class="kpi"><div class="v" style="color:var(--ok)">${nOk}</div><div class="k">Cumplen</div></div>
-          <div class="kpi"><div class="v" style="color:var(--bad)">${nEx}</div><div class="k">Exceden</div></div>
+          <div class="kpi"><div class="v">${nOp}</div><div class="k">${t('frep.kTurbOp')}</div></div>
+          <div class="kpi"><div class="v">${rs.length}</div><div class="k">${t('frep.kRcpEval')}</div></div>
+          <div class="kpi"><div class="v" style="color:var(--ok)">${nOk}</div><div class="k">${t('frep.kComply')}</div></div>
+          <div class="kpi"><div class="v" style="color:var(--bad)">${nEx}</div><div class="k">${t('frep.kExceed')}</div></div>
         </div>
 
-        <h2>2 · Parámetros del estudio</h2>
+        <h2>${t('frep.h2Params')}</h2>
         <div class="params">
-          <div><span>Altura de buje</span><b>90 m</b></div>
-          <div><span>Diámetro de rotor</span><b>84 m (R = 42 m)</b></div>
-          <div><span>Límite horas/año</span><b>30 h</b></div>
-          <div><span>Límite minutos/día</span><b>30 min</b></div>
-          <div><span>Elevación solar mínima</span><b>3°</b></div>
-          <div><span>Alcance máximo</span><b>1.500 m</b></div>
-          <div><span>Paso temporal (receptor)</span><b>2 min · 365 días</b></div>
-          <div><span>Efemérides</span><b>NOAA (azimut/elevación)</b></div>
-          <div><span>Caso real (meteo)</span><b>sol·operación·rosa de vientos</b></div>
-          <div><span>Fuente meteo</span><b>${METEO_CAMAN.source}</b></div>
+          <div><span>${t('frep.pHub')}</span><b>90 m</b></div>
+          <div><span>${t('frep.pRotor')}</span><b>84 m (R = 42 m)</b></div>
+          <div><span>${t('frep.pLimitH')}</span><b>30 h</b></div>
+          <div><span>${t('frep.pLimitD')}</span><b>30 min</b></div>
+          <div><span>${t('frep.pSunMin')}</span><b>3°</b></div>
+          <div><span>${t('frep.pReach')}</span><b>1.500 m</b></div>
+          <div><span>${t('frep.pStep')}</span><b>${t('frep.pStepV')}</b></div>
+          <div><span>${t('frep.pEph')}</span><b>${t('frep.pEphV')}</b></div>
+          <div><span>${t('frep.pReal')}</span><b>${t('frep.pRealV')}</b></div>
+          <div><span>${t('frep.pMeteo')}</span><b>${METEO_CAMAN.source}</b></div>
         </div>
 
-        <h2>3 · Mapa de iso-sombra del parque</h2>
-        ${siteImg ? `<figure><img src="${siteImg}" alt="Mapa de parpadeo de sombra del parque Camán I">
-          <figcaption>Horas/año de parpadeo de sombra (worst-case) sobre el área. ▲ turbinas (verde=operativa, ámbar=montaje, gris=fundación) · ● receptores (verde=cumple, rojo=excede). Norte arriba.</figcaption></figure>
-          <div class="maplegend"><span><i style="background:#bee678"></i>1–5</span><span><i style="background:#fde047"></i>5–15</span><span><i style="background:#fb923c"></i>15–30</span><span><i style="background:#ef4444"></i>≥30 h/año (excede)</span></div>`
-          : '<p class="muted">Mapa no disponible (sin turbinas operativas).</p>'}
+        <h2>${t('frep.h3Map')}</h2>
+        ${siteImg ? `<figure><img src="${siteImg}" alt="${t('frep.mapAlt')}">
+          <figcaption>${t('frep.mapCap')}</figcaption></figure>
+          <div class="maplegend"><span><i style="background:#bee678"></i>1–5</span><span><i style="background:#fde047"></i>5–15</span><span><i style="background:#fb923c"></i>15–30</span><span><i style="background:#ef4444"></i>${t('frep.mapLegExceed')}</span></div>`
+          : `<p class="muted">${t('frep.mapNA')}</p>`}
 
-        <h2>4 · Análisis por receptor</h2>
+        <h2>${t('frep.h4ByRcp')}</h2>
         ${cards}
 
-        <h2>5 · Tabla de cumplimiento</h2>
-        <table><thead><tr><th>Receptor</th><th>Coordenadas (lat, lon)</th><th class="num">h/año worst</th><th class="num">min/día</th><th class="num">días</th><th class="num">h/año real</th><th>Parada sugerida</th><th class="ctr">Estado</th></tr></thead><tbody>${sumRows}</tbody></table>
+        <h2>${t('frep.h5Compliance')}</h2>
+        <table><thead><tr><th>${t('frep.thRcp')}</th><th>${t('frep.thCoords')}</th><th class="num">${t('frep.thHrsWorst')}</th><th class="num">${t('frep.thMinDay')}</th><th class="num">${t('frep.thDays')}</th><th class="num">${t('frep.thHrsReal')}</th><th>${t('frep.thShutdown')}</th><th class="ctr">${t('frep.thStatus')}</th></tr></thead><tbody>${sumRows}</tbody></table>
 
-        <h2>6 · Programa de turbinas</h2>
-        <table><thead><tr><th>Turbina</th><th class="num">Latitud</th><th class="num">Longitud</th><th>Estado de obra</th></tr></thead><tbody>${schedRows}</tbody></table>
+        <h2>${t('frep.h6Schedule')}</h2>
+        <table><thead><tr><th>${t('frep.thTurbine')}</th><th class="num">${t('frep.thLat')}</th><th class="num">${t('frep.thLon')}</th><th>${t('frep.thBuildState')}</th></tr></thead><tbody>${schedRows}</tbody></table>
 
         <footer>
-          <b>Metodología.</b> El parpadeo de sombra se evalúa minuto a minuto durante un año astronómico. La sombra del buje (altura H) cae a distancia H/tan(elevación) en el azimut anti-solar; el rotor (radio R) la ensancha a la banda [(H−R)/tanθ, (H+R)/tanθ] y a un semiángulo atan(R/d). Un receptor se contabiliza cuando su rumbo desde la turbina coincide con el anti-solar y su distancia cae en la banda. El «caso real» pondera cada instante por la estadística de sol despejado, la operación del rotor y la orientación según la rosa de vientos del sitio (${METEO_CAMAN.source}).<br><br>
-          <b>Alcance.</b> Documento técnico de apoyo generado por ReWind. El worst-case es conservador (cota superior); el cumplimiento normativo definitivo debe verificarse con datos meteorológicos medidos (TMY/estación) y la curva de operación real del aerogenerador. Referencia normativa: directriz LAI (Alemania) sobre inmisión de sombra intermitente.
+          ${t('frep.footMethod', METEO_CAMAN.source)}<br><br>
+          ${t('frep.footScope')}
         </footer>
       </div></html>`;
     this._openReport(html, 'informe_shadow_flicker_caman.html');
@@ -417,15 +418,16 @@ export class MapView {
   // Informe de sombreado ENTRE turbinas (proxy de pérdida por sombra mutua).
   interTurbineReport() {
     const { perTurbine, total } = interTurbineShading(this.fleet.structures, { stepMin: 10 });
-    if (!perTurbine.length) { alert('No hay turbinas operativas para el análisis inter-turbinas.'); return; }
+    if (!perTurbine.length) { alert(t('mv.noTurbInter')); return; }
     const rows = perTurbine.map(r => `<tr><td>${r.label}</td><td style="text-align:right">${r.hoursYear.toFixed(1)}</td></tr>`).join('');
-    const html = `<!doctype html><meta charset=utf-8><title>Sombreado entre torres — Camán I</title>
+    const gen = new Date().toLocaleString(getLang() === 'en' ? 'en-GB' : 'es-CL');
+    const html = `<!doctype html><html lang="${getLang()}"><meta charset=utf-8><title>${t('iter.title')}</title>
       <style>body{font:14px system-ui,sans-serif;margin:32px;color:#1b2533}h1{font-size:19px}table{border-collapse:collapse;width:60%;margin-top:12px;font-size:13px}
       th,td{border:1px solid #cbd5e1;padding:6px 9px}th{background:#f1f5f9;text-align:left}.muted{color:#64748b;font-size:12px;line-height:1.5}</style>
-      <h1>Sombreado entre turbinas (worst-case) — Camán I</h1>
-      <p class="muted">${perTurbine.length} turbinas operativas · total ${total.toFixed(0)} h/año de sombra mutua · Generado ${new Date().toLocaleString('es-CL')}<br>
-      Horas/año en que el rotor de cada turbina cae en la sombra de otra (proxy de pérdida por sombreado; aproxima el buje como receptor a nivel de suelo). La pérdida energética real depende de la curva de potencia y del viento.</p>
-      <table><thead><tr><th>Turbina</th><th>h/año en sombra de otras</th></tr></thead><tbody>${rows}</tbody></table>`;
+      <h1>${t('iter.h1')}</h1>
+      <p class="muted">${t('iter.sub', perTurbine.length, total.toFixed(0), gen)}<br>
+      ${t('iter.note')}</p>
+      <table><thead><tr><th>${t('iter.thTurbine')}</th><th>${t('iter.thHrs')}</th></tr></thead><tbody>${rows}</tbody></table>`;
     this._openReport(html, 'sombreado_entre_torres_caman.html');
   }
 
@@ -506,7 +508,7 @@ export class MapView {
   // PiP está anclado abajo-derecha → se arrastra hacia adentro para agrandar.
   _addResizeHandle() {
     const h = document.createElement('div');
-    h.className = 'mv-resize'; h.title = 'Arrastra para redimensionar';
+    h.className = 'mv-resize'; h.title = t('mv.resize');
     this.el.appendChild(h);
     let s = null;
     const onMove = (e) => {
