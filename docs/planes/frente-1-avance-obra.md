@@ -82,18 +82,29 @@ stage = {
 ---
 
 ## Plan por fases (mapeo al código actual)
-1. **Datos por componente** — extender `stages` en `parks_data_caman.js` + helpers
-   (`defaultStages`, `builtFromStages`). Persistir en `localStorage`.
-2. **4D por componente** — `fleet_view.js` (`setConstructionMode`/`setProgress`) +
-   `structures.js`/`turbine_mesh.js`: que cada componente se llene/aparezca según su %.
-3. **HUD detalle de torre** — callouts ancladas con línea-guía (extender `anchorScreen`
-   a N anclas) + panel expandido + **botón «Abrir partida»** (en `shm_mode.js`).
-4. **Tween de cámara** («el girito») — animación de cámara/target por componente en
-   `fleet_view.js` (keyframes por ancla, ease-in-out ~0.6 s).
-5. **Dashboard de parque** — curva-S, Gantt, % por componente, atrasos, export
-   (pestaña «Avance» del panel, hoy editor simple de etapas).
+1. ✅ **Datos por componente** (v242) — `parks_data_caman.js`: `TURBINE_COMPONENTS`/
+   `HV_COMPONENTS` (yFrac+ícono) + `enrichStages()` (cronograma sintético realista y
+   editable: plan/real, responsable, fotos/informes, `twinCheck`). Persistido en `stages`.
+2. ✅ **4D por componente** (v249) — `turbine_mesh.js` expone `c4d` (mast/ghost, góndola,
+   rotor sólido/fantasma) y `fleet_view._setTurbineProgress4D`: el fuste se erige por su %,
+   góndola y rotor aparecen al completarse su partida (si no, silueta fantasma);
+   `setConstructionMode(off)` restaura. `defaultStages` da % parcial a la partida en curso.
+3. ✅ **HUD detalle de torre** (v242–v245) — `avance_hud.js`: callouts ancladas con
+   línea-guía (`anchorScreenAt`), semáforo+%, expand con datos/fotos, **«Abrir partida»**
+   (modal con galería/bitácora/informe). Auto-despliegue, fotos mockup, layout compacto.
+4. ✅ **Tween de cámara** («el girito») (v242–v245) — `fleet_view.cameraTo`/`focusComponent`
+   + branch `_tween` (ease-in-out ~0.68 s); sesgo a la derecha en modo compacto.
+5. ✅ **Dashboard de parque** (v248–v249) — `avance_dashboard.js` (pestaña «Obra»):
+   veredicto plan vs real, KPIs, **curva-S**, % por componente, torres atrasadas, informe DPR.
+   *(Gantt por torre/zona: pendiente opcional.)*
 6. **(Difer.)** crosslink `twinCheck` desde `R-31` (verificación estructural por partida).
 7. **(Depende `R-10`)** fotos/informes reales (galería + almacenamiento).
+
+## Estado
+**Frente 1 — núcleo completo (v249).** HUD de detalle por componente (callouts, girito,
+fotos, layout compacto), 4D por componente en la malla, y dashboard de parque (curva-S,
+% por componente, atrasos, DPR). **Pendiente opcional:** Gantt por torre/zona en el
+dashboard; **diferido:** crosslink real del gemelo (`R-31`) y fotos/almacenamiento (`R-10`).
 
 ## Dependencias
 - `R-10` (`DataSource`/BD) para fotos/informes y persistencia industrial.
