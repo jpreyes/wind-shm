@@ -8,20 +8,20 @@
 //   inspecciones y señal temporal EN VIVO desde un Web Worker (DataSource).
 // Recortes (modelado) los hace shm.css ocultando, no borrando.
 // ─────────────────────────────────────────────────────────────────────────────
-import { FleetView } from './fleet_view.js?v=260';
-import { DataSource } from './data_source.js?v=260';
-import { computeTwin } from './digital_twin.js?v=260';
-import { ParkManager, loadParksStore } from './parks.js?v=260';
-import { MapView } from './map_view.js?v=260';
-import { defaultStages, builtFromStages } from './parks_data_caman.js?v=260';
-import { compassRoseSVG } from './compass.js?v=260';
-import { buildAvanceHUD } from './avance_hud.js?v=260';
-import { renderAvance } from './avance_dashboard.js?v=260';
-import * as Insp from './inspection.js?v=260';
-import * as Fat from './fatigue.js?v=260';
+import { FleetView } from './fleet_view.js?v=261';
+import { DataSource } from './data_source.js?v=261';
+import { computeTwin } from './digital_twin.js?v=261';
+import { ParkManager, loadParksStore } from './parks.js?v=261';
+import { MapView } from './map_view.js?v=261';
+import { defaultStages, builtFromStages } from './parks_data_caman.js?v=261';
+import { compassRoseSVG } from './compass.js?v=261';
+import { buildAvanceHUD } from './avance_hud.js?v=261';
+import { renderAvance } from './avance_dashboard.js?v=261';
+import * as Insp from './inspection.js?v=261';
+import * as Fat from './fatigue.js?v=261';
 
 const F1_BASE = { turbine: 0.283, hv: 1.6 };
-const REWIND_VER = 'v260';   // versión visible del build (subir junto al cache-bust)
+const REWIND_VER = 'v261';   // versión visible del build (subir junto al cache-bust)
 const FS = 62.5;   // frecuencia de muestreo de la señal (Hz), igual que shm_worker.js
 // Clasificador ML de daño (0..4)
 const CLS = ['Sin daño', 'Leve', 'Moderado', 'Alto', 'Muy alto'];
@@ -82,6 +82,7 @@ async function boot() {
 
   let pm = null;                       // ParkManager (árbol lateral) — se crea más abajo
   buildToolbar(toolbar, fleet, () => pm);
+  buildMenubar(fleet, () => pm);       // menú superior nativo de ReWind (R-7)
   const nameplate = buildNameplate(vpwrap);
   const banner = buildBanner(vpwrap);
   const dash = buildDashboard(panel, fleet, actions);
@@ -257,7 +258,7 @@ async function boot() {
   // ── Relieve conceptual del terreno (DEM vendorizado) — encendido por defecto ─
   setLoad(88, 'Cargando relieve…'); await delay(40);
   try {
-    await fleet.loadTerrain('data/caman_dem.json?v=260');
+    await fleet.loadTerrain('data/caman_dem.json?v=261');
     fleet.setTerrainVisible(true);
     document.getElementById('shm-relieve-tool')?.classList.add('active');
   } catch (e) { console.warn('[shm] relieve no disponible', e); }
@@ -375,6 +376,118 @@ function buildToolbar(toolbar, fleet, getPM = () => null) {
     e.preventDefault();
     fleet.removeStructure(fleet.selected.id);
   });
+}
+
+// ── Menú superior nativo de ReWind (R-7) ─────────────────────────────────────
+// Menús desplegables (Parque · Datos · Informe) en el #menubar. Centraliza
+// acciones de SHM que antes estaban dispersas o no existían en la barra superior.
+function buildMenubar(fleet, getPM = () => null) {
+  const bar = document.getElementById('menubar');
+  if (!bar) return;
+  const right = bar.querySelector('.menubar-right');
+
+  const stamp = () => new Date().toISOString().slice(0, 19).replace(/[:T]/g, '-');
+  const downloadJSON = (name, obj) => {
+    const blob = new Blob([JSON.stringify(obj, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a'); a.href = url; a.download = name; a.click();
+    setTimeout(() => URL.revokeObjectURL(url), 2000);
+  };
+  const pickFile = (accept, cb) => {
+    const inp = document.createElement('input'); inp.type = 'file'; inp.accept = accept;
+    inp.addEventListener('change', async () => { const f = inp.files?.[0]; if (f) cb(await f.text(), f); });
+    inp.click();
+  };
+
+  // ── Acciones ──
+  const newTurbine = () => { const o = fleet.addTurbine(); getPM()?.onAddStructure?.(o); };
+  const newHV = () => { const o = fleet.addHVTower(); getPM()?.onAddStructure?.(o); };
+  const exportPark = () => {
+    try { const s = localStorage.getItem('rewind-parks'); if (!s) throw 0; downloadJSON(`rewind-parque-${stamp()}.json`, JSON.parse(s)); }
+    catch { alert('No hay parque que exportar.'); }
+  };
+  const importPark = () => pickFile('.json,application/json', (txt) => {
+    try { const o = JSON.parse(txt); if (!o || !Array.isArray(o.parks)) throw 0; localStorage.setItem('rewind-parks', txt); alert('Parque importado. Se recargará la app.'); location.reload(); }
+    catch { alert('Archivo de parque no válido.'); }
+  });
+  const exportTelemetry = () => downloadJSON(`rewind-telemetria-${stamp()}.json`,
+    { generado: new Date().toISOString(), fuente: window.shmData?.mode || 'sim', estructuras: window.shmData?.latest || {} });
+  const exportInsp = () => { try { downloadJSON(`rewind-inspecciones-${stamp()}.json`, JSON.parse(Insp.exportJSON())); } catch { alert('No se pudo exportar.'); } };
+  const importInsp = () => pickFile('.json,application/json', (txt) => {
+    try { const n = Insp.importJSON(txt, false); alert(`Importadas inspecciones de ${n} estructura(s). Se recargará la app.`); location.reload(); }
+    catch { alert('Archivo de inspecciones no válido.'); }
+  });
+  const parkReport = () => window.shmDash?.buildReport?.(null);
+  const selReport = () => { const s = fleet.selected; if (s) window.shmDash?.buildReport?.(s); else alert('Selecciona una estructura primero.'); };
+
+  // ── Definición de menús ──
+  const menus = [
+    { label: 'Parque', items: [
+      { label: '＋ Nueva torre', fn: newTurbine },
+      { label: '＋ Nueva torre AT', fn: newHV },
+      { sep: 1 },
+      { label: '⤓ Exportar parque (.json)', fn: exportPark },
+      { label: '⤒ Importar parque (.json)', fn: importPark },
+    ] },
+    { label: 'Datos', items: [
+      { label: () => `● Fuente: ${window.shmData?.mode === 'live' ? 'En vivo' : 'Simulada'}`, info: 1 },
+      { label: '⤓ Exportar telemetría (.json)', fn: exportTelemetry },
+      { sep: 1 },
+      { label: '⤓ Exportar inspecciones (.json)', fn: exportInsp },
+      { label: '⤒ Importar inspecciones (.json)', fn: importInsp },
+    ] },
+    { label: 'Informe', items: [
+      { label: '📄 Informe del parque', fn: parkReport },
+      { label: '📄 Informe de la selección', fn: selReport },
+      { sep: 1 },
+      { label: 'ⓘ Acerca de ReWind', fn: showAbout },
+    ] },
+  ];
+
+  const nav = document.createElement('nav'); nav.className = 'mb-menus';
+  const closeAll = () => nav.querySelectorAll('.mb-menu.open').forEach(m => m.classList.remove('open'));
+  for (const def of menus) {
+    const m = document.createElement('div'); m.className = 'mb-menu';
+    const btn = document.createElement('button'); btn.type = 'button'; btn.className = 'mb-top'; btn.textContent = def.label;
+    const dd = document.createElement('div'); dd.className = 'mb-dd';
+    const refreshers = [];
+    for (const it of def.items) {
+      if (it.sep) { const s = document.createElement('div'); s.className = 'mb-sep'; dd.appendChild(s); continue; }
+      const mi = document.createElement('button'); mi.type = 'button'; mi.className = 'mb-item';
+      const set = () => { mi.textContent = typeof it.label === 'function' ? it.label() : it.label; };
+      set();
+      if (it.info) { mi.disabled = true; mi.classList.add('mb-info'); refreshers.push(set); }
+      else mi.addEventListener('click', () => { closeAll(); it.fn(); });
+      dd.appendChild(mi);
+    }
+    btn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const wasOpen = m.classList.contains('open'); closeAll();
+      if (!wasOpen) { refreshers.forEach(f => f()); m.classList.add('open'); }
+    });
+    m.append(btn, dd); nav.appendChild(m);
+  }
+  document.addEventListener('click', closeAll);
+  addEventListener('keydown', (e) => { if (e.key === 'Escape') closeAll(); });
+  if (right) bar.insertBefore(nav, right); else bar.appendChild(nav);
+}
+
+// «Acerca de ReWind» — tarjeta modal ligera (versión + crédito + fuente).
+function showAbout() {
+  document.getElementById('mb-about')?.remove();
+  const ov = document.createElement('div'); ov.id = 'mb-about'; ov.className = 'mb-about';
+  ov.innerHTML = `<div class="mb-about-card" role="dialog" aria-label="Acerca de ReWind">
+    <button class="mb-about-x" type="button" aria-label="Cerrar">✕</button>
+    <h2>ReWind <span>${REWIND_VER}</span></h2>
+    <p>Monitoreo de salud estructural (SHM) de torres eólicas — gemelo digital físico,
+       fatiga, inspección y avance de obra para el parque Camán I.</p>
+    <p class="mb-about-mut">Instituto de Obras Civiles · Universidad Austral de Chile.
+       Motor de elementos finitos heredado, reutilizado como gemelo digital.</p>
+  </div>`;
+  const close = () => ov.remove();
+  ov.addEventListener('click', (e) => { if (e.target === ov || e.target.closest('.mb-about-x')) close(); });
+  addEventListener('keydown', function esc(e) { if (e.key === 'Escape') { close(); removeEventListener('keydown', esc); } });
+  document.body.appendChild(ov);
 }
 
 // ── Control de Sol/sombras (hora + día + animación) ──────────────────────────
@@ -1899,7 +2012,7 @@ ${detalle}${compilado}
     const v = el.querySelector('.shm-toptab.active')?.dataset.v;
     if (v === 'shm') renderSHM(); else if (v === 'insp') renderInsp(); else if (v === 'obra') showObra();
   }
-  return { setStructures, select, onTick, setAlarms, showShadow, showObra, showInsp: () => setTopView('insp'), refreshShadow: renderShadow, refresh };
+  return { setStructures, select, onTick, setAlarms, showShadow, showObra, showInsp: () => setTopView('insp'), refreshShadow: renderShadow, refresh, buildReport };
 }
 
 function startBoot() { boot().catch(e => { console.error('[shm] boot', e); window.__rewindCloseLanding?.(); }); }
