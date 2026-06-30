@@ -6,8 +6,9 @@
 // (acumulado plan vs real por mes), % por componente y ranking de torres atrasadas.
 // Render en DOM/SVG (verificable) + informe imprimible. Módulo de presentación.
 // ─────────────────────────────────────────────────────────────────────────────
-import { enrichStages, TURBINE_COMPONENTS } from './parks_data_caman.js?v=264';
-import * as CTwin from './construction_twin.js?v=264';
+import { enrichStages, TURBINE_COMPONENTS } from './parks_data_caman.js?v=265';
+import * as CTwin from './construction_twin.js?v=265';
+import { t } from './i18n.js?v=265';
 
 const DAY = 864e5;
 const fmtPct = (x) => `${Math.round(x * 100)}%`;
@@ -79,7 +80,7 @@ export function computeParkAvance(structures) {
 // ── SVG de la curva-S (plan vs real) ─────────────────────────────────────────
 function curveSVG(curve) {
   const n = curve.labels.length;
-  if (n < 2) return '<div class="av-mut">Sin cronograma suficiente para la curva-S.</div>';
+  if (n < 2) return `<div class="av-mut">${t('obra.noCurve')}</div>`;
   const W = 300, H = 150, ml = 30, mb = 20, mt = 8, mr = 8;
   const pw = W - ml - mr, ph = H - mt - mb;
   const X = (i) => ml + (i / (n - 1)) * pw;
@@ -87,7 +88,7 @@ function curveSVG(curve) {
   const path = (arr) => arr.map((v, i) => v == null ? null : `${X(i).toFixed(1)},${Y(v).toFixed(1)}`).filter(Boolean).join(' ');
   const grid = [0, 0.25, 0.5, 0.75, 1].map(v => `<line x1="${ml}" y1="${Y(v)}" x2="${W - mr}" y2="${Y(v)}" stroke="var(--border,#28384a)" stroke-width="0.5"/><text x="${ml - 4}" y="${Y(v) + 3}" text-anchor="end" font-size="8" fill="var(--text-muted,#93a6b8)">${v * 100 | 0}</text>`).join('');
   const xlabels = curve.labels.map((l, i) => (i % Math.ceil(n / 6) === 0 || i === n - 1) ? `<text x="${X(i)}" y="${H - 6}" text-anchor="middle" font-size="8" fill="var(--text-muted,#93a6b8)">${l}</text>` : '').join('');
-  const todayLine = curve.todayIdx >= 0 ? `<line x1="${X(curve.todayIdx)}" y1="${mt}" x2="${X(curve.todayIdx)}" y2="${mt + ph}" stroke="#ff5e3a" stroke-width="1" stroke-dasharray="3 2"/><text x="${X(curve.todayIdx)}" y="${mt + 7}" text-anchor="middle" font-size="8" fill="#ff5e3a">hoy</text>` : '';
+  const todayLine = curve.todayIdx >= 0 ? `<line x1="${X(curve.todayIdx)}" y1="${mt}" x2="${X(curve.todayIdx)}" y2="${mt + ph}" stroke="#ff5e3a" stroke-width="1" stroke-dasharray="3 2"/><text x="${X(curve.todayIdx)}" y="${mt + 7}" text-anchor="middle" font-size="8" fill="#ff5e3a">${t('obra.today')}</text>` : '';
   return `<svg viewBox="0 0 ${W} ${H}" class="av-curve" xmlns="http://www.w3.org/2000/svg">
     ${grid}${todayLine}
     <polyline points="${path(curve.plan)}" fill="none" stroke="var(--text-muted,#93a6b8)" stroke-width="1.6" stroke-dasharray="4 3"/>
@@ -103,7 +104,7 @@ function ganttSVG(structures) {
   const rows = turbs.map(t => ({ label: t.label || t.id, sts: enrichStages(t.stages, 'turbine', t.id) }));
   let min = Infinity, max = -Infinity;
   rows.forEach(r => r.sts.forEach(s => { min = Math.min(min, Date.parse(s.plannedStart)); max = Math.max(max, Date.parse(s.plannedEnd)); }));
-  if (!isFinite(min) || !rows.length) return '<div class="av-mut">Sin cronograma.</div>';
+  if (!isFinite(min) || !rows.length) return `<div class="av-mut">${t('obra.noGantt')}</div>`;
   const today = Date.now();
   const labW = 44, W = 280, rh = 12, gap = 2, headH = 16, padR = 6, trackW = W - labW - padR;
   const X = (ms) => labW + (ms - min) / (max - min || 1) * trackW;
@@ -116,7 +117,7 @@ function ganttSVG(structures) {
     grid += `<text x="${(x + 1).toFixed(1)}" y="10" font-size="7" fill="var(--text-muted,#93a6b8)">${monKey(d.getTime())}</text>`;
   }
   const tX = X(Math.min(Math.max(today, min), max));
-  const todayLine = `<line x1="${tX.toFixed(1)}" y1="${headH - 3}" x2="${tX.toFixed(1)}" y2="${H}" stroke="#ff5e3a" stroke-width="1" stroke-dasharray="3 2"/><text x="${(tX + 1).toFixed(1)}" y="${headH - 4}" font-size="7" fill="#ff5e3a">hoy</text>`;
+  const todayLine = `<line x1="${tX.toFixed(1)}" y1="${headH - 3}" x2="${tX.toFixed(1)}" y2="${H}" stroke="#ff5e3a" stroke-width="1" stroke-dasharray="3 2"/><text x="${(tX + 1).toFixed(1)}" y="${headH - 4}" font-size="7" fill="#ff5e3a">${t('obra.today')}</text>`;
   let body = '';
   rows.forEach((r, ri) => {
     const y = headH + ri * (rh + gap);
@@ -137,14 +138,14 @@ function towerEditor(selected) {
   const rows = sts.map((s, i) => `
     <div class="avt-row">
       <span class="avt-nm">${s.label || s.name}</span>
-      <input type="number" class="avt-pp" data-i="${i}" min="0" max="100" step="5" value="${s.pct || 0}" title="% de avance de la partida">
+      <input type="number" class="avt-pp" data-i="${i}" min="0" max="100" step="5" value="${s.pct || 0}" title="${t('obra.ppTip')}">
       <span class="avt-u">%</span>
       <span class="avt-bar"><i class="${statusCol2(s.pct)}" style="width:${s.pct || 0}%"></i></span>
     </div>`).join('');
   return `<div class="avt-card">
-    <div class="avt-h">${selected.label} · avance <b>${Math.round(built * 100)}%</b></div>
+    <div class="avt-h">${selected.label} · ${t('obra.progress')} <b>${Math.round(built * 100)}%</b></div>
     <div class="avt-rows">${rows}</div>
-    <div class="av-mut" style="margin-top:4px">Ajusta el % de cada partida; el llenado 3D y los indicadores se recalculan.</div>
+    <div class="av-mut" style="margin-top:4px">${t('obra.tweHint')}</div>
   </div>`;
 }
 const statusCol2 = (pct) => pct >= 100 ? 'done' : pct > 0 ? 'wip' : 'pend';
@@ -182,22 +183,22 @@ function constructionTwinCard(selected) {
   const m = CTwin.measuredCurve(f1, selected.stages, selected.id);
   const cur = m.points[m.points.length - 1];
   const bandOk = CTwin.inBand(f1, win);
-  const verdict = !cur ? { c: 'mut', t: 'Sin medición aún (fuste &lt; 25%).' }
-    : cur.below ? { c: 'bad', t: `⚠ f₁ medida bajo lo predicho en «${cur.label}» — posible base flexible (pernos/grout/fundación).` }
-    : { c: 'ok', t: `✓ f₁ medida en banda con el gemelo («${cur.label}»).` };
-  const baseline = m.reached >= 6 ? `f₁ commissioning <b>${fmtHz(f1)} Hz</b> capturada` : 'pendiente (al montar el rotor)';
+  const verdict = !cur ? { c: 'mut', t: t('ct.noMeas') }
+    : cur.below ? { c: 'bad', t: t('ct.below', cur.label) }
+    : { c: 'ok', t: t('ct.inbandT', cur.label) };
+  const baseline = m.reached >= 6 ? t('ct.baselineOk', fmtHz(f1)) : t('ct.baselinePending');
   return `<div class="ct-card">
-    <div class="ct-h">🛰️ Gemelo de construcción <span class="ct-sub">f₁ predicha vs medida</span></div>
+    <div class="ct-h">🛰️ ${t('ct.title')} <span class="ct-sub">${t('ct.sub')}</span></div>
     ${ctwinSVG(pred, m.points, win)}
-    <div class="ct-leg"><span><i class="dash"></i>predicha</span><span><i class="dot ok"></i>medida en banda</span><span><i class="dot bad"></i>bajo lo predicho</span><span><i class="band"></i>soft-stiff</span></div>
+    <div class="ct-leg"><span><i class="dash"></i>${t('ct.legPred')}</span><span><i class="dot ok"></i>${t('ct.legInband')}</span><span><i class="dot bad"></i>${t('ct.legBelow')}</span><span><i class="band"></i>${t('ct.legBand')}</span></div>
     <div class="ct-verdict ${verdict.c}">${verdict.t}</div>
     <table class="ct-kv">
-      <tr><td>f₁ torre completa</td><td><b>${fmtHz(f1)} Hz</b></td></tr>
-      <tr><td>Ventana soft-stiff (rpm ${win.rpm})</td><td>${fmtHz(win.lo)}–${fmtHz(win.hi)} Hz · ${bandOk ? '<b class="ok">✓ en banda</b>' : '<b class="bad">✗ fuera</b>'}</td></tr>
+      <tr><td>${t('ct.kvFull')}</td><td><b>${fmtHz(f1)} Hz</b></td></tr>
+      <tr><td>${t('ct.kvWin', win.rpm)}</td><td>${fmtHz(win.lo)}–${fmtHz(win.hi)} Hz · ${bandOk ? `<b class="ok">${t('ct.inbandY')}</b>` : `<b class="bad">${t('ct.inbandN')}</b>`}</td></tr>
       <tr><td>1P · 3P</td><td>${fmtHz(win.p1)} · ${fmtHz(win.p3)} Hz</td></tr>
-      <tr><td>Línea base</td><td>${baseline}</td></tr>
+      <tr><td>${t('ct.kvBaseline')}</td><td>${baseline}</td></tr>
     </table>
-    <button id="ct-cert" class="av-btn" type="button">📄 Certificado de puesta en marcha</button>
+    <button id="ct-cert" class="av-btn" type="button">${t('ct.cert')}</button>
   </div>`;
 }
 
@@ -240,40 +241,40 @@ export function commissioningReport(selected) {
 export function renderAvance(host, structures, selected, apply) {
   const d = computeParkAvance(structures);
   const behind = d.planPct - d.realPct;   // + = el parque va atrasado
-  const verdict = behind > 0.05 ? { c: 'bad', t: `Atrasado ${Math.round(behind * 100)} pts vs plan` }
-    : behind < -0.05 ? { c: 'ok', t: `Adelantado ${Math.round(-behind * 100)} pts` }
-    : { c: 'ok', t: 'En línea con el plan' };
+  const verdict = behind > 0.05 ? { c: 'bad', t: t('obra.behind', Math.round(behind * 100)) }
+    : behind < -0.05 ? { c: 'ok', t: t('obra.ahead', Math.round(-behind * 100)) }
+    : { c: 'ok', t: t('obra.online') };
   const compBars = d.perComp.map(p => `
     <div class="av-comp"><span class="av-comp-l">${p.label}</span>
       <span class="av-comp-bar"><i style="width:${Math.round(p.pct * 100)}%"></i></span>
       <span class="av-comp-p">${fmtPct(p.pct)}</span></div>`).join('');
   const lateRows = d.late.length ? d.late.map(l => `
     <div class="av-late"><span class="av-late-n">${l.label}</span>
-      <span class="av-late-v">real ${fmtPct(l.real)} · plan ${fmtPct(l.plan)} <b class="av-behind">−${Math.round(l.behind * 100)} pts</b></span></div>`).join('')
-    : '<div class="av-mut">Ninguna torre atrasada respecto al plan. 👍</div>';
+      <span class="av-late-v">${t('obra.wReal')} ${fmtPct(l.real)} · ${t('obra.wPlan')} ${fmtPct(l.plan)} <b class="av-behind">−${Math.round(l.behind * 100)} pts</b></span></div>`).join('')
+    : `<div class="av-mut">${t('obra.noLate')}</div>`;
 
   host.innerHTML = `
     ${towerEditor(selected)}
     ${constructionTwinCard(selected)}
-    <div class="av-hdr">Avance de obra · Camán I</div>
+    <div class="av-hdr">${t('obra.hdr')}</div>
     <div class="av-banner ${verdict.c}">${verdict.c === 'ok' ? '✓' : '✗'} ${verdict.t}</div>
     <div class="av-kpis">
-      <div class="av-kpi"><div class="k">Real</div><div class="v">${fmtPct(d.realPct)}</div></div>
-      <div class="av-kpi"><div class="k">Plan a hoy</div><div class="v">${fmtPct(d.planPct)}</div></div>
-      <div class="av-kpi"><div class="k">Atraso medio</div><div class="v ${d.slipDays > 0 ? 'late' : ''}">${d.slipDays > 0 ? '+' : ''}${d.slipDays} d</div></div>
-      <div class="av-kpi"><div class="k">Operativas</div><div class="v">${d.nOp}/${d.nTurb}</div></div>
+      <div class="av-kpi"><div class="k">${t('obra.kReal')}</div><div class="v">${fmtPct(d.realPct)}</div></div>
+      <div class="av-kpi"><div class="k">${t('obra.kPlan')}</div><div class="v">${fmtPct(d.planPct)}</div></div>
+      <div class="av-kpi"><div class="k">${t('obra.kSlip')}</div><div class="v ${d.slipDays > 0 ? 'late' : ''}">${d.slipDays > 0 ? '+' : ''}${d.slipDays} d</div></div>
+      <div class="av-kpi"><div class="k">${t('obra.kOp')}</div><div class="v">${d.nOp}/${d.nTurb}</div></div>
     </div>
-    <div class="av-sub">Curva-S — acumulado plan vs real</div>
+    <div class="av-sub">${t('obra.curveS')}</div>
     ${curveSVG(d.curve)}
-    <div class="av-leg"><span><i class="dash"></i>Plan</span><span><i class="solid"></i>Real</span><span><i class="today"></i>Hoy</span></div>
-    <div class="av-sub">Avance por componente (parque)</div>
+    <div class="av-leg"><span><i class="dash"></i>${t('obra.legPlan')}</span><span><i class="solid"></i>${t('obra.legReal')}</span><span><i class="today"></i>${t('obra.legToday')}</span></div>
+    <div class="av-sub">${t('obra.byComp')}</div>
     <div class="av-comps">${compBars}</div>
-    <div class="av-sub">Torres atrasadas <span class="av-mut">(real &lt; plan)</span></div>
+    <div class="av-sub">${t('obra.lateH')} <span class="av-mut">${t('obra.lateHint')}</span></div>
     <div class="av-lates">${lateRows}</div>
-    <div class="av-sub">Gantt por torre <span class="av-mut">(plan · color = estado)</span></div>
+    <div class="av-sub">${t('obra.ganttH')} <span class="av-mut">${t('obra.ganttHint')}</span></div>
     <div class="av-gantt">${ganttSVG(structures)}</div>
-    <div class="av-leg"><span><i class="g-done"></i>Completada</span><span><i class="g-wip"></i>En ejecución</span><span><i class="g-pend"></i>Pendiente</span><span><i class="today"></i>Hoy</span></div>
-    <button id="av-report" class="av-btn" type="button">📄 Informe de avance (DPR)</button>`;
+    <div class="av-leg"><span><i class="g-done"></i>${t('obra.gDone')}</span><span><i class="g-wip"></i>${t('obra.gWip')}</span><span><i class="g-pend"></i>${t('obra.gPend')}</span><span><i class="today"></i>${t('obra.legToday')}</span></div>
+    <button id="av-report" class="av-btn" type="button">${t('obra.dpr')}</button>`;
   host.querySelector('#av-report')?.addEventListener('click', () => avanceReport(structures));
   host.querySelector('#ct-cert')?.addEventListener('click', () => commissioningReport(selected));
   // Editor de partidas de la torre seleccionada

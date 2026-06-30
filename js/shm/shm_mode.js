@@ -8,21 +8,21 @@
 //   inspecciones y señal temporal EN VIVO desde un Web Worker (DataSource).
 // Recortes (modelado) los hace shm.css ocultando, no borrando.
 // ─────────────────────────────────────────────────────────────────────────────
-import { FleetView } from './fleet_view.js?v=264';
-import { DataSource } from './data_source.js?v=264';
-import { computeTwin } from './digital_twin.js?v=264';
-import { ParkManager, loadParksStore } from './parks.js?v=264';
-import { MapView } from './map_view.js?v=264';
-import { defaultStages, builtFromStages } from './parks_data_caman.js?v=264';
-import { compassRoseSVG } from './compass.js?v=264';
-import { buildAvanceHUD } from './avance_hud.js?v=264';
-import { renderAvance } from './avance_dashboard.js?v=264';
-import * as Insp from './inspection.js?v=264';
-import * as Fat from './fatigue.js?v=264';
-import { t, getLang, setLang } from './i18n.js?v=264';
+import { FleetView } from './fleet_view.js?v=265';
+import { DataSource } from './data_source.js?v=265';
+import { computeTwin } from './digital_twin.js?v=265';
+import { ParkManager, loadParksStore } from './parks.js?v=265';
+import { MapView } from './map_view.js?v=265';
+import { defaultStages, builtFromStages } from './parks_data_caman.js?v=265';
+import { compassRoseSVG } from './compass.js?v=265';
+import { buildAvanceHUD } from './avance_hud.js?v=265';
+import { renderAvance } from './avance_dashboard.js?v=265';
+import * as Insp from './inspection.js?v=265';
+import * as Fat from './fatigue.js?v=265';
+import { t, getLang, setLang } from './i18n.js?v=265';
 
 const F1_BASE = { turbine: 0.283, hv: 1.6 };
-const REWIND_VER = 'v264';   // versión visible del build (subir junto al cache-bust)
+const REWIND_VER = 'v265';   // versión visible del build (subir junto al cache-bust)
 const FS = 62.5;   // frecuencia de muestreo de la señal (Hz), igual que shm_worker.js
 // Clasificador ML de daño (0..4)
 const CLS = ['Sin daño', 'Leve', 'Moderado', 'Alto', 'Muy alto'];
@@ -263,7 +263,7 @@ async function boot() {
   // ── Relieve conceptual del terreno (DEM vendorizado) — encendido por defecto ─
   setLoad(88, 'Cargando relieve…'); await delay(40);
   try {
-    await fleet.loadTerrain('data/caman_dem.json?v=264');
+    await fleet.loadTerrain('data/caman_dem.json?v=265');
     fleet.setTerrainVisible(true);
     document.getElementById('shm-relieve-tool')?.classList.add('active');
   } catch (e) { console.warn('[shm] relieve no disponible', e); }
@@ -821,8 +821,7 @@ function buildDashboard(panel, fleet, actions) {
     const host = $('#shm-shadow'); if (!host) return;
     const mv = window.shmMap;
     if (!fleet.sunMode) {
-      host.innerHTML = `<div class="ssh-off">☀️ El estudio de sombra está apagado.<br><br>
-        Activa <b>Shadow flicker</b> en la barra de herramientas (izquierda) para encender el sol móvil, ver las sombras sobre el relieve y analizar el parpadeo (shadow-flicker) sobre las viviendas.</div>`;
+      host.innerHTML = `<div class="ssh-off">${t('ssh.off')}<br><br>${t('ssh.offHint')}</div>`;
       return;
     }
     const rcp = (mv?._receptors) || [];
@@ -831,57 +830,57 @@ function buildDashboard(panel, fleet, actions) {
     const opTurb = fleet.structures.filter(s => s.type !== 'hv' && (s.built ?? 1) >= 0.97).length;
     const worst = rcp.reduce((a, r) => r.res.hoursYear > (a?.res.hoursYear ?? -1) ? r : a, null);
     const sp = fleet.getSunInfo?.();
-    const t = fleet._sunTime || {};
-    const dateStr = (t.year != null) ? `${String(t.day).padStart(2, '0')}/${String((t.month0 ?? 0) + 1).padStart(2, '0')}/${t.year}` : '—';
-    const hourStr = (t.hour != null) ? `${String(Math.floor(t.hour)).padStart(2, '0')}:${String(Math.round((t.hour % 1) * 60) % 60).padStart(2, '0')}` : '—';
-    const sunStr = sp ? (sp.elevation > 0 ? `${sp.elevation.toFixed(0)}° alt · ${sp.azimuth.toFixed(0)}° az` : '☾ noche') : '—';
-    const compliance = !rcp.length ? { txt: 'Sin receptores', cls: 'na' }
-      : nEx ? { txt: `${nEx} de ${rcp.length} EXCEDE(N)`, cls: 'bad' }
-      : { txt: `${rcp.length}/${rcp.length} CUMPLEN`, cls: 'ok' };
+    const stime = fleet._sunTime || {};
+    const dateStr = (stime.year != null) ? `${String(stime.day).padStart(2, '0')}/${String((stime.month0 ?? 0) + 1).padStart(2, '0')}/${stime.year}` : '—';
+    const hourStr = (stime.hour != null) ? `${String(Math.floor(stime.hour)).padStart(2, '0')}:${String(Math.round((stime.hour % 1) * 60) % 60).padStart(2, '0')}` : '—';
+    const sunStr = sp ? (sp.elevation > 0 ? `${sp.elevation.toFixed(0)}° alt · ${sp.azimuth.toFixed(0)}° az` : t('ssh.night')) : '—';
+    const compliance = !rcp.length ? { txt: t('ssh.cNone'), cls: 'na' }
+      : nEx ? { txt: t('ssh.cBad', nEx, rcp.length), cls: 'bad' }
+      : { txt: t('ssh.cOk', rcp.length), cls: 'ok' };
 
     const rows = rcp.length ? rcp.map(r => `
       <div class="ssh-rcp ${r.ok ? 'ok' : 'bad'}">
-        <span class="ssh-n" title="${r.name || ('Receptor ' + r.n)}">${r.name ? r.name : '#' + r.n}</span>
+        <span class="ssh-n" title="${r.name || t('ssh.rcpName', r.n)}">${r.name ? r.name : '#' + r.n}</span>
         <span class="ssh-v">
-          <b>${r.res.hoursYear.toFixed(1)}</b> h/año<span class="ssh-sub"> (real≈${r.res.hoursYearReal.toFixed(1)})</span><br>
-          <span class="ssh-st">${r.res.maxMinDay} min/día · ${r.res.daysAffected} días · ${r.ok ? '✓ cumple' : '✗ excede'}</span>
-          ${r.win ? `<span class="ssh-st">⏸ parada: ${r.win.months} · ${r.win.hours}</span>` : ''}
+          <b>${r.res.hoursYear.toFixed(1)}</b> ${t('ssh.hYear')}<span class="ssh-sub"> (real≈${r.res.hoursYearReal.toFixed(1)})</span><br>
+          <span class="ssh-st">${t('ssh.minDay', r.res.maxMinDay)} · ${t('ssh.days', r.res.daysAffected)} · ${r.ok ? t('ssh.comply') : t('ssh.exceed')}</span>
+          ${r.win ? `<span class="ssh-st">${t('ssh.stop', r.win.months, r.win.hours)}</span>` : ''}
         </span>
-        <button class="ssh-del" data-n="${r.n}" title="Quitar receptor">✕</button>
-      </div>`).join('') : `<div class="ssh-empty">Sin receptores. Haz clic en el mapa 2D (con Shadow activo) para agregar una vivienda, o <b>importa</b> un archivo (CSV/KML/KMZ/SHP) abajo.</div>`;
+        <button class="ssh-del" data-n="${r.n}" title="${t('ssh.delTip')}">✕</button>
+      </div>`).join('') : `<div class="ssh-empty">${t('ssh.empty')}</div>`;
 
     host.innerHTML = `
-      <div class="ssh-hdr">Estudio de sombra · Camán I</div>
+      <div class="ssh-hdr">${t('ssh.hdr')}</div>
       <div class="ssh-banner ${compliance.cls}">${compliance.cls === 'ok' ? '✓' : compliance.cls === 'bad' ? '✗' : 'ℹ'} ${compliance.txt}
-        <span class="ssh-banner-sub">Límite LAI: ≤30 h/año · ≤30 min/día (worst-case)</span></div>
+        <span class="ssh-banner-sub">${t('ssh.limit')}</span></div>
       <div class="ssh-kpis">
-        <div class="ssh-kpi"><div class="k">Turbinas op.</div><div class="v">${opTurb}</div></div>
-        <div class="ssh-kpi"><div class="k">Receptores</div><div class="v">${rcp.length}</div></div>
-        <div class="ssh-kpi"><div class="k">Cumplen</div><div class="v" style="color:var(--success,#22c55e)">${nOk}</div></div>
-        <div class="ssh-kpi"><div class="k">Exceden</div><div class="v" style="color:var(--danger,#ef4444)">${nEx}</div></div>
-        <div class="ssh-kpi wide"><div class="k">Peor receptor</div><div class="v">${worst ? `#${worst.n} · ${worst.res.hoursYear.toFixed(1)} h/año` : '—'}</div></div>
+        <div class="ssh-kpi"><div class="k">${t('ssh.kTurb')}</div><div class="v">${opTurb}</div></div>
+        <div class="ssh-kpi"><div class="k">${t('ssh.kRcp')}</div><div class="v">${rcp.length}</div></div>
+        <div class="ssh-kpi"><div class="k">${t('ssh.kOk')}</div><div class="v" style="color:var(--success,#22c55e)">${nOk}</div></div>
+        <div class="ssh-kpi"><div class="k">${t('ssh.kEx')}</div><div class="v" style="color:var(--danger,#ef4444)">${nEx}</div></div>
+        <div class="ssh-kpi wide"><div class="k">${t('ssh.kWorst')}</div><div class="v">${worst ? `#${worst.n} · ${worst.res.hoursYear.toFixed(1)} ${t('ssh.hYear')}` : '—'}</div></div>
       </div>
       <div class="ssh-params">
-        <div class="ssh-prow"><span>☀️ Sol ahora</span><b>${sunStr}</b></div>
-        <div class="ssh-prow"><span>📅 Fecha · hora</span><b>${dateStr} · ${hourStr}</b></div>
-        <div class="ssh-prow"><span>🗼 Buje · rotor</span><b>90 m · Ø84 m</b></div>
-        <div class="ssh-prow"><span>📐 Método</span><b>LAI worst-case + real (meteo)</b></div>
+        <div class="ssh-prow"><span>${t('ssh.sunNow')}</span><b>${sunStr}</b></div>
+        <div class="ssh-prow"><span>${t('ssh.dateHour')}</span><b>${dateStr} · ${hourStr}</b></div>
+        <div class="ssh-prow"><span>${t('ssh.hubRotor')}</span><b>90 m · Ø84 m</b></div>
+        <div class="ssh-prow"><span>${t('ssh.method')}</span><b>${t('ssh.methodV')}</b></div>
       </div>
       <div class="ssh-actions">
-        <button id="ssh-fmap" class="sun-btn js-fmap ${mv?._flickerOverlay ? 'active' : ''}" type="button">🗺️ Mapa de flicker (h/año)</button>
+        <button id="ssh-fmap" class="sun-btn js-fmap ${mv?._flickerOverlay ? 'active' : ''}" type="button">${t('ssh.fmap')}</button>
         <div class="sun-legend"><span><i style="background:#bee678"></i>1–5</span><span><i style="background:#fde047"></i>5–15</span><span><i style="background:#fb923c"></i>15–30</span><span><i style="background:#ef4444"></i>≥30 ✗</span></div>
-        <button id="ssh-report" class="sun-btn" type="button">📄 Informe completo (todos)</button>
-        <button id="ssh-inter" class="sun-btn" type="button">🌀 Sombreado entre torres</button>
+        <button id="ssh-report" class="sun-btn" type="button">${t('ssh.reportAll')}</button>
+        <button id="ssh-inter" class="sun-btn" type="button">${t('ssh.inter')}</button>
       </div>
-      <div class="ssh-rcp-h">Receptores (viviendas) · ${rcp.length}${rcp.length ? ` · ${nEx} excede(n)` : ''}
+      <div class="ssh-rcp-h">${t('ssh.rcpH')} · ${rcp.length}${rcp.length ? ` · ${t('ssh.exceedN', nEx)}` : ''}
         <span class="ssh-rcp-act">
           <input type="file" id="ssh-file" accept=".csv,.txt,.kml,.kmz,.geojson,.json,.shp" style="display:none">
-          <button id="ssh-import" class="ssh-mini" type="button" title="Importar receptores desde CSV / KML / KMZ / GeoJSON / SHP">📂 Importar</button>
-          ${rcp.length ? `<button id="ssh-clear" class="ssh-mini" type="button" title="Quitar todos los receptores">🗑 Limpiar</button>` : ''}
+          <button id="ssh-import" class="ssh-mini" type="button" title="${t('ssh.importTip')}">${t('ssh.import')}</button>
+          ${rcp.length ? `<button id="ssh-clear" class="ssh-mini" type="button" title="${t('ssh.clearTip')}">${t('ssh.clear')}</button>` : ''}
         </span>
       </div>
       <div class="ssh-list">${rows}</div>
-      <div class="ssh-foot">Worst-case astronómico (sol siempre despejado, rotor siempre girando) — el criterio que acepta la autoridad. «Real» pondera estadística de sol, operación y rosa de vientos del sitio. El informe completo incluye a <b>todos</b> los receptores (marcados o importados).</div>`;
+      <div class="ssh-foot">${t('ssh.foot')}</div>`;
     host.querySelector('#ssh-fmap')?.addEventListener('click', () => { window.shmMap?.toggleFlickerMap(); window.shmSyncFlickerBtns?.(); });
     host.querySelector('#ssh-report')?.addEventListener('click', () => window.shmMap?.flickerReport());
     host.querySelector('#ssh-inter')?.addEventListener('click', () => window.shmMap?.interTurbineReport());
@@ -889,7 +888,7 @@ function buildDashboard(panel, fleet, actions) {
     const fileInp = host.querySelector('#ssh-file');
     host.querySelector('#ssh-import')?.addEventListener('click', () => fileInp?.click());
     fileInp?.addEventListener('change', async (e) => { const f = e.target.files?.[0]; e.target.value = ''; if (f) await window.shmMap?.importReceptors(f); });
-    host.querySelector('#ssh-clear')?.addEventListener('click', () => { if (confirm('¿Quitar todos los receptores?')) window.shmMap?.clearReceptors(); });
+    host.querySelector('#ssh-clear')?.addEventListener('click', () => { if (confirm(t('ssh.clearConfirm'))) window.shmMap?.clearReceptors(); });
   }
   function showShadow() { setTopView('shadow'); }
 
