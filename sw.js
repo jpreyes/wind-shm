@@ -9,7 +9,7 @@
 // Al subir la versión de la app, suba también CACHE_VERSION para forzar una
 // limpieza completa de la caché antigua en la próxima visita en línea.
 // ──────────────────────────────────────────────────────────────────────────────
-const CACHE_VERSION = 'v199';
+const CACHE_VERSION = 'v200';
 const CACHE = `portico-${CACHE_VERSION}`;
 
 // Núcleo mínimo para que la app arranque aunque sea la primera vez sin red.
@@ -19,13 +19,13 @@ const SHELL = [
   './',
   './index.html',
   './manifest.webmanifest',
-  './style.css?v=243',
-  './ui-v2.css?v=243',
-  './shm.css?v=243',
-  './js/shm/shm_mode.js?v=243',
+  './style.css?v=244',
+  './ui-v2.css?v=244',
+  './shm.css?v=244',
+  './js/shm/shm_mode.js?v=244',
   './lib/numeric.js',
-  './lib/leaflet/leaflet.js?v=243',
-  './lib/leaflet/leaflet.css?v=243',
+  './lib/leaflet/leaflet.js?v=244',
+  './lib/leaflet/leaflet.css?v=244',
   './icons/icon.svg',
   './icons/icon-192.png',
   './icons/icon-512.png',

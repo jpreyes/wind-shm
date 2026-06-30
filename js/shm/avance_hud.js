@@ -9,7 +9,7 @@
 // más un botón «Abrir partida» (vista completa). Sólo DOM/overlay; el 3D lo provee
 // fleet_view (anchorScreenAt / focusComponent).
 // ─────────────────────────────────────────────────────────────────────────────
-import { TURBINE_COMPONENTS, HV_COMPONENTS, enrichStages } from './parks_data_caman.js?v=243';
+import { TURBINE_COMPONENTS, HV_COMPONENTS, enrichStages } from './parks_data_caman.js?v=244';
 
 const fmt = (iso) => { if (!iso) return '—'; const [y, m, d] = iso.split('-'); return `${d}/${m}/${y.slice(2)}`; };
 
@@ -156,31 +156,54 @@ export function buildAvanceHUD(vpwrap, fleet) {
     if (!cur || root.style.display === 'none') return;
     const wr = wrap.getBoundingClientRect();
     svg.setAttribute('width', wr.width); svg.setAttribute('height', wr.height);
-    const off = 96, placed = [];
+    const off = 96, vis = [];
     for (const co of callouts) {
       const a = fleet.anchorScreenAt?.(cur, co.comp.yFrac);
       if (!a || a.behind) { co.el.style.display = 'none'; co.line.style.display = 'none'; continue; }
       co.el.style.display = 'block'; co.line.style.display = '';
-      const ax = a.x - wr.left, ay = a.y - wr.top;
-      const cw = co.el.offsetWidth || 178, ch = co.el.offsetHeight || 44;
-      let x = co.side === 'right' ? ax + off : ax - off - cw;
-      x = Math.max(6, Math.min(x, wr.width - cw - 6));
-      placed.push({ co, ax, ay, cw, ch, x, y: ay - ch / 2 });
+      vis.push({ co, ax: a.x - wr.left, ay: a.y - wr.top, cw: co.el.offsetWidth || 178, ch: co.el.offsetHeight || 44 });
     }
-    // Anti-solape por lado: ordena por altura y empuja hacia abajo si se pisan.
+    if (!vis.length) return;
+    // ¿Hay espacio para anclar a los lados de la torre? Si el viewport es angosto o
+    // la torre está cerca de un borde, NO: se pasa a columna vertical a la izquierda.
+    const colW = Math.max(...vis.map(v => v.cw)) + off + 12;
+    const towerX = vis[0].ax;
+    const noSpace = wr.width < 720 || towerX < colW + 20 || towerX > wr.width - colW - 20;
+    root.classList.toggle('ah-compact', noSpace);     // callouts más angostas en columna
+    if (noSpace) layoutStacked(vis, wr); else layoutAnchored(vis, wr, off);
+  }
+
+  // Layout normal: callouts a los lados de la torre, ancladas a su altura.
+  function layoutAnchored(vis, wr, off) {
+    const placed = vis.map(v => ({ ...v, x: Math.max(6, Math.min(v.co.side === 'right' ? v.ax + off : v.ax - off - v.cw, wr.width - v.cw - 6)), y: v.ay - v.ch / 2 }));
     for (const side of ['left', 'right']) {
       const grp = placed.filter(p => p.co.side === side).sort((a, b) => a.y - b.y);
       for (let i = 1; i < grp.length; i++) { const min = grp[i - 1].y + grp[i - 1].ch + 8; if (grp[i].y < min) grp[i].y = min; }
     }
     for (const p of placed) {
       const y = Math.max(6, Math.min(p.y, wr.height - p.ch - 6));
-      p.co.el.style.left = p.x + 'px'; p.co.el.style.top = y + 'px';
-      const ex = p.co.side === 'right' ? p.x : p.x + p.cw;     // borde interno de la callout
-      const ey = y + Math.min(p.ch / 2, 22);
-      p.co.line.setAttribute('x1', ex); p.co.line.setAttribute('y1', ey);
-      p.co.line.setAttribute('x2', p.ax); p.co.line.setAttribute('y2', p.ay);
-      p.co.line.classList.toggle('hot', expanded === p.co.comp.component);
+      place(p.co, p.x, y, p.co.side === 'right' ? p.x : p.x + p.cw, p.ax, p.ay);
     }
+  }
+
+  // Layout compacto: columna vertical pegada a la IZQUIERDA, de arriba (tope de la
+  // torre) hacia abajo, dejando el resto del visor libre para la torre.
+  function layoutStacked(vis, wr) {
+    vis.sort((a, b) => b.co.comp.yFrac - a.co.comp.yFrac);   // rotor/góndola arriba → fundación abajo
+    const x = 8; let y = 8;
+    for (const v of vis) {
+      const yy = Math.min(y, wr.height - v.ch - 6);
+      place(v.co, x, yy, x + v.cw, v.ax, v.ay);              // línea desde el borde derecho de la columna
+      y = yy + v.ch + 8;
+    }
+  }
+
+  function place(co, x, y, ex, ax, ay) {
+    co.el.style.left = x + 'px'; co.el.style.top = y + 'px';
+    const ey = y + Math.min((co.el.offsetHeight || 44) / 2, 22);
+    co.line.setAttribute('x1', ex); co.line.setAttribute('y1', ey);
+    co.line.setAttribute('x2', ax); co.line.setAttribute('y2', ay);
+    co.line.classList.toggle('hot', expanded === co.comp.component);
   }
 
   function hide() { root.style.display = 'none'; clear(); cur = null; }
