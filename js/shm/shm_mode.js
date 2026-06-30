@@ -8,21 +8,21 @@
 //   inspecciones y señal temporal EN VIVO desde un Web Worker (DataSource).
 // Recortes (modelado) los hace shm.css ocultando, no borrando.
 // ─────────────────────────────────────────────────────────────────────────────
-import { FleetView } from './fleet_view.js?v=273';
-import { DataSource } from './data_source.js?v=273';
-import { computeTwin } from './digital_twin.js?v=273';
-import { ParkManager, loadParksStore } from './parks.js?v=273';
-import { MapView } from './map_view.js?v=273';
-import { defaultStages, builtFromStages } from './parks_data_caman.js?v=273';
-import { compassRoseSVG } from './compass.js?v=273';
-import { buildAvanceHUD } from './avance_hud.js?v=273';
-import { renderAvance } from './avance_dashboard.js?v=273';
-import * as Insp from './inspection.js?v=273';
-import * as Fat from './fatigue.js?v=273';
-import { t, getLang, setLang } from './i18n.js?v=273';
+import { FleetView } from './fleet_view.js?v=274';
+import { DataSource } from './data_source.js?v=274';
+import { computeTwin } from './digital_twin.js?v=274';
+import { ParkManager, loadParksStore } from './parks.js?v=274';
+import { MapView } from './map_view.js?v=274';
+import { defaultStages, builtFromStages } from './parks_data_caman.js?v=274';
+import { compassRoseSVG } from './compass.js?v=274';
+import { buildAvanceHUD } from './avance_hud.js?v=274';
+import { renderAvance } from './avance_dashboard.js?v=274';
+import * as Insp from './inspection.js?v=274';
+import * as Fat from './fatigue.js?v=274';
+import { t, getLang, setLang } from './i18n.js?v=274';
 
 const F1_BASE = { turbine: 0.283, hv: 1.6 };
-const REWIND_VER = 'v273';   // versión visible del build (subir junto al cache-bust)
+const REWIND_VER = 'v274';   // versión visible del build (subir junto al cache-bust)
 const FS = 62.5;   // frecuencia de muestreo de la señal (Hz), igual que shm_worker.js
 // Clasificador ML de daño (0..4)
 const CLS = ['Sin daño', 'Leve', 'Moderado', 'Alto', 'Muy alto'];
@@ -268,7 +268,7 @@ async function boot() {
   // ── Relieve conceptual del terreno (DEM vendorizado) — encendido por defecto ─
   setLoad(88, 'Cargando relieve…'); await delay(40);
   try {
-    await fleet.loadTerrain('data/caman_dem.json?v=273');
+    await fleet.loadTerrain('data/caman_dem.json?v=274');
     fleet.setTerrainVisible(true);
     document.getElementById('shm-relieve-tool')?.classList.add('active');
   } catch (e) { console.warn('[shm] relieve no disponible', e); }

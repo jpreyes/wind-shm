@@ -9,10 +9,10 @@
 // más un botón «Abrir partida» (vista completa). Sólo DOM/overlay; el 3D lo provee
 // fleet_view (anchorScreenAt / focusComponent).
 // ─────────────────────────────────────────────────────────────────────────────
-import { TURBINE_COMPONENTS, HV_COMPONENTS, enrichStages } from './parks_data_caman.js?v=273';
-import * as CTwin from './construction_twin.js?v=273';
-import * as Insp from './inspection.js?v=273';
-import { t, getLang } from './i18n.js?v=273';
+import { TURBINE_COMPONENTS, HV_COMPONENTS, enrichStages } from './parks_data_caman.js?v=274';
+import * as CTwin from './construction_twin.js?v=274';
+import * as Insp from './inspection.js?v=274';
+import { t, getLang } from './i18n.js?v=274';
 
 const fmt = (iso) => { if (!iso) return '—'; const [y, m, d] = iso.split('-'); return `${d}/${m}/${y.slice(2)}`; };
 
@@ -118,6 +118,7 @@ export function buildAvanceHUD(vpwrap, fleet) {
 
     if (mode === 'shm') {
       comps = (st.sensors || []).map(se => ({ component: se.id, label: sensorLabel(se), icon: '📡', yFrac: se._hfrac ?? (/mid/.test(se.id) ? 0.5 : 0.92) }));
+      if (st.gateway?.mesh) comps.push({ component: '__gw__', label: t('ahud.gateway'), icon: '📶', yFrac: 0.05, gateway: true });   // nodo de enlace en la base
     } else {
       comps = st.type === 'hv' ? HV_COMPONENTS : TURBINE_COMPONENTS;
       stages = enrichStages(st.stages, st.type, st.id);
@@ -236,6 +237,7 @@ export function buildAvanceHUD(vpwrap, fleet) {
   function renderShmCallouts() {
     const sum = window.shmData?.get(cur.id);
     for (const co of callouts) {
+      if (co.comp.gateway) { renderGatewayCallout(co, sum); continue; }
       const se = (sum?.sensors || []).find(s => s.id === co.comp.component) || (cur.sensors || []).find(s => s.id === co.comp.component);
       const fault = se?.status === 'fault';
       const rms = se && se.rms != null ? (se.rms * 1000).toFixed(1) + ' mg' : '—';
@@ -256,6 +258,27 @@ export function buildAvanceHUD(vpwrap, fleet) {
         </table><button class="ah-open" type="button">${t('ahud.seeShm')}</button></div>` : ''}`;
       if (open) co.el.querySelector('.ah-open')?.addEventListener('click', (e) => { e.stopPropagation(); window.shmDash?.showSHM?.(); });
     }
+  }
+
+  // Callout del GATEWAY (nodo de enlace en la base): estado en línea + sensores enlazados.
+  function renderGatewayCallout(co, sum) {
+    const nS = (cur.sensors || []).length;
+    const open = expanded === co.comp.component;
+    co.el.classList.toggle('open', open);
+    co.el.innerHTML = `
+      <div class="ah-head">
+        <span class="ah-dot done"></span><span class="ah-ico">${co.comp.icon}</span>
+        <span class="ah-name">${co.comp.label}</span>
+        <span class="ah-pct">${t('ahud.gwOnline')}</span>
+        <span class="ah-chev">${open ? '▾' : '▸'}</span>
+      </div>
+      ${open ? `<div class="ah-body"><table class="ah-kv">
+        <tr><td>${t('ahud.state')}</td><td>${t('ahud.gwOnline')}</td></tr>
+        <tr><td>${t('ahud.gwRole')}</td><td>${t('ahud.gwRoleV')}</td></tr>
+        <tr><td>${t('ahud.gwSensors')}</td><td>${nS}</td></tr>
+        <tr><td>${t('ahud.f1now')}</td><td>${sum?.f1 != null ? sum.f1.toFixed(3) + ' Hz' : '—'}</td></tr>
+      </table><button class="ah-open" type="button">${t('ahud.seeShm')}</button></div>` : ''}`;
+    if (open) co.el.querySelector('.ah-open')?.addEventListener('click', (e) => { e.stopPropagation(); window.shmDash?.showSHM?.(); });
   }
 
   // Refresca SÓLO los valores en vivo del modo sensores (sin reconstruir el DOM).
