@@ -8,21 +8,21 @@
 //   inspecciones y señal temporal EN VIVO desde un Web Worker (DataSource).
 // Recortes (modelado) los hace shm.css ocultando, no borrando.
 // ─────────────────────────────────────────────────────────────────────────────
-import { FleetView } from './fleet_view.js?v=263';
-import { DataSource } from './data_source.js?v=263';
-import { computeTwin } from './digital_twin.js?v=263';
-import { ParkManager, loadParksStore } from './parks.js?v=263';
-import { MapView } from './map_view.js?v=263';
-import { defaultStages, builtFromStages } from './parks_data_caman.js?v=263';
-import { compassRoseSVG } from './compass.js?v=263';
-import { buildAvanceHUD } from './avance_hud.js?v=263';
-import { renderAvance } from './avance_dashboard.js?v=263';
-import * as Insp from './inspection.js?v=263';
-import * as Fat from './fatigue.js?v=263';
-import { t, getLang, setLang } from './i18n.js?v=263';
+import { FleetView } from './fleet_view.js?v=264';
+import { DataSource } from './data_source.js?v=264';
+import { computeTwin } from './digital_twin.js?v=264';
+import { ParkManager, loadParksStore } from './parks.js?v=264';
+import { MapView } from './map_view.js?v=264';
+import { defaultStages, builtFromStages } from './parks_data_caman.js?v=264';
+import { compassRoseSVG } from './compass.js?v=264';
+import { buildAvanceHUD } from './avance_hud.js?v=264';
+import { renderAvance } from './avance_dashboard.js?v=264';
+import * as Insp from './inspection.js?v=264';
+import * as Fat from './fatigue.js?v=264';
+import { t, getLang, setLang } from './i18n.js?v=264';
 
 const F1_BASE = { turbine: 0.283, hv: 1.6 };
-const REWIND_VER = 'v263';   // versión visible del build (subir junto al cache-bust)
+const REWIND_VER = 'v264';   // versión visible del build (subir junto al cache-bust)
 const FS = 62.5;   // frecuencia de muestreo de la señal (Hz), igual que shm_worker.js
 // Clasificador ML de daño (0..4)
 const CLS = ['Sin daño', 'Leve', 'Moderado', 'Alto', 'Muy alto'];
@@ -263,7 +263,7 @@ async function boot() {
   // ── Relieve conceptual del terreno (DEM vendorizado) — encendido por defecto ─
   setLoad(88, 'Cargando relieve…'); await delay(40);
   try {
-    await fleet.loadTerrain('data/caman_dem.json?v=263');
+    await fleet.loadTerrain('data/caman_dem.json?v=264');
     fleet.setTerrainVisible(true);
     document.getElementById('shm-relieve-tool')?.classList.add('active');
   } catch (e) { console.warn('[shm] relieve no disponible', e); }
@@ -772,15 +772,15 @@ function buildDashboard(panel, fleet, actions) {
     <div class="shm-view" id="view-shadow" style="display:none"><div class="shm-shadow" id="shm-shadow"></div></div>
     <div class="shm-view" id="view-parque">
       <div class="shm-fleet">
-        <div class="shm-stat"><div class="k">Estructuras</div><div class="v" id="shm-count">0</div></div>
-        <div class="shm-stat"><div class="k">Sensores OK</div><div class="v" style="color:var(--success)" id="shm-ok">0</div></div>
-        <div class="shm-stat"><div class="k">Fallas</div><div class="v" style="color:var(--danger)" id="shm-fault">0</div></div>
-        <div class="shm-stat"><div class="k">Alarmas</div><div class="v" style="color:var(--danger)" id="shm-alarm-count">0</div></div>
+        <div class="shm-stat"><div class="k">${t('sb.struct')}</div><div class="v" id="shm-count">0</div></div>
+        <div class="shm-stat"><div class="k">${t('sh.sensOk')}</div><div class="v" style="color:var(--success)" id="shm-ok">0</div></div>
+        <div class="shm-stat"><div class="k">${t('pq.faults')}</div><div class="v" style="color:var(--danger)" id="shm-fault">0</div></div>
+        <div class="shm-stat"><div class="k">${t('sb.alarm')}</div><div class="v" style="color:var(--danger)" id="shm-alarm-count">0</div></div>
       </div>
       <div class="shm-parkprog" id="shm-parkprog"></div>
       <div class="shm-venc" id="shm-venc"></div>
       <div class="shm-listwrap">
-        <div class="shm-list-h">Estructuras del parque</div>
+        <div class="shm-list-h">${t('pq.listH')}</div>
         <div class="shm-list" id="shm-list"></div>
       </div>
     </div>
@@ -940,9 +940,9 @@ function buildDashboard(panel, fleet, actions) {
     if (!bs.length) { box.innerHTML = ''; return; }
     const avg = Math.round(bs.reduce((a, b) => a + b, 0) / bs.length * 100);
     const done = bs.filter(b => b >= 0.999).length, found = bs.filter(b => b <= 0.02).length;
-    box.innerHTML = `<div class="pp-top"><span>Avance del parque</span><b>${avg}%</b></div>
+    box.innerHTML = `<div class="pp-top"><span>${t('pp.parkProg')}</span><b>${avg}%</b></div>
       <div class="pp-bar"><i style="width:${avg}%"></i></div>
-      <div class="pp-sub">${done} completas · ${bs.length - done - found} en montaje · ${found} solo fundación</div>`;
+      <div class="pp-sub">${t('pp.sub', done, bs.length - done - found, found)}</div>`;
   }
   // Rollup de vencimientos de inspección a nivel PARQUE (bandeja en la pestaña Parque).
   function updateRollup() {
@@ -961,19 +961,19 @@ function buildDashboard(panel, fleet, actions) {
     items.sort((a, b) => (b.due.overdue - a.due.overdue) || (b.odue - a.odue) || (b.open - a.open));
     const acts = `<span class="venc-acts">
       <input type="file" id="venc-file" accept=".json,application/json" style="display:none">
-      <button id="venc-export" class="venc-mini" title="Exportar todas las inspecciones a JSON (respaldo)">⬇ Exportar</button>
-      <button id="venc-import" class="venc-mini" title="Importar inspecciones desde un respaldo JSON">⬆ Importar</button></span>`;
+      <button id="venc-export" class="venc-mini" title="${t('venc.exportTip')}">${t('venc.export')}</button>
+      <button id="venc-import" class="venc-mini" title="${t('venc.importTip')}">${t('venc.import')}</button></span>`;
     if (!items.length) {
-      box.innerHTML = `<div class="venc-h">Vencimientos de inspección ${acts}</div><div class="venc-ok">✓ Sin vencimientos ni órdenes abiertas.</div>`;
+      box.innerHTML = `<div class="venc-h">${t('venc.h')} ${acts}</div><div class="venc-ok">${t('venc.ok')}</div>`;
     } else {
       const rows = items.slice(0, 8).map(it => `
         <button class="venc-row" data-venc="${it.id}">
           <span class="venc-dot ${it.due.overdue ? 'bad' : it.due.soon ? 'warn' : 'ok'}"></span>
           <span class="venc-nm">${it.label}</span>
-          <span class="venc-badges">${it.due.overdue ? '<i class="b bad">vencida</i>' : it.due.soon ? '<i class="b warn">por vencer</i>' : ''}${it.open ? `<i class="b ${it.odue ? 'bad' : ''}">${it.open} OT${it.odue ? ` · ${it.odue}⚠` : ''}</i>` : ''}</span>
+          <span class="venc-badges">${it.due.overdue ? `<i class="b bad">${t('venc.overdue')}</i>` : it.due.soon ? `<i class="b warn">${t('venc.soon')}</i>` : ''}${it.open ? `<i class="b ${it.odue ? 'bad' : ''}">${it.open} OT${it.odue ? ` · ${it.odue}⚠` : ''}</i>` : ''}</span>
         </button>`).join('');
       box.innerHTML = `
-        <div class="venc-h">Vencimientos de inspección <span class="venc-sum">${vOverdue} vencida(s) · ${vSoon} por vencer · ${woOpen} OT (${woOverdue}⚠)</span> ${acts}</div>
+        <div class="venc-h">${t('venc.h')} <span class="venc-sum">${t('venc.sum', vOverdue, vSoon, woOpen, woOverdue)}</span> ${acts}</div>
         <div class="venc-list">${rows}</div>`;
     }
     box.querySelectorAll('[data-venc]').forEach(b => b.addEventListener('click', () => { fleet.selectById(b.dataset.venc); window.shmDash?.showInsp?.(); }));
@@ -987,9 +987,9 @@ function buildDashboard(panel, fleet, actions) {
     box.querySelector('#venc-import').addEventListener('click', () => vf.click());
     vf.addEventListener('change', async (e) => {
       const f = e.target.files?.[0]; e.target.value = ''; if (!f) return;
-      const merge = confirm('Importar respaldo:\n\n[Aceptar] = FUSIONAR con lo existente\n[Cancelar] = REEMPLAZAR todo');
-      try { const n = Insp.importJSON(await f.text(), !merge); updateRollup(); if (current) renderInsp(); alert(`Importadas inspecciones de ${n} estructura(s).`); }
-      catch (err) { alert('No se pudo importar: ' + (err.message || err)); }
+      const merge = confirm(t('venc.confirm'));
+      try { const n = Insp.importJSON(await f.text(), !merge); updateRollup(); if (current) renderInsp(); alert(t('venc.imported', n)); }
+      catch (err) { alert(t('venc.importFail', err.message || err)); }
     });
   }
 
@@ -1257,16 +1257,16 @@ function buildDashboard(panel, fleet, actions) {
     const dmgRows = sel.damages.length ? sel.damages.map(d => {
       const sc = Insp.scoreDamage(d), b = Insp.scoreBand(sc);
       const np = (d.photos || []).length;
-      const strip = np ? `<div class="ins-dmg-photos">${d.photos.map(p => `<div class="ins-dphoto" data-d="${d.id}" data-p="${p.id}" style="background-image:url('${p.url}')"><button class="ins-px" data-del-dmgphoto title="Quitar foto">✕</button></div>`).join('')}</div>` : '';
+      const strip = np ? `<div class="ins-dmg-photos">${d.photos.map(p => `<div class="ins-dphoto" data-d="${d.id}" data-p="${p.id}" style="background-image:url('${p.url}')"><button class="ins-px" data-del-dmgphoto title="${t('ins.rmPhoto')}">✕</button></div>`).join('')}</div>` : '';
       return `<div class="ins-dmg-wrap">
         <div class="ins-dmg">
           <span class="ins-dmg-sc ${b.cls}">${sc.toFixed(0)}</span>
           <span class="ins-dmg-v"><b>${d.damage_type}</b><br><span class="ins-mut">${d.severity} · ${d.damage_cause}${d.extent ? ' · ' + d.extent : ''}${d.location ? ' · ' + d.location : ''}</span></span>
-          <button class="ins-dmg-cam" data-dmg-addphoto="${d.id}" title="Agregar foto al hallazgo">📷${np ? ' ' + np : ''}</button>
-          <button class="ins-ot" data-ot="${d.id}" title="Crear orden de trabajo">→ OT</button>
-          <button class="ins-x" data-del-dmg="${d.id}" title="Quitar hallazgo">✕</button>
+          <button class="ins-dmg-cam" data-dmg-addphoto="${d.id}" title="${t('ins.addPhotoFinding')}">📷${np ? ' ' + np : ''}</button>
+          <button class="ins-ot" data-ot="${d.id}" title="${t('ins.otTip')}">→ OT</button>
+          <button class="ins-x" data-del-dmg="${d.id}" title="${t('ins.rmFinding')}">✕</button>
         </div>${strip}</div>`;
-    }).join('') : '<div class="ins-mut">Sin hallazgos. Agrega uno abajo.</div>';
+    }).join('') : `<div class="ins-mut">${t('ins.noFindings')}</div>`;
 
     const listRows = inspections.map(i => {
       const sc = Insp.inspectionScore(i.damages), b = Insp.scoreBand(sc);
@@ -1282,41 +1282,41 @@ function buildDashboard(panel, fleet, actions) {
         <div class="ins-head">Inspección · ${o.label}
           <span class="ins-cond ${sel.condition}">${Insp.conditionLabel(sel.condition)}</span></div>
         <div class="ins-kpis">
-          <div class="ins-kpi"><div class="k">Inspecciones</div><div class="v">${inspections.length}</div></div>
-          <div class="ins-kpi"><div class="k">Score (sel.)</div><div class="v ${band.cls}">${score.toFixed(0)}</div></div>
-          <div class="ins-kpi"><div class="k">Hallazgos</div><div class="v">${sel.damages.length}</div></div>
-          <div class="ins-kpi"><div class="k">Ensayos</div><div class="v">${sel.tests.length}</div></div>
+          <div class="ins-kpi"><div class="k">${t('ins.kInsp')}</div><div class="v">${inspections.length}</div></div>
+          <div class="ins-kpi"><div class="k">${t('ins.kScore')}</div><div class="v ${band.cls}">${score.toFixed(0)}</div></div>
+          <div class="ins-kpi"><div class="k">${t('ins.kFindings')}</div><div class="v">${sel.damages.length}</div></div>
+          <div class="ins-kpi"><div class="k">${t('ins.kTests')}</div><div class="v">${sel.tests.length}</div></div>
         </div>
         ${(() => {
           const due = Insp.dueState(sel.nextDate), ow = (sel.workOrders || []).filter(w => w.status !== 'cerrado'), odw = ow.filter(w => Insp.dueState(w.due).overdue).length;
           const m = [];
-          if (due.overdue) m.push('inspección vencida'); else if (due.soon) m.push('inspección por vencer');
-          if (odw) m.push(`${odw} OT vencida(s)`); if (ow.length) m.push(`${ow.length} OT abierta(s)`);
+          if (due.overdue) m.push(t('ins.aOverdue')); else if (due.soon) m.push(t('ins.aSoon'));
+          if (odw) m.push(t('ins.aWoOverdue', odw)); if (ow.length) m.push(t('ins.aWoOpen', ow.length));
           return m.length ? `<div class="ins-alert ${due.overdue || odw ? 'bad' : 'warn'}">⚠ ${m.join(' · ')}</div>` : '';
         })()}
-        <div class="shm-sub2">Histórico de evaluación del estado estructural</div>
+        <div class="shm-sub2">${t('ins.hist')}</div>
         ${evalHistorySVG(hist)}
-        <div class="ins-actrow"><button id="ins-new" class="ins-btn">＋ Nueva inspección</button></div>
-        <div class="shm-sub2">Inspecciones</div>
+        <div class="ins-actrow"><button id="ins-new" class="ins-btn">${t('ins.new')}</button></div>
+        <div class="shm-sub2">${t('ins.listH')}</div>
         <div class="ins-list">${listRows}</div>
         <div class="ins-card">
           <div class="ins-card-h">${sel.date} · <b>${sel.inspector}</b>
-            <span class="ins-score ${band.cls}" title="Score determinista 0–100">${score.toFixed(0)} <small>${band.label}</small></span></div>
+            <span class="ins-score ${band.cls}" title="${t('ins.scoreTitle')}">${score.toFixed(0)} <small>${band.label}</small></span></div>
           <div class="ins-meta">
-            <label>Fecha<input type="date" id="ins-date" value="${sel.date}"></label>
-            <label>Inspector<input type="text" id="ins-insp" value="${sel.inspector}"></label>
-            <label>Condición<select id="ins-cond">${condOpt}</select></label>
-            <label>Ubicación<input type="text" id="ins-loc" value="${sel.location || ''}"></label>
-            <label>Próxima inspección<input type="date" id="ins-next" value="${sel.nextDate || ''}"></label>
+            <label>${t('ins.fDate')}<input type="date" id="ins-date" value="${sel.date}"></label>
+            <label>${t('ins.fInsp')}<input type="text" id="ins-insp" value="${sel.inspector}"></label>
+            <label>${t('ins.fCond')}<select id="ins-cond">${condOpt}</select></label>
+            <label>${t('ins.fLoc')}<input type="text" id="ins-loc" value="${sel.location || ''}"></label>
+            <label>${t('ins.fNext')}<input type="date" id="ins-next" value="${sel.nextDate || ''}"></label>
           </div>
-          <label class="ins-sumlbl">Resumen<textarea id="ins-sum" rows="2">${sel.summary || ''}</textarea></label>
+          <label class="ins-sumlbl">${t('ins.summary')}<textarea id="ins-sum" rows="2">${sel.summary || ''}</textarea></label>
 
-          <div class="shm-sub2">Fotografías · ${(sel.photos || []).length}</div>
-          <div class="ins-photos">${(sel.photos || []).map(p => `<div class="ins-photo" data-photo="${p.id}" style="background-image:url('${p.url}')"><button class="ins-px" data-del-photo="${p.id}" title="Quitar foto">✕</button></div>`).join('') || '<div class="ins-mut">Sin fotos.</div>'}</div>
+          <div class="shm-sub2">${t('ins.photos')} · ${(sel.photos || []).length}</div>
+          <div class="ins-photos">${(sel.photos || []).map(p => `<div class="ins-photo" data-photo="${p.id}" style="background-image:url('${p.url}')"><button class="ins-px" data-del-photo="${p.id}" title="${t('ins.rmPhoto')}">✕</button></div>`).join('') || `<div class="ins-mut">${t('ins.noPhotos')}</div>`}</div>
           <input type="file" id="ins-photo-file" accept="image/*" style="display:none">
-          <button id="ins-addphoto" class="ins-mini-btn">＋ Foto</button>
+          <button id="ins-addphoto" class="ins-mini-btn">${t('ins.addPhoto')}</button>
 
-          <div class="shm-sub2">Hallazgos (daños) · score auto</div>
+          <div class="shm-sub2">${t('ins.findings')}</div>
           <div class="ins-dmgs">${dmgRows}</div>
           <input type="file" id="nd-photo-file" accept="image/*" style="display:none">
           <div class="ins-addform">
@@ -1324,37 +1324,37 @@ function buildDashboard(panel, fleet, actions) {
             <select id="nd-cause">${opt(Insp.DAMAGE_CAUSES, '')}</select>
             <div class="ins-add3">
               <select id="nd-sev">${opt(Insp.SEVERITIES, 'Media')}</select>
-              <input type="text" id="nd-ext" placeholder="extensión (%)" >
-              <input type="text" id="nd-loc" placeholder="ubicación">
+              <input type="text" id="nd-ext" placeholder="${t('ins.extent')}" >
+              <input type="text" id="nd-loc" placeholder="${t('ins.loc')}">
             </div>
-            <button id="nd-add" class="ins-btn">＋ Agregar hallazgo</button>
+            <button id="nd-add" class="ins-btn">${t('ins.addFinding')}</button>
           </div>
 
-          <div class="shm-sub2">Ensayos · ${sel.tests.length}</div>
-          <div class="ins-mini">${sel.tests.map(t => { const c = Insp.classifyTest(t.test_type); return `<div class="ins-li"><span class="ins-tbadge ${c.ndt ? 'ndt' : ''}">${c.label}</span> <b>${t.test_type}</b> — ${t.result_summary || '—'} <button class="ins-x" data-del-test="${t.id}">✕</button></div>`; }).join('') || '<div class="ins-mut">Sin ensayos.</div>'}</div>
-          <button id="ins-addtest" class="ins-mini-btn">＋ Ensayo</button>
+          <div class="shm-sub2">${t('ins.tests')} · ${sel.tests.length}</div>
+          <div class="ins-mini">${sel.tests.map(t2 => { const c = Insp.classifyTest(t2.test_type); return `<div class="ins-li"><span class="ins-tbadge ${c.ndt ? 'ndt' : ''}">${c.label}</span> <b>${t2.test_type}</b> — ${t2.result_summary || '—'} <button class="ins-x" data-del-test="${t2.id}">✕</button></div>`; }).join('') || `<div class="ins-mut">${t('ins.noTests')}</div>`}</div>
+          <button id="ins-addtest" class="ins-mini-btn">${t('ins.addTest')}</button>
 
-          <div class="shm-sub2">Documentos · ${sel.documents.length}</div>
-          <div class="ins-mini">${sel.documents.map(dc => `<div class="ins-li">📎 <b>${dc.title}</b> <span class="ins-mut">(${dc.category})</span> <button class="ins-x" data-del-doc="${dc.id}">✕</button></div>`).join('') || '<div class="ins-mut">Sin documentos.</div>'}</div>
-          <button id="ins-adddoc" class="ins-mini-btn">＋ Documento</button>
+          <div class="shm-sub2">${t('ins.docs')} · ${sel.documents.length}</div>
+          <div class="ins-mini">${sel.documents.map(dc => `<div class="ins-li">📎 <b>${dc.title}</b> <span class="ins-mut">(${dc.category})</span> <button class="ins-x" data-del-doc="${dc.id}">✕</button></div>`).join('') || `<div class="ins-mut">${t('ins.noDocs')}</div>`}</div>
+          <button id="ins-adddoc" class="ins-mini-btn">${t('ins.addDoc')}</button>
 
-          <div class="shm-sub2">Órdenes de trabajo · ${(sel.workOrders || []).length}</div>
+          <div class="shm-sub2">${t('ins.wos')} · ${(sel.workOrders || []).length}</div>
           <div class="ins-mini">${(sel.workOrders || []).map(w => { const dd = Insp.dueState(w.due); return `<div class="ins-wo">
-            <button class="ins-wost s-${w.status.replace(/ /g, '')}" data-wo="${w.id}" title="Cambiar estado">${w.status}</button>
-            <span class="ins-wo-v"><b>${w.title}</b><br><span class="ins-mut">${w.assignee || 'sin asignar'} · prio ${w.priority}${w.due ? ` · vence ${w.due}${dd.overdue ? ' ⚠' : ''}` : ''}</span></span>
-            <button class="ins-x" data-del-wo="${w.id}">✕</button></div>`; }).join('') || '<div class="ins-mut">Sin órdenes de trabajo.</div>'}</div>
-          <button id="ins-addwo" class="ins-mini-btn">＋ Orden de trabajo</button>
+            <button class="ins-wost s-${w.status.replace(/ /g, '')}" data-wo="${w.id}" title="${t('ins.woStateTip')}">${w.status}</button>
+            <span class="ins-wo-v"><b>${w.title}</b><br><span class="ins-mut">${w.assignee || t('ins.unassigned')} · ${t('ins.prio')} ${w.priority}${w.due ? ` · ${t('ins.dueWord')} ${w.due}${dd.overdue ? ' ⚠' : ''}` : ''}</span></span>
+            <button class="ins-x" data-del-wo="${w.id}">✕</button></div>`; }).join('') || `<div class="ins-mut">${t('ins.noWos')}</div>`}</div>
+          <button id="ins-addwo" class="ins-mini-btn">${t('ins.addWo')}</button>
 
-          <div class="ins-foot"><button id="ins-report" class="ins-btn">📄 Informe de inspección</button>
-            <button id="ins-del" class="ins-del">🗑 Eliminar</button></div>
+          <div class="ins-foot"><button id="ins-report" class="ins-btn">${t('ins.report')}</button>
+            <button id="ins-del" class="ins-del">${t('ins.del')}</button></div>
         </div>
-        <div class="note" style="font-size:10px">Score determinista (severidad·causa·tipo·extensión, 0–100) — método portado de structapp-base. Distinto del estado por sensores (pestaña SHM).</div>
+        <div class="note" style="font-size:10px">${t('ins.note')}</div>
       </div>`;
 
     const save = (re = true) => { Insp.updateInspection(o.id, sel); updateRollup(); if (re) renderInsp(); };
     host.querySelectorAll('[data-insp]').forEach(b => b.addEventListener('click', () => { inspSel = b.dataset.insp; renderInsp(); }));
     host.querySelector('#ins-new').addEventListener('click', () => { const ni = Insp.addInspection(o.id, { inspector: latest.inspector }); inspSel = ni.id; renderInsp(); });
-    host.querySelector('#ins-del').addEventListener('click', () => { if (confirm('¿Eliminar esta inspección?')) { Insp.removeInspection(o.id, sel.id); inspSel = null; renderInsp(); } });
+    host.querySelector('#ins-del').addEventListener('click', () => { if (confirm(t('ins.delConfirm'))) { Insp.removeInspection(o.id, sel.id); inspSel = null; renderInsp(); } });
     host.querySelector('#ins-date').addEventListener('change', (e) => { sel.date = e.target.value; save(); });
     host.querySelector('#ins-insp').addEventListener('change', (e) => { sel.inspector = e.target.value; save(false); });
     host.querySelector('#ins-loc').addEventListener('change', (e) => { sel.location = e.target.value; save(false); });
@@ -1366,15 +1366,15 @@ function buildDashboard(panel, fleet, actions) {
       sel.damages.push({ id: Insp.uid(), damage_type: $('#nd-type').value, damage_cause: $('#nd-cause').value, severity: $('#nd-sev').value, extent: $('#nd-ext').value.trim(), location: $('#nd-loc').value.trim(), comments: '' });
       sel.condition = Insp.conditionFromScore(Insp.inspectionScore(sel.damages)); save();
     });
-    host.querySelector('#ins-addtest').addEventListener('click', () => { const t = (prompt('Tipo de ensayo (p.ej. Esclerómetro, Ultrasonido, Par de apriete):', '') || '').trim(); if (!t) return; const r = (prompt('Resultado / resumen:', '') || '').trim(); sel.tests.push({ id: Insp.uid(), test_type: t, result_summary: r, executed_at: new Date().toISOString().slice(0, 10) }); save(); });
-    host.querySelector('#ins-adddoc').addEventListener('click', () => { const t = (prompt('Título del documento:', '') || '').trim(); if (!t) return; const c = (prompt('Categoría (informe/fotografía/ensayo/otro):', 'informe') || 'otro').trim(); sel.documents.push({ id: Insp.uid(), title: t, category: c, issued_at: new Date().toISOString().slice(0, 10) }); save(); });
+    host.querySelector('#ins-addtest').addEventListener('click', () => { const tt = (prompt(t('ins.pTestType'), '') || '').trim(); if (!tt) return; const r = (prompt(t('ins.pTestResult'), '') || '').trim(); sel.tests.push({ id: Insp.uid(), test_type: tt, result_summary: r, executed_at: new Date().toISOString().slice(0, 10) }); save(); });
+    host.querySelector('#ins-adddoc').addEventListener('click', () => { const tt = (prompt(t('ins.pDocTitle'), '') || '').trim(); if (!tt) return; const c = (prompt(t('ins.pDocCat'), 'informe') || 'otro').trim(); sel.documents.push({ id: Insp.uid(), title: tt, category: c, issued_at: new Date().toISOString().slice(0, 10) }); save(); });
     host.querySelectorAll('[data-del-test]').forEach(b => b.addEventListener('click', () => { sel.tests = sel.tests.filter(t => t.id !== b.dataset.delTest); save(); }));
     host.querySelectorAll('[data-del-doc]').forEach(b => b.addEventListener('click', () => { sel.documents = sel.documents.filter(d => d.id !== b.dataset.delDoc); save(); }));
     // Órdenes de trabajo
     host.querySelector('#ins-addwo').addEventListener('click', () => {
-      const title = (prompt('Título de la orden de trabajo:', '') || '').trim(); if (!title) return;
-      const assignee = (prompt('Responsable:', '') || '').trim();
-      const priority = (prompt('Prioridad (baja/media/alta):', 'media') || 'media').trim().toLowerCase();
+      const title = (prompt(t('ins.pWoTitle'), '') || '').trim(); if (!title) return;
+      const assignee = (prompt(t('ins.pWoAssignee'), '') || '').trim();
+      const priority = (prompt(t('ins.pWoPrio'), 'media') || 'media').trim().toLowerCase();
       (sel.workOrders ||= []).push({ id: Insp.uid(), title, assignee, priority: Insp.WO_PRIORITY.includes(priority) ? priority : 'media', status: 'abierto', due: sel.nextDate || '' });
       save();
     });
@@ -1392,7 +1392,7 @@ function buildDashboard(panel, fleet, actions) {
     pf.addEventListener('change', async (e) => {
       const f = e.target.files?.[0]; e.target.value = ''; if (!f) return;
       try { const url = await Insp.imageToThumb(f); (sel.photos ||= []).push({ id: Insp.uid(), url }); save(); }
-      catch (err) { alert('No se pudo procesar la foto: ' + (err?.message || err)); }
+      catch (err) { alert(t('ins.photoFail', err?.message || err)); }
     });
     host.querySelectorAll('[data-del-photo]').forEach(b => b.addEventListener('click', (e) => { e.stopPropagation(); sel.photos = (sel.photos || []).filter(p => p.id !== b.dataset.delPhoto); save(); }));
     host.querySelectorAll('.ins-photo').forEach(d => d.addEventListener('click', (e) => { if (e.target.closest('.ins-px')) return; const p = (sel.photos || []).find(x => x.id === d.dataset.photo); if (p) { const w = window.open('', '_blank'); if (w) w.document.write(`<img src="${p.url}" style="max-width:100%">`); } }));
@@ -1405,7 +1405,7 @@ function buildDashboard(panel, fleet, actions) {
       if (!f || !tid) return;
       const d = sel.damages.find(x => x.id === tid); if (!d) return;
       try { const url = await Insp.imageToThumb(f); (d.photos ||= []).push({ id: Insp.uid(), url }); save(); }
-      catch (err) { alert('No se pudo procesar la foto: ' + (err?.message || err)); }
+      catch (err) { alert(t('ins.photoFail', err?.message || err)); }
     });
     host.querySelectorAll('[data-del-dmgphoto]').forEach(b => b.addEventListener('click', (e) => {
       e.stopPropagation();

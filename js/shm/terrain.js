@@ -9,7 +9,7 @@
 // torres y drapear caminos sobre el relieve.
 // ─────────────────────────────────────────────────────────────────────────────
 import * as THREE from 'three';
-import { CAMAN_CENTER, LAYOUT_SCALE, toScene } from './parks_data_caman.js?v=263';
+import { CAMAN_CENTER, LAYOUT_SCALE, toScene } from './parks_data_caman.js?v=264';
 
 const M_PER_DEG_LAT = 111320;
 const M_PER_DEG_LON = 111320 * Math.cos(CAMAN_CENTER.lat * Math.PI / 180);
