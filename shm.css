@@ -383,3 +383,6 @@ body.shm #shm-banner.show { display: flex; animation: shm-blink 0.8s steps(1) in
 .shm-sun .sun-btn { width: 100%; padding: 6px; cursor: pointer; border-radius: var(--radius-sm, 6px);
   background: var(--bg4); color: var(--text); border: 1px solid var(--border2); }
 .shm-sun .sun-btn:hover { filter: brightness(1.15); }
+
+/* Estudio de sol en el mapa 2D: atenúa el basemap para que la sombra contraste */
+.mv-sun .leaflet-tile-pane { filter: brightness(0.5) saturate(0.65); }

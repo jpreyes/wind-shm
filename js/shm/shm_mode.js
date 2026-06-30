@@ -8,15 +8,15 @@
 //   inspecciones y señal temporal EN VIVO desde un Web Worker (DataSource).
 // Recortes (modelado) los hace shm.css ocultando, no borrando.
 // ─────────────────────────────────────────────────────────────────────────────
-import { FleetView } from './fleet_view.js?v=221';
-import { DataSource } from './data_source.js?v=221';
-import { computeTwin } from './digital_twin.js?v=221';
-import { ParkManager, loadParksStore } from './parks.js?v=221';
-import { MapView } from './map_view.js?v=221';
-import { defaultStages, builtFromStages } from './parks_data_caman.js?v=221';
+import { FleetView } from './fleet_view.js?v=222';
+import { DataSource } from './data_source.js?v=222';
+import { computeTwin } from './digital_twin.js?v=222';
+import { ParkManager, loadParksStore } from './parks.js?v=222';
+import { MapView } from './map_view.js?v=222';
+import { defaultStages, builtFromStages } from './parks_data_caman.js?v=222';
 
 const F1_BASE = { turbine: 0.283, hv: 1.6 };
-const REWIND_VER = 'v221';   // versión visible del build (subir junto al cache-bust)
+const REWIND_VER = 'v222';   // versión visible del build (subir junto al cache-bust)
 const FS = 62.5;   // frecuencia de muestreo de la señal (Hz), igual que shm_worker.js
 // Clasificador ML de daño (0..4)
 const CLS = ['Sin daño', 'Leve', 'Moderado', 'Alto', 'Muy alto'];
@@ -185,7 +185,7 @@ async function boot() {
   // ── Relieve conceptual del terreno (DEM vendorizado) — encendido por defecto ─
   setLoad(88, 'Cargando relieve…'); await delay(40);
   try {
-    await fleet.loadTerrain('data/caman_dem.json?v=221');
+    await fleet.loadTerrain('data/caman_dem.json?v=222');
     fleet.setTerrainVisible(true);
     document.getElementById('shm-relieve-tool')?.classList.add('active');
   } catch (e) { console.warn('[shm] relieve no disponible', e); }
@@ -248,7 +248,7 @@ function buildToolbar(toolbar, fleet, getPM = () => null) {
   const sunCtl = buildSunControl(fleet);
   const sol = mk('shm-sun-tool', 'Sol y sombras: ver la sombra de las torres según la hora y el día',
     `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><circle cx="12" cy="12" r="4.2"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3M4.9 4.9l2.1 2.1M17 17l2.1 2.1M19.1 4.9 17 7M7 17l-2.1 2.1"/></svg>`,
-    'Sol', () => { const on = !fleet.sunMode; fleet.setSunEnabled(on); sol.classList.toggle('active', on); sunCtl.setOpen(on); });
+    'Sol', () => { const on = !fleet.sunMode; fleet.setSunEnabled(on); sol.classList.toggle('active', on); sunCtl.setOpen(on); window.shmMap?.setSunShadows(on, on ? fleet.getSunInfo() : null); });
   // El botón «Editar» es el interruptor maestro del modo edición: con él activo se
   // pueden crear, borrar y mover estructuras; apagado, sólo se monitorea.
   // TODO(perfiles): condicionar la visibilidad de «Editar» al rol del usuario.
@@ -313,6 +313,7 @@ function buildSunControl(fleet) {
     hh.textContent = fmtH(hour);
     const sp = fleet.getSunInfo();
     read.textContent = sp ? (sp.elevation > 0 ? `alt ${sp.elevation.toFixed(0)}° · az ${sp.azimuth.toFixed(0)}°` : '☾ noche') : '';
+    window.shmMap?.setSunShadows(true, sp);   // sincroniza la sombra del mapa 2D
   };
   hourEl.addEventListener('input', apply);
   dateEl.addEventListener('change', apply);

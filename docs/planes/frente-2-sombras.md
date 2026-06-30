@@ -54,11 +54,11 @@ Mitigación: módulos de parada (shutdown). Open-source emergente: WIMBY SF.
      relieve); al apagar Sol vuelve a la vista esquemática. Checkbox «Escala real» en el panel.
      *Tradeoff aceptado:* a escala real las torres se ven pequeñas → el encuadre acerca al grupo
      en obra y el 2D será la mejor vista de comparación.
-3. ⬜ **2D (Leaflet) con sombra + atenuar mapa** *(siguiente)* — replicar la sombra en planta sobre
-   el mapa 2D para comparar: por torre, polígono de sombra (dir anti-solar, largo = altura/tan(elev)
-   + disco del rotor). En modo Sol: **ocultar los divIcons** (tapan la sombra) y **atenuar la capa
-   base** del mapa para que la sombra contraste; la sombra puede ir en **color de contraste** (no
-   necesariamente gris).
+3. ✅ **2D (Leaflet) con sombra + atenuar mapa** (v222) — `MapView.setSunShadows(on, sun)`: por torre,
+   sombra en planta (línea del fuste en dir anti-solar, largo = altura erigida/tan(elev), + disco del
+   rotor si está montado), **físicamente 1:1** (metros reales). En modo Sol **oculta los divIcons**
+   y **atenúa el basemap** (filtro CSS `.mv-sun .leaflet-tile-pane`); sombra en **índigo `#1b2e6b`**
+   (igual que en 3D). Se sincroniza con el control de Sol (hora/fecha/animación) vía `window.shmMap`.
 4. **Worst-case cuantitativo** — proyección del disco del rotor a puntos receptores →
    horas/año, min/día; **ráster de flicker** sobre el terreno.
 4. **Real-case estadístico** — % de sol + rosa de vientos + horas de operación.
