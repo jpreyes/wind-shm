@@ -575,6 +575,9 @@ body.shm #shm-banner.show { display: flex; animation: shm-blink 0.8s steps(1) in
 .shm-venc { margin: 8px 0; }
 .shm-venc .venc-h { font-size: 12px; font-weight: 700; color: var(--text); display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; margin-bottom: 6px; }
 .shm-venc .venc-sum { font-size: 10.5px; font-weight: 400; color: var(--text-muted); }
+.shm-venc .venc-acts { margin-left: auto; display: flex; gap: 5px; }
+.shm-venc .venc-mini { cursor: pointer; background: var(--bg4); color: var(--text); border: 1px solid var(--border2); border-radius: var(--radius-sm, 6px); padding: 3px 7px; font-family: inherit; font-size: 10.5px; font-weight: 600; }
+.shm-venc .venc-mini:hover { filter: brightness(1.15); border-color: var(--accent); }
 .shm-venc .venc-ok { font-size: 11.5px; color: var(--success, #22c55e); }
 .shm-venc .venc-list { display: flex; flex-direction: column; gap: 3px; }
 .shm-venc .venc-row { display: flex; align-items: center; gap: 8px; width: 100%; text-align: left; cursor: pointer; background: var(--bg3); border: 1px solid var(--border); border-radius: var(--radius-sm, 6px); padding: 5px 8px; font-family: inherit; font-size: 11.5px; color: var(--text); }

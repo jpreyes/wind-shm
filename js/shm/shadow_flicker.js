@@ -14,7 +14,7 @@
 //
 // Módulo ES puro (Node + navegador). Verificable: `node js/shm/shadow_flicker.js`.
 // ─────────────────────────────────────────────────────────────────────────────
-import { solarPosition } from './solar.js?v=254';
+import { solarPosition } from './solar.js?v=255';
 
 const M_PER_DEG_LAT = 111320;
 export const FLICKER_LIMITS = { hoursYear: 30, minDay: 30 };   // referencia LAI (Alemania)

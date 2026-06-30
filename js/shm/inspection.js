@@ -157,6 +157,18 @@ export function removeInspection(structId, inspId) {
   setInspections(structId, (loadAll()[structId] || []).filter(i => i.id !== inspId));
 }
 
+// ── Respaldo / restauración (portabilidad sin backend; persistencia real → R-10) ──
+export function exportJSON() { return JSON.stringify(loadAll(), null, 2); }
+/** Importa un JSON de inspecciones. replace=false fusiona por estructura. Devuelve nº de estructuras. */
+export function importJSON(text, replace = false) {
+  const data = JSON.parse(text);
+  if (!data || typeof data !== 'object' || Array.isArray(data)) throw new Error('Formato de respaldo inválido.');
+  const cur = replace ? {} : loadAll();
+  let n = 0;
+  for (const k in data) if (Array.isArray(data[k])) { cur[k] = data[k]; n++; }
+  saveAll(cur); return n;
+}
+
 // ── Órdenes de trabajo + calendario (vencimientos) ───────────────────────────
 export const WO_STATUS = ['abierto', 'en curso', 'cerrado'];
 export const WO_PRIORITY = ['baja', 'media', 'alta'];

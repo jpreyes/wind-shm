@@ -8,19 +8,19 @@
 //   inspecciones y señal temporal EN VIVO desde un Web Worker (DataSource).
 // Recortes (modelado) los hace shm.css ocultando, no borrando.
 // ─────────────────────────────────────────────────────────────────────────────
-import { FleetView } from './fleet_view.js?v=254';
-import { DataSource } from './data_source.js?v=254';
-import { computeTwin } from './digital_twin.js?v=254';
-import { ParkManager, loadParksStore } from './parks.js?v=254';
-import { MapView } from './map_view.js?v=254';
-import { defaultStages, builtFromStages } from './parks_data_caman.js?v=254';
-import { compassRoseSVG } from './compass.js?v=254';
-import { buildAvanceHUD } from './avance_hud.js?v=254';
-import { renderAvance } from './avance_dashboard.js?v=254';
-import * as Insp from './inspection.js?v=254';
+import { FleetView } from './fleet_view.js?v=255';
+import { DataSource } from './data_source.js?v=255';
+import { computeTwin } from './digital_twin.js?v=255';
+import { ParkManager, loadParksStore } from './parks.js?v=255';
+import { MapView } from './map_view.js?v=255';
+import { defaultStages, builtFromStages } from './parks_data_caman.js?v=255';
+import { compassRoseSVG } from './compass.js?v=255';
+import { buildAvanceHUD } from './avance_hud.js?v=255';
+import { renderAvance } from './avance_dashboard.js?v=255';
+import * as Insp from './inspection.js?v=255';
 
 const F1_BASE = { turbine: 0.283, hv: 1.6 };
-const REWIND_VER = 'v254';   // versión visible del build (subir junto al cache-bust)
+const REWIND_VER = 'v255';   // versión visible del build (subir junto al cache-bust)
 const FS = 62.5;   // frecuencia de muestreo de la señal (Hz), igual que shm_worker.js
 // Clasificador ML de daño (0..4)
 const CLS = ['Sin daño', 'Leve', 'Moderado', 'Alto', 'Muy alto'];
@@ -256,7 +256,7 @@ async function boot() {
   // ── Relieve conceptual del terreno (DEM vendorizado) — encendido por defecto ─
   setLoad(88, 'Cargando relieve…'); await delay(40);
   try {
-    await fleet.loadTerrain('data/caman_dem.json?v=254');
+    await fleet.loadTerrain('data/caman_dem.json?v=255');
     fleet.setTerrainVisible(true);
     document.getElementById('shm-relieve-tool')?.classList.add('active');
   } catch (e) { console.warn('[shm] relieve no disponible', e); }
@@ -833,18 +833,39 @@ function buildDashboard(panel, fleet, actions) {
       woOpen += open; woOverdue += odue;
       if (due.overdue || due.soon || open) items.push({ id: st.id, label: st.label, due, open, odue });
     }
-    if (!items.length) { box.innerHTML = `<div class="venc-h">Vencimientos de inspección</div><div class="venc-ok">✓ Sin vencimientos ni órdenes abiertas.</div>`; return; }
     items.sort((a, b) => (b.due.overdue - a.due.overdue) || (b.odue - a.odue) || (b.open - a.open));
-    const rows = items.slice(0, 8).map(it => `
-      <button class="venc-row" data-venc="${it.id}">
-        <span class="venc-dot ${it.due.overdue ? 'bad' : it.due.soon ? 'warn' : 'ok'}"></span>
-        <span class="venc-nm">${it.label}</span>
-        <span class="venc-badges">${it.due.overdue ? '<i class="b bad">vencida</i>' : it.due.soon ? '<i class="b warn">por vencer</i>' : ''}${it.open ? `<i class="b ${it.odue ? 'bad' : ''}">${it.open} OT${it.odue ? ` · ${it.odue}⚠` : ''}</i>` : ''}</span>
-      </button>`).join('');
-    box.innerHTML = `
-      <div class="venc-h">Vencimientos de inspección <span class="venc-sum">${vOverdue} vencida(s) · ${vSoon} por vencer · ${woOpen} OT (${woOverdue}⚠)</span></div>
-      <div class="venc-list">${rows}</div>`;
+    const acts = `<span class="venc-acts">
+      <input type="file" id="venc-file" accept=".json,application/json" style="display:none">
+      <button id="venc-export" class="venc-mini" title="Exportar todas las inspecciones a JSON (respaldo)">⬇ Exportar</button>
+      <button id="venc-import" class="venc-mini" title="Importar inspecciones desde un respaldo JSON">⬆ Importar</button></span>`;
+    if (!items.length) {
+      box.innerHTML = `<div class="venc-h">Vencimientos de inspección ${acts}</div><div class="venc-ok">✓ Sin vencimientos ni órdenes abiertas.</div>`;
+    } else {
+      const rows = items.slice(0, 8).map(it => `
+        <button class="venc-row" data-venc="${it.id}">
+          <span class="venc-dot ${it.due.overdue ? 'bad' : it.due.soon ? 'warn' : 'ok'}"></span>
+          <span class="venc-nm">${it.label}</span>
+          <span class="venc-badges">${it.due.overdue ? '<i class="b bad">vencida</i>' : it.due.soon ? '<i class="b warn">por vencer</i>' : ''}${it.open ? `<i class="b ${it.odue ? 'bad' : ''}">${it.open} OT${it.odue ? ` · ${it.odue}⚠` : ''}</i>` : ''}</span>
+        </button>`).join('');
+      box.innerHTML = `
+        <div class="venc-h">Vencimientos de inspección <span class="venc-sum">${vOverdue} vencida(s) · ${vSoon} por vencer · ${woOpen} OT (${woOverdue}⚠)</span> ${acts}</div>
+        <div class="venc-list">${rows}</div>`;
+    }
     box.querySelectorAll('[data-venc]').forEach(b => b.addEventListener('click', () => { fleet.selectById(b.dataset.venc); window.shmDash?.showInsp?.(); }));
+    box.querySelector('#venc-export').addEventListener('click', () => {
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(new Blob([Insp.exportJSON()], { type: 'application/json' }));
+      a.download = `rewind_inspecciones_${new Date().toISOString().slice(0, 10)}.json`; a.click();
+      setTimeout(() => URL.revokeObjectURL(a.href), 2000);
+    });
+    const vf = box.querySelector('#venc-file');
+    box.querySelector('#venc-import').addEventListener('click', () => vf.click());
+    vf.addEventListener('change', async (e) => {
+      const f = e.target.files?.[0]; e.target.value = ''; if (!f) return;
+      const merge = confirm('Importar respaldo:\n\n[Aceptar] = FUSIONAR con lo existente\n[Cancelar] = REEMPLAZAR todo');
+      try { const n = Insp.importJSON(await f.text(), !merge); updateRollup(); if (current) renderInsp(); alert(`Importadas inspecciones de ${n} estructura(s).`); }
+      catch (err) { alert('No se pudo importar: ' + (err.message || err)); }
+    });
   }
 
   function setAlarms(ids) {
