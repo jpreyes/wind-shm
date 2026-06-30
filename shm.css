@@ -568,6 +568,27 @@ body.shm #shm-banner.show { display: flex; animation: shm-blink 0.8s steps(1) in
 .shm-avance .avt-bar { flex: 1; height: 7px; background: rgba(127,127,127,.2); border-radius: 4px; overflow: hidden; }
 .shm-avance .avt-bar i { display: block; height: 100%; background: var(--accent); }
 .shm-avance .avt-bar i.done { background: #22c55e; } .shm-avance .avt-bar i.wip { background: #f59e0b; } .shm-avance .avt-bar i.pend { background: #94a3b8; }
+/* ── Gemelo de construcción (R-31) en la pestaña Obra ────────────────────────── */
+.shm-avance .ct-card { background: var(--bg3); border: 1px solid var(--border2); border-radius: var(--radius-sm, 6px); padding: 10px; display: flex; flex-direction: column; gap: 7px; }
+.shm-avance .ct-h { font-size: 12.5px; font-weight: 700; color: var(--text); }
+.shm-avance .ct-h .ct-sub { font-weight: 400; font-size: 10.5px; color: var(--text-muted); margin-left: 6px; }
+.shm-avance .ct-svg { width: 100%; height: auto; aspect-ratio: 280 / 150; background: var(--bg4); border: 1px solid var(--border); border-radius: 6px; }
+.shm-avance .ct-leg { display: flex; flex-wrap: wrap; gap: 6px 12px; font-size: 10px; color: var(--text-muted); }
+.shm-avance .ct-leg span { display: flex; align-items: center; gap: 4px; }
+.shm-avance .ct-leg i { width: 14px; height: 0; display: inline-block; }
+.shm-avance .ct-leg i.dash { border-top: 2px dashed var(--text-muted); }
+.shm-avance .ct-leg i.dot { width: 8px; height: 8px; border-radius: 50%; }
+.shm-avance .ct-leg i.dot.ok { background: #22c55e; } .shm-avance .ct-leg i.dot.bad { background: #ef4444; }
+.shm-avance .ct-leg i.band { width: 12px; height: 8px; background: #22c55e; opacity: .3; border-radius: 2px; }
+.shm-avance .ct-verdict { font-size: 11.5px; font-weight: 600; padding: 6px 9px; border-radius: var(--radius-sm, 6px); }
+.shm-avance .ct-verdict.ok { background: color-mix(in srgb, #22c55e 16%, var(--bg4)); color: var(--success, #22c55e); }
+.shm-avance .ct-verdict.bad { background: color-mix(in srgb, #ef4444 16%, var(--bg4)); color: var(--danger, #ef4444); }
+.shm-avance .ct-verdict.mut { color: var(--text-muted); }
+.shm-avance .ct-kv { width: 100%; border-collapse: collapse; font-size: 11.5px; }
+.shm-avance .ct-kv td { padding: 2px 0; vertical-align: top; }
+.shm-avance .ct-kv td:first-child { color: var(--text-muted); padding-right: 8px; }
+.shm-avance .ct-kv .ok { color: var(--success, #22c55e); } .shm-avance .ct-kv .bad { color: var(--danger, #ef4444); }
+
 /* Sub-título de sección dentro de Inspección/SHM */
 #shm-panel .shm-sub2 { font-size: 12px; font-weight: 700; color: var(--text-muted); border-top: 1px solid var(--border); padding-top: 9px; margin-top: 10px; }
 

@@ -6,7 +6,8 @@
 // (acumulado plan vs real por mes), % por componente y ranking de torres atrasadas.
 // Render en DOM/SVG (verificable) + informe imprimible. Módulo de presentación.
 // ─────────────────────────────────────────────────────────────────────────────
-import { enrichStages, TURBINE_COMPONENTS } from './parks_data_caman.js?v=255';
+import { enrichStages, TURBINE_COMPONENTS } from './parks_data_caman.js?v=256';
+import * as CTwin from './construction_twin.js?v=256';
 
 const DAY = 864e5;
 const fmtPct = (x) => `${Math.round(x * 100)}%`;
@@ -148,6 +149,91 @@ function towerEditor(selected) {
 }
 const statusCol2 = (pct) => pct >= 100 ? 'done' : pct > 0 ? 'wip' : 'pend';
 
+// ── Gemelo de construcción (R-31): f₁ predicha vs medida por etapa ────────────
+const f1Full = () => (typeof window !== 'undefined' && window.shmTwin?.turbine) || 0.283;
+const fmtHz = (f) => f >= 1 ? f.toFixed(2) : f.toFixed(3);
+
+// Gráfico log-y: curva predicha (línea), puntos medidos y banda soft-stiff.
+function ctwinSVG(pred, meas, win) {
+  const W = 280, Hc = 150, ml = 30, mb = 26, mt = 8, mr = 8, pw = W - ml - mr, ph = Hc - mt - mb;
+  const fmin = Math.min(win.lo, ...pred.map(p => p.f1)) * 0.8;
+  const fmax = Math.max(win.hi, pred[0].f1) * 1.15;
+  const lg = Math.log10, L0 = lg(fmin), L1 = lg(fmax);
+  const X = (i) => ml + (i / (pred.length - 1)) * pw;
+  const Y = (f) => mt + (1 - (lg(Math.max(f, fmin)) - L0) / (L1 - L0)) * ph;
+  const band = `<rect x="${ml}" y="${Y(win.hi).toFixed(1)}" width="${pw}" height="${(Y(win.lo) - Y(win.hi)).toFixed(1)}" fill="#22c55e" opacity="0.12"/>
+    <line x1="${ml}" y1="${Y(win.lo).toFixed(1)}" x2="${W - mr}" y2="${Y(win.lo).toFixed(1)}" stroke="#22c55e" stroke-width="0.6" stroke-dasharray="3 3"/>
+    <line x1="${ml}" y1="${Y(win.hi).toFixed(1)}" x2="${W - mr}" y2="${Y(win.hi).toFixed(1)}" stroke="#22c55e" stroke-width="0.6" stroke-dasharray="3 3"/>
+    <text x="${W - mr}" y="${(Y(win.hi) - 2).toFixed(1)}" text-anchor="end" font-size="7" fill="#22c55e">soft-stiff</text>`;
+  const ticks = [0.2, 0.5, 1, 2, 5].filter(v => v >= fmin && v <= fmax).map(v =>
+    `<text x="${ml - 4}" y="${(Y(v) + 3).toFixed(1)}" text-anchor="end" font-size="7" fill="var(--text-muted,#93a6b8)">${v}</text>`).join('');
+  const predLine = `<polyline points="${pred.map((p, i) => `${X(i).toFixed(1)},${Y(p.f1).toFixed(1)}`).join(' ')}" fill="none" stroke="var(--text-muted,#93a6b8)" stroke-width="1.6" stroke-dasharray="4 3"/>`;
+  const predDots = pred.map((p, i) => `<circle cx="${X(i).toFixed(1)}" cy="${Y(p.f1).toFixed(1)}" r="1.8" fill="var(--text-muted,#93a6b8)"/>`).join('');
+  const measLine = meas.length > 1 ? `<polyline points="${meas.map((p, i) => `${X(i).toFixed(1)},${Y(p.f1).toFixed(1)}`).join(' ')}" fill="none" stroke="var(--accent,#38bdf8)" stroke-width="2"/>` : '';
+  const measDots = meas.map((p, i) => `<circle cx="${X(i).toFixed(1)}" cy="${Y(p.f1).toFixed(1)}" r="3" fill="${p.below ? '#ef4444' : '#22c55e'}" stroke="#0b1018" stroke-width="0.8"/>`).join('');
+  const xlabels = pred.map((p, i) => `<text x="${X(i).toFixed(1)}" y="${Hc - 14}" text-anchor="middle" font-size="6.5" fill="var(--text-muted,#93a6b8)" transform="rotate(20 ${X(i).toFixed(1)} ${Hc - 14})">${p.label}</text>`).join('');
+  return `<svg viewBox="0 0 ${W} ${Hc}" class="ct-svg" xmlns="http://www.w3.org/2000/svg">${band}${ticks}${predLine}${predDots}${measLine}${measDots}${xlabels}<text x="2" y="11" font-size="7" fill="var(--text-muted,#93a6b8)">f₁ (Hz)</text></svg>`;
+}
+
+function constructionTwinCard(selected) {
+  if (!selected || selected.type !== 'turbine') return '';
+  const f1 = f1Full(), win = CTwin.softStiffWindow(14);
+  const { points: pred } = CTwin.predictedCurve(f1);
+  const m = CTwin.measuredCurve(f1, selected.stages, selected.id);
+  const cur = m.points[m.points.length - 1];
+  const bandOk = CTwin.inBand(f1, win);
+  const verdict = !cur ? { c: 'mut', t: 'Sin medición aún (fuste &lt; 25%).' }
+    : cur.below ? { c: 'bad', t: `⚠ f₁ medida bajo lo predicho en «${cur.label}» — posible base flexible (pernos/grout/fundación).` }
+    : { c: 'ok', t: `✓ f₁ medida en banda con el gemelo («${cur.label}»).` };
+  const baseline = m.reached >= 6 ? `f₁ commissioning <b>${fmtHz(f1)} Hz</b> capturada` : 'pendiente (al montar el rotor)';
+  return `<div class="ct-card">
+    <div class="ct-h">🛰️ Gemelo de construcción <span class="ct-sub">f₁ predicha vs medida</span></div>
+    ${ctwinSVG(pred, m.points, win)}
+    <div class="ct-leg"><span><i class="dash"></i>predicha</span><span><i class="dot ok"></i>medida en banda</span><span><i class="dot bad"></i>bajo lo predicho</span><span><i class="band"></i>soft-stiff</span></div>
+    <div class="ct-verdict ${verdict.c}">${verdict.t}</div>
+    <table class="ct-kv">
+      <tr><td>f₁ torre completa</td><td><b>${fmtHz(f1)} Hz</b></td></tr>
+      <tr><td>Ventana soft-stiff (rpm ${win.rpm})</td><td>${fmtHz(win.lo)}–${fmtHz(win.hi)} Hz · ${bandOk ? '<b class="ok">✓ en banda</b>' : '<b class="bad">✗ fuera</b>'}</td></tr>
+      <tr><td>1P · 3P</td><td>${fmtHz(win.p1)} · ${fmtHz(win.p3)} Hz</td></tr>
+      <tr><td>Línea base</td><td>${baseline}</td></tr>
+    </table>
+    <button id="ct-cert" class="av-btn" type="button">📄 Certificado de puesta en marcha</button>
+  </div>`;
+}
+
+export function commissioningReport(selected) {
+  const f1 = f1Full(), win = CTwin.softStiffWindow(14);
+  const { points: pred } = CTwin.predictedCurve(f1);
+  const m = CTwin.measuredCurve(f1, selected.stages, selected.id);
+  const bandOk = CTwin.inBand(f1, win);
+  const operational = m.reached >= 6;
+  const anyBelow = m.points.some(p => p.below);
+  const verdict = !operational ? { t: 'EN MONTAJE — commissioning pendiente', c: '#d97706' }
+    : (bandOk && !anyBelow) ? { t: 'APTA — f₁ en ventana soft-stiff, sin desviaciones', c: '#16a34a' }
+    : { t: 'CON OBSERVACIONES — revisar antes de poner en marcha', c: '#dc2626' };
+  const rows = pred.map((p, i) => { const me = m.points[i]; return `<tr><td>${p.label}</td><td style="text-align:right">${fmtHz(p.f1)}</td><td style="text-align:right">${me ? fmtHz(me.f1) : '—'}</td><td style="text-align:right;color:${me && me.below ? '#b91c1c' : '#15803d'}">${me ? (me.below ? 'bajo' : 'ok') : '—'}</td></tr>`; }).join('');
+  const html = `<!doctype html><html lang="es"><meta charset="utf-8"><title>Certificado de puesta en marcha — ${selected.label}</title>
+    <style>body{font:14px/1.5 system-ui,sans-serif;margin:0;color:#1b2533}.wrap{max-width:780px;margin:0 auto;padding:0 32px 40px}
+    .hero{background:linear-gradient(120deg,#0e7490,#155e75);color:#fff;padding:24px 32px;margin-bottom:20px}.hero h1{margin:4px 0;font-size:20px}
+    h2{font-size:15px;border-bottom:2px solid #cbd5e1;padding-bottom:5px;margin:22px 0 10px}.mut{color:#64748b;font-size:12px}
+    table{border-collapse:collapse;width:100%;font-size:13px}th,td{border:1px solid #cbd5e1;padding:6px 9px;text-align:left}th{background:#f1f5f9}
+    .verd{display:inline-block;font-weight:800;padding:8px 16px;border-radius:10px;color:#fff;background:${verdict.c}}</style>
+    <div class="hero"><div class="mut" style="color:#cfe9f1;letter-spacing:2px;text-transform:uppercase">ReWind · Gemelo de construcción</div>
+      <h1>Certificado de puesta en marcha — ${selected.label}</h1><div style="opacity:.9;font-size:13px">Parque Camán I · ${new Date().toLocaleDateString('es-CL')}</div></div>
+    <div class="wrap">
+      <h2>Veredicto</h2><p><span class="verd">${verdict.t}</span></p>
+      <h2>Frecuencia natural f₁</h2>
+      <table><tr><td>f₁ torre completa (gemelo FEM)</td><td><b>${fmtHz(f1)} Hz</b></td></tr>
+        <tr><td>Ventana soft-stiff (rpm ${win.rpm})</td><td>${fmtHz(win.lo)}–${fmtHz(win.hi)} Hz · ${bandOk ? 'en banda ✓' : 'fuera ✗'}</td></tr>
+        <tr><td>1P / 3P</td><td>${fmtHz(win.p1)} / ${fmtHz(win.p3)} Hz</td></tr>
+        <tr><td>Línea base de commissioning</td><td>${operational ? 'capturada (f₁ = ' + fmtHz(f1) + ' Hz)' : 'pendiente'}</td></tr></table>
+      <h2>f₁ predicha vs medida por etapa</h2>
+      <table><thead><tr><th>Etapa</th><th style="text-align:right">Predicha (Hz)</th><th style="text-align:right">Medida (Hz)</th><th style="text-align:right">Estado</th></tr></thead><tbody>${rows}</tbody></table>
+      <p class="mut" style="margin-top:18px">Soft-stiff: la f₁ debe quedar ≥10% sobre 1P (giro del rotor) y ≤10% bajo 3P (paso de aspas). Una f₁ medida bajo la predicha indica base más flexible (pernos de brida sin pretensar, grout deficiente o fundación sin rigidez/curado). Datos de medición simulados hasta integrar OMA (R-21) / telemetría (R-10). Generado por ReWind.</p>
+    </div></html>`;
+  const w = window.open('', '_blank'); if (w) { w.document.write(html); w.document.close(); }
+}
+
 // Render del dashboard en un host del panel derecho. `selected` (opcional) =
 // estructura enfocada → se antepone su editor de partidas. `apply(struct)` aplica
 // los cambios (avance 3D + persistencia) y se vuelve a renderizar.
@@ -168,6 +254,7 @@ export function renderAvance(host, structures, selected, apply) {
 
   host.innerHTML = `
     ${towerEditor(selected)}
+    ${constructionTwinCard(selected)}
     <div class="av-hdr">Avance de obra · Camán I</div>
     <div class="av-banner ${verdict.c}">${verdict.c === 'ok' ? '✓' : '✗'} ${verdict.t}</div>
     <div class="av-kpis">
@@ -188,6 +275,7 @@ export function renderAvance(host, structures, selected, apply) {
     <div class="av-leg"><span><i class="g-done"></i>Completada</span><span><i class="g-wip"></i>En ejecución</span><span><i class="g-pend"></i>Pendiente</span><span><i class="today"></i>Hoy</span></div>
     <button id="av-report" class="av-btn" type="button">📄 Informe de avance (DPR)</button>`;
   host.querySelector('#av-report')?.addEventListener('click', () => avanceReport(structures));
+  host.querySelector('#ct-cert')?.addEventListener('click', () => commissioningReport(selected));
   // Editor de partidas de la torre seleccionada
   if (selected && selected.type === 'turbine') {
     host.querySelectorAll('.avt-pp').forEach(inp => inp.addEventListener('change', () => {
