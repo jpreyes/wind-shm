@@ -97,4 +97,4 @@ Use the preview tools to verify UI/solver changes (serve on 8765). **The PWA ser
 
 ## Roadmap
 
-`docs/ROADMAP.md` is the live, group-based plan. **Groups G1–G23 are the inherited PÓRTICO history** (historical record of the FEM base). **The live ReWind plan is group G24 with items `R-*`** (R-6 i18n, R-7 native SHM menu, R-8/R-16 drop PÓRTICO branding/landing, R-10/R-11 industrial `DataSource`+API / Electron+InfluxDB, R-18 full construction window, R-19 shadow analysis, R-21+ SHM analytics: OMA from measured signal, fatigue/DEL, alarms). Update it when closing items.
+`docs/ROADMAP.md` is the live ReWind plan, all items `R-*` (Hechos / Pendientes / SHM analytics gaps): R-6 i18n, R-7 native SHM menu, R-8/R-16 drop PÓRTICO branding/landing, R-10/R-11 industrial `DataSource`+API / Electron+InfluxDB, R-18 full construction window, R-19 shadow analysis, R-21+ SHM analytics (OMA from measured signal, fatigue/DEL, alarms). The inherited PÓRTICO/FEM history is **not** here — it lives in the upstream `structweb3d` repo. Update the roadmap when closing items.
