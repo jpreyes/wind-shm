@@ -8,15 +8,15 @@
 //   inspecciones y señal temporal EN VIVO desde un Web Worker (DataSource).
 // Recortes (modelado) los hace shm.css ocultando, no borrando.
 // ─────────────────────────────────────────────────────────────────────────────
-import { FleetView } from './fleet_view.js?v=215';
-import { DataSource } from './data_source.js?v=215';
-import { computeTwin } from './digital_twin.js?v=215';
-import { ParkManager, loadParksStore } from './parks.js?v=215';
-import { MapView } from './map_view.js?v=215';
-import { defaultStages, builtFromStages } from './parks_data_caman.js?v=215';
+import { FleetView } from './fleet_view.js?v=216';
+import { DataSource } from './data_source.js?v=216';
+import { computeTwin } from './digital_twin.js?v=216';
+import { ParkManager, loadParksStore } from './parks.js?v=216';
+import { MapView } from './map_view.js?v=216';
+import { defaultStages, builtFromStages } from './parks_data_caman.js?v=216';
 
 const F1_BASE = { turbine: 0.283, hv: 1.6 };
-const REWIND_VER = 'v215';   // versión visible del build (subir junto al cache-bust)
+const REWIND_VER = 'v216';   // versión visible del build (subir junto al cache-bust)
 const FS = 62.5;   // frecuencia de muestreo de la señal (Hz), igual que shm_worker.js
 // Clasificador ML de daño (0..4)
 const CLS = ['Sin daño', 'Leve', 'Moderado', 'Alto', 'Muy alto'];
@@ -185,7 +185,7 @@ async function boot() {
   // ── Relieve conceptual del terreno (DEM vendorizado) — encendido por defecto ─
   setLoad(88, 'Cargando relieve…'); await delay(40);
   try {
-    await fleet.loadTerrain('data/caman_dem.json?v=215');
+    await fleet.loadTerrain('data/caman_dem.json?v=216');
     fleet.setTerrainVisible(true);
     document.getElementById('shm-relieve-tool')?.classList.add('active');
   } catch (e) { console.warn('[shm] relieve no disponible', e); }
@@ -290,34 +290,33 @@ function buildSunControl(fleet) {
   const wrap = document.getElementById('viewport-wrap') || document.body;
   const el = document.createElement('div');
   el.id = 'shm-sun'; el.className = 'shm-sun';
-  const today = new Date();
-  const doy0 = Math.floor((Date.UTC(today.getFullYear(), today.getMonth(), today.getDate()) - Date.UTC(today.getFullYear(), 0, 0)) / 86400000);
+  const isoToday = new Date().toISOString().slice(0, 10);
   el.innerHTML = `
     <div class="sun-head"><span class="sun-title">Sol y sombras</span><span class="sun-read" id="sun-read">—</span></div>
     <label class="sun-ctl"><span>Hora</span><input type="range" id="sun-hour" min="0" max="24" step="0.25" value="13"><b id="sun-hh">13:00</b></label>
-    <label class="sun-ctl"><span>Día</span><input type="range" id="sun-day" min="1" max="365" step="1" value="${doy0}"><b id="sun-dd">—</b></label>
+    <label class="sun-ctl"><span>Fecha</span><input type="date" id="sun-date" value="${isoToday}" min="2015-01-01" max="2040-12-31"></label>
+    <label class="sun-real"><input type="checkbox" id="sun-realscale" checked> Escala real <span class="sun-hint">(sombra fiel)</span></label>
     <div class="sun-foot"><button id="sun-play" class="sun-btn" type="button">▶ Animar el día</button></div>`;
   wrap.appendChild(el);
-  const hourEl = el.querySelector('#sun-hour'), dayEl = el.querySelector('#sun-day');
-  const hh = el.querySelector('#sun-hh'), dd = el.querySelector('#sun-dd'), read = el.querySelector('#sun-read'), playBtn = el.querySelector('#sun-play');
-  const MES = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic'];
+  const hourEl = el.querySelector('#sun-hour'), dateEl = el.querySelector('#sun-date'), realEl = el.querySelector('#sun-realscale');
+  const hh = el.querySelector('#sun-hh'), read = el.querySelector('#sun-read'), playBtn = el.querySelector('#sun-play');
   const fmtH = (h) => `${String(Math.floor(h)).padStart(2, '0')}:${String(Math.round((h % 1) * 60) % 60).padStart(2, '0')}`;
   const apply = () => {
-    const hour = +hourEl.value, doy = +dayEl.value - 1;
-    fleet.setSunTime({ doy, hour });
+    const hour = +hourEl.value;
+    const [Y, M, D] = (dateEl.value || isoToday).split('-').map(Number);
+    fleet.setSunTime({ year: Y, month0: M - 1, day: D, hour });
     hh.textContent = fmtH(hour);
-    const d = new Date(today.getFullYear(), 0, 1 + doy);
-    dd.textContent = `${d.getDate()} ${MES[d.getMonth()]}`;
     const sp = fleet.getSunInfo();
     read.textContent = sp ? (sp.elevation > 0 ? `alt ${sp.elevation.toFixed(0)}° · az ${sp.azimuth.toFixed(0)}°` : '☾ noche') : '';
   };
   hourEl.addEventListener('input', apply);
-  dayEl.addEventListener('input', apply);
+  dateEl.addEventListener('change', apply);
+  realEl.addEventListener('change', () => fleet.setRealScale(realEl.checked));
   let raf = null, last = 0;
   const stop = () => { if (raf) cancelAnimationFrame(raf); raf = null; playBtn.textContent = '▶ Animar el día'; };
   const tick = (ts) => { if (!last) last = ts; const dt = (ts - last) / 1000; last = ts; let h = +hourEl.value + dt * 2; if (h >= 24) h -= 24; hourEl.value = h.toFixed(2); apply(); raf = requestAnimationFrame(tick); };
   playBtn.addEventListener('click', () => { if (raf) stop(); else { last = 0; playBtn.textContent = '⏸ Pausar'; raf = requestAnimationFrame(tick); } });
-  return { setOpen(on) { el.classList.toggle('show', on); if (on) apply(); else stop(); } };
+  return { setOpen(on) { el.classList.toggle('show', on); if (on) { realEl.checked = fleet.realScale; apply(); } else stop(); } };
 }
 
 // ── Nameplate (cuadro con el nombre sobre la vista) ──────────────────────────

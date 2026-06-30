@@ -374,6 +374,11 @@ body.shm #shm-banner.show { display: flex; animation: shm-blink 0.8s steps(1) in
 .shm-sun .sun-ctl span { width: 32px; color: var(--text-muted); }
 .shm-sun .sun-ctl input[type=range] { flex: 1; min-width: 0; accent-color: var(--accent); }
 .shm-sun .sun-ctl b { width: 50px; text-align: right; font-weight: 500; font-variant-numeric: tabular-nums; }
+.shm-sun .sun-ctl input[type=date] { flex: 1; min-width: 0; background: var(--bg4); color: var(--text);
+  border: 1px solid var(--border2); border-radius: var(--radius-sm, 6px); padding: 3px 6px; font: inherit; }
+.shm-sun .sun-real { display: flex; align-items: center; gap: 7px; margin: 9px 0 2px; cursor: pointer; }
+.shm-sun .sun-real input { accent-color: var(--accent); }
+.shm-sun .sun-real .sun-hint { color: var(--text-muted); }
 .shm-sun .sun-foot { margin-top: 8px; }
 .shm-sun .sun-btn { width: 100%; padding: 6px; cursor: pointer; border-radius: var(--radius-sm, 6px);
   background: var(--bg4); color: var(--text); border: 1px solid var(--border2); }

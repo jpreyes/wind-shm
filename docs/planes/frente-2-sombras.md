@@ -47,8 +47,19 @@ Mitigación: módulos de parada (shutdown). Open-source emergente: WIMBY SF.
    elevación, noche bajo el horizonte. **Sombras SOBRE el relieve** vía malla receptora que
    comparte la geometría del DEM con `ShadowMaterial` (el ShaderMaterial conceptual no recibe
    sombras); cazador plano de respaldo con el relieve apagado. **Botón «Sol» en la barra lateral
-   izquierda** + panel flotante con sliders **Hora/Día** + animación del día + lectura alt/az.
-3. **Worst-case cuantitativo** — proyección del disco del rotor a puntos receptores →
+   izquierda** + panel flotante con slider **Hora**, **selector de fecha (con año)** + animación
+   del día + lectura alt/az.
+   - ✅ **Escala real** (v216): al activar Sol se pasa a proporción 1:1 (torres ×2.2→×0.35,
+     relieve vex 1.5→1) para que la **sombra sea físicamente fiel** (y más corta → no se sale del
+     relieve); al apagar Sol vuelve a la vista esquemática. Checkbox «Escala real» en el panel.
+     *Tradeoff aceptado:* a escala real las torres se ven pequeñas → el encuadre acerca al grupo
+     en obra y el 2D será la mejor vista de comparación.
+3. ⬜ **2D (Leaflet) con sombra + atenuar mapa** *(siguiente)* — replicar la sombra en planta sobre
+   el mapa 2D para comparar: por torre, polígono de sombra (dir anti-solar, largo = altura/tan(elev)
+   + disco del rotor). En modo Sol: **ocultar los divIcons** (tapan la sombra) y **atenuar la capa
+   base** del mapa para que la sombra contraste; la sombra puede ir en **color de contraste** (no
+   necesariamente gris).
+4. **Worst-case cuantitativo** — proyección del disco del rotor a puntos receptores →
    horas/año, min/día; **ráster de flicker** sobre el terreno.
 4. **Real-case estadístico** — % de sol + rosa de vientos + horas de operación.
 5. **Reporte de cumplimiento** (30 h / 30 min) + mitigación (calendario de parada).

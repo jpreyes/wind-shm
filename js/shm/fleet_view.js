@@ -7,11 +7,11 @@
 // ─────────────────────────────────────────────────────────────────────────────
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
-import { createTurbine, TOWER_H } from './turbine_mesh.js?v=215';
-import { createSubstationTower, groundCable, overheadLine } from './structures.js?v=215';
-import { toScene, CAMAN_CENTER } from './parks_data_caman.js?v=215';
-import { CAMAN_ROADS } from './caman_roads.js?v=215';
-import { solarPosition, dateFromLocal, sunSceneDir } from './solar.js?v=215';
+import { createTurbine, TOWER_H } from './turbine_mesh.js?v=216';
+import { createSubstationTower, groundCable, overheadLine } from './structures.js?v=216';
+import { toScene, CAMAN_CENTER, LAYOUT_SCALE } from './parks_data_caman.js?v=216';
+import { CAMAN_ROADS } from './caman_roads.js?v=216';
+import { solarPosition, dateFromLocal, sunSceneDir } from './solar.js?v=216';
 
 const SPACING = 235;
 const TOWER_SCALE = 2.2;   // agranda las torres (vista esquemática) para que destaquen sobre el relieve
@@ -79,7 +79,10 @@ export class FleetView {
     container.appendChild(this.renderer.domElement);
     this.constructionMode = true;                 // 4D: torres «llenándose» según su avance
     this.sunMode = false;                          // análisis de sombras (sol móvil) — apagado por defecto
-    this._sunTime = { doy: 172, hour: 13 };        // día del año + hora local (172 ≈ 21-jun)
+    this.realScale = false;                        // escala real (sólo durante el estudio de sol)
+    this.scaleK = TOWER_SCALE;                     // escala de torres vigente (esquemática vs real)
+    const now0 = new Date();
+    this._sunTime = { year: now0.getFullYear(), month0: now0.getMonth(), day: now0.getDate(), hour: 13 };
 
     this.controls = new OrbitControls(this.camera, this.renderer.domElement);
     this.controls.enableDamping = true;
@@ -116,18 +119,49 @@ export class FleetView {
   setSunEnabled(on) {
     this.sunMode = !!on;
     if (on) {
-      this._setupSunShadow();
-      this._setReceiveShadows(true);
-      this._ensureCatcher();
-      this.applySunTime();
+      this.setRealScale(true);          // el estudio de sol va en escala real (sombra fiel); setRealScale arma la sombra
     } else {
       this.sun.castShadow = false;
       this._setReceiveShadows(false);
+      this.setRealScale(false);         // vuelve a la escala esquemática (sunMode ya false → no re-arma sombra)
       this._updateShadowReceivers();
       this.sun.position.set(250, 350, 180); this.sun.intensity = 1.0; this.sun.color.setHex(0xffffff);
       this.hemi.intensity = 1.15;
       this._sunInfo = null;
     }
+  }
+
+  // Escala REAL (1:1) vs esquemática (torres ×2.2, relieve vex 1.5). Sólo tiene
+  // sentido durante el estudio de sol: a proporción real la sombra es físicamente
+  // correcta (y mucho más corta, así no se sale del relieve). El precio: las torres
+  // se ven pequeñas sobre el parque de varios km.
+  setRealScale(on) {
+    this.realScale = !!on;
+    this.scaleK = on ? LAYOUT_SCALE : TOWER_SCALE;   // 0.35 real (= escala horizontal) · 2.2 esquemático
+    if (this.terrain) this._rebuildTerrain(on ? 1.0 : 1.5);
+    for (const st of this.structures) this._applyScale(st, this.scaleK);
+    this.applyElevation();                           // re-asienta torres + cables + caminos en el nuevo relieve
+    if (this.sunMode) {
+      this._setupSunShadow(); this._setReceiveShadows(true); this._ensureCatcher(); this.applySunTime();
+      // A escala real las torres son pequeñas: encuadra el grupo en obra/operativo
+      // (las que proyectan sombra sólida) para que el estudio se vea legible.
+      const built = this.turbines.filter(t => (t.built ?? 1) > 0.3);
+      this.frameStructs(built.length ? built : this.structures);
+    } else this.frameGeneral();
+  }
+
+  // Reconstruye la malla del relieve con otra exageración vertical (vex) desde el
+  // DEM ya cargado en memoria. Preserva visibilidad y rehace el receptor de sombra.
+  _rebuildTerrain(vex) {
+    if (!this.terrain || !this._TerrainClass) return;
+    const dem = this.terrain.dem, wasVisible = this.terrain.mesh.visible;
+    this.scene.remove(this.terrain.mesh);
+    if (this.terrain.shadowMesh) this.scene.remove(this.terrain.shadowMesh);
+    this.terrain.dispose();
+    this.terrain = new this._TerrainClass(dem, { vex });
+    this.terrain.mesh.visible = wasVisible;
+    this.scene.add(this.terrain.mesh);
+    if (this.terrain.shadowMesh) this.scene.add(this.terrain.shadowMesh);
   }
 
   // Visibilidad de los receptores de sombra: el relieve recibe sombra cuando está
@@ -142,9 +176,8 @@ export class FleetView {
 
   // Posiciona el sol (dirección, intensidad y color) según la efeméride del parque.
   applySunTime() {
-    const { doy, hour } = this._sunTime;
-    const d = new Date(new Date().getFullYear(), 0, 1 + doy);
-    const date = dateFromLocal(d.getFullYear(), d.getMonth(), d.getDate(), hour, -4);   // Camán: UTC−4
+    const { year, month0, day, hour } = this._sunTime;
+    const date = dateFromLocal(year, month0, day, hour, -4);   // Camán: UTC−4
     const sp = solarPosition(date, CAMAN_CENTER.lat, CAMAN_CENTER.lon);
     this._sunInfo = sp;
     const dir = sunSceneDir(sp.elevation, sp.azimuth);
@@ -206,7 +239,8 @@ export class FleetView {
   // ── Relieve conceptual (capa de terreno) ─────────────────────────────────────
   // Carga el DEM vendorizado y añade la malla (oculta hasta activarla).
   async loadTerrain(url) {
-    const { Terrain } = await import('./terrain.js?v=215');
+    const { Terrain } = await import('./terrain.js?v=216');
+    this._TerrainClass = Terrain;                     // para reconstruir al cambiar de escala
     const dem = await (await fetch(url)).json();
     this.terrain = new Terrain(dem, { vex: 1.5 });   // relieve exagerado (esquemático)
     this.scene.add(this.terrain.mesh);
@@ -333,11 +367,12 @@ export class FleetView {
   getStructures() { return this.structures.map(s => ({ id: s.id, type: s.type, label: s.label, height: s.height })); }
   getStructure(id) { return this.structures.find(s => s.id === id) || null; }
   selectById(id) { const o = this.getStructure(id); if (o) this.selectTurbine(o); }
-  _addLabel(st) { const sp = makeLabelSprite(st.label); sp.position.set(0, 2, 14); st.group.add(sp); st._label = sp; }   // al pie, fuera de la fundación
+  _addLabel(st) { const sp = makeLabelSprite(st.label); sp.position.set(0, 2, 14); st.group.add(sp); st._label = sp; st._labelBase = sp.scale.clone(); }   // al pie, fuera de la fundación
   // Agranda la estructura (vista esquemática) sin agrandar su etiqueta flotante.
+  // Idempotente: la etiqueta se compensa desde su escala base (no acumula al re-escalar).
   _applyScale(st, k = TOWER_SCALE) {
     st.group.scale.setScalar(k);
-    if (st._label) { st._label.scale.multiplyScalar(1 / k); st._label.position.set(0, 2 / k, 14 / k); }
+    if (st._label) { if (st._labelBase) st._label.scale.copy(st._labelBase).multiplyScalar(1 / k); st._label.position.set(0, 2 / k, 14 / k); }
   }
   // Cambia la etiqueta visible (nombre) de una estructura y reconstruye su sprite 3D.
   setLabel(id, text) {
@@ -433,7 +468,7 @@ export class FleetView {
   // Posición de cámara que encuadra toda la flota, centrada.
   frame() {
     const { center, radius } = this._extent();
-    const gy = this.groundY(center.x, center.z), H = TOWER_H * TOWER_SCALE;
+    const gy = this.groundY(center.x, center.z), H = TOWER_H * this.scaleK;
     const tgt = new THREE.Vector3(center.x, gy + H * 0.45, center.z);
     const dist = Math.max(radius * 2.0, 280);
     const pos = new THREE.Vector3(center.x + dist * 0.45, gy + H * 1.15 + radius * 0.4, center.z + dist);
@@ -576,7 +611,7 @@ export class FleetView {
     for (const s of list) box.expandByPoint(s.group.position);
     const c = box.getCenter(new THREE.Vector3()), sz = box.getSize(new THREE.Vector3());
     const radius = Math.max(sz.x, sz.z) / 2 + SPACING;
-    const gy = this.groundY(c.x, c.z), H = TOWER_H * TOWER_SCALE;
+    const gy = this.groundY(c.x, c.z), H = TOWER_H * this.scaleK;
     const tgt = new THREE.Vector3(c.x, gy + H * 0.45, c.z);
     const dist = Math.max(radius * 2.0, 280);
     const pos = new THREE.Vector3(c.x + dist * 0.45, gy + H * 1.15 + radius * 0.4, c.z + dist);
@@ -743,7 +778,7 @@ export class FleetView {
       const p = this.selected.group.position, pulse = 0.5 + 0.5 * Math.sin(tt * 4);
       ring.visible = true;
       ring.position.set(p.x, p.y + 1.2, p.z);                                  // a la cota de la torre
-      ring.scale.setScalar((this.selected.type === 'hv' ? 1.15 : 1.3) * TOWER_SCALE * (1 + 0.08 * Math.sin(tt * 4)));
+      ring.scale.setScalar((this.selected.type === 'hv' ? 1.15 : 1.3) * this.scaleK * (1 + 0.08 * Math.sin(tt * 4)));
       ring.material.opacity = 0.6 + 0.35 * pulse;
     } else ring.visible = false;
 
