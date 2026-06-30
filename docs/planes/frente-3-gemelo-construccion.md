@@ -48,16 +48,25 @@ predecible**. Cada punto medido **fuera de la banda** del gemelo señala una cau
 | Tilt creciente entre hitos | asentamiento temprano de la fundación |
 
 ## Plan por fases (mapeo al código actual)
-1. **Gemelo** — `digital_twin.js` calcula `f₁(built)` del voladizo parcial; **verificar
-   vs solución analítica de voladizo** (test Node). Chequeo de ventana soft-stiff vs
-   1P/3P (rango de RPM del rotor como parámetro).
-2. **Datos** — f₁ medida por etapa (desde `SimulatedSource` ahora; `LiveSource` después).
-3. **UI** — tarjeta «Construcción»: **curva predicha + puntos medidos + banderas
-   verde/ámbar/rojo + banda soft-stiff**. (Integra con el HUD del Frente 1: el crosslink
-   «Gemelo: f₁ en banda ✓» de cada partida sale de aquí.)
-4. **Línea base** de commissioning + **exportar certificado** por torre.
-5. **Calibración** — una torre patrón fija masa/rigidez nominales; extrapolar al tipo.
-6. **(Después)** integración en vivo (`R-10`/`R-11`) + sensor de tilt biaxial (`R-24`).
+1. ✅ **Gemelo** (v256) — `js/shm/construction_twin.js`: `f₁(built)` del voladizo parcial
+   (Rayleigh) calibrado a la f₁ del gemelo FEM (0.283 Hz); **validado vs voladizo
+   analítico** (β=1.875, err 1.4%, self-test Node). Ventana **soft-stiff** vs 1P/3P (rpm
+   parámetro).
+2. 🟡 **Datos** — f₁ medida por etapa: hoy **simulada** determinista (defecto de base en
+   ~30% de torres); la real llega con OMA (`R-21`) / telemetría.
+3. ✅ **UI** (v256) — tarjeta «Gemelo de construcción» en la pestaña **Obra**: curva
+   predicha + puntos medidos verde/rojo + banda soft-stiff + veredicto. **Crosslink al
+   HUD** (v257): cada partida muestra «f₁ X Hz · concuerda ✓ / bajo lo predicho ✗».
+4. ✅ **Línea base** de commissioning + **certificado** imprimible por torre (v256).
+5. ⬜ **Calibración** — una torre patrón fija masa/rigidez nominales; extrapolar al tipo.
+6. ⬜ **(Al final, lo más desafiante)** f₁ medida real (OMA `R-21`) + integración en vivo
+   (`R-10`/`R-11`) + sensor de tilt biaxial (`R-24`).
+
+## Estado
+**Núcleo hecho (v256–v257):** modelo de voladizo calibrado, curva f₁ por etapa, ventana
+soft-stiff, tarjeta predicho-vs-medido en Obra, certificado de puesta en marcha y
+crosslink al HUD. **Pendiente (cierre):** la f₁ **medida real** (OMA) y la **conexión con
+los sensores** en vivo — acordado para el final por ser lo técnicamente más desafiante.
 
 ## Dependencias
 - `R-21` (OMA) para obtener la f₁ **medida** real desde la señal.

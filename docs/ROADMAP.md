@@ -9,7 +9,7 @@ Estado: ⬜ pendiente · 🟡 en curso · ✅ hecho. Los ítems se numeran `R-*`
 > **▶ Foco inmediato (en lo que trabajamos ahora):** planes detallados en [`docs/planes/`](planes/).
 > 1. ✅ **`R-18` — Etapas constructivas / avance de obra** (HUD tipo Stark + 4D por componente + dashboard de parque con curva-S/Gantt) — **hecho (v250)** — [plan](planes/frente-1-avance-obra.md).
 > 2. ✅ **`R-19` — Análisis de sombras** de los aerogeneradores según el sol — **hecho (v241)** — [plan](planes/frente-2-sombras.md).
-> 3. **`R-31` — Gemelo de construcción** (frecuencia predicha-vs-medida por etapa; el buque insignia, encaja con Camán en construcción) — **SIGUIENTE** — [plan](planes/frente-3-gemelo-construccion.md).
+> 3. 🟡 **`R-31` — Gemelo de construcción** (frecuencia predicha-vs-medida por etapa; el buque insignia, encaja con Camán en construcción) — **núcleo hecho (v256–v257)**; falta f₁ MEDIDA real (OMA `R-21`) + sensores en vivo (`R-10`) — [plan](planes/frente-3-gemelo-construccion.md).
 >
 > Los tres se apoyan en el modelo 4D que ya estamos modificando.
 
@@ -82,7 +82,7 @@ galgas caras; ReWind apunta a **onshore, con MEMS baratos y un gemelo físico en
 navegador**. Fundamentado en literatura 2025 (Devriendt & Weijtjens; WES 2025;
 revisiones de extensión de vida).*
 
-- ⬜ **🌟 Gemelo de CONSTRUCCIÓN / puesta en marcha (SHM durante el montaje)** `[R-31]` ***(PRIORITARIO — Camán se está construyendo AHORA y ya trabajamos el 4D)***: la SHM clásica arranca en operación; **monitorear estructuralmente mientras se construye es un white space** (la literatura no cubre el seguimiento modal durante el montaje ni la captura de la línea base de puesta en marcha con gemelo). ReWind ya modela el estado constructivo (`built`/`stages`, planos de corte 4D), así que el paso natural es:
+- 🟡 **🌟 Gemelo de CONSTRUCCIÓN / puesta en marcha (SHM durante el montaje)** `[R-31]` ***(núcleo hecho v256–v257)***: `js/shm/construction_twin.js` — voladizo equivalente (Rayleigh) calibrado a la f₁ del gemelo FEM (0.283 Hz), **curva f₁ predicha por etapa** (fuste 25/50/75/100 → +góndola → +rotor, validada vs voladizo analítico), **ventana soft-stiff** (1P/3P), y **medición simulada** con defecto de base determinista (~30% de torres). UI: tarjeta «Gemelo de construcción» en la pestaña **Obra** (curva predicha + puntos medidos verde/rojo + banda soft-stiff + veredicto + línea base) y **certificado de puesta en marcha** imprimible; **crosslink al HUD** del Frente 1 (cada partida muestra «f₁ X Hz · concuerda ✓ / bajo lo predicho ✗»). **Falta (lo más desafiante, al final):** f₁ **MEDIDA real** desde la señal (**OMA, `R-21`**) y **telemetría en vivo** (`R-10`/`R-11`) + tilt biaxial (`R-24`). Contexto del white space: la SHM clásica arranca en operación; **monitorear estructuralmente mientras se construye es un white space** (la literatura no cubre el seguimiento modal durante el montaje ni la captura de la línea base de puesta en marcha con gemelo). ReWind ya modela el estado constructivo (`built`/`stages`, planos de corte 4D), así que el paso natural es:
   - **Frecuencia esperada vs. medida por etapa.** A medida que sube el fuste, el gemelo predice f₁ en cada estado constructivo (voladizo de altura = fracción construida → f₁ baja por una curva conocida). **Desviación de la curva predicha = anomalía** (pretensado de pernos de brida insuficiente, fundación aún sin rigidez/curado, defecto de grout, base mal apoyada). Reusa `digital_twin.js` + `modal_solver` evaluados sobre el mástil parcial.
   - **Fundación en obra:** curado/madurez del hormigón (ganancia de rigidez), **asentamiento/tilt temprano**, jaula de anclaje/bolt-circle. Problemas caros y frecuentes (fundaciones agrietadas, fisuras por asentamiento plástico).
   - **Línea base («fingerprint») de puesta en marcha:** capturar f₁/f₂/amortiguamiento de cada torre recién montada **es lo que habilita toda la SHM operacional posterior** (es la referencia contra la que se comparará). Capturarla durante la construcción es el momento natural y casi nadie lo hace bien. Entrega: un **módulo de QA/commissioning** — predicho vs. medido por etapa, banderas verde/ámbar/rojo, y el fingerprint auto-generado que alimenta la SHM operacional.
@@ -96,7 +96,7 @@ revisiones de extensión de vida).*
 **Foco inmediato (apoyados en el 4D):**
 1. ✅ **`R-18` etapas constructivas / avance de obra** — hecho (HUD + 4D por componente + dashboard).
 2. ✅ **`R-19` análisis de sombras** — hecho.
-3. **🌟 `R-31` gemelo de construcción** — **SIGUIENTE**: frecuencia predicha-vs-medida por etapa; el mejor encaje hoy. Se beneficia de `R-21` (OMA) para la f₁ medida.
+3. 🟡 **🌟 `R-31` gemelo de construcción** — **núcleo hecho** (curva predicha + soft-stiff + certificado + crosslink HUD). Se cierra con `R-21` (OMA) para la f₁ medida real + sensores en vivo.
 
 **Después:**
 4. **`R-21` OMA desde la señal medida** — habilita el sensado virtual (base modal viva).
