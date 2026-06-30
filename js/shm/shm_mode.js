@@ -8,19 +8,20 @@
 //   inspecciones y señal temporal EN VIVO desde un Web Worker (DataSource).
 // Recortes (modelado) los hace shm.css ocultando, no borrando.
 // ─────────────────────────────────────────────────────────────────────────────
-import { FleetView } from './fleet_view.js?v=259';
-import { DataSource } from './data_source.js?v=259';
-import { computeTwin } from './digital_twin.js?v=259';
-import { ParkManager, loadParksStore } from './parks.js?v=259';
-import { MapView } from './map_view.js?v=259';
-import { defaultStages, builtFromStages } from './parks_data_caman.js?v=259';
-import { compassRoseSVG } from './compass.js?v=259';
-import { buildAvanceHUD } from './avance_hud.js?v=259';
-import { renderAvance } from './avance_dashboard.js?v=259';
-import * as Insp from './inspection.js?v=259';
+import { FleetView } from './fleet_view.js?v=260';
+import { DataSource } from './data_source.js?v=260';
+import { computeTwin } from './digital_twin.js?v=260';
+import { ParkManager, loadParksStore } from './parks.js?v=260';
+import { MapView } from './map_view.js?v=260';
+import { defaultStages, builtFromStages } from './parks_data_caman.js?v=260';
+import { compassRoseSVG } from './compass.js?v=260';
+import { buildAvanceHUD } from './avance_hud.js?v=260';
+import { renderAvance } from './avance_dashboard.js?v=260';
+import * as Insp from './inspection.js?v=260';
+import * as Fat from './fatigue.js?v=260';
 
 const F1_BASE = { turbine: 0.283, hv: 1.6 };
-const REWIND_VER = 'v259';   // versión visible del build (subir junto al cache-bust)
+const REWIND_VER = 'v260';   // versión visible del build (subir junto al cache-bust)
 const FS = 62.5;   // frecuencia de muestreo de la señal (Hz), igual que shm_worker.js
 // Clasificador ML de daño (0..4)
 const CLS = ['Sin daño', 'Leve', 'Moderado', 'Alto', 'Muy alto'];
@@ -256,7 +257,7 @@ async function boot() {
   // ── Relieve conceptual del terreno (DEM vendorizado) — encendido por defecto ─
   setLoad(88, 'Cargando relieve…'); await delay(40);
   try {
-    await fleet.loadTerrain('data/caman_dem.json?v=259');
+    await fleet.loadTerrain('data/caman_dem.json?v=260');
     fleet.setTerrainVisible(true);
     document.getElementById('shm-relieve-tool')?.classList.add('active');
   } catch (e) { console.warn('[shm] relieve no disponible', e); }
@@ -944,12 +945,13 @@ function buildDashboard(panel, fleet, actions) {
   // ── Pestaña SHM: estado por sensores + señal + sensores + avanzado ───────────
   function renderSHM() {
     const o = current; if (!o) { const h = $('#shm-shm'); if (h) h.innerHTML = '<div class="empty">Selecciona una estructura.</div>'; return; }
-    if (!['estado', 'senal', 'sensores', 'avz'].includes(pane)) pane = 'estado';
+    if (!['estado', 'senal', 'sensores', 'avz', 'fatiga'].includes(pane)) pane = 'estado';
     $('#shm-shm').innerHTML = `
       <div class="shm-tabs">
         <button class="shm-tab" data-p="estado">Estado</button>
         <button class="shm-tab" data-p="senal">Señal</button>
         <button class="shm-tab" data-p="sensores">Sensores</button>
+        <button class="shm-tab" data-p="fatiga">Fatiga</button>
         <button class="shm-tab" data-p="avz">Avanzado</button>
       </div>
       <div class="shm-body" id="shm-pane"></div>`;
@@ -984,6 +986,25 @@ function buildDashboard(panel, fleet, actions) {
       body.innerHTML = o.sensors.map(se =>
         `<div class="shm-sensor"><span class="dot ${se.status}"></span><span style="flex:1">${se.id}</span><b class="s-rms" data-sid="${se.id}">—</b></div>`
       ).join('') + `<div class="note">Verde = operativo · Rojo = en falla. Estado y RMS en vivo desde el gateway (sim).</div>`;
+    } else if (pane === 'fatiga') {
+      const a = assessFatigueFor(o, sum);
+      const st = Fat.fatigueState(a.Delapsed);
+      const rulLab = !isFinite(a.rul) ? '∞' : a.rul <= 0 ? '0 a ⚠' : `${a.rul.toFixed(0)} a`;
+      const lifeLab = !isFinite(a.lifeYears) ? '∞' : `${a.lifeYears.toFixed(0)} a`;
+      body.innerHTML = `
+        <div class="fat-kpis">
+          <div class="fat-kpi"><div class="k">Vida consumida</div><div class="v ${st.key}">${(a.Delapsed * 100).toFixed(0)}%</div></div>
+          <div class="fat-kpi"><div class="k">Vida remanente</div><div class="v ${a.rul <= 2 ? 'critica' : ''}">${rulLab}</div></div>
+          <div class="fat-kpi"><div class="k">Daño / año</div><div class="v">${a.Dyear.toExponential(1)}</div></div>
+          <div class="fat-kpi"><div class="k">DEL (m=3)</div><div class="v">${a.del3.toFixed(0)}<small> MPa</small></div></div>
+        </div>
+        <div class="row"><span>Estado de fatiga</span><b class="${st.key}">${st.label}</b></div>
+        <div class="row"><span>Vida de diseño estimada</span><b>${lifeLab}</b></div>
+        <div class="row"><span>Años en servicio (sim.)</span><b>${a.yearsInService} a</b></div>
+        <div class="row" style="border:0"><span>Categoría de detalle</span><b>EN 1993-1-9 · ΔσC ${a.detail}</b></div>
+        <div class="shm-sub2">Espectro de carga (rainflow · ciclos/año)</div>
+        ${fatigueSpectrumSVG(a)}
+        <div class="note" style="font-size:10px">Conteo <b>rainflow</b> (ASTM E1049) + S-N <b>EN 1993-1-9</b> + daño de <b>Miner</b> → vida remanente y <b>DEL</b>. Historia de tensiones <b>sintética</b> (turbulencia de banda baja + armónicos 1P/3P del rotor) hasta conectar la galga/acelerómetro real. Distinto del índice de daño por sensores (pestaña Estado).</div>`;
     } else if (pane === 'avz') {
       const nvm = o.type === 'turbine'
         ? `<div class="note">Diagramas del gemelo digital — fuste bajo viento + peso propio:</div>
@@ -1020,6 +1041,49 @@ function buildDashboard(panel, fleet, actions) {
   // 0–100 (port de structapp-base), ensayos, documentos, histórico de evaluación
   // e informe. La «evaluación de inspección» es distinta del estado por sensores (SHM).
   const ihash = (s) => { let h = 0; for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) >>> 0; return h; };
+
+  // Entradas de fatiga por estructura (R-22): viento medio del sitio estable por
+  // torre, índice de daño del live, años en servicio determinista, armónicos
+  // 1P/3P solo en aerogeneradores (la torre AT fatiga por bataneo de viento).
+  function assessFatigueFor(o, sum) {
+    const h = ihash(o.id), turbine = o.type === 'turbine';
+    return Fat.assessFatigue({
+      id: o.id,
+      vMean: 7.5 + (h % 5) * 0.4,                 // viento medio del sitio (estable)
+      dmgIndex: sum ? (sum.dmg || 0) : 0,
+      detail: turbine ? 80 : 71,                   // categoría de detalle EN 1993-1-9
+      harmonics: turbine,
+      yearsInService: 3 + (h % 7),                 // 3..9 años (sim. hasta tener fecha real)
+    });
+  }
+
+  // Espectro de carga (rainflow): barras ciclos/año vs rango de tensión (log-y),
+  // con los umbrales S-N ΔσD (m1→m2) y ΔσL (corte).
+  function fatigueSpectrumSVG(a) {
+    const sp = a.spectrum.filter(b => b.perYear > 0);
+    if (!sp.length) return '<div class="ins-mut">Sin ciclos de fatiga.</div>';
+    const W = 300, H = 140, ml = 36, mb = 24, mt = 10, mr = 8, pw = W - ml - mr, ph = H - mt - mb;
+    const maxR = Math.max(...sp.map(b => b.range), a.limits.dsD * 1.05);
+    const ys = sp.map(b => b.perYear), ymax = Math.max(...ys), ymin = Math.min(...ys);
+    const lMax = Math.log10(ymax), lMin = Math.log10(Math.max(ymin, 1)), span = (lMax - lMin) || 1;
+    const Y = v => mt + (1 - (Math.log10(Math.max(v, 1)) - lMin) / span) * ph;
+    const X = r => ml + (r / maxR) * pw;
+    const bw = Math.max(2, pw / sp.length - 2);
+    const { dsD, dsL } = a.limits;
+    const col = r => r >= dsD ? '#ef4444' : r >= dsL ? '#f59e0b' : '#64748b';
+    const bars = sp.map(b => { const x = X(b.range) - bw / 2, y = Y(b.perYear); return `<rect x="${x.toFixed(1)}" y="${y.toFixed(1)}" width="${bw.toFixed(1)}" height="${(mt + ph - y).toFixed(1)}" fill="${col(b.range)}" opacity="0.85"/>`; }).join('');
+    const vline = (r, lab, c) => r <= maxR ? `<line x1="${X(r).toFixed(1)}" y1="${mt}" x2="${X(r).toFixed(1)}" y2="${mt + ph}" stroke="${c}" stroke-width="1" stroke-dasharray="3 3"/><text x="${X(r).toFixed(1)}" y="${mt + 7}" font-size="7" fill="${c}" text-anchor="middle">${lab}</text>` : '';
+    const yticks = [ymin, Math.sqrt(ymin * ymax), ymax].map(v => `<text x="${ml - 4}" y="${(Y(v) + 3).toFixed(1)}" font-size="7" fill="var(--text-muted,#93a6b8)" text-anchor="end">${v >= 1e6 ? (v / 1e6).toFixed(0) + 'M' : v >= 1e3 ? (v / 1e3).toFixed(0) + 'k' : v.toFixed(0)}</text>`).join('');
+    const xticks = [0, maxR / 2, maxR].map(r => `<text x="${X(r).toFixed(1)}" y="${(mt + ph + 11).toFixed(1)}" font-size="7" fill="var(--text-muted,#93a6b8)" text-anchor="middle">${r.toFixed(0)}</text>`).join('');
+    return `<svg viewBox="0 0 ${W} ${H}" style="width:100%;height:auto;aspect-ratio:${W}/${H};display:block;background:var(--bg3);border:1px solid var(--border);border-radius:6px">
+      ${bars}${vline(dsL, 'ΔσL', '#94a3b8')}${vline(dsD, 'ΔσD', '#f59e0b')}
+      <line x1="${ml}" y1="${mt + ph}" x2="${ml + pw}" y2="${mt + ph}" stroke="var(--border,#28384a)" stroke-width="0.7"/>
+      ${yticks}${xticks}
+      <text x="${ml + pw / 2}" y="${H - 3}" font-size="8" fill="var(--text-muted,#93a6b8)" text-anchor="middle">rango Δσ (MPa)</text>
+      <text x="9" y="${mt + ph / 2}" font-size="8" fill="var(--text-muted,#93a6b8)" text-anchor="middle" transform="rotate(-90 9 ${mt + ph / 2})">ciclos/año (log)</text>
+    </svg>`;
+  }
+
   function seedInspection(o) {
     const h = ihash(o.id), fault = o.sensors.some(s => s.status === 'fault');
     const insp = Insp.addInspection(o.id, {

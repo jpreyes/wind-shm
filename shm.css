@@ -625,6 +625,15 @@ body.shm #shm-banner.show { display: flex; animation: shm-blink 0.8s steps(1) in
 .ins-kpi .v.operativa, .ins-score.operativa, .ins-row-s.operativa, .ins-dmg-sc.operativa { color: var(--success, #22c55e); }
 .ins-kpi .v.observacion, .ins-score.observacion, .ins-row-s.observacion, .ins-dmg-sc.observacion { color: #f59e0b; }
 .ins-kpi .v.critica, .ins-score.critica, .ins-row-s.critica, .ins-dmg-sc.critica { color: var(--danger, #ef4444); }
+/* ── Fatiga (R-22): KPIs ─────────────────────────────────────────────────── */
+#shm-shm .fat-kpis { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; margin-bottom: 8px; }
+#shm-shm .fat-kpi { background: var(--bg3); border: 1px solid var(--border); border-radius: var(--radius-sm, 6px); padding: 6px 8px; }
+#shm-shm .fat-kpi .k { font-size: 10px; color: var(--text-muted); text-transform: uppercase; letter-spacing: .3px; }
+#shm-shm .fat-kpi .v { font-size: 17px; font-weight: 700; color: var(--text); }
+#shm-shm .fat-kpi .v small { font-size: 10px; font-weight: 600; color: var(--text-muted); }
+#shm-shm .fat-kpi .v.operativa { color: var(--success, #22c55e); }
+#shm-shm .fat-kpi .v.observacion { color: #f59e0b; }
+#shm-shm .fat-kpi .v.critica { color: var(--danger, #ef4444); }
 #shm-insp .ins-mut { font-size: 11px; color: var(--text-muted); }
 #shm-insp .ins-actrow { display: flex; }
 #shm-insp .ins-btn { cursor: pointer; background: var(--bg4); color: var(--text); border: 1px solid var(--border2); border-radius: var(--radius-sm, 6px); padding: 6px 10px; font-family: inherit; font-size: 12px; font-weight: 600; }
