@@ -8,21 +8,21 @@
 //   inspecciones y señal temporal EN VIVO desde un Web Worker (DataSource).
 // Recortes (modelado) los hace shm.css ocultando, no borrando.
 // ─────────────────────────────────────────────────────────────────────────────
-import { FleetView } from './fleet_view.js?v=270';
-import { DataSource } from './data_source.js?v=270';
-import { computeTwin } from './digital_twin.js?v=270';
-import { ParkManager, loadParksStore } from './parks.js?v=270';
-import { MapView } from './map_view.js?v=270';
-import { defaultStages, builtFromStages } from './parks_data_caman.js?v=270';
-import { compassRoseSVG } from './compass.js?v=270';
-import { buildAvanceHUD } from './avance_hud.js?v=270';
-import { renderAvance } from './avance_dashboard.js?v=270';
-import * as Insp from './inspection.js?v=270';
-import * as Fat from './fatigue.js?v=270';
-import { t, getLang, setLang } from './i18n.js?v=270';
+import { FleetView } from './fleet_view.js?v=271';
+import { DataSource } from './data_source.js?v=271';
+import { computeTwin } from './digital_twin.js?v=271';
+import { ParkManager, loadParksStore } from './parks.js?v=271';
+import { MapView } from './map_view.js?v=271';
+import { defaultStages, builtFromStages } from './parks_data_caman.js?v=271';
+import { compassRoseSVG } from './compass.js?v=271';
+import { buildAvanceHUD } from './avance_hud.js?v=271';
+import { renderAvance } from './avance_dashboard.js?v=271';
+import * as Insp from './inspection.js?v=271';
+import * as Fat from './fatigue.js?v=271';
+import { t, getLang, setLang } from './i18n.js?v=271';
 
 const F1_BASE = { turbine: 0.283, hv: 1.6 };
-const REWIND_VER = 'v270';   // versión visible del build (subir junto al cache-bust)
+const REWIND_VER = 'v271';   // versión visible del build (subir junto al cache-bust)
 const FS = 62.5;   // frecuencia de muestreo de la señal (Hz), igual que shm_worker.js
 // Clasificador ML de daño (0..4)
 const CLS = ['Sin daño', 'Leve', 'Moderado', 'Alto', 'Muy alto'];
@@ -263,7 +263,7 @@ async function boot() {
   // ── Relieve conceptual del terreno (DEM vendorizado) — encendido por defecto ─
   setLoad(88, 'Cargando relieve…'); await delay(40);
   try {
-    await fleet.loadTerrain('data/caman_dem.json?v=270');
+    await fleet.loadTerrain('data/caman_dem.json?v=271');
     fleet.setTerrainVisible(true);
     document.getElementById('shm-relieve-tool')?.classList.add('active');
   } catch (e) { console.warn('[shm] relieve no disponible', e); }
@@ -805,6 +805,9 @@ function buildDashboard(panel, fleet, actions) {
   function setTopView(v) {
     for (const w of ['parque', 'seleccion', 'obra', 'insp', 'shm', 'shadow']) $('#view-' + w).style.display = v === w ? '' : 'none';
     el.querySelectorAll('.shm-toptab').forEach(t => t.classList.toggle('active', t.dataset.v === v));
+    // Sincroniza el estado activo de los accesos del toolbar a las pestañas del panel.
+    const PANEL_TOOLS = { insp: 'shm-pinsp-tool', shm: 'shm-pshm-tool' };
+    for (const [view, id] of Object.entries(PANEL_TOOLS)) document.getElementById(id)?.classList.toggle('active', v === view);
     if (v === 'shadow') renderShadow();
     if (v === 'obra') {
       try {
