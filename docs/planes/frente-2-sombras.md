@@ -85,6 +85,16 @@ Mitigación: módulos de parada (shutdown). Open-source emergente: WIMBY SF.
    (cara hacia la línea sol→receptor según el viento) → `hoursYearReal` esperado. Reemplaza al factor
    fijo en los receptores (popup «Real (meteo)» + informe). *Datos estimados; refinar con TMY/estación
    (camino industrial de `R-10`).* Verificado en Node (worst 43.5 → real 5.9 h/año).
+9. ✅ **Sombra del relieve mucho más tenue que la de las torres** (v236) — Three.js r164 filtra el
+   casteo de sombra por la cámara principal (no por luz), así que no se pueden separar en dos mapas
+   por tipo de objeto. Se resuelve en dos niveles: el relieve **deja de castear** al mapa y su sombra
+   pasa a ser **hillshade del shader** siguiendo al sol real (`uLight`, normal en mundo) → tenue; las
+   torres siguen con sombra proyectada, ahora más marcada (`ShadowMaterial` opacity 0.36→0.44).
+10. ✅ **Pestaña «Shadow flicker» en el panel derecho** (v237) — los análisis migran al dashboard como
+   3ª pestaña (Parque · Selección · Shadow flicker): mapa de flicker, informe de cumplimiento,
+   sombreado entre torres y la **lista viva de receptores** (worst/real + quitar). Los controles de
+   hora/fecha quedan en el HUD flotante sobre el visor. Activar «Shadow» abre la pestaña; agregar/
+   quitar receptores en el 2D la refresca (`map_view.removeReceptor` + `window.shmDash.refreshShadow`).
 
 ## Dependencias
 - Receptores (viviendas) como capa de datos del parque.
