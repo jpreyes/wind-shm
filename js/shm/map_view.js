@@ -6,9 +6,9 @@
 // Click en un marcador → conmuta a la vista 3D enfocando esa estructura (onPick).
 // Leaflet se carga como global (window.L) desde lib/leaflet/leaflet.js.
 // ─────────────────────────────────────────────────────────────────────────────
-import { CAMAN_CENTER } from './parks_data_caman.js?v=225';
-import { CAMAN_ROADS } from './caman_roads.js?v=225';
-import { compassRoseSVG } from './compass.js?v=225';
+import { CAMAN_CENTER } from './parks_data_caman.js?v=226';
+import { CAMAN_ROADS } from './caman_roads.js?v=226';
+import { compassRoseSVG } from './compass.js?v=226';
 
 // Color del marcador según el avance de obra (coherente con el 4D / panel).
 function colorFor(st) {
@@ -126,7 +126,8 @@ export class MapView {
     this.sunMode ? this.shadowLayer.addTo(this.map) : this.map.removeLayer(this.shadowLayer);
     this.shadowLayer.clearLayers();
     if (!this.sunMode || !sun || sun.elevation <= 0.5) return;                  // sin sol útil (noche) → sin sombra
-    const SH = '#1b2e6b';                                                       // índigo (igual que en 3D)
+    // Colores de alto contraste con el verde: sombra VIOLETA, torre AMARILLA.
+    const SH = '#6d28d9', TW = '#fde047', TWE = '#1a1300';
     const bearing = (sun.azimuth + 180) * Math.PI / 180;                        // hacia donde cae la sombra
     const tan = Math.tan(sun.elevation * Math.PI / 180), cb = Math.cos(bearing), sb = Math.sin(bearing);
     for (const st of this.fleet.structures) {
@@ -136,11 +137,19 @@ export class MapView {
       const H = (st.height || (st.type === 'hv' ? 40 : 90)) * frac;             // altura erigida (m)
       const Lm = Math.min(H / tan, 3000);                                       // largo de sombra (cap a 3 km con sol muy bajo)
       const dlat = (Lm * cb) / 111320, dlon = (Lm * sb) / (111320 * Math.cos(st.lat * Math.PI / 180));
-      const tip = [st.lat + dlat, st.lon + dlon];
-      L.polyline([[st.lat, st.lon], tip], { color: SH, weight: 3.5, opacity: 0.75 }).addTo(this.shadowLayer);
+      const base = [st.lat, st.lon], tip = [st.lat + dlat, st.lon + dlon];
+      L.polyline([base, tip], { color: SH, weight: 4, opacity: 0.9 }).addTo(this.shadowLayer);
       if (st.type !== 'hv' && frac >= 0.97)                                     // disco del rotor sólo si está montado
-        L.circle(tip, { radius: 42, stroke: false, fillColor: SH, fillOpacity: 0.42 }).addTo(this.shadowLayer);
+        L.circle(tip, { radius: 42, stroke: false, fillColor: SH, fillOpacity: 0.5 }).addTo(this.shadowLayer);
+      L.circleMarker(base, { radius: 3.6, color: TWE, weight: 1, fillColor: TW, fillOpacity: 1 }).addTo(this.shadowLayer);   // torre (punto)
     }
+  }
+
+  // Centra/acerca el mapa sobre una estructura (al seleccionarla en el árbol o 3D).
+  focus(obj) {
+    if (!obj || obj.lat == null || obj.lon == null || !this.map) return;
+    const z = Math.max(this.map.getZoom(), 14);
+    this.map.setView([obj.lat, obj.lon], z, { animate: false });
   }
 
   // Tirador propio para redimensionar el PiP con el ratón (el `resize` nativo del

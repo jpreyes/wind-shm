@@ -122,19 +122,30 @@ body.shm #shm-map-tool.active { color: var(--accent); background: var(--accent-s
 /* ── Vista 2D del parque (Leaflet): mini-mapa PiP ⇄ pantalla completa ───────── */
 body.shm #viewport-wrap { position: relative; }
 #map-container { position: absolute; z-index: 6; display: none; background: var(--bg2, #0b1018); }
-/* PiP: ventana auxiliar en la esquina, redimensionable */
-body.shm.map-pip #map-container {
+/* Caja PiP compartida (esquina inferior-derecha) — la usa la vista secundaria */
+.pip-box {
+  right: 14px; bottom: 14px; width: 320px; height: 230px; min-width: 180px; min-height: 140px;
+  border: 1px solid var(--border2); border-radius: 8px; overflow: hidden;
+  box-shadow: 0 6px 22px rgba(0,0,0,.45);
+}
+/* — 3D principal (por defecto): 2D como PiP en la esquina — */
+body.shm.map-pip:not(.view-2d) #map-container {
   display: block; right: 14px; bottom: 14px; width: 320px; height: 230px;
   min-width: 180px; min-height: 140px; border: 1px solid var(--border2);
   border-radius: 8px; overflow: hidden; box-shadow: 0 6px 22px rgba(0,0,0,.45);
 }
-/* Pantalla completa (gana sobre el PiP y sobre el tamaño inline del resize) */
-body.shm.map-full #map-container {
+/* — 2D principal (intercambiado): el mapa llena y el 3D queda en PiP — */
+body.shm.view-2d #map-container {
   display: block; inset: 0 !important; width: auto !important; height: auto !important;
-  min-width: 0; min-height: 0; border: 0; border-radius: 0; box-shadow: none;
+  min-width: 0; min-height: 0; border: 0; border-radius: 0; box-shadow: none; z-index: 5;
 }
-body.shm.map-full #shm-nameplate, body.shm.map-full #shm-banner { display: none; }
-body.shm.map-full .mv-resize { display: none; }
+body.shm.view-2d #viewport-container {
+  position: absolute; right: 14px; bottom: 14px; width: 320px; height: 230px;
+  border: 1px solid var(--border2); border-radius: 8px; overflow: hidden;
+  box-shadow: 0 6px 22px rgba(0,0,0,.45); z-index: 7; cursor: pointer;
+}
+body.shm.view-2d #shm-compass, body.shm.view-2d #shm-nameplate, body.shm.view-2d #shm-banner { display: none; }
+body.shm.view-2d .mv-resize { display: none; }
 .leaflet-container { font: inherit; }
 /* Tirador de redimensión del PiP (esquina superior-izquierda) */
 .mv-resize { position: absolute; top: 0; left: 0; width: 18px; height: 18px; z-index: 1100;
@@ -387,7 +398,7 @@ body.shm #shm-banner.show { display: flex; animation: shm-blink 0.8s steps(1) in
 /* Estudio de sol en el mapa 2D: ACLARA/desatura el basemap (lámina de estudio)
    para que la sombra índigo oscura contraste encima (antes lo oscurecía → sombra
    oscura sobre fondo oscuro = invisible). */
-.mv-sun .leaflet-tile-pane { filter: brightness(1.2) saturate(0.28) contrast(0.82); }
+.mv-sun .leaflet-tile-pane { filter: brightness(1.12) saturate(0.55) contrast(0.9); }
 
 /* ── Rosa de los vientos (3D flotante arriba-derecha + 2D control) ─────────── */
 #shm-compass { position: absolute; right: 14px; top: 14px; z-index: 25; width: 58px; height: 58px; pointer-events: none; }

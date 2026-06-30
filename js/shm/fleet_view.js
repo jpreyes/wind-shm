@@ -7,11 +7,11 @@
 // ─────────────────────────────────────────────────────────────────────────────
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
-import { createTurbine, TOWER_H } from './turbine_mesh.js?v=225';
-import { createSubstationTower, groundCable, overheadLine } from './structures.js?v=225';
-import { toScene, CAMAN_CENTER, LAYOUT_SCALE } from './parks_data_caman.js?v=225';
-import { CAMAN_ROADS } from './caman_roads.js?v=225';
-import { solarPosition, dateFromLocal, sunSceneDir } from './solar.js?v=225';
+import { createTurbine, TOWER_H } from './turbine_mesh.js?v=226';
+import { createSubstationTower, groundCable, overheadLine } from './structures.js?v=226';
+import { toScene, CAMAN_CENTER, LAYOUT_SCALE } from './parks_data_caman.js?v=226';
+import { CAMAN_ROADS } from './caman_roads.js?v=226';
+import { solarPosition, dateFromLocal, sunSceneDir } from './solar.js?v=226';
 
 const SPACING = 235;
 const TOWER_SCALE = 2.2;   // agranda las torres (vista esquemática) para que destaquen sobre el relieve
@@ -261,7 +261,7 @@ export class FleetView {
   // ── Relieve conceptual (capa de terreno) ─────────────────────────────────────
   // Carga el DEM vendorizado y añade la malla (oculta hasta activarla).
   async loadTerrain(url) {
-    const { Terrain } = await import('./terrain.js?v=225');
+    const { Terrain } = await import('./terrain.js?v=226');
     this._TerrainClass = Terrain;                     // para reconstruir al cambiar de escala
     const dem = await (await fetch(url)).json();
     this.terrain = new Terrain(dem, { vex: 1.5 });   // relieve exagerado (esquemático)
@@ -702,12 +702,17 @@ export class FleetView {
     this.flyTo(f.pos, f.tgt, 3000);
   }
 
+  // Reajusta cámara + renderer al tamaño actual del contenedor (al intercambiar
+  // vista principal ⇄ PiP no hay evento `resize` de ventana, hay que llamarlo).
+  resize() {
+    const w = this.container.clientWidth, h = this.container.clientHeight;
+    if (!w || !h) return;
+    this.camera.aspect = w / h; this.camera.updateProjectionMatrix();
+    this.renderer.setSize(w, h);
+  }
+
   _bind() {
-    addEventListener('resize', () => {
-      const w = this.container.clientWidth, h = this.container.clientHeight;
-      this.camera.aspect = w / h; this.camera.updateProjectionMatrix();
-      this.renderer.setSize(w, h);
-    });
+    addEventListener('resize', () => this.resize());
     let downXY = null;
     const dom = this.renderer.domElement;
     dom.addEventListener('pointerdown', e => {

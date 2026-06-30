@@ -8,16 +8,16 @@
 //   inspecciones y señal temporal EN VIVO desde un Web Worker (DataSource).
 // Recortes (modelado) los hace shm.css ocultando, no borrando.
 // ─────────────────────────────────────────────────────────────────────────────
-import { FleetView } from './fleet_view.js?v=225';
-import { DataSource } from './data_source.js?v=225';
-import { computeTwin } from './digital_twin.js?v=225';
-import { ParkManager, loadParksStore } from './parks.js?v=225';
-import { MapView } from './map_view.js?v=225';
-import { defaultStages, builtFromStages } from './parks_data_caman.js?v=225';
-import { compassRoseSVG } from './compass.js?v=225';
+import { FleetView } from './fleet_view.js?v=226';
+import { DataSource } from './data_source.js?v=226';
+import { computeTwin } from './digital_twin.js?v=226';
+import { ParkManager, loadParksStore } from './parks.js?v=226';
+import { MapView } from './map_view.js?v=226';
+import { defaultStages, builtFromStages } from './parks_data_caman.js?v=226';
+import { compassRoseSVG } from './compass.js?v=226';
 
 const F1_BASE = { turbine: 0.283, hv: 1.6 };
-const REWIND_VER = 'v225';   // versión visible del build (subir junto al cache-bust)
+const REWIND_VER = 'v226';   // versión visible del build (subir junto al cache-bust)
 const FS = 62.5;   // frecuencia de muestreo de la señal (Hz), igual que shm_worker.js
 // Clasificador ML de daño (0..4)
 const CLS = ['Sin daño', 'Leve', 'Moderado', 'Alto', 'Muy alto'];
@@ -147,12 +147,26 @@ async function boot() {
   const syncData = () => { ds.init(buildManifest()); dash.setStructures(fleet.getStructures()); mapView?.setStructures(); };
 
   // Vista 2D del parque (Leaflet): click en un marcador → vuelve al 3D enfocando la torre.
+  // Intercambia cuál vista es principal (3D ⇄ 2D): la otra queda como PiP en la esquina.
+  const swapViews = () => {
+    document.body.classList.add('map-pip');                 // el 2D debe estar presente
+    const v2 = document.body.classList.toggle('view-2d');
+    document.getElementById('shm-map-tool')?.classList.add('active');
+    const apply = () => { fleet.resize(); mapView.invalidate(); mapView.map?.invalidateSize(); };
+    apply(); setTimeout(apply, 80);                          // síncrono (reflow) + fallback
+    return v2;
+  };
   mapView = new MapView(document.getElementById('map-container'), fleet, {
-    onPick: (id) => { document.body.classList.remove('map-full'); fleet.selectById(id); },   // mantiene el PiP visible
-    onToggleFull: () => { document.body.classList.toggle('map-full'); mapView.invalidate(); },
+    onPick: (id) => fleet.selectById(id),                   // selecciona y centra (no cambia la vista principal)
+    onToggleFull: () => swapViews(),                        // ⤢ / doble-clic en el mapa → intercambia principal ⇄ PiP
   });
   window.shmMap = mapView;
+  window.shmSwapViews = swapViews;
   mapView.setStructures();
+  // Doble-clic en el PiP del 3D (cuando el 2D es principal) → promover el 3D.
+  document.getElementById('viewport-container')?.addEventListener('dblclick', () => {
+    if (document.body.classList.contains('view-2d')) swapViews();
+  });
 
   // Árbol lateral Parque ▸ Zona ▸ Torre
   pm = new ParkManager({ el: document.getElementById('park-tree'), fleet, store, onSync: syncData });
@@ -167,17 +181,17 @@ async function boot() {
   const towerCard = buildTowerCard(vpwrap, fleet, { onShowAvance: () => dash.showPane('avance') });
   const compass = buildCompass(vpwrap, fleet);   // rosa de los vientos (gira con la cámara)
   fleet.onFrame = () => { towerCard.tick(); compass.update(); };   // reposiciona ficha + brújula con el render
-  fleet.onSelect = (obj) => { dash.select(obj); nameplate.show(obj); towerCard.setData(obj); statusBar.setSelected(obj); ds.focus(obj ? obj.id : null); };
+  fleet.onSelect = (obj) => { dash.select(obj); nameplate.show(obj); towerCard.setData(obj); statusBar.setSelected(obj); ds.focus(obj ? obj.id : null); if (obj) mapView?.focus(obj); };
 
   // Mapa 2D (PiP) visible por defecto.
   document.body.classList.add('map-pip');
   document.getElementById('shm-map-tool')?.classList.add('active');
   mapView.invalidate();
 
-  // ESC: en pantalla completa del mapa, restaura; si no, deselecciona la estructura.
+  // ESC: si el 2D está como principal, vuelve al 3D; si no, deselecciona la estructura.
   addEventListener('keydown', (e) => {
     if (e.key !== 'Escape') return;
-    if (document.body.classList.contains('map-full')) { document.body.classList.remove('map-full'); mapView.invalidate(); return; }
+    if (document.body.classList.contains('view-2d')) { swapViews(); return; }
     if (fleet.selected) fleet.clearSelection();
   });
 
@@ -187,7 +201,7 @@ async function boot() {
   // ── Relieve conceptual del terreno (DEM vendorizado) — encendido por defecto ─
   setLoad(88, 'Cargando relieve…'); await delay(40);
   try {
-    await fleet.loadTerrain('data/caman_dem.json?v=225');
+    await fleet.loadTerrain('data/caman_dem.json?v=226');
     fleet.setTerrainVisible(true);
     document.getElementById('shm-relieve-tool')?.classList.add('active');
   } catch (e) { console.warn('[shm] relieve no disponible', e); }
@@ -273,9 +287,10 @@ function buildToolbar(toolbar, fleet, getPM = () => null) {
     `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M9 4 L3 6 V20 L9 18 L15 20 L21 18 V4 L15 6 L9 4 Z"/><path d="M9 4 V18 M15 6 V20"/></svg>`,
     'Mapa', () => {
       const on = document.body.classList.toggle('map-pip');
-      if (!on) document.body.classList.remove('map-full');   // al cerrar el mapa, salir también de pantalla completa
+      if (!on) document.body.classList.remove('view-2d');     // al cerrar el mapa, vuelve el 3D a principal
       mapBtn.classList.toggle('active', on);
-      if (on) { window.shmMap?.invalidate(); window.shmMap?.refresh(); }
+      const apply = () => { fleet.resize(); if (on) { window.shmMap?.invalidate(); window.shmMap?.refresh(); } };
+      apply(); setTimeout(apply, 80);
     });
   // «Árbol» va ARRIBA DE TODO, sobre la flecha de selección (1.er control de la barra).
   const topSep = document.createElement('div'); topSep.className = 'tool-sep';
