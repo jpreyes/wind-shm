@@ -8,19 +8,19 @@
 //   inspecciones y señal temporal EN VIVO desde un Web Worker (DataSource).
 // Recortes (modelado) los hace shm.css ocultando, no borrando.
 // ─────────────────────────────────────────────────────────────────────────────
-import { FleetView } from './fleet_view.js?v=258';
-import { DataSource } from './data_source.js?v=258';
-import { computeTwin } from './digital_twin.js?v=258';
-import { ParkManager, loadParksStore } from './parks.js?v=258';
-import { MapView } from './map_view.js?v=258';
-import { defaultStages, builtFromStages } from './parks_data_caman.js?v=258';
-import { compassRoseSVG } from './compass.js?v=258';
-import { buildAvanceHUD } from './avance_hud.js?v=258';
-import { renderAvance } from './avance_dashboard.js?v=258';
-import * as Insp from './inspection.js?v=258';
+import { FleetView } from './fleet_view.js?v=259';
+import { DataSource } from './data_source.js?v=259';
+import { computeTwin } from './digital_twin.js?v=259';
+import { ParkManager, loadParksStore } from './parks.js?v=259';
+import { MapView } from './map_view.js?v=259';
+import { defaultStages, builtFromStages } from './parks_data_caman.js?v=259';
+import { compassRoseSVG } from './compass.js?v=259';
+import { buildAvanceHUD } from './avance_hud.js?v=259';
+import { renderAvance } from './avance_dashboard.js?v=259';
+import * as Insp from './inspection.js?v=259';
 
 const F1_BASE = { turbine: 0.283, hv: 1.6 };
-const REWIND_VER = 'v258';   // versión visible del build (subir junto al cache-bust)
+const REWIND_VER = 'v259';   // versión visible del build (subir junto al cache-bust)
 const FS = 62.5;   // frecuencia de muestreo de la señal (Hz), igual que shm_worker.js
 // Clasificador ML de daño (0..4)
 const CLS = ['Sin daño', 'Leve', 'Moderado', 'Alto', 'Muy alto'];
@@ -256,7 +256,7 @@ async function boot() {
   // ── Relieve conceptual del terreno (DEM vendorizado) — encendido por defecto ─
   setLoad(88, 'Cargando relieve…'); await delay(40);
   try {
-    await fleet.loadTerrain('data/caman_dem.json?v=258');
+    await fleet.loadTerrain('data/caman_dem.json?v=259');
     fleet.setTerrainVisible(true);
     document.getElementById('shm-relieve-tool')?.classList.add('active');
   } catch (e) { console.warn('[shm] relieve no disponible', e); }
@@ -1067,11 +1067,16 @@ function buildDashboard(panel, fleet, actions) {
 
     const dmgRows = sel.damages.length ? sel.damages.map(d => {
       const sc = Insp.scoreDamage(d), b = Insp.scoreBand(sc);
-      return `<div class="ins-dmg">
-        <span class="ins-dmg-sc ${b.cls}">${sc.toFixed(0)}</span>
-        <span class="ins-dmg-v"><b>${d.damage_type}</b><br><span class="ins-mut">${d.severity} · ${d.damage_cause}${d.extent ? ' · ' + d.extent : ''}${d.location ? ' · ' + d.location : ''}</span></span>
-        <button class="ins-ot" data-ot="${d.id}" title="Crear orden de trabajo">→ OT</button>
-        <button class="ins-x" data-del-dmg="${d.id}" title="Quitar hallazgo">✕</button></div>`;
+      const np = (d.photos || []).length;
+      const strip = np ? `<div class="ins-dmg-photos">${d.photos.map(p => `<div class="ins-dphoto" data-d="${d.id}" data-p="${p.id}" style="background-image:url('${p.url}')"><button class="ins-px" data-del-dmgphoto title="Quitar foto">✕</button></div>`).join('')}</div>` : '';
+      return `<div class="ins-dmg-wrap">
+        <div class="ins-dmg">
+          <span class="ins-dmg-sc ${b.cls}">${sc.toFixed(0)}</span>
+          <span class="ins-dmg-v"><b>${d.damage_type}</b><br><span class="ins-mut">${d.severity} · ${d.damage_cause}${d.extent ? ' · ' + d.extent : ''}${d.location ? ' · ' + d.location : ''}</span></span>
+          <button class="ins-dmg-cam" data-dmg-addphoto="${d.id}" title="Agregar foto al hallazgo">📷${np ? ' ' + np : ''}</button>
+          <button class="ins-ot" data-ot="${d.id}" title="Crear orden de trabajo">→ OT</button>
+          <button class="ins-x" data-del-dmg="${d.id}" title="Quitar hallazgo">✕</button>
+        </div>${strip}</div>`;
     }).join('') : '<div class="ins-mut">Sin hallazgos. Agrega uno abajo.</div>';
 
     const listRows = inspections.map(i => {
@@ -1124,6 +1129,7 @@ function buildDashboard(panel, fleet, actions) {
 
           <div class="shm-sub2">Hallazgos (daños) · score auto</div>
           <div class="ins-dmgs">${dmgRows}</div>
+          <input type="file" id="nd-photo-file" accept="image/*" style="display:none">
           <div class="ins-addform">
             <select id="nd-type">${opt(Insp.DAMAGE_TYPES, '')}</select>
             <select id="nd-cause">${opt(Insp.DAMAGE_CAUSES, '')}</select>
@@ -1201,6 +1207,28 @@ function buildDashboard(panel, fleet, actions) {
     });
     host.querySelectorAll('[data-del-photo]').forEach(b => b.addEventListener('click', (e) => { e.stopPropagation(); sel.photos = (sel.photos || []).filter(p => p.id !== b.dataset.delPhoto); save(); }));
     host.querySelectorAll('.ins-photo').forEach(d => d.addEventListener('click', (e) => { if (e.target.closest('.ins-px')) return; const p = (sel.photos || []).find(x => x.id === d.dataset.photo); if (p) { const w = window.open('', '_blank'); if (w) w.document.write(`<img src="${p.url}" style="max-width:100%">`); } }));
+    // Fotos por hallazgo (input oculto compartido + objetivo recordado)
+    let dmgPhotoTarget = null;
+    const dpf = host.querySelector('#nd-photo-file');
+    host.querySelectorAll('[data-dmg-addphoto]').forEach(b => b.addEventListener('click', () => { dmgPhotoTarget = b.dataset.dmgAddphoto; dpf.click(); }));
+    dpf.addEventListener('change', async (e) => {
+      const f = e.target.files?.[0]; e.target.value = ''; const tid = dmgPhotoTarget; dmgPhotoTarget = null;
+      if (!f || !tid) return;
+      const d = sel.damages.find(x => x.id === tid); if (!d) return;
+      try { const url = await Insp.imageToThumb(f); (d.photos ||= []).push({ id: Insp.uid(), url }); save(); }
+      catch (err) { alert('No se pudo procesar la foto: ' + (err?.message || err)); }
+    });
+    host.querySelectorAll('[data-del-dmgphoto]').forEach(b => b.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const wrap = b.closest('.ins-dphoto'); if (!wrap) return;
+      const d = sel.damages.find(x => x.id === wrap.dataset.d); if (!d) return;
+      d.photos = (d.photos || []).filter(p => p.id !== wrap.dataset.p); save();
+    }));
+    host.querySelectorAll('.ins-dphoto').forEach(elp => elp.addEventListener('click', (e) => {
+      if (e.target.closest('.ins-px')) return;
+      const d = sel.damages.find(x => x.id === elp.dataset.d); const p = d && (d.photos || []).find(x => x.id === elp.dataset.p);
+      if (p) { const w = window.open('', '_blank'); if (w) w.document.write(`<img src="${p.url}" style="max-width:100%">`); }
+    }));
   }
 
   // Informe de inspección imprimible.
@@ -1209,12 +1237,16 @@ function buildDashboard(panel, fleet, actions) {
     const rows = insp.damages.map(d => `<tr><td>${d.damage_type}</td><td>${d.severity}</td><td>${d.damage_cause}</td><td>${d.extent || '—'}</td><td>${d.location || '—'}</td><td style="text-align:right">${Insp.scoreDamage(d).toFixed(0)}</td></tr>`).join('') || '<tr><td colspan="6" style="color:#15803d">Sin hallazgos.</td></tr>';
     const tests = insp.tests.map(t => `<tr><td>${Insp.classifyTest(t.test_type).label}</td><td>${t.test_type}</td><td>${t.result_summary || '—'}</td><td>${t.executed_at || '—'}</td></tr>`).join('') || '<tr><td colspan="4" style="color:#64748b">Sin ensayos.</td></tr>';
     const wos = (insp.workOrders || []).map(w => `<tr><td>${w.title}</td><td>${w.assignee || '—'}</td><td>${w.priority}</td><td>${w.status}</td><td>${w.due || '—'}</td></tr>`).join('') || '<tr><td colspan="5" style="color:#64748b">Sin órdenes de trabajo.</td></tr>';
+    const dmgPhotos = insp.damages.filter(d => (d.photos || []).length).map(d =>
+      `<div class="dphoto-grp"><div class="mut"><b>${d.damage_type}</b> · ${d.severity}${d.location ? ' · ' + d.location : ''}</div>
+        <div class="dphoto-row">${d.photos.map(p => `<img src="${p.url}" alt="${d.damage_type}">`).join('')}</div></div>`).join('');
     const html = `<!doctype html><html lang="es"><meta charset="utf-8"><title>Inspección — ${o.label}</title>
       <style>body{font:14px/1.5 system-ui,sans-serif;margin:0;color:#1b2533}.wrap{max-width:820px;margin:0 auto;padding:0 32px 40px}
       .hero{background:linear-gradient(120deg,#0e7490,#155e75);color:#fff;padding:24px 32px;margin-bottom:22px}.hero h1{margin:4px 0;font-size:21px}
       h2{font-size:15px;border-bottom:2px solid #cbd5e1;padding-bottom:5px;margin:24px 0 10px}.mut{color:#64748b;font-size:12px}
       table{border-collapse:collapse;width:100%;font-size:13px;margin-top:6px}th,td{border:1px solid #cbd5e1;padding:6px 9px;text-align:left}th{background:#f1f5f9}
-      .score{display:inline-block;font-size:30px;font-weight:800;padding:6px 16px;border-radius:10px;color:#fff;background:${band.cls === 'critica' ? '#dc2626' : band.cls === 'observacion' ? '#d97706' : '#16a34a'}}</style>
+      .score{display:inline-block;font-size:30px;font-weight:800;padding:6px 16px;border-radius:10px;color:#fff;background:${band.cls === 'critica' ? '#dc2626' : band.cls === 'observacion' ? '#d97706' : '#16a34a'}}
+      .dphoto-grp{margin:10px 0}.dphoto-row{display:flex;flex-wrap:wrap;gap:7px;margin-top:4px}.dphoto-row img{width:170px;height:128px;object-fit:cover;border:1px solid #cbd5e1;border-radius:6px}</style>
       <div class="hero"><div class="mut" style="color:#cfe9f1;letter-spacing:2px;text-transform:uppercase">ReWind · Inspección estructural</div>
         <h1>Informe de inspección — ${o.label}</h1><div style="opacity:.9;font-size:13px">${insp.date} · ${insp.inspector} · ${Insp.conditionLabel(insp.condition)}</div></div>
       <div class="wrap">
@@ -1223,6 +1255,7 @@ function buildDashboard(panel, fleet, actions) {
         <p>${insp.summary || '<span class="mut">Sin resumen.</span>'}</p>
         <h2>Hallazgos (${insp.damages.length})</h2>
         <table><thead><tr><th>Tipo</th><th>Gravedad</th><th>Causa</th><th>Extensión</th><th>Ubicación</th><th style="text-align:right">Score</th></tr></thead><tbody>${rows}</tbody></table>
+        ${dmgPhotos ? `<h2>Fotografías de hallazgos</h2>${dmgPhotos}` : ''}
         <h2>Ensayos (${insp.tests.length})</h2>
         <table><thead><tr><th>Clase</th><th>Ensayo</th><th>Resultado</th><th>Fecha</th></tr></thead><tbody>${tests}</tbody></table>
         <h2>Órdenes de trabajo (${(insp.workOrders || []).length})</h2>
