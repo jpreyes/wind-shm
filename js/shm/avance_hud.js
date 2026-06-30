@@ -9,10 +9,11 @@
 // más un botón «Abrir partida» (vista completa). Sólo DOM/overlay; el 3D lo provee
 // fleet_view (anchorScreenAt / focusComponent).
 // ─────────────────────────────────────────────────────────────────────────────
-import { TURBINE_COMPONENTS, HV_COMPONENTS, enrichStages } from './parks_data_caman.js?v=275';
-import * as CTwin from './construction_twin.js?v=275';
-import * as Insp from './inspection.js?v=275';
-import { t, getLang } from './i18n.js?v=275';
+import { TURBINE_COMPONENTS, HV_COMPONENTS, enrichStages } from './parks_data_caman.js?v=276';
+import * as CTwin from './construction_twin.js?v=276';
+import * as Insp from './inspection.js?v=276';
+import { t, getLang } from './i18n.js?v=276';
+import * as Instr from './instrumentation.js?v=276';
 
 const fmt = (iso) => { if (!iso) return '—'; const [y, m, d] = iso.split('-'); return `${d}/${m}/${y.slice(2)}`; };
 
@@ -119,6 +120,7 @@ export function buildAvanceHUD(vpwrap, fleet) {
     if (mode === 'shm') {
       comps = (st.sensors || []).map(se => ({ component: se.id, label: sensorLabel(se), icon: '📡', yFrac: se._hfrac ?? (/mid/.test(se.id) ? 0.5 : 0.92) }));
       if (st.gateway?.mesh) comps.push({ component: '__gw__', label: t('ahud.gateway'), icon: '📶', yFrac: 0.05, gateway: true });   // nodo de enlace en la base
+      for (const cs of Instr.getSensors(st.id)) comps.push({ component: 'cs-' + cs.id, label: cs.label || Instr.typeLabel(cs.type), icon: Instr.typeIcon(cs.type), yFrac: cs.yFrac ?? 0.6, custom: cs });   // R-33: sensores del usuario
     } else {
       comps = st.type === 'hv' ? HV_COMPONENTS : TURBINE_COMPONENTS;
       stages = enrichStages(st.stages, st.type, st.id);
@@ -238,6 +240,7 @@ export function buildAvanceHUD(vpwrap, fleet) {
     const sum = window.shmData?.get(cur.id);
     for (const co of callouts) {
       if (co.comp.gateway) { renderGatewayCallout(co, sum); continue; }
+      if (co.comp.custom) { renderCustomCallout(co); continue; }
       const se = (sum?.sensors || []).find(s => s.id === co.comp.component) || (cur.sensors || []).find(s => s.id === co.comp.component);
       const fault = se?.status === 'fault';
       const rms = se && se.rms != null ? (se.rms * 1000).toFixed(1) + ' mg' : '—';
@@ -258,6 +261,26 @@ export function buildAvanceHUD(vpwrap, fleet) {
         </table><button class="ah-open" type="button">${t('ahud.seeShm')}</button></div>` : ''}`;
       if (open) co.el.querySelector('.ah-open')?.addEventListener('click', (e) => { e.stopPropagation(); window.shmDash?.showSHM?.(); });
     }
+  }
+
+  // Callout de un SENSOR AGREGADO por el usuario (R-33): valor sintético en vivo.
+  function renderCustomCallout(co) {
+    const cs = co.comp.custom, val = Instr.fmtLive(cs, performance.now() / 1000);
+    const open = expanded === co.comp.component;
+    co.el.classList.toggle('open', open);
+    co.el.innerHTML = `
+      <div class="ah-head">
+        <span class="ah-dot done"></span><span class="ah-ico">${co.comp.icon}</span>
+        <span class="ah-name">${co.comp.label}</span>
+        <span class="ah-pct ah-live-cs" data-cs-id="${cs.id}" data-cs-type="${cs.type}">${val}</span>
+        <span class="ah-chev">${open ? '▾' : '▸'}</span>
+      </div>
+      ${open ? `<div class="ah-body"><table class="ah-kv">
+        <tr><td>${t('instr.type')}</td><td>${Instr.typeLabel(cs.type)}</td></tr>
+        <tr><td>${t('instr.height')}</td><td>${Math.round((cs.yFrac || 0) * 100)}%</td></tr>
+        <tr><td>${t('ahud.value')}</td><td class="ah-live-cs" data-cs-id="${cs.id}" data-cs-type="${cs.type}">${val}</td></tr>
+      </table><button class="ah-open" type="button">${t('ahud.seeShm')}</button></div>` : ''}`;
+    if (open) co.el.querySelector('.ah-open')?.addEventListener('click', (e) => { e.stopPropagation(); window.shmDash?.showSHM?.(); });
   }
 
   // Callout del GATEWAY (nodo de enlace en la base): estado en línea + sensores enlazados.
@@ -284,7 +307,10 @@ export function buildAvanceHUD(vpwrap, fleet) {
   // Refresca SÓLO los valores en vivo del modo sensores (sin reconstruir el DOM).
   function refreshShmValues() {
     const sum = window.shmData?.get(cur.id);
+    const tSec = performance.now() / 1000;
     for (const co of callouts) {
+      if (co.comp.gateway) continue;
+      if (co.comp.custom) { const v = Instr.fmtLive(co.comp.custom, tSec); co.el.querySelectorAll('.ah-live-cs').forEach(n => n.textContent = v); continue; }
       const se = (sum?.sensors || []).find(s => s.id === co.comp.component);
       const fault = se?.status === 'fault';
       const rms = se && se.rms != null ? (se.rms * 1000).toFixed(1) + ' mg' : '—';

@@ -8,21 +8,22 @@
 //   inspecciones y señal temporal EN VIVO desde un Web Worker (DataSource).
 // Recortes (modelado) los hace shm.css ocultando, no borrando.
 // ─────────────────────────────────────────────────────────────────────────────
-import { FleetView } from './fleet_view.js?v=275';
-import { DataSource } from './data_source.js?v=275';
-import { computeTwin } from './digital_twin.js?v=275';
-import { ParkManager, loadParksStore } from './parks.js?v=275';
-import { MapView } from './map_view.js?v=275';
-import { defaultStages, builtFromStages } from './parks_data_caman.js?v=275';
-import { compassRoseSVG } from './compass.js?v=275';
-import { buildAvanceHUD } from './avance_hud.js?v=275';
-import { renderAvance } from './avance_dashboard.js?v=275';
-import * as Insp from './inspection.js?v=275';
-import * as Fat from './fatigue.js?v=275';
-import { t, getLang, setLang } from './i18n.js?v=275';
+import { FleetView } from './fleet_view.js?v=276';
+import { DataSource } from './data_source.js?v=276';
+import { computeTwin } from './digital_twin.js?v=276';
+import { ParkManager, loadParksStore } from './parks.js?v=276';
+import { MapView } from './map_view.js?v=276';
+import { defaultStages, builtFromStages } from './parks_data_caman.js?v=276';
+import { compassRoseSVG } from './compass.js?v=276';
+import { buildAvanceHUD } from './avance_hud.js?v=276';
+import { renderAvance } from './avance_dashboard.js?v=276';
+import * as Insp from './inspection.js?v=276';
+import * as Fat from './fatigue.js?v=276';
+import * as Instr from './instrumentation.js?v=276';
+import { t, getLang, setLang } from './i18n.js?v=276';
 
 const F1_BASE = { turbine: 0.283, hv: 1.6 };
-const REWIND_VER = 'v275';   // versión visible del build (subir junto al cache-bust)
+const REWIND_VER = 'v276';   // versión visible del build (subir junto al cache-bust)
 const FS = 62.5;   // frecuencia de muestreo de la señal (Hz), igual que shm_worker.js
 // Clasificador ML de daño (0..4)
 const CLS = ['Sin daño', 'Leve', 'Moderado', 'Alto', 'Muy alto'];
@@ -268,7 +269,7 @@ async function boot() {
   // ── Relieve conceptual del terreno (DEM vendorizado) — encendido por defecto ─
   setLoad(88, 'Cargando relieve…'); await delay(40);
   try {
-    await fleet.loadTerrain('data/caman_dem.json?v=275');
+    await fleet.loadTerrain('data/caman_dem.json?v=276');
     fleet.setTerrainVisible(true);
     document.getElementById('shm-relieve-tool')?.classList.add('active');
   } catch (e) { console.warn('[shm] relieve no disponible', e); }
@@ -1132,9 +1133,34 @@ function buildDashboard(panel, fleet, actions) {
       const gwRow = o.gateway?.mesh
         ? `<div class="shm-sensor"><span class="dot ok"></span><span style="flex:1">📶 ${t('ahud.gateway')} <span class="ins-mut" style="font-size:10px">(${t('ahud.gwRoleV')})</span></span><b style="color:var(--success)">${t('ahud.gwOnline')}</b></div>`
         : '';
+      const custom = Instr.getSensors(o.id);
+      const customRows = custom.map(cs =>
+        `<div class="shm-sensor"><span class="dot ok"></span><span style="flex:1">${Instr.typeIcon(cs.type)} ${cs.label || Instr.typeLabel(cs.type)} <span class="ins-mut" style="font-size:10px">· ${Math.round((cs.yFrac || 0) * 100)}%</span></span><b class="s-custom" data-cs-id="${cs.id}" data-cs-type="${cs.type}">—</b><button class="ins-x cs-del" data-csd="${cs.id}" title="${t('instr.remove')}">✕</button></div>`
+      ).join('');
+      const typeOpts = Instr.SENSOR_TYPES.map(ty => `<option value="${ty.key}">${Instr.typeLabel(ty.key)}</option>`).join('');
       body.innerHTML = o.sensors.map(se =>
         `<div class="shm-sensor"><span class="dot ${se.status}"></span><span style="flex:1">${se.id}</span><b class="s-rms" data-sid="${se.id}">—</b></div>`
-      ).join('') + gwRow + `<div class="note">${t('sens.note')}</div>`;
+      ).join('') + gwRow
+        + (custom.length ? `<div class="shm-sub2">${t('instr.custom')} · ${custom.length}</div>${customRows}` : '')
+        + `<div class="instr-add">
+             <select id="cs-type">${typeOpts}</select>
+             <input type="text" id="cs-label" placeholder="${t('instr.labelPh')}">
+             <label class="cs-h">${t('instr.height')} <input type="range" id="cs-yfrac" min="0" max="100" step="5" value="60"><b id="cs-yv">60%</b></label>
+             <button id="cs-add" class="ins-btn">${t('instr.add')}</button>
+           </div>`
+        + `<div class="note">${t('sens.note')} ${t('instr.note')}</div>`;
+      const yf = body.querySelector('#cs-yfrac'), yv = body.querySelector('#cs-yv');
+      yf?.addEventListener('input', () => yv.textContent = yf.value + '%');
+      body.querySelector('#cs-add')?.addEventListener('click', () => {
+        Instr.addSensor(o.id, { type: body.querySelector('#cs-type').value, label: body.querySelector('#cs-label').value, yFrac: (+yf.value || 0) / 100 });
+        if (window.shmAvanceHUD && current === o) window.shmAvanceHUD.show(o, 'shm');   // refleja en el HUD
+        renderSHMPane();
+      });
+      body.querySelectorAll('.cs-del').forEach(b => b.addEventListener('click', () => {
+        Instr.removeSensor(o.id, b.dataset.csd);
+        if (window.shmAvanceHUD && current === o) window.shmAvanceHUD.show(o, 'shm');
+        renderSHMPane();
+      }));
     } else if (pane === 'fatiga') {
       const a = assessFatigueFor(o, sum);
       const st = Fat.fatigueState(a.Delapsed);
@@ -1503,6 +1529,9 @@ function buildDashboard(panel, fleet, actions) {
     }
     // SHM · Señal (estado por sensor)
     for (const se of sum.sensors) { const b = [...el.querySelectorAll('#sig-wrap .row')].find(r => r.firstChild.textContent === se.id)?.querySelector('.sig-st'); if (b) { b.textContent = se.status === 'fault' ? 'falla' : 'ok'; b.style.color = se.status === 'fault' ? 'var(--danger)' : 'var(--success)'; } }
+    // SHM · Sensores agregados por el usuario (R-33): valor sintético en vivo.
+    const _tSec = performance.now() / 1000;
+    el.querySelectorAll('.s-custom').forEach(n => { n.textContent = Instr.fmtLive({ id: n.dataset.csId, type: n.dataset.csType }, _tSec); });
   }
 
   function onTick(msg) {

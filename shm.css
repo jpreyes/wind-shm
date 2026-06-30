@@ -475,6 +475,15 @@ body.shm #shm-panel .shm-body { overflow-x: hidden; }
 .shm-sensor .dot { width: 9px; height: 9px; border-radius: 50%; flex: 0 0 auto; }
 .shm-sensor .dot.ok { background: var(--success); box-shadow: 0 0 6px var(--success); }
 .shm-sensor .dot.fault { background: var(--danger); box-shadow: 0 0 6px var(--danger); }
+.shm-sensor .cs-del { background: none; border: 0; color: var(--text-muted); cursor: pointer; font-size: 12px; padding: 0 2px; }
+.shm-sensor .cs-del:hover { color: var(--danger, #ef4444); }
+/* Editor de instrumentación (R-33) */
+.instr-add { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin: 10px 0 4px; background: var(--bg4); border: 1px dashed var(--border2); border-radius: 6px; padding: 8px; }
+.instr-add select, .instr-add input[type=text] { background: var(--bg3); border: 1px solid var(--border2); color: var(--text); border-radius: 5px; padding: 4px 6px; font: inherit; font-size: 12px; }
+.instr-add input[type=text] { flex: 1; min-width: 90px; }
+.instr-add .cs-h { display: flex; align-items: center; gap: 5px; font-size: 11px; color: var(--text-muted); width: 100%; }
+.instr-add .cs-h input[type=range] { flex: 1; }
+.instr-add .ins-btn { white-space: nowrap; }
 
 /* Nameplate sobre la vista */
 #shm-nameplate { position: absolute; bottom: 18px; left: 50%; transform: translateX(-50%); z-index: 6; display: none; align-items: center; gap: 10px; padding: 8px 16px; background: var(--glass); border: 1px solid var(--border2); border-radius: 10px; backdrop-filter: blur(6px); box-shadow: var(--shadow-sm); color: var(--text); font-family: var(--font); }
