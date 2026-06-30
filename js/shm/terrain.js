@@ -9,7 +9,7 @@
 // torres y drapear caminos sobre el relieve.
 // ─────────────────────────────────────────────────────────────────────────────
 import * as THREE from 'three';
-import { CAMAN_CENTER, LAYOUT_SCALE, toScene } from './parks_data_caman.js?v=216';
+import { CAMAN_CENTER, LAYOUT_SCALE, toScene } from './parks_data_caman.js?v=217';
 
 const M_PER_DEG_LAT = 111320;
 const M_PER_DEG_LON = 111320 * Math.cos(CAMAN_CENTER.lat * Math.PI / 180);
@@ -106,8 +106,10 @@ export class Terrain {
         }`,
       side: THREE.DoubleSide, transparent: true,
     });
+    mat.shadowSide = THREE.FrontSide;   // la cara superior del relieve es la que proyecta sombra
     const mesh = new THREE.Mesh(geo, mat);
-    mesh.receiveShadow = true; mesh.renderOrder = -1; mesh.name = 'terrain';
+    mesh.receiveShadow = true; mesh.castShadow = true;   // los cerros proyectan sombra (sobre el valle y otras torres)
+    mesh.renderOrder = -1; mesh.name = 'terrain';
 
     // Malla receptora de sombras (comparte la geometría del relieve): el
     // ShaderMaterial conceptual no recibe sombras, así que superponemos un
