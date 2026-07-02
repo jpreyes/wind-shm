@@ -10,8 +10,9 @@ Estado: ⬜ pendiente · 🟡 en curso · ✅ hecho. Los ítems se numeran `R-*`
 > 1. ✅ **`R-18` — Etapas constructivas / avance de obra** (HUD tipo Stark + 4D por componente + dashboard de parque con curva-S/Gantt) — **hecho (v250)** — [plan](planes/frente-1-avance-obra.md).
 > 2. ✅ **`R-19` — Análisis de sombras** de los aerogeneradores según el sol — **hecho (v241)** — [plan](planes/frente-2-sombras.md).
 > 3. 🟡 **`R-31` — Gemelo de construcción** (frecuencia predicha-vs-medida por etapa; el buque insignia, encaja con Camán en construcción) — **núcleo hecho (v256–v257)**; falta f₁ MEDIDA real (OMA `R-21`) + sensores en vivo (`R-10`) — [plan](planes/frente-3-gemelo-construccion.md).
+> 4. ⬜ **`R-10` — Backend de datos reales** (ADXL355 + inclinómetro · gateway Raspberry Pi · Mosquitto → bridge → InfluxDB/Postgres → WS `/live`; 10 sensores hoy → ~200 en piloto) — **plan listo** — [plan](planes/frente-4-backend-r10.md). Cierra `R-31` (f₁ medida), habilita `R-21` (ventanas crudas para el OMA ultramétrico), `R-23`, `R-24`, `R-32` persistente y `R-33`.
 >
-> Los tres se apoyan en el modelo 4D que ya estamos modificando.
+> Los frentes 1–3 se apoyan en el modelo 4D; el 4 conecta todo a datos reales.
 
 > **Base FEM heredada (gemelo digital).** ReWind nació como fork de
 > **PÓRTICO** (`structweb3d`), una app de análisis estructural FEM 3D. Tras la
