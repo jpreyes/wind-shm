@@ -1,110 +1,132 @@
-# ReWind — Roadmap
+# ReWind — Roadmap unificado
 
 **ReWind (`wind-shm`)** es una herramienta de **SHM (Structural Health
 Monitoring) de parques eólicos**: flota viva 3D georreferenciada, capa de
 sensores, avance de obra 4D, dashboard e informe de estado estructural por torre.
 
 Estado: ⬜ pendiente · 🟡 en curso · ✅ hecho. Los ítems se numeran `R-*`.
+Este roadmap **unifica** los ítems históricos, las brechas de la auditoría interna
+(2026-07-02) y las oportunidades de alto valor, ordenados en **fases ejecutables**.
 
-> **▶ Foco inmediato (en lo que trabajamos ahora):** planes detallados en [`docs/planes/`](planes/).
-> 1. ✅ **`R-18` — Etapas constructivas / avance de obra** (HUD tipo Stark + 4D por componente + dashboard de parque con curva-S/Gantt) — **hecho (v250)** — [plan](planes/frente-1-avance-obra.md).
-> 2. ✅ **`R-19` — Análisis de sombras** de los aerogeneradores según el sol — **hecho (v241)** — [plan](planes/frente-2-sombras.md).
-> 3. 🟡 **`R-31` — Gemelo de construcción** (frecuencia predicha-vs-medida por etapa; el buque insignia, encaja con Camán en construcción) — **núcleo hecho (v256–v257)**; falta f₁ MEDIDA real (OMA `R-21`) + sensores en vivo (`R-10`) — [plan](planes/frente-3-gemelo-construccion.md).
-> 4. ⬜ **`R-10` — Backend de datos reales** (ADXL355 + inclinómetro · gateway Raspberry Pi · Mosquitto → bridge → InfluxDB/Postgres → WS `/live`; 10 sensores hoy → ~200 en piloto) — **plan listo** — [plan](planes/frente-4-backend-r10.md). Cierra `R-31` (f₁ medida), habilita `R-21` (ventanas crudas para el OMA ultramétrico), `R-23`, `R-24`, `R-32` persistente y `R-33`.
->
-> Los frentes 1–3 se apoyan en el modelo 4D; el 4 conecta todo a datos reales.
+> **▶ Fase actual: Fase 3 — Backend de datos reales** (`R-10`, [plan Frente 4](planes/frente-4-backend-r10.md)).
+> Las fases 1–2 (endurecimiento + analítica local) pueden intercalarse: son
+> independientes del backend y de medio día a 2 días cada ítem.
 
 > **Base FEM heredada (gemelo digital).** ReWind nació como fork de
 > **PÓRTICO** (`structweb3d`), una app de análisis estructural FEM 3D. Tras la
 > limpieza **`R-20`** el repo es **solo ReWind**: del motor FEM se conservan solo
 > los 10 solvers que el **gemelo digital** necesita (modal/estático → f₁/f₂ y
-> deformadas). Todo el resto de PÓRTICO (mallador, diseño multinorma, espectro,
-> no-lineal, puentes, UI de modelado, asistente LLM, import/export multi-motor,
-> IFC…) **se eliminó del código**. El historial de aquellas capacidades vive en el
-> repo **upstream `jpreyes/structweb3d`**, no aquí.
+> deformadas). El historial de aquellas capacidades vive en el repo
+> **upstream `jpreyes/structweb3d`**, no aquí.
+
+---
+
+## Roadmap por fases
+
+### Fase 1 — Endurecimiento y pulido (sin dependencias; ~1 semana en total)
+*Cierra los fallos de la auditoría y el roce de UX. Todo client-side, ítems de horas.*
+
+| ID | Qué | Esfuerzo | Criterio de cierre |
+|---|---|---|---|
+| ⬜ `R-40a` | **Escapar HTML** en todos los sinks de texto libre (inspector/resumen/OT/ensayos/docs en `renderInsp`, nombres de receptores importados en `map_view`, etiquetas de instrumentación). `esc()` ya existe en `buildReport` — extenderlo como util compartido; atributos con `&quot;`. | ½ día | Importar un KML con `name` malicioso no inyecta HTML; comillas en campos no rompen atributos. |
+| ⬜ `R-40b` | **Re-seed fantasma**: borrar la última inspección no debe sembrar una demo (flag `seeded` por estructura + empty-state con «＋ Nueva inspección»). | horas | Se puede tener una torre con 0 inspecciones. |
+| ⬜ `R-40c` | **Cuota de localStorage**: detectar `QuotaExceededError` en `saveAll` → aviso al usuario (exportar respaldo / liberar fotos). *(El fix definitivo llega con `R-10`: fotos a BD/disco.)* | horas | Guardado fallido ya no es silencioso. |
+| ⬜ `R-40d` | **Perf del rollup**: `Insp.getAll()` con un solo `JSON.parse` por rollup (hoy: parse del store completo × 43 estructuras). | horas | Pestaña Parque sin jank con fotos cargadas. |
+| ⬜ `R-40e` | **Coherencia física**: torres con `built < 0.97` no muestran fatiga «consumida» ni sensores «operando» (mensaje «torre en montaje — sin datos operacionales»; worker emite `standby`). | ½ día | Una torre en fundación no reporta vida consumida ni RMS. |
+| ⬜ `R-40f` | Menores: fuga de listener en «Acerca de» (remover en `close()`), aviso de popup bloqueado en todos los informes (helper común con fallback a descarga, copiar `_openReport`), orientación EXIF en `imageToThumb` (`createImageBitmap(file,{imageOrientation:'from-image'})`), `theme-color`/manifest claros (media query + JS en el toggle), `.gitignore` de `data/` con excepción `!data/*.json`, restaurar vista/selección tras cambiar idioma (`sessionStorage`). | 1 día | Checklist completo. |
+| ⬜ `R-36a` | **Formularios inline** para Ensayo/Documento/OT (reemplazar `prompt()` encadenados; replicar el patrón `.instr-add` ya estilado). | ½ día | Cero `prompt()` en el CMMS. |
+| ⬜ `R-36b` | **Confirmación al borrar con Supr** en modo edición (hoy borra directo) — o mejor, junto con `R-36c`. | horas | No se pierde una torre por un despiste. |
+| ⬜ `R-36c` | **Undo básico en edición**: pila de snapshots del store de parques (máx. 10) + Ctrl+Z. | ½ día | Mover/borrar/crear es reversible. |
+| ⬜ `R-36d` | **Tour de bienvenida** (vanilla, 4 pasos anclados: torre clicable → pestañas → modos del toolbar → informes; flag `rewind_tour_done`). | ½ día | Primer uso guiado. |
+| ⬜ `R-36e` | Accesibilidad: `aria-label` en botones icon-only (el motor de tooltips borra `title`), `aria-pressed` en toggles del toolbar, `role="dialog"`+focus-trap en modales, icono de tema 🌙⇄☀️ según estado. | ½–1 día | Navegable por teclado/SR en lo esencial. |
+| ⬜ `R-36f` | **Edición de sensores** de instrumentación (hoy solo agregar/quitar; `updateSensor` ya existe) + verificación de cajones/HUD **en móvil real**. | ½ día | Mover un sensor sin recrearlo. |
+
+### Fase 2 — Analítica coherente (client-side; prepara y aprovecha el backend)
+*El salto de «maqueta» a «monitoreo»: memoria, coherencia y comparación. Sin backend.*
+
+| ID | Qué | Esfuerzo | Depende | Criterio de cierre |
+|---|---|---|---|---|
+| ⬜ `R-34` 🌟 | **Histórico persistente de series** (f₁, RMS, viento, tilt) en **IndexedDB** (nativo, sin libs): decimación a 1 punto/min, retención rodante 30–90 días, purga en boot. Nueva subpestaña **«Tendencia»** en SHM (f₁ vs tiempo + banda de la línea base del gemelo). *Hoy `freqHist` muere al recargar.* | 1–2 días | — | La deriva de f₁ sobrevive al reload; tendencia de días visible. |
+| ⬜ `R-35` 🌟 | **Índice de salud unificado (Health Index)**: fusión de las 4 fuentes (clasificador ML, score de inspección, vida de fatiga, defecto del gemelo R-31) → un HI 0–100 por torre con desglose de contribuciones. Sustituye el color del punto en lista/mapa y el gauge del informe. *Resuelve la contradicción actual: R-31 marca base defectuosa y el Estado dice «sin daño».* | 1 día | — | Módulo puro testeable en Node; tooltip con desglose. |
+| ⬜ `R-26` | **Benchmarking de flota**: z-score robusto (mediana/MAD) de f₁ y RMS por ventana de 5 min → card «Anomalías de flota» en la pestaña Parque (\|z\|>2.5). | ½ día | mejor con `R-34` | La torre anómala se destaca sin modelo previo. |
+| ⬜ `R-37` 🌟 | **Replay / time-scrubber**: `ReplaySource` con la MISMA interfaz de `DataSource` leyendo el histórico y emitiendo ticks acelerados (En vivo ⇄ fecha/hora + velocidad en la barra de estado). *Demo killer y validación de la arquitectura para `R-10`.* | 1–2 días | `R-34` | «Reproducir ayer a 60×» funciona sin que el dashboard note la diferencia. |
+| ⬜ `R-23a` | **Alarmas configurables v1** (client-side): umbrales por métrica (RMS, Δf₁ %, viento, tilt) en localStorage + editor en la subpestaña Estado + registro de eventos + `Notification` API si la PWA está instalada. *(La notificación email/SMS y las reglas server-side son `R-23b`, Fase 3.)* | 1 día | mejor con `R-34` | Umbral editado dispara aviso/crítico y queda registrado. |
+| ⬜ `R-38` | **Roles viewer/editor v1**: `?role=viewer` (o toggle) oculta Editar/Crear/Borrar y pone el CMMS readonly. *(Auth real con `R-10`.)* | horas | — | Un enlace «solo lectura» compartible. |
+| ⬜ `R-39` | **Comparador de torres** lado a lado: elegir 2 → tabla de f₁ vs gemelo, RMS, HI, fatiga, score de inspección, avance. | 1 día | `R-35` | Comparación en 2 clics. |
+| ⬜ `R-33b` | **Marcador 3D** de los sensores de instrumentación (esfera «capa de vida» a `yFrac·H`, color por tipo; evento `instr-changed` para sincronizar). | ½ día | — | El sensor agregado se ve clavado en la torre. |
+| ⬜ `R-13x` | **Rosa de vientos viva** en la pestaña Parque (la rosa de `meteo_caman` + sector del viento actual resaltado). | horas | — | Golosina de demo. |
+
+### Fase 3 — Backend de datos reales (`R-10` · Frente 4) 🏗️ **← FASE ACTUAL**
+*Plan detallado: [frente-4-backend-r10.md](planes/frente-4-backend-r10.md). Hardware:
+ADXL355 + inclinómetro, gateway Raspberry Pi, 2–3 sensores/gateway, 10 hoy → ~200 piloto.
+Conectividad: **Starlink** (CGNAT → servidor on-prem + Cloudflare Tunnel/Tailscale).*
+
+| # | Sub-fase | Esfuerzo | Criterio de cierre |
+|---|---|---|---|
+| ⬜ 3.1 | Banco local Docker (mosquitto+influx+postgres) + **trama v2** (3 ejes, µg/int32 — la v1 en mili-g tiraría la resolución del ADXL355) + bridge v2 + features 1/min, alimentado por el simulador. | 1–2 días | Influx llenándose desde el sim. |
+| ⬜ 3.2 | **WS `/live`** en `rewind-api` emitiendo el MISMO esquema del worker (`{tick, summaries, waves}`) + **reconexión en el cliente** (auditoría A2). | 1–2 días | La app con `?live=wss://` muestra el banco sin tocar el front. |
+| ⬜ 3.3 | **Pi de referencia**: `sampler.py` (SPI/DRDY/FIFO del ADXL355, chrony, trama v2, cola store-and-forward, tilt 1 Hz, LWT) + `provision.sh` + Tailscale. | 2–3 días | 2 sensores reales de una torre en el dashboard. |
+| ⬜ 3.4 | **Features + archivo de ventanas crudas** (10/30 min → `raw/…` para el OMA de `R-21`) + retención/downsampling en Influx. | 1–2 días | Tendencia de f₁ real de una semana. |
+| ⬜ 3.5 | **CMMS a Postgres** (`R-32` persistente): esquema + REST + adaptador en el front (localStorage como caché offline) + fotos a disco. *Cierra A4/A5 de raíz.* | 2–4 días | Inspecciones multiusuario que sobreviven al navegador. |
+| ⬜ 3.6 | **Alarmas server-side (`R-23b`)** + notificador (SMTP/Telegram) + LWT→«gateway offline». **Tilt real (`R-24`)** entra por el mismo pipeline. | 1–2 días | Alarma real llega al teléfono. |
+| ⬜ 3.7 | Endurecer piloto: TLS, túneles (Cloudflare/Tailscale), **backups probados**, doc de operación. **Reportes programados (`R-28`)** vía cron. | 2 días | Restauración de respaldo ensayada una vez. |
+
+*Al cerrar la Fase 3 quedan resueltos:* `R-10`, `R-23`, `R-24`, `R-28`, `R-32` (persistencia),
+`R-33` (hardware real) y el stack de `R-11` (Influx/Node decididos).
+
+### Fase 4 — Cierre técnico (lo diferido a propósito)
+*Requiere Fase 3 operando y ventanas crudas acumuladas.*
+
+| ID | Qué | Depende | Criterio de cierre |
+|---|---|---|---|
+| ⬜ `R-21` 🌟 | **OMA con el módulo ultramétrico propio de JP** sobre las ventanas crudas archivadas: f₁/f₂/amortiguamiento medidos + deriva en el tiempo. *(Decisión: NO peak-picking/FFT genérico.)* | 3.4 | f₁ medida real publicada como feature. |
+| ⬜ `R-31b` 🌟 | **Cierre del gemelo de construcción**: la curva «medida» deja de ser simulada — f₁ real por etapa del montaje + certificado de commissioning con datos reales. | `R-21` | Certificado de una torre real de Camán. |
+| ⬜ `R-25` | **RUL por componente**: fatiga (`R-22`) alimentada con historia real + tendencias de `R-21`. | `R-21`, 3.4 | RUL con banda de incertidumbre por torre. |
+| ⬜ `R-30` 🌟 | **Gemelo de cargas / extensión de vida**: expansión modal (base modal viva de `R-21`) → tensión en hotspots sin sensor → rainflow/Miner → «certificado de salud y vida remanente». Validar contra una galga en torre piloto. | `R-21`, `R-25` | Informe de vida remanente defendible. |
+
+### Fase 5 — Mayores (cuando el piloto lo pida)
+
+| ID | Qué | Nota |
+|---|---|---|
+| ⬜ `R-11b` | **Electron** (app de escritorio para el centro de control) + alineación con estándares eólicos (IEC 61400, OPC-UA/IEC 61850). | El stack de datos ya quedó decidido en Fase 3. |
+| ⬜ `R-27` | Curva de potencia y disponibilidad. | Requiere integración SCADA. |
+| ⬜ `R-29` | Drivetrain/palas (vibración de caja, monitoreo de palas, dron/IA). | Requiere más sensórica. |
+| ⬜ `R-38b` | Auth real multi-usuario (sobre los roles v1 y el backend). | |
+
+---
+
+## Detalle de ítems pendientes (referencia)
+
+- 🟡 **`R-10` Persistencia/`DataSource` industrial + API** — ver [plan Frente 4](planes/frente-4-backend-r10.md) (arquitectura completa: Pi/ADXL355 → Mosquitto → bridge → InfluxDB/Postgres → REST+WS; Starlink/CGNAT → on-prem + túneles). *(Primer trozo v235: `js/shm/meteo_caman.js`.)*
+- ⬜ **`R-21` OMA** *(diferido: módulo ultramétrico propio de JP al cierre, con sensores reales)* — extraer f₁/f₂/amortiguamiento **de los acelerómetros** y seguir su deriva; habilita la f₁ medida de `R-31` y la base modal de `R-30`.
+- ⬜ **`R-23` Alarmas** — v1 client-side en Fase 2 (`R-23a`), reglas+notificación server-side en Fase 3 (`R-23b`).
+- ⬜ **`R-24` Tilt/asentamiento** — el inclinómetro real entra por el pipeline de Fase 3; tendencia de desplome complementa el diagnóstico de fundación.
+- ⬜ **`R-25` RUL por componente** — fatiga `R-22` + tendencias `R-21` (Fase 4).
+- ⬜ **`R-26` Benchmarking de flota** — z-score/MAD de la población (Fase 2).
+- ⬜ **`R-27` Curva de potencia** — requiere SCADA (Fase 5).
+- ⬜ **`R-28` Reportes programados** — cron del servidor (Fase 3.7).
+- ⬜ **`R-29` Drivetrain/palas** — más sensórica (Fase 5).
+- ⬜ **`R-30` 🌟 Gemelo de cargas / extensión de vida** — sensado virtual por expansión modal + rainflow/Miner → RUL de hotspots sin sensor; el caso de negocio es la **extensión de vida** de flotas llegando a sus 20 años. *Límites honestos: 2 acelerómetros → ~2 modos; validar contra galga piloto.* (Fase 4.)
+- 🟡 **`R-31` 🌟 Gemelo de construcción** *(núcleo hecho v256–v257)* — `construction_twin.js`: curva f₁ predicha por etapa (validada vs voladizo analítico), ventana soft-stiff 1P/3P, medición simulada con defecto de base, tarjeta en Obra + certificado + crosslink al HUD. **Falta:** f₁ MEDIDA real (`R-21`) + telemetría (`R-10`) + tilt (`R-24`). El white space: nadie monitorea estructuralmente DURANTE el montaje ni formaliza la línea base de commissioning con gemelo. → [plan](planes/frente-3-gemelo-construccion.md).
+- 🟡 **`R-33` Instrumentación editable** *(v1 hecho v276)* — sensores de usuario (tipo/etiqueta/altura) en panel + HUD con valor sintético. **Falta:** marcador 3D (`R-33b`, Fase 2), edición de posición de sensores de fábrica, gateway configurable, hardware real (Fase 3).
 
 ---
 
 ## ✅ Hechos
 
-- ✅ **Figuras del informe (estado estructural)** `[R-1]` (v208): la **deformada** del informe pasó de una silueta extruida con quiebres a (a) un **dibujo limpio** con eje de altura, referencia sin deformar, silueta con degradado por desplazamiento, marcas de sensores y barra de color en mm; y (b) una **deformada CÚBICA de voladizo** ajustada por mínimos cuadrados a lo MEDIDO (`w(ζ)=c₂ζ²+c₃ζ³`, empotrada: `w(0)=0,w'(0)=0`) → curva suave. Esquemas (turbina/torre AT) redibujados como SVG nítidos.
-- ✅ **Velocímetro de estado en el informe** `[R-2]` (v208): el «Estado» pasa de texto a un **medidor tipo manómetro** (arco verde→rojo + aguja) que apunta de **más sano a más dañado** (clase ML 0–4) con el índice de daño %.
-- ✅ **Quitar el selector de Unidades** `[R-3]` (v208): no tiene sentido en ReWind; se eliminó `#unit-select` del `index.html`.
-- ✅ **Árbol lateral multiparque Parque ▸ Zona ▸ Torre** `[R-4]` (v208): `js/shm/parks.js` (store + UI) — varios parques (cada uno con su flota y layout), zonas dentro de cada parque (enfoque con atenuación + encuadre), asignación de torres a zonas, CRUD, persistencia en `localStorage`.
-- ✅ **Torres AT seleccionables, movibles y borrables** `[R-5]` (v208): el picking sube por el árbol de la escena → las torres AT se seleccionan, arrastran y borran como las turbinas.
-- ✅ **Desactivar (por ahora) la Configuración** `[R-9]` (v209): el botón ⚙ se oculta en ReWind hasta rehacerlo específico para SHM. *(También se movió el botón «Árbol» al tope del toolbar.)*
-- ✅ **Avance de obra / etapas constructivas (HUD tipo Stark + dashboard de parque)** `[R-18]` (v242–v251): modelo de **partidas por componente** (fundación·fuste·góndola·rotor·cableado) con cronograma sintético editable (plan/real, responsable, fotos mockup, crosslink al gemelo); **HUD «Stark»** (callouts ancladas con línea-guía + semáforo/% + giro de cámara + «Abrir partida» con galería/bitácora/informe; auto-despliegue, layout compacto); **llenado 4D por componente** en la malla; **pestaña «Obra»** con editor por torre + dashboard de parque (veredicto, KPIs, **curva-S**, % por componente, atrasos, **Gantt por torre**, informe DPR). → [plan](planes/frente-1-avance-obra.md).
-- ✅ **Análisis de sombras (shadow-flicker)** `[R-19]` (v215–v241): efemérides NOAA + sombras 3D sobre el relieve y 2D en el mapa; estudio horario/diario; worst-case y real-case (meteo del sitio) cuantitativos; **mapa de flicker** (2D+3D); receptores por clic o **importados (CSV/KML/KMZ/GeoJSON/SHP)**; **informe imprimible** con mapa de iso-sombra y calendario mes×hora; sombreado inter-turbinas; pestaña «Shadow flicker». → [plan](planes/frente-2-sombras.md).
-- ✅ **HUD multi-modo + instrumentación + pulido del visor** (v259–v276): el **HUD flotante por componente** (`avance_hud.js`), antes solo de Avance, ahora sigue la pestaña del panel y tiene **3 modos** — **Avance** (partidas), **Inspección** (hallazgos por componente, color por severidad) y **Sensores** (un callout por sensor a su altura real `_hfrac` con estado/RMS/f₁/temp en vivo). El **gateway** aparece como callout y en la pestaña Sensores (solo turbinas). **R-33 v1** suma **sensores definidos por el usuario** (`js/shm/instrumentation.js`: añadir/quitar tipo·etiqueta·altura, valor sintético en vivo, persistido) que se ven en el panel y como callout del HUD. **Toolbar**: accesos directos a las pestañas del panel (Inspección·Sensores) con **estado activo** sincronizado (`setTopView`). **Shadow**: el relieve se **aclara** en modo Shadow (uniform `uShadow`) para que la sombra proyectada resalte. **Inspección**: **fotos por hallazgo** (además de por inspección).
-- ✅ **Depurar del código todo lo que no sea de ReWind (no solo ocultarlo)** `[R-20]` (v213): se eliminaron `js/app.js` (ReWind se auto-bootea), `js/design/`, `js/io/`, `js/ui/`, `js/utils/`, el mallador (`mesh_*`, `mesher`, `discretize`, `macromodel`, `matching`, `model_ops`), `js/api/`, los solvers no usados por el gemelo (geometric, spectrum, formfind, nl_*, buckling, subspace, staged, tendon, moving_load, timehistory, sparse, linsolve + workers), `worker/asistente.js` y el markup PÓRTICO de `index.html` (menús, barra de modelado, panel FE, overlays/modales/ayuda) — **~24.900 líneas**. Se conserva el closure de ReWind (`js/shm/*` + `model`/`serializer`/`macro_registry`/`macros.turbine` + 10 solvers del gemelo + `asistente/generador.js`). El resize del panel se repuso en `shm_mode.js`.
-
----
-
-## ⬜ Pendientes — industrialización de ReWind
-
-- ✅ **Internacionalización ES/EN (multilingüe)** `[R-6]` (v262–v268): `js/shm/i18n.js` — diccionario ES/EN + `t(key)` + idioma en `localStorage` + **conmutador ES/EN** en el menú superior (recarga la app para rehacer los render). **Toda la app es bilingüe**: Fase 1 (marco: toolbar, menú superior, barra de estado, pestañas/subpestañas, portada, `<html lang>`); 2a (Selección + panes SHM + clasificación en vivo + rótulo/banner); 2b (Parque + micro-CMMS de Inspección); 2c (Obra + gemelo de construcción + Shadow flicker); **2d (informes imprimibles)**: certificado de commissioning, avance DPR, inspección, **salud SHM `buildReport`** (incluye etiquetas de canvas) y **shadow flicker** (`map_view.js`: informe completo, inter-turbinas, popup y calendario mes×hora), todos con `<html lang>` y fechas por locale. El **HUD flotante por componente** (`avance_hud.js`: callouts de avance/inspección/sensores, modal «Abrir partida» y ficha de partida imprimible) también quedó bilingüe (v273). **No se traducen los catálogos de dominio** (tipos/causas/severidades de daño, nombres de componentes) por ser claves de scoring/datos. *(El CSV `docs/textos_ui.csv` es el inventario viejo de PÓRTICO; no aplica.)*
-- ✅ **Adecuar el menú superior a ReWind** `[R-7]` (v261): **menú nativo de SHM** en el `#menubar` (`buildMenubar`) con 3 desplegables — **Parque** (nueva torre/AT, exportar/importar parque .json), **Datos** (fuente sim/vivo en vivo, exportar telemetría .json, exportar/importar inspecciones .json), **Informe** (informe del parque, informe de la selección, «Acerca de ReWind»). Sin markup heredado de PÓRTICO (ya removido en R-20/R-8).
-- ✅ **Quitar toda referencia a «PÓRTICO»** `[R-8]` (v258): marca, textos, títulos visibles, encabezados de exportación (CSV/resultados), banner de `serve.py` y `console` → todo «ReWind»; icono PWA (`aria-label`), caché del SW (`rewind-…`) y clave de tema en `localStorage` (`rewind_theme`, con lectura de respaldo del antiguo `portico_theme`) renombrados. *(El núcleo de cálculo `js/solver`/`js/model` puede seguir nombrando PÓRTICO en comentarios internos; lo visible al usuario ya no lo nombra. `CLAUDE.md` conserva las referencias a PÓRTICO porque documentan que esto es un fork.)*
-- 🟡 **Persistencia/`DataSource` industrial + API publicada** `[R-10]`: que la herramienta sirva a la industria conectándose a una **base de datos de torres del parque** o funcionando de forma **autónoma**. Capas: `localStorage` (demo) → IndexedDB/SQLite local (autónomo, sin red) → BD del parque. **Publicar una API** (esquema común `DataSource` simulado ↔ en vivo) para que terceros consuman la misma telemetría. *(Primer trozo hecho v235: `js/shm/meteo_caman.js` — fuente de datos meteo del sitio —sol mensual, rosa de vientos, operación— que consume el real-case de sombra; falta la BD/API/telemetría industrial.)* **→ [plan del backend (Frente 4): ADXL355 + Pi gateway + Mosquitto/Influx/Postgres](planes/frente-4-backend-r10.md)** — hardware real: ADXL355 + inclinómetro, gateway Raspberry Pi, 2–3 sensores/gateway, 10 hoy → ~200 en piloto.
-- ⬜ **Empaquetado Electron + serie temporal InfluxDB + estándares eólicos** `[R-11]`: llevar ReWind a **Electron** (app de escritorio para el centro de control del parque). Decidir el **stack de ingesta de InfluxDB** (cliente Python / C++ / Rust — definir el lenguaje base del backend) y alinear el modelo de datos con los **estándares eólicos** (IEC 61400, OPC-UA/IEC 61850 para la subestación). *(Ver `bridge/` para la cadena ESP32 → MQTT → InfluxDB ya prototipada.)*
-- ✅ **Landing propia de ReWind** `[R-16]` (v252): `index.html` es ahora una **landing page editorial** propia de ReWind (hero, cómo funciona, el diferenciador de construcción, capacidades, demo); la app pasó a **`app.html`** (los CTA enlazan ahí). Service worker y `manifest` (start_url → `app.html`) ajustados; imágenes en `images/`. *(El splash heredado dentro de la app es aparte; pulir con `[R-8]`.)*
-- ✅ **Inspección como micro-sistema de gestión (CMMS ligero) + histórico de evaluación rico** `[R-32]` (v252–v254): `js/shm/inspection.js` (port a JS del scoring determinista de structapp-base: severidad·causa·tipo·extensión → 0–100 por daño y por inspección, sin Python/servidor) + catálogos eólicos + almacén `localStorage` por estructura. La pestaña **Inspección** es un micro-CMMS completo: KPIs por inspección, **histórico de evaluación** (sparkline de score), lista de inspecciones, ficha editable, **hallazgos catalogados con score automático**, **fotos por inspección y por hallazgo** (thumbnail), **ensayos genéricos con auto-clasificación NDT**, documentos, **órdenes de trabajo** (estado/prioridad/responsable/vencimiento + «→ OT» desde un hallazgo), **calendario** (próxima inspección + alertas de vencimiento), **informe imprimible**, **rollup de vencimientos a nivel parque** (pestaña Parque) y **exportar/importar JSON** (respaldo sin backend). La evaluación de inspección es distinta del estado por sensores (SHM). **Lo único que falta es propio de `[R-10]`** (no de R-32): persistencia en BD real, adjuntos/fotos en almacenamiento y la 2ª opinión por LLM. Detalle de capacidades futuras del management system (con backend):
-  - **Histórico de evaluación rico:** línea de tiempo navegable con eventos fechados (inspección visual, OMA/medición, cambio de clasificación, reparación), severidad, adjuntos y nota; no solo la banda de clasificación ML.
-  - **Órdenes de trabajo / hallazgos (work orders):** crear hallazgo → asignar responsable → estado (abierto/en curso/cerrado) → prioridad → vencimiento; checklist de inspección por tipo de estructura.
-  - **Calendario / vencimientos:** próximas inspecciones y mantenimientos programados, alertas de vencido (encaja con `[R-23]`).
-  - **Adjuntos:** fotos, informes y notas por evento/hallazgo (requiere almacenamiento, `[R-10]`).
-  - **Reportes:** ficha de inspección por torre + resumen de hallazgos abiertos por parque (encaja con `[R-28]`).
-  *Distinguir siempre **evaluación de inspección** (manual/periódica) del **estado por sensores** (live, pestaña SHM).* Depende de `[R-10]` para persistencia real.
-
----
-
-## ⬜ Capacidades SHM que tienen las plataformas comerciales y a ReWind le faltan
-
-*(Detectadas comparando con Bachmann SHM.Webportal, HBK/Brüel & Kjær, Romax
-Insight, fos4X/Wölfel, Onyx InSight, ROMO Wind, SkySpecs. Ordenadas por valor/esfuerzo.)*
-
-- ⬜ **OMA — identificación modal desde la señal MEDIDA** `[R-21]` *(DIFERIDO AL FINAL, junto con los sensores en vivo)*: extraer f₁, f₂, amortiguamiento (y forma modal con 2 sensores) **de los acelerómetros**, no del gemelo teórico, y **seguir su deriva en el tiempo**. El corrimiento de frecuencias es la señal temprana de daño / aflojamiento de pernos / asentamiento de fundación. **Decisión (JP):** se integrará un **módulo propio de interpretación con estrategias ultramétricas** (no el peak-picking/FFT genérico), así que se hace al cierre junto con la conexión de sensores reales (`R-10`/`R-11`). Habilita la f₁ MEDIDA de `R-31` y la base modal de `R-30`. *Es la prueba de que esto es SHM real y no una maqueta.*
-- ✅ **Consumo de vida a fatiga / cargas equivalentes (DEL)** `[R-22]` (v260): `js/shm/fatigue.js` — conteo **rainflow** (ASTM E1049, 3 puntos) + curvas **S-N EN 1993-1-9** (bilineal m1=3/m2=5, categoría de detalle ΔσC) → **daño de Miner**, **vida de diseño/remanente (RUL)** y **DEL** (rango equivalente de daño). **Verificado en Node** (`js/shm/test_fatigue.mjs`): caso canónico de rainflow, amplitud constante (DEL=rango), continuidad S-N en los quiebres, linealidad de Miner, monotonía. **UI**: pestaña **Fatiga** en el panel SHM (KPIs vida consumida/RUL/daño-año/DEL + espectro de carga rainflow log-y con umbrales ΔσD/ΔσL). Historia de tensiones **sintética** (turbulencia + 1P/3P) hasta conectar galga/acelerómetro real; alimenta el futuro **🌟 `R-30`** y la RUL de `R-25`.
-- ⬜ **Alarmas y umbrales configurables** `[R-23]`: umbrales por métrica (RMS, f₁, tilt, viento) con estados activo/aviso/crítico y notificación (email/SMS/push). Depende del `DataSource` (`[R-10]`).
-- ⬜ **Inclinómetro / tilt del fuste y asentamiento de fundación** `[R-24]`: seguimiento del desplome y del settlement en el tiempo (complementa OMA para diagnóstico de fundación).
-- 🟡 **Instrumentación editable: colocar/configurar sensores** `[R-33]` (v276, v1): `js/shm/instrumentation.js` — **añadir/quitar/configurar sensores** por estructura (tipo acelerómetro/inclinómetro/galga/temperatura, etiqueta, altura `yFrac`), persistido en `localStorage`. Aparecen en la **pestaña Sensores** (editor + lista con valor en vivo) y como **callout del HUD** anclado a su altura sobre el modelo; valor en vivo **sintético** por tipo. **Pendiente**: marcador 3D propio en la torre (hoy se ubica vía callout), edición de posición de los sensores de fábrica, sensores configurables del gateway, y la conexión al hardware real (`[R-10]`).
-- ⬜ **Mantenimiento predictivo + vida útil remanente (RUL) por componente** `[R-25]`: curva de salud por torre/componente y estimación de RUL a partir de fatiga `[R-22]` + tendencias `[R-21]`.
-- ⬜ **SHM poblacional (benchmarking de flota)** `[R-26]`: comparar torres entre sí para detectar la anómala (la población como referencia). Falta implementarlo (clustering / z-score de la flota).
-- ⬜ **Desempeño: curva de potencia y disponibilidad** `[R-27]`: curva de potencia medida vs. garantizada, pérdidas por viento, disponibilidad. *(Requiere SCADA — encaja con `[R-10]`/`[R-11]`.)*
-- ⬜ **Reportes programados + export automático** `[R-28]`: informes periódicos (PDF/Excel) por torre, zona y parque, agendados.
-- ⬜ **Componentes más allá del fuste (drivetrain/palas)** `[R-29]` *(grande, requiere más sensórica)*: vibración de orden de caja/rodamientos y monitoreo de palas (grietas, hielo, desbalance) — opcionalmente inspección por dron/IA. Hoy ReWind monitorea solo la torre.
-
----
-
-## 🚩 Buque insignia — diferenciadores de alto valor que pocos hacen
-
-*Dos jugadas que usan lo que ReWind ya tiene (el gemelo FEM + 2 acelerómetros) para
-ofrecer algo que las plataformas SHM «data-only» no pueden: inferir el estado
-estructural en puntos SIN sensor. La mayoría del estado del arte es offshore y con
-galgas caras; ReWind apunta a **onshore, con MEMS baratos y un gemelo físico en el
-navegador**. Fundamentado en literatura 2025 (Devriendt & Weijtjens; WES 2025;
-revisiones de extensión de vida).*
-
-- 🟡 **🌟 Gemelo de CONSTRUCCIÓN / puesta en marcha (SHM durante el montaje)** `[R-31]` ***(núcleo hecho v256–v257)***: `js/shm/construction_twin.js` — voladizo equivalente (Rayleigh) calibrado a la f₁ del gemelo FEM (0.283 Hz), **curva f₁ predicha por etapa** (fuste 25/50/75/100 → +góndola → +rotor, validada vs voladizo analítico), **ventana soft-stiff** (1P/3P), y **medición simulada** con defecto de base determinista (~30% de torres). UI: tarjeta «Gemelo de construcción» en la pestaña **Obra** (curva predicha + puntos medidos verde/rojo + banda soft-stiff + veredicto + línea base) y **certificado de puesta en marcha** imprimible; **crosslink al HUD** del Frente 1 (cada partida muestra «f₁ X Hz · concuerda ✓ / bajo lo predicho ✗»). **Falta (lo más desafiante, al final):** f₁ **MEDIDA real** desde la señal (**OMA, `R-21`**) y **telemetría en vivo** (`R-10`/`R-11`) + tilt biaxial (`R-24`). Contexto del white space: la SHM clásica arranca en operación; **monitorear estructuralmente mientras se construye es un white space** (la literatura no cubre el seguimiento modal durante el montaje ni la captura de la línea base de puesta en marcha con gemelo). ReWind ya modela el estado constructivo (`built`/`stages`, planos de corte 4D), así que el paso natural es:
-  - **Frecuencia esperada vs. medida por etapa.** A medida que sube el fuste, el gemelo predice f₁ en cada estado constructivo (voladizo de altura = fracción construida → f₁ baja por una curva conocida). **Desviación de la curva predicha = anomalía** (pretensado de pernos de brida insuficiente, fundación aún sin rigidez/curado, defecto de grout, base mal apoyada). Reusa `digital_twin.js` + `modal_solver` evaluados sobre el mástil parcial.
-  - **Fundación en obra:** curado/madurez del hormigón (ganancia de rigidez), **asentamiento/tilt temprano**, jaula de anclaje/bolt-circle. Problemas caros y frecuentes (fundaciones agrietadas, fisuras por asentamiento plástico).
-  - **Línea base («fingerprint») de puesta en marcha:** capturar f₁/f₂/amortiguamiento de cada torre recién montada **es lo que habilita toda la SHM operacional posterior** (es la referencia contra la que se comparará). Capturarla durante la construcción es el momento natural y casi nadie lo hace bien. Entrega: un **módulo de QA/commissioning** — predicho vs. medido por etapa, banderas verde/ámbar/rojo, y el fingerprint auto-generado que alimenta la SHM operacional.
-  - *Encaje:* el más bajo en esfuerzo de los dos (no necesita 20 años de fatiga), da **valor inmediato en Camán**, y construye sobre el 4D que ya estamos modificando. → **[plan completo](planes/frente-3-gemelo-construccion.md)**.
-- ⬜ **🌟 Gemelo de CARGAS — sensado virtual + fatiga para extensión de vida (operacional)** `[R-30]`: usar el gemelo + los 2 MEMS para **reconstruir el campo de tensión en los hotspots SIN sensor** (soldadura de base, brida atornillada, interfaz fuste–fundación) por **expansión modal** sobre las formas del gemelo, y de ahí **rainflow + curva S-N → daño Palmgren-Miner → vida consumida / RUL**. Caso de negocio: la flota mundial llega a sus ~20 años de diseño y la **extensión de vida** vale millones; hoy se decide con reevaluaciones genéricas, no con la historia de cargas real de *esa* máquina. Fusiona `[R-21]` (OMA da la base modal viva) + `[R-22]` (fatiga). Entrega: **«certificado de salud y vida remanente»** vivo por torre y flota. *Límites honestos:* 2 acelerómetros → ~2 modos resueltos; fatiga aproximada (banda de incertidumbre), conviene biaxial y, si hay, viento/potencia de SCADA; validar contra una galga en una torre piloto.
-
----
-
-## Secuencia sugerida
-
-**Foco inmediato (apoyados en el 4D):**
-1. ✅ **`R-18` etapas constructivas / avance de obra** — hecho (HUD + 4D por componente + dashboard).
-2. ✅ **`R-19` análisis de sombras** — hecho.
-3. 🟡 **🌟 `R-31` gemelo de construcción** — **núcleo hecho** (curva predicha + soft-stiff + certificado + crosslink HUD). Se cierra con `R-21` (OMA) para la f₁ medida real + sensores en vivo.
-
-**Pulido de producto — ✅ hecho:** `R-8` (quitar marca PÓRTICO, v258), `R-7` (menú nativo SHM, v261), `R-6` (i18n ES/EN completa, v262–v273), `R-16` (landing propia, v252), `R-22` (fatiga/DEL, v260); **🟡** `R-33` (instrumentación editable, v1 v276).
-
-**Después:**
-4. **`R-21` OMA desde la señal medida** — habilita el sensado virtual (base modal viva). *(Diferido al final con los sensores en vivo; JP integra su módulo ultramétrico.)*
-5. **🌟 `R-30` gemelo de cargas / extensión de vida** (sobre `R-22` ya hecho) — jugada operacional de alto valor (madura cuando haya horas de operación).
-6. **`R-10` `DataSource` + `R-23` alarmas** — habilitan la conexión industrial y el resto (y cierran `R-33` con hardware real).
-7. Mayores: `R-11` (Electron + InfluxDB), `R-25`–`R-29` (predictivo, flota, drivetrain).
+- ✅ **`R-1`** Figuras del informe (deformada limpia + ajuste cúbico de voladizo a lo medido) (v208).
+- ✅ **`R-2`** Velocímetro de estado en el informe (v208).
+- ✅ **`R-3`** Quitar selector de unidades (v208).
+- ✅ **`R-4`** Árbol lateral multiparque Parque ▸ Zona ▸ Torre (`parks.js`, localStorage) (v208).
+- ✅ **`R-5`** Torres AT seleccionables/movibles/borrables (v208).
+- ✅ **`R-6`** i18n ES/EN completa (v262–v273): `i18n.js` + conmutador; marco, 6 paneles, HUD y los 6 informes imprimibles bilingües; catálogos de dominio sin traducir (claves de scoring).
+- ✅ **`R-7`** Menú superior nativo (Parque/Datos/Informe + Acerca de) (v261).
+- ✅ **`R-8`** Sin marca «PÓRTICO» en lo visible (textos, exports, SW `rewind-*`, claves `rewind_*` con fallback) (v258).
+- ✅ **`R-9`** Configuración desactivada hasta rehacerla SHM (v209).
+- ✅ **`R-16`** Landing editorial propia; la app en `app.html` (v252).
+- ✅ **`R-18`** Avance de obra 4D: partidas por componente, HUD Stark, curva-S/Gantt/DPR (v242–v251). → [plan](planes/frente-1-avance-obra.md).
+- ✅ **`R-19`** Shadow flicker completo: worst/real case, mapa iso-sombra, receptores importables, informes (v215–v241). → [plan](planes/frente-2-sombras.md).
+- ✅ **`R-20`** Purga PÓRTICO (~24.900 líneas); queda el closure de ReWind + 10 solvers del gemelo (v213).
+- ✅ **`R-22`** Fatiga/DEL: rainflow ASTM E1049 + S-N EN 1993-1-9 + Miner → RUL/DEL, verificado en Node; pestaña Fatiga (v260).
+- ✅ **`R-32`** Micro-CMMS de inspección: scoring determinista (port de structapp-base), hallazgos con fotos (por inspección y por hallazgo), ensayos NDT, documentos, OT, calendario/vencimientos, rollup de parque, export/import (v252–v254). *(Persistencia real → Fase 3.5.)*
+- ✅ **HUD multi-modo + pulido del visor** (v259–v277): HUD con modos Avance/Inspección/Sensores anclado por componente/altura; gateway como callout y en el panel; `R-33` v1 (sensores de usuario); accesos del toolbar con estado activo; relieve aclarado en modo Shadow (`uShadow`); modo claro por defecto (app y landing).
