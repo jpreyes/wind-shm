@@ -24,3 +24,6 @@ referencias/*.docx
 
 # Zips subidos al repo local (entregables/fuentes), no se versionan
 *.zip
+
+# Auditorías internas (notas de trabajo, no se publican)
+auditoria/
