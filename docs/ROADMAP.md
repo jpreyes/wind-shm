@@ -11,6 +11,9 @@ Este roadmap **unifica** los ítems históricos, las brechas de la auditoría in
 > **▶ Fase actual: Fase 3 — Backend de datos reales** (`R-10`, [plan Frente 4](planes/frente-4-backend-r10.md)).
 > Las fases 1–2 (endurecimiento + analítica local) pueden intercalarse: son
 > independientes del backend y de medio día a 2 días cada ítem.
+> **▶ Nuevo frente pedido por el proyecto:** `R-41` **módulo «Calidad de obra»** —
+> ingesta y **round-trip EXACTO** del «Log protocolos SACYR.xlsx» (el formato de
+> facto de Camán, inmutable) — [plan Frente 5](planes/frente-5-calidad-obra.md).
 
 > **Base FEM heredada (gemelo digital).** ReWind nació como fork de
 > **PÓRTICO** (`structweb3d`), una app de análisis estructural FEM 3D. Tras la
@@ -55,6 +58,7 @@ Este roadmap **unifica** los ítems históricos, las brechas de la auditoría in
 | ⬜ `R-39` | **Comparador de torres** lado a lado: elegir 2 → tabla de f₁ vs gemelo, RMS, HI, fatiga, score de inspección, avance. | 1 día | `R-35` | Comparación en 2 clics. |
 | ⬜ `R-33b` | **Marcador 3D** de los sensores de instrumentación (esfera «capa de vida» a `yFrac·H`, color por tipo; evento `instr-changed` para sincronizar). | ½ día | — | El sensor agregado se ve clavado en la torre. |
 | ⬜ `R-13x` | **Rosa de vientos viva** en la pestaña Parque (la rosa de `meteo_caman` + sector del viento actual resaltado). | horas | — | Golosina de demo. |
+| ⬜ `R-41` 🌟 | **Módulo «Calidad de obra»** (v1, fases 5.1–5.5 del [plan Frente 5](planes/frente-5-calidad-obra.md)): reader Node del «Log protocolos SACYR.xlsx» → JSON canónico; **writer XML quirúrgico** (plantilla = el original; solo celdas de datos; fórmulas/gráficos/CF intactos; `fullCalcOnLoad`) + **diff-harness** byte-a-byte; pestaña **«Calidad»** (heatmap protocolos×WTG, KPIs turnaround, drill por torre); integración con Obra/HUD/CMMS (avance real opt-in, ensayos hormigón → `R-31`). *(v2 con backend = sub-fase 3.5b.)* | ~2 semanas | — | El Excel exportado abre en Excel sin reparaciones y el diff da 0 fuera de las celdas editadas. |
 
 ### Fase 3 — Backend de datos reales (`R-10` · Frente 4) 🏗️ **← FASE ACTUAL**
 *Plan detallado: [frente-4-backend-r10.md](planes/frente-4-backend-r10.md). Hardware:
@@ -68,6 +72,7 @@ Conectividad: **Starlink** (CGNAT → servidor on-prem + Cloudflare Tunnel/Tails
 | ⬜ 3.3 | **Pi de referencia**: `sampler.py` (SPI/DRDY/FIFO del ADXL355, chrony, trama v2, cola store-and-forward, tilt 1 Hz, LWT) + `provision.sh` + Tailscale. | 2–3 días | 2 sensores reales de una torre en el dashboard. |
 | ⬜ 3.4 | **Features + archivo de ventanas crudas** (10/30 min → `raw/…` para el OMA de `R-21`) + retención/downsampling en Influx. | 1–2 días | Tendencia de f₁ real de una semana. |
 | ⬜ 3.5 | **CMMS a Postgres** (`R-32` persistente): esquema + REST + adaptador en el front (localStorage como caché offline) + fotos a disco. *Cierra A4/A5 de raíz.* | 2–4 días | Inspecciones multiusuario que sobreviven al navegador. |
+| ⬜ 3.5b | **Calidad de obra a Postgres** (`R-41` v2, fase 5.6 del Frente 5): tablas `protocolos/ciclos/ensayos_*`, upload de versiones del xlsx (upsert idempotente), export server-side con el writer, historial de versiones. | 3 días | Dos usuarios ven el mismo log; export desde BD idéntico al formato de facto. |
 | ⬜ 3.6 | **Alarmas server-side (`R-23b`)** + notificador (SMTP/Telegram) + LWT→«gateway offline». **Tilt real (`R-24`)** entra por el mismo pipeline. | 1–2 días | Alarma real llega al teléfono. |
 | ⬜ 3.7 | Endurecer piloto: TLS, túneles (Cloudflare/Tailscale), **backups probados**, doc de operación. **Reportes programados (`R-28`)** vía cron. | 2 días | Restauración de respaldo ensayada una vez. |
 
@@ -109,6 +114,7 @@ Conectividad: **Starlink** (CGNAT → servidor on-prem + Cloudflare Tunnel/Tails
 - ⬜ **`R-30` 🌟 Gemelo de cargas / extensión de vida** — sensado virtual por expansión modal + rainflow/Miner → RUL de hotspots sin sensor; el caso de negocio es la **extensión de vida** de flotas llegando a sus 20 años. *Límites honestos: 2 acelerómetros → ~2 modos; validar contra galga piloto.* (Fase 4.)
 - 🟡 **`R-31` 🌟 Gemelo de construcción** *(núcleo hecho v256–v257)* — `construction_twin.js`: curva f₁ predicha por etapa (validada vs voladizo analítico), ventana soft-stiff 1P/3P, medición simulada con defecto de base, tarjeta en Obra + certificado + crosslink al HUD. **Falta:** f₁ MEDIDA real (`R-21`) + telemetría (`R-10`) + tilt (`R-24`). El white space: nadie monitorea estructuralmente DURANTE el montaje ni formaliza la línea base de commissioning con gemelo. → [plan](planes/frente-3-gemelo-construccion.md).
 - 🟡 **`R-33` Instrumentación editable** *(v1 hecho v276)* — sensores de usuario (tipo/etiqueta/altura) en panel + HUD con valor sintético. **Falta:** marcador 3D (`R-33b`, Fase 2), edición de posición de sensores de fábrica, gateway configurable, hardware real (Fase 3).
+- ⬜ **`R-41` 🌟 Módulo «Calidad de obra» (round-trip del Log de protocolos)** — el proyecto Camán se gestiona con un Excel de facto **inmutable** (log de protocolos QA/QC con ciclos de revisión SACYR⇄ITO, matrices de completitud por WTG, ensayos de hormigón/áridos/mortero/geotecnia, hitos de pago, KPIs). ReWind lo ingiere, lo gestiona y **exporta un xlsx exactamente igual** (plantilla + parche quirúrgico del XML del zip: solo celdas de datos; los 21 gráficos, ~900 formatos condicionales, fórmulas y vínculos externos quedan intactos; las matrices/KPIs se recalculan solas al abrir). Encaje: el % de protocolos por WTG es el **avance real** del 4D; los ensayos de hormigón alimentan el CMMS y la narrativa del gemelo (`R-31`). → [plan Frente 5](planes/frente-5-calidad-obra.md) + anexo de construcción columna-a-columna en `auditoria/` (no versionado: estructura interna del proyecto).
 
 ---
 
