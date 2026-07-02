@@ -56,11 +56,18 @@ xlsx original ──► READER (Node/browser) ──► JSON canónico ──►
                                                          fórmulas → valores calculados)
 ```
 
-- **Reader** (`tools/sacyr_reader.mjs`, JS puro sobre el zip): lee el libro con
-  **valores calculados** (el xlsx guarda el último valor de cada fórmula en el
-  XML, no hace falta motor de cálculo) según el mapa del anexo → **JSON
-  canónico**. Corre igual en Node (tests) y en el navegador (`fflate`
-  vendorizado en `lib/`, mismo patrón que numeric/leaflet).
+- **Reader** (`tools/sacyr_reader.mjs` + `lib/xlsx_lite.mjs`, JS puro sobre el
+  zip): lee el libro con **valores calculados** (el xlsx guarda el último valor
+  de cada fórmula en el XML, no hace falta motor de cálculo) según el mapa del
+  anexo → **JSON canónico**. **Sin dependencias externas**: descomprime con la
+  API web `DecompressionStream('deflate-raw')`, global en Node ≥18 y en todo
+  navegador evergreen — corre igual en Node (tests/CLI) y en el navegador
+  (fase 5.4), sin vendorizar `fflate`.
+  - **Dos capas** (`readSacyr` → `{ …, _raw }`): `_raw` captura VERBATIM cada
+    celda con dato de las hojas de datos (backstop de cobertura + round-trip);
+    el modelo estructurado (protocolos con ciclos, ensayos, catálogos) se
+    **deriva** del raw → no pueden divergir. Los ciclos del LOG se leen con un
+    stride uniforme de 10 columnas desde la col W (hasta 5 ciclos).
 - **Writer** (`tools/sacyr_writer.mjs`): genera el xlsx de salida escribiendo
   **valores** en las mismas hojas/posiciones que el original:
   - **Hojas de datos** (logs + ensayos): fila a fila desde el JSON canónico,
@@ -141,7 +148,7 @@ ciclos se recalculan en JS (lun–vie) y se validan contra los del archivo.
 
 | # | Entregable | Esfuerzo | Criterio de cierre |
 |---|---|---|---|
-| ⬜ 5.1 | **Reader** + JSON canónico + tests Node con el archivo real | 2 días | 1.437 + 2.501 + ensayos parseados; spot-checks; días hábiles recalculados ≈ archivo. |
+| ✅ 5.1 | **Reader** (`lib/xlsx_lite.mjs` + `tools/sacyr_reader.mjs`) + JSON canónico + tests (`tools/test_sacyr_reader.mjs`) | 2 días | **Hecho:** 1.364 protocolos/1.949 ciclos, 455 ensayos, catálogos; distribuciones == SPEC verbatim (estados P, áreas F, grados/plantas); **días hábiles recalculados = archivo 1845/1845 (100%)**; spot-check fila 7; cobertura raw 46.852 celdas. |
 | ⬜ 5.2 | **Writer de valores** + **diff de información** | 1–2 días | Round-trip sin cambios → 0 diffs de valor en hojas de datos; abre sin advertencias. |
 | ⬜ 5.3 | **Derivados en JS** (matriz por WTG, KPIs turnaround, pendientes) + validación cruzada contra los valores del archivo | 1–2 días | Nuestros agregados == valores del archivo original. |
 | ⬜ 5.4 | **Pestaña «Calidad»** (import navegador + dashboard + drill) | 3 días | El xlsx real se importa y navega; KPIs coinciden con la hoja KPI´s. |
