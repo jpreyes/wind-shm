@@ -18,6 +18,9 @@ import { readXlsx, numToCol, colToNum } from '../lib/xlsx_lite.mjs';
 const isBlank = (v) => v == null || (typeof v === 'string' && v.trim() === '');
 const iso = (d) => (d instanceof Date ? d.toISOString().slice(0, 10) : null);
 const trim = (v) => (typeof v === 'string' ? v.trim() : v);
+// Valor canónico de una celda: blank / string vacío → null (coherente con _raw,
+// que no captura celdas vacías; evita divergencias en el round-trip del modelo).
+const clean = (v) => { const t = trim(v); return isBlank(t) ? null : t; };
 
 // NETWORKDAYS (lun–vie, sin feriados): días hábiles inclusive entre dos fechas.
 // El libro usa NETWORKDAYS(inicio,fin)-1 para «días hábiles» de cada ciclo.
@@ -96,7 +99,7 @@ const CYC = { tmlEnvio: 0, fechaEnvio: 1, estado: 2, tmlRetorno: 3, item: 4, hyp
 
 function parseLog(sheet) {
   const protocolos = [];
-  const V = (r, colLetter) => trim(sheet.val(colLetter + r));
+  const V = (r, colLetter) => clean(sheet.val(colLetter + r));
   for (let r = 7; r <= sheet.maxRow; r++) {
     const codigoDocumento = V(r, 'E');
     // Fila de datos válida = tiene código de documento (o al menos algún dato clave).
@@ -107,7 +110,7 @@ function parseLog(sheet) {
     for (let k = 0; k < CYC_MAX; k++) {
       const base = CYC_BASE + k * CYC_STRIDE;
       const at = (off) => { const c = sheet.cellRC(r, base + off); return c ? c.value : null; };
-      const estadoRaw = trim(at(CYC.estado));
+      const estadoRaw = clean(at(CYC.estado));
       if (isBlank(estadoRaw)) continue;            // ciclo inexistente (igual que la fórmula O)
       const fechaEnvio = at(CYC.fechaEnvio);
       const fechaRetorno = at(CYC.fechaRetorno);
@@ -115,14 +118,14 @@ function parseLog(sheet) {
       const dhCalc = diasHabilesSacyr(fechaEnvio, fechaRetorno);
       ciclos.push({
         n: k + 1,
-        tmlEnvio: trim(at(CYC.tmlEnvio)) ?? null,
+        tmlEnvio: clean(at(CYC.tmlEnvio)),
         fechaEnvio: iso(fechaEnvio),
         estado: normEstado(estadoRaw),
         estadoRaw: estadoRaw ?? null,
-        tmlRetorno: trim(at(CYC.tmlRetorno)) ?? null,
-        item: at(CYC.item) ?? null,
+        tmlRetorno: clean(at(CYC.tmlRetorno)),
+        item: clean(at(CYC.item)),
         fechaRetorno: iso(fechaRetorno),
-        comentarios: trim(at(CYC.comentarios)) ?? null,
+        comentarios: clean(at(CYC.comentarios)),
         diasCorridos: typeof at(CYC.diasCorridos) === 'number' ? at(CYC.diasCorridos) : null,
         diasHabiles: typeof dhFile === 'number' ? dhFile : null,   // valor del archivo
         diasHabilesCalc: dhCalc,                                    // recalculado (validación 5.3)
@@ -159,7 +162,7 @@ function parseLog(sheet) {
 function parseEnsayosHormigon(sheet) {
   if (!sheet) return [];
   const out = [];
-  const V = (r, c) => trim(sheet.val(c + r));
+  const V = (r, c) => clean(sheet.val(c + r));
   for (let r = 5; r <= sheet.maxRow; r++) {
     const nEnsayo = V(r, 'D');
     const elemento = V(r, 'I');
@@ -193,7 +196,7 @@ function parseEnsayosHormigon(sheet) {
 function parseResumen(sheet) {
   if (!sheet) return [];
   const out = [];
-  const V = (r, c) => trim(sheet.val(c + r));
+  const V = (r, c) => clean(sheet.val(c + r));
   for (let r = 5; r <= sheet.maxRow; r++) {
     const cod = V(r, 'B');
     const elemento = V(r, 'D');
@@ -252,6 +255,7 @@ export async function readSacyr(bytes) {
     ['LOG PTL Parque y SSEE', 6, 7], ['Resumen', 4, 5],
     ['Ensayos Hormigón', 4, 5], ['Ensayos Áridos y Calicatas', 4, 5],
     ['Mortero de Nivelación', 4, 5], ['Inf. Geotécnicos', 4, 5],
+    ['Listas', 2, 3],   // catálogo (round-trip del catálogo → catalogos)
   ];
   for (const [name, hdr, data] of rawTargets) {
     const sh = wb.sheet(name);

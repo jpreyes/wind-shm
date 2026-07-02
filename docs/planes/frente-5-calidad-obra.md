@@ -149,7 +149,7 @@ ciclos se recalculan en JS (lun–vie) y se validan contra los del archivo.
 | # | Entregable | Esfuerzo | Criterio de cierre |
 |---|---|---|---|
 | ✅ 5.1 | **Reader** (`lib/xlsx_lite.mjs` + `tools/sacyr_reader.mjs`) + JSON canónico + tests (`tools/test_sacyr_reader.mjs`) | 2 días | **Hecho:** 1.364 protocolos/1.949 ciclos, 455 ensayos, catálogos; distribuciones == SPEC verbatim (estados P, áreas F, grados/plantas); **días hábiles recalculados = archivo 1845/1845 (100%)**; spot-check fila 7; cobertura raw 46.852 celdas. |
-| ⬜ 5.2 | **Writer de valores** + **diff de información** | 1–2 días | Round-trip sin cambios → 0 diffs de valor en hojas de datos; abre sin advertencias. |
+| ✅ 5.2 | **Writer de valores** (`lib/xlsx_write.mjs` + `tools/sacyr_writer.mjs`) + **diff de información** (`tools/sacyr_diff.mjs`) | 1–2 días | **Hecho:** round-trip original→JSON→export→JSON' **sin pérdida** — 0 diffs en 72.338 celdas (7 hojas incl. «Listas») + JSON canónico idéntico; export (4 MB) abre en openpyxl/Excel sin advertencias (fechas reconocidas). Test autocontenido `tools/test_xlsx_roundtrip.mjs` (todos los tipos, sin archivo real). |
 | ⬜ 5.3 | **Derivados en JS** (matriz por WTG, KPIs turnaround, pendientes) + validación cruzada contra los valores del archivo | 1–2 días | Nuestros agregados == valores del archivo original. |
 | ⬜ 5.4 | **Pestaña «Calidad»** (import navegador + dashboard + drill) | 3 días | El xlsx real se importa y navega; KPIs coinciden con la hoja KPI´s. |
 | ⬜ 5.5 | **Integración** Obra/HUD/CMMS (avance real opt-in, ensayos hormigón) | 2 días | El 4D puede mostrar % real de protocolos por torre. |
