@@ -6,11 +6,15 @@ proyecto**. ReWind debe poder **ingerirlo**, gestionarlo (dashboard de calidad +
 integración con Obra/CMMS) y **exportar un Excel cuya INFORMACIÓN coincida**:
 mismas hojas, mismas cabeceras, **mismos valores en las mismas celdas**.
 
-> **Alcance del round-trip (acordado):** lo que debe coincidir es **la
-> información — los valores de las celdas**. NO es necesario reproducir
-> fórmulas, gráficos, formatos condicionales ni estilos (los gráficos serían
-> «ideal, no necesario»). Donde el original tiene una fórmula, el export escribe
-> **el valor calculado**.
+> **Contrato #1 — round-trip de INFORMACIÓN sin pérdida (lo único obligatorio):**
+> toda la información del Excel debe poder **subirse a ReWind** (leerse al modelo
+> canónico sin perder nada) y ReWind debe poder **volver a sacarla** en un Excel
+> legible. **NO** se requiere fidelidad de archivo: ni byte-a-byte, ni fórmulas,
+> ni gráficos, ni formatos condicionales, ni estilos (gráficos = «ideal, no
+> necesario»). Donde el original tiene una fórmula, el export escribe el **valor**.
+> **Layout secundario (solo por familiaridad):** el export usa las mismas hojas,
+> cabeceras y celdas que el original para que a quien lo abra le resulte conocido
+> — pero si algo se moviera, lo que importa es que **la información esté completa**.
 
 > **Anexo de construcción (no versionado, contiene estructura interna del
 > proyecto):** `auditoria/SPEC-sacyr-xlsx-2026-07-02.md` — mapa columna-a-columna
@@ -76,14 +80,16 @@ xlsx original ──► READER (Node/browser) ──► JSON canónico ──►
     datos (barato y útil). Estilos/colores/gráficos: **no requeridos**;
     gráficos «ideal» → queda como mejora opcional (v1.1) re-incrustando la
     plantilla original solo para las hojas con gráficos, sin compromiso.
-- **Criterio de aceptación (diff de INFORMACIÓN)** — `tools/sacyr_diff.mjs`:
-  compara **valores celda a celda** (normalizando tipo: fecha-serial vs fecha,
-  número vs texto numérico) entre el export y el original:
-  1. Round-trip **sin cambios** → 0 diferencias de valor en las hojas de datos,
-     y en las derivadas dentro del alcance.
-  2. **Con cambios** → difieren exactamente las celdas esperadas (+ los
-     agregados derivados afectados).
-  3. El export abre en Excel/LibreOffice sin advertencias.
+- **Criterio de aceptación (sin pérdida de información)** — `tools/sacyr_diff.mjs`:
+  1. **Cobertura de lectura:** toda celda con dato del original queda
+     representada en el JSON canónico (ninguna se «cae» en el parseo) — reporte
+     de celdas no mapeadas = debe ser 0 en las hojas de datos.
+  2. **Round-trip sin cambios:** original → JSON → export → JSON' ⇒ **`JSON == JSON'`**
+     (igualdad de información, independiente de posición). Como verificación
+     adicional cómoda, el diff celda-a-celda de las hojas de datos también da 0.
+  3. **Con cambios:** difieren exactamente los datos editados (+ los agregados
+     derivados afectados).
+  4. El export abre en Excel/LibreOffice sin advertencias.
 
 ## 3. Modelo de datos canónico (interno)
 
