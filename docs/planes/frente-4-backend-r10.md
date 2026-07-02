@@ -171,8 +171,38 @@ clonada + `provision.sh`) y vigilar el ring crudo (ajustar ciclo de trabajo o re
 El primer cuello real sería el ring continuo a 200 sensores — por eso el ciclo 10/30.
 
 ## 4. Riesgos / decisiones abiertas
-- **Conectividad del parque** (¿4G por gateway? ¿malla WiFi? ¿fibra de la subestación?)
-  define QoS del enlace y el tamaño del buffer de la Pi. El store-and-forward cubre cortes.
+
+### Conectividad: **Starlink** (decidido)
+Starlink como enlace del parque tiene 3 implicancias de diseño:
+
+1. **CGNAT — no hay IP pública entrante.** Nada de afuera puede iniciar conexión hacia
+   el parque. Consecuencias:
+   - **El servidor va ON-PREM en el parque** (la topología ya recomendada): los datos de
+     sensores viajan por la red LOCAL del parque (Pi → servidor) y **nunca tocan
+     Starlink**; el satélite queda solo para acceso remoto, NTP y actualizaciones.
+   - **Acceso remoto al dashboard:** túnel de salida — **Cloudflare Tunnel** (gratis,
+     da HTTPS+WSS públicos con dominio, cero puertos abiertos) o **Tailscale** (malla
+     WireGuard; el dashboard queda en la tailnet privada). Recomendado: Cloudflare
+     Tunnel para el dashboard (clientes/demo) + Tailscale para operación.
+   - **Mantenimiento remoto de las Pis:** instalar **Tailscale en cada Pi** → SSH desde
+     cualquier parte pese al CGNAT. Es la diferencia entre «manejar 100 Pis» y
+     «viajar al parque por cada tornillo».
+2. **Microcortes** (obstrucción/handover/clima, de segundos a minutos): el
+   **store-and-forward** de la Pi + MQTT QoS 1 con sesión persistente ya lo cubre —
+   y como el broker es local, los cortes de Starlink **ni siquiera afectan la ingesta**,
+   solo el acceso remoto.
+3. **Presupuesto de datos:** con el servidor on-prem, el tráfico satelital es solo el
+   dashboard remoto (KB/s) + respaldos. **Si se quisiera replicar crudo a la nube**:
+   200 sensores continuos ≈ 300 KB/s ≈ ~780 GB/mes (con ciclo 10/30 ≈ 260 GB/mes) —
+   vigilar el plan de datos / prioridad de tráfico de Starlink; alternativa: replicar
+   solo **features** (insignificante) y subir ventanas crudas por lotes nocturnos.
+4. **NTP sobre Starlink funciona** (chrony; jitter de ms — suficiente para modos
+   < 20 Hz entre torres; dentro de la torre manda el reloj común de la Pi).
+5. **Pendiente aún:** la red **intra-parque** (torre → caseta del servidor): fibra del
+   colector si existe, radios punto-a-punto (Ubiquiti) o 4G local por cluster de
+   gateways. Esto define dónde se ubican físicamente los ~100 gateways del piloto.
+
+### Otras decisiones abiertas
 - **Sincronización fina** si el OMA ultramétrico llegara a necesitar fase ENTRE torres
   (< 1 ms): GPS-PPS por gateway. Dentro de la torre ya está resuelto (misma Pi).
 - **¿Continuo vs ciclo?** para R-21: preguntar a JP qué densidad de ventanas necesita
