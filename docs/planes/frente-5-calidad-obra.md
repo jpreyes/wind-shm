@@ -1,94 +1,91 @@
-# Frente 5 — Módulo «Calidad de obra» (`R-41`): ingesta y round-trip del Log de protocolos
+# Frente 5 — Módulo «Calidad de obra» (`R-41`): ingesta y export del Log de protocolos
 
 **Estado:** plan · **Origen:** el proyecto Camán se gestiona con un libro Excel
-(«Log protocolos SACYR.xlsx», ~25 hojas) que es **el formato de facto del proyecto
-y NO se puede modificar**. ReWind debe poder **ingerirlo**, gestionarlo (dashboard
-de calidad + integración con Obra/CMMS) y **exportar un Excel de salida
-EXACTAMENTE igual** al original — mismas hojas, cabeceras, fórmulas, gráficos,
-formatos condicionales, vínculos y layout — con los datos actualizados.
+(«Log protocolos SACYR.xlsx», ~25 hojas) que es **el formato de facto del
+proyecto**. ReWind debe poder **ingerirlo**, gestionarlo (dashboard de calidad +
+integración con Obra/CMMS) y **exportar un Excel cuya INFORMACIÓN coincida**:
+mismas hojas, mismas cabeceras, **mismos valores en las mismas celdas**.
+
+> **Alcance del round-trip (acordado):** lo que debe coincidir es **la
+> información — los valores de las celdas**. NO es necesario reproducir
+> fórmulas, gráficos, formatos condicionales ni estilos (los gráficos serían
+> «ideal, no necesario»). Donde el original tiene una fórmula, el export escribe
+> **el valor calculado**.
 
 > **Anexo de construcción (no versionado, contiene estructura interna del
 > proyecto):** `auditoria/SPEC-sacyr-xlsx-2026-07-02.md` — mapa columna-a-columna
-> verbatim de cada hoja de entrada (cabecera, fila de datos, columnas con fórmula,
-> fórmulas de ejemplo, autofiltros/freeze/merges, valores distintos observados y
-> el catálogo de la hoja «Listas»). Ese anexo + este plan = espec completa.
+> verbatim de cada hoja (cabecera, fila de datos, qué columnas son fórmula en el
+> original, fórmulas de ejemplo, valores de estado observados y el catálogo de la
+> hoja «Listas»). Ese anexo + este plan = espec completa.
 
 ---
 
-## 1. La restricción dura y lo que implica
+## 1. Qué contiene el libro (análisis del archivo real)
 
-El análisis del libro real arrojó que **regenerarlo desde cero es inviable**:
-
-- **21 gráficos** (11 en KPI´s, 5 en Estatus, 3 en Actividades, 1 en Estadística,
-  1 en hitos) — openpyxl/exceljs los destruyen o degradan al reescribir.
-- **~900 reglas de formato condicional** (215 en cada Matriz, 77 en Estatus…),
-  varias con **extensiones** que openpyxl ya advierte que «will be removed».
-- **Vínculos externos** a otros 2 libros (Log Pruebas FAT.xlsx en unidad
-  compartida; una Matriz .xlsm) que deben quedar intactos.
-- **Data validation** con extensiones no soportadas.
-- Hojas **ocultas** (Resumen, Estatus, Listas, Actividades…), tab colors,
-  freeze panes, autofiltros, cientos de celdas combinadas.
-- **Las hojas derivadas son FÓRMULAS**: las Matrices (Fundaciones/LAT/SSEE/SET),
-  KPI´s, Estatus y Estadística se calculan desde los logs. No hay que
-  reproducir su lógica: hay que **alimentar los logs y dejar que Excel recalcule**.
-
-### Decisión de arquitectura: **plantilla + parche quirúrgico del XML**
-
-Un `.xlsx` es un ZIP de XML. La única forma de garantizar «exactamente igual»:
-
-1. **La plantilla ES el archivo original** (una copia prístina, versionada fuera
-   del repo público — p. ej. `data-privada/` o el propio backend). Nunca se
-   genera un libro nuevo.
-2. El **writer** abre el ZIP y modifica **únicamente** los valores de celdas de
-   DATOS en las hojas de entrada (`xl/worksheets/sheetN.xml` + `sharedStrings.xml`),
-   **sin tocar ningún otro part** (charts, styles, condFmt, externalLinks,
-   drawings, tema, validaciones quedan **byte-idénticos**).
-3. Se marca `fullCalcOnLoad="1"` en `xl/workbook.xml` (`<calcPr>`) para que Excel
-   recalcule TODAS las fórmulas al abrir → matrices, KPIs, gráficos y estatus se
-   actualizan solos con los datos nuevos.
-4. **Node puro, sin dependencias de runtime** en la app: el writer vive en
-   `tools/`+backend (allí sí puede usar `fflate`/`jszip` como dep de tooling,
-   igual que los otros `tools/*.mjs`).
-
-### Reglas del writer (invariantes)
-
-- **Jamás escribir una columna marcada `[F]`** (fórmula) en el anexo. Solo
-  columnas de datos. Si un valor entrante colisiona con una columna `[F]`, se
-  ignora (la fórmula manda).
-- **Fila nueva** (protocolo/ensayo nuevo): se **clona la última fila de datos**
-  de la hoja a nivel XML — celdas de datos con los valores nuevos, celdas `[F]`
-  con la fórmula de la fila clonada **reindexada** a la fila nueva (ajuste de
-  referencias relativas; si la celda usa *shared formula* `t="shared"`, se
-  materializa como fórmula explícita al clonar). Extender `ref` del autofiltro
-  y de la `dimension` de la hoja.
-- **Literales intactos:** el reader guarda `rawValue` de cada celda; el writer
-  escribe el literal ORIGINAL, no el normalizado (ej.: coexisten
-  `Sin Comentarios`×886 y `Sin comentarios`×370 — se preservan tal cual;
-  normalizar solo la copia interna). Fechas: conservar el serial numérico y el
-  estilo de la celda original (no re-formatear).
-- **`sharedStrings.xml`:** los strings nuevos se AÑADEN al final (índices
-  existentes no se reordenan); actualizar `count`/`uniqueCount`.
-- Hojas **derivadas, ocultas y de informe** (Matrices, KPI´s, Estatus,
-  Estadística, Emisión TML, Resúmen hitos, Hoja1/3/4/5, Actividades,
-  Actualización de vínculos): **prohibido tocarlas**. Cambian solas al recalcular.
-
-### Hojas de ENTRADA (las únicas que el writer escribe)
-
-| Hoja | HDR@ | Rol |
+| Hoja | Filas×Cols | Rol |
 |---|---|---|
-| `LOG PTL Parque y SSEE` | F6 | Log maestro de protocolos del parque+SSEE (1.437 filas; ciclos de revisión SACYR⇄ITO) |
-| `Resumen` | F4 (oculta) | Log histórico/paralelo de protocolos (2.501 filas) |
-| `Ensayos Hormigón` | F4 | Probetas (día 3/7/14/28/56), planta, grado, rupturas |
-| `Ensayos Áridos y Calicatas` | F4 | Ensayos de áridos y calicatas |
-| `Mortero de Nivelación` | F4 | Ensayos de mortero |
-| `Inf. Geotécnicos` | F4 | Informes geotécnicos |
-| `Listas` | (oculta) | Catálogos del workflow — solo lectura para la app (fuente de los combos) |
+| `LOG PTL Parque y SSEE` | 1.437×72 | **Log maestro**: protocolos QA/QC con hasta 4 ciclos de revisión SACYR⇄ITO (CyD) — fechas envío/retorno, TML, estado, días corridos/hábiles |
+| `Resumen` (oculta) | 2.501×49 | Log histórico/paralelo de protocolos |
+| `Matriz Fundaciones` / `Matriz LAT` / `Matriz SSEE Camán` / `Matriz SET Huichahue` | 46×245 … | **Derivadas (fórmulas)**: completitud por estructura — total/aprobados/con comentarios/pendientes/% por WTG y por protocolo |
+| `Ensayos Hormigón` | 483×48 | Probetas (día 3/7/14/28/56), planta, grado, rupturas |
+| `Ensayos Áridos y Calicatas` · `Mortero de Nivelación` · `Inf. Geotécnicos` | 200/59/74 | Ensayos de materiales e informes |
+| `Resúmen KPI´s` · `Estatus` · `Estadística` | — | **Derivadas (fórmulas + 17 gráficos)**: KPIs de turnaround, estatus semanal |
+| `Resúmen hitos fundaciones` | 16.453×27 | Informe documental maquetado por WTG×hito de pago (soporte de estados de pago) |
+| `Emisión TML` · `Protocolos pendientes` · `Listas` (catálogos) · varias `HojaN` ocultas | — | Auxiliares |
 
-*(El mapa columna-a-columna con qué es dato y qué es fórmula está en el anexo.)*
+Datos duros que condicionan la ingesta: literales inconsistentes
+(`Sin Comentarios`×886 vs `Sin comentarios`×370, typo `Revición` en el catálogo),
+filas `Nulo`, fechas como texto (`Sin Definir`), cabeceras multilínea con celdas
+combinadas, vínculos externos a otros 2 libros. **Nada de esto hay que
+reproducirlo — hay que leerlo bien.**
 
 ---
 
-## 2. Modelo de datos canónico (interno de ReWind)
+## 2. Arquitectura: round-trip a nivel de INFORMACIÓN
+
+```
+xlsx original ──► READER (Node/browser) ──► JSON canónico ──► UI «Calidad» + integración Obra/CMMS
+                                                 │
+                                                 ▼
+                                    WRITER (valores) ──► xlsx de salida
+                                                        (mismas hojas/cabeceras/celdas,
+                                                         fórmulas → valores calculados)
+```
+
+- **Reader** (`tools/sacyr_reader.mjs`, JS puro sobre el zip): lee el libro con
+  **valores calculados** (el xlsx guarda el último valor de cada fórmula en el
+  XML, no hace falta motor de cálculo) según el mapa del anexo → **JSON
+  canónico**. Corre igual en Node (tests) y en el navegador (`fflate`
+  vendorizado en `lib/`, mismo patrón que numeric/leaflet).
+- **Writer** (`tools/sacyr_writer.mjs`): genera el xlsx de salida escribiendo
+  **valores** en las mismas hojas/posiciones que el original:
+  - **Hojas de datos** (logs + ensayos): fila a fila desde el JSON canónico,
+    escribiendo el **literal original** (`rawValue`) en lo no editado — el
+    export no «corrige» `Sin Comentarios`/`Sin comentarios`, los preserva.
+  - **Hojas derivadas** (Matrices, KPI´s, Protocolos pendientes, Estatus básico):
+    se escriben los **valores recalculados por el módulo** — las mismas
+    agregaciones que la UI necesita de todos modos (completitud por WTG,
+    turnaround por ciclo, pendientes). Validación cruzada: sobre el archivo
+    original sin cambios, nuestros agregados deben **coincidir con los valores
+    que trae el archivo**.
+  - **Hojas informe/scratch** (`Resúmen hitos fundaciones`, `Actividades`,
+    `HojaN`, `Actualización de vínculos`): fuera del alcance v1 (se re-emiten
+    los valores leídos tal cual, o se omiten — decisión por hoja en el anexo).
+  - Formato mínimo funcional: cabeceras en las mismas filas/columnas, fechas
+    como fechas, números como números, autofiltro y freeze de las hojas de
+    datos (barato y útil). Estilos/colores/gráficos: **no requeridos**;
+    gráficos «ideal» → queda como mejora opcional (v1.1) re-incrustando la
+    plantilla original solo para las hojas con gráficos, sin compromiso.
+- **Criterio de aceptación (diff de INFORMACIÓN)** — `tools/sacyr_diff.mjs`:
+  compara **valores celda a celda** (normalizando tipo: fecha-serial vs fecha,
+  número vs texto numérico) entre el export y el original:
+  1. Round-trip **sin cambios** → 0 diferencias de valor en las hojas de datos,
+     y en las derivadas dentro del alcance.
+  2. **Con cambios** → difieren exactamente las celdas esperadas (+ los
+     agregados derivados afectados).
+  3. El export abre en Excel/LibreOffice sin advertencias.
+
+## 3. Modelo de datos canónico (interno)
 
 ```
 protocolo {
@@ -99,89 +96,65 @@ protocolo {
   hitoPago,             // 1er | 2do | 3er | código de hito (p.ej. 19.17)
   fechaDocumento,
   estadoActual,         // normalizado: aprobado | conComentarios | enRevision | nulo | informativo
-  estadoActualRaw,      // literal original (round-trip)
+  estadoActualRaw,      // literal original (se escribe tal cual al exportar)
   ciclos: [ { n, tmlEnvio, fechaEnvio, tmlRetorno, fechaRetorno,
               estado, estadoRaw, comentarios, diasCorridos, diasHabiles } ],
-  _origen: { hoja, fila }        // ancla exacta para el writer
+  _origen: { hoja, fila }        // ancla para reconstruir la posición al exportar
 }
 ensayoHormigon { id, planta, grado, elemento, trabajo, fechas{d3,d7,d14,d28,d56},
                  resistencias, estado…, _origen }
 ensayoAridos / mortero / informeGeotecnico { …, _origen }
-catalogos { areas[], estadosRevision[], … }        // desde «Listas»
+catalogos { areas[], estadosRevision[], especialidades[] }   // desde «Listas»
+derivados { matrizPorWtg[], kpisTurnaround[], pendientesPorWtg[] }  // calculados en JS
 ```
 
-**Normalización (solo interna):** mapa de estados tolerante a
-mayúsculas/acentos/typos (`Sin Comentarios`/`Sin comentarios` → `aprobado`;
-`Con comentarios` → `conComentarios`; `Nulo`/`NULO` → `nulo`; incluye el typo
-`Revición ITO…` del catálogo). `elemento` «WTG NN» → id de estructura ReWind
-(`Tnn`); áreas → componente del 4D (Fundación→fundación; Vial→cableado;
-Subestación→torres AT). Fechas: serial Excel → ISO; textos `Sin Definir` → null
-(pero `rawValue` conserva el texto).
+**Normalización (solo interna):** estados tolerantes a mayúsculas/acentos/typos;
+`WTG NN` → id de estructura ReWind (`Tnn`); áreas → componente del 4D
+(Fundación→fundación, Vial→cableado, Subestación→torres AT); fechas serial→ISO;
+`Sin Definir`→null (con `rawValue` conservado). Los **días hábiles** de los
+ciclos se recalculan en JS (lun–vie) y se validan contra los del archivo.
 
----
+## 4. UI — pestaña «Calidad» (v1 client-side)
 
-## 3. Los tres pilares del módulo
+- **Importar**: file-picker del xlsx → reader en el navegador → store
+  `rewind.calidad.v1` (JSON canónico, ~2–4 MB; si aprieta, IndexedDB como `R-34`).
+- **Dashboard**: matriz-heatmap protocolos×WTG (la Matriz, interactiva), KPIs de
+  turnaround (días hábiles por ciclo, % con comentarios, pendientes por WTG),
+  drill por estructura → protocolos con sus ciclos; filtros por
+  área/especialidad/hito de pago.
+- **Integración ReWind**: % de protocolos aprobados por WTG/área → **avance real
+  del 4D** (opt-in con toggle); protocolos «Con comentarios» crónicos visibles en
+  el HUD de Obra; **Ensayos Hormigón** en el CMMS (pestaña Ensayos) y la
+  resistencia a 28 días disponible para la narrativa del gemelo de construcción
+  (madurez de fundación, `R-31`).
+- **Edición v1 (acotada)**: registrar ciclo nuevo (envío/retorno/estado/
+  comentarios) y protocolos nuevos → JSON canónico → **Exportar Excel**
+  (v1 en el navegador mismo — el writer es JS puro; v2 server-side).
 
-### 3.1 Reader (`tools/sacyr_reader.mjs`, reutilizado por el backend)
-Node: abre el xlsx (zip), parsea `sharedStrings` + hojas de entrada según el
-mapa del anexo → emite el JSON canónico + un **índice de round-trip**
-(`hoja/fila/col → rawValue`) que el writer usa. Tolerante: filas `Nulo`, celdas
-vacías, cabeceras multilínea. **Test Node** con el archivo real: nº de filas
-por hoja, spot-checks de 10 protocolos conocidos, idempotencia
-(leer→escribir sin cambios→leer = igual).
-
-### 3.2 Writer (`tools/sacyr_writer.mjs`)
-Entrada: plantilla (el xlsx original o la última versión) + el JSON canónico con
-cambios (celdas editadas / filas nuevas). Salida: xlsx nuevo. Aplica las reglas
-de la sección 1. **Criterio de aceptación (el contrato):** un **diff-harness**
-(`tools/sacyr_diff.mjs`) que compara salida vs original:
-1. **Sin cambios aplicados** → los parts NO tocados deben ser **byte-idénticos**
-   (hash por part del zip) y las hojas tocadas, **celda-a-celda idénticas**
-   (valor, tipo, estilo-id).
-2. **Con cambios** → solo difieren exactamente las celdas esperadas.
-3. Abrir la salida en Excel/LibreOffice: cero reparaciones («Excel encontró
-   contenido ilegible» = fallo), gráficos y matrices vivos, CF intacto.
-
-### 3.3 UI — pestaña «Calidad» en ReWind (v1 client-side)
-- **Importar**: file-picker del xlsx → el parse corre en el navegador con el
-  MISMO módulo del reader (es JS puro sobre zip; `fflate` vendorizado en `lib/`
-  como se hizo con numeric/leaflet) → store `rewind.calidad.v1`.
-- **Dashboard**: matriz-heatmap protocolos×WTG (réplica visual de la Matriz,
-  pero interactiva), KPIs de turnaround (días hábiles por ciclo, % con
-  comentarios, pendientes por WTG), drill por estructura → lista de protocolos
-  con sus ciclos; filtros por área/especialidad/hito.
-- **Integración**: el % de protocolos aprobados por WTG/área alimenta (opcional,
-  con toggle) el avance real del 4D; hallazgos «Con comentarios» crónicos →
-  visibles en el HUD de Obra; **Ensayos Hormigón** se muestran en el CMMS
-  (pestaña Ensayos) y la resistencia a 28 días queda disponible para la
-  narrativa del gemelo de construcción (madurez de fundación, `R-31`).
-- **Edición v1 (acotada)**: registrar un ciclo nuevo (envío/retorno/estado/
-  comentarios) y protocolos nuevos → van al JSON canónico → **Exportar Excel**
-  (v1: descarga el JSON de cambios + se ejecuta el writer en Node; v2: el
-  backend lo hace server-side y devuelve el xlsx).
-
----
-
-## 4. Fases
+## 5. Fases
 
 | # | Entregable | Esfuerzo | Criterio de cierre |
 |---|---|---|---|
-| ⬜ 5.1 | **Reader** Node + JSON canónico + tests con el archivo real | 2 días | Los 1.437 + 2.501 + ensayos parseados; spot-checks OK. |
-| ⬜ 5.2 | **Writer** XML quirúrgico + **diff-harness** | 3–4 días | Round-trip sin cambios = byte-idéntico en parts no tocados; Excel abre sin reparar; caso «agregar 1 ciclo + 1 protocolo» pasa el diff y las Matrices/KPIs se actualizan al abrir. |
-| ⬜ 5.3 | **Pestaña «Calidad»** (import navegador + dashboard + drill) | 3 días | El xlsx real se importa y navega; KPIs coinciden con la hoja KPI´s (validación cruzada). |
-| ⬜ 5.4 | **Integración** con Obra/HUD/CMMS (avance real opt-in, ensayos hormigón) | 2 días | El 4D puede mostrar % real de protocolos por torre. |
-| ⬜ 5.5 | **Edición + export** (ciclos/protocolos nuevos → writer) | 2 días | Un ciclo registrado en ReWind aparece en el Excel exportado, idéntico en todo lo demás. |
-| ⬜ 5.6 | **Backend (con Frente 4, fase 3.5b)**: tablas Postgres (`protocolos`, `ciclos`, `ensayos_*`), upload de versiones del xlsx (upsert idempotente por código+correlativo), export server-side, historial de versiones | 3 días | Dos usuarios ven el mismo log; export descargable con datos de BD. |
+| ⬜ 5.1 | **Reader** + JSON canónico + tests Node con el archivo real | 2 días | 1.437 + 2.501 + ensayos parseados; spot-checks; días hábiles recalculados ≈ archivo. |
+| ⬜ 5.2 | **Writer de valores** + **diff de información** | 1–2 días | Round-trip sin cambios → 0 diffs de valor en hojas de datos; abre sin advertencias. |
+| ⬜ 5.3 | **Derivados en JS** (matriz por WTG, KPIs turnaround, pendientes) + validación cruzada contra los valores del archivo | 1–2 días | Nuestros agregados == valores del archivo original. |
+| ⬜ 5.4 | **Pestaña «Calidad»** (import navegador + dashboard + drill) | 3 días | El xlsx real se importa y navega; KPIs coinciden con la hoja KPI´s. |
+| ⬜ 5.5 | **Integración** Obra/HUD/CMMS (avance real opt-in, ensayos hormigón) | 2 días | El 4D puede mostrar % real de protocolos por torre. |
+| ⬜ 5.6 | **Edición + export** (ciclos/protocolos nuevos → writer en navegador) | 1–2 días | Un ciclo registrado en ReWind aparece en el Excel exportado; el resto de la información, idéntica. |
+| ⬜ 5.7 | **Backend (con Frente 4, fase 3.5b)**: Postgres (`protocolos/ciclos/ensayos_*`), upload de versiones (upsert idempotente por código+correlativo), export server-side, historial | 3 días | Dos usuarios ven el mismo log; export desde BD. |
 
-## 5. Riesgos y mitigaciones
-- **Fragilidad del XML quirúrgico** (shared formulas, dimension/autofilter al
-  insertar filas): mitigado por el diff-harness como puerta de cada release y
-  por preferir «editar celdas existentes» sobre «insertar filas» cuando se pueda.
-- **El original evoluciona** (SACYR agrega columnas/hojas): el reader valida las
-  cabeceras contra el anexo y **rechaza con reporte claro** si el layout cambió
-  (mejor fallar ruidoso que corromper); actualizar anexo+mapas es un PR corto.
-- **Confidencialidad**: el xlsx y el anexo con estructura interna NO se
-  versionan en este repo público (gitignore `auditoria/`, plantilla en
-  `data-privada/` o en el backend). La UI no expone nombres de personas.
-- **Tamaño en localStorage** (v1): solo el JSON canónico (~2–4 MB sin estilos)
-  — si aprieta, IndexedDB (mismo patrón que `R-34`).
+*(Total v1 ≈ 1½ semanas — bajó desde ~2 al soltar la fidelidad de archivo.)*
+
+## 6. Riesgos y mitigaciones
+- **El original evoluciona** (columnas/hojas nuevas): el reader valida cabeceras
+  contra el anexo y **falla ruidoso con reporte claro** si el layout cambió;
+  actualizar anexo+mapas es un cambio corto.
+- **Agregados que no cuadran** (nuestras fórmulas vs las del archivo): la
+  validación cruzada de 5.3 es la puerta; ante discrepancia, manda el archivo
+  (se documenta la regla real y se ajusta el cálculo JS).
+- **Confidencialidad**: el xlsx y el anexo NO se versionan en este repo público
+  (`auditoria/` gitignoreada; el archivo vive fuera del repo / en el backend).
+  La UI no expone nombres de personas.
+- **Gráficos (mejora opcional v1.1)**: si se quisieran, la vía es usar el
+  archivo original como plantilla solo para las hojas con gráficos — sin
+  compromiso en v1.
