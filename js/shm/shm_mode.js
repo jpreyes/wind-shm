@@ -8,29 +8,30 @@
 //   inspecciones y señal temporal EN VIVO desde un Web Worker (DataSource).
 // Recortes (modelado) los hace shm.css ocultando, no borrando.
 // ─────────────────────────────────────────────────────────────────────────────
-import { FleetView } from './fleet_view.js?v=293';
-import { DataSource } from './data_source.js?v=293';
-import { computeTwin } from './digital_twin.js?v=293';
-import { ParkManager, loadParksStore } from './parks.js?v=293';
-import { MapView } from './map_view.js?v=293';
-import { defaultStages, builtFromStages } from './parks_data_caman.js?v=293';
-import { compassRoseSVG } from './compass.js?v=293';
-import { buildAvanceHUD } from './avance_hud.js?v=293';
-import { renderAvance } from './avance_dashboard.js?v=293';
-import * as Insp from './inspection.js?v=293';
-import * as Fat from './fatigue.js?v=293';
-import * as Instr from './instrumentation.js?v=293';
-import * as Calidad from './calidad.js?v=293';
-import * as Hist from './history.js?v=293';
-import * as Health from './health.js?v=293';
-import * as Bench from './benchmark.js?v=293';
-import * as Alarms from './alarms.js?v=293';
-import { METEO_CAMAN } from './meteo_caman.js?v=293';
-import { esc, safeUrl } from './util.js?v=293';
-import { t, getLang, setLang } from './i18n.js?v=293';
+import { FleetView } from './fleet_view.js?v=294';
+import { DataSource } from './data_source.js?v=294';
+import { computeTwin } from './digital_twin.js?v=294';
+import { ParkManager, loadParksStore } from './parks.js?v=294';
+import { MapView } from './map_view.js?v=294';
+import { defaultStages, builtFromStages } from './parks_data_caman.js?v=294';
+import { compassRoseSVG } from './compass.js?v=294';
+import { buildAvanceHUD } from './avance_hud.js?v=294';
+import { renderAvance } from './avance_dashboard.js?v=294';
+import * as Insp from './inspection.js?v=294';
+import * as Fat from './fatigue.js?v=294';
+import * as Instr from './instrumentation.js?v=294';
+import * as Calidad from './calidad.js?v=294';
+import * as Hist from './history.js?v=294';
+import * as Health from './health.js?v=294';
+import * as Bench from './benchmark.js?v=294';
+import * as Alarms from './alarms.js?v=294';
+import { METEO_CAMAN } from './meteo_caman.js?v=294';
+import { ReplaySource } from './replay.js?v=294';
+import { esc, safeUrl } from './util.js?v=294';
+import { t, getLang, setLang } from './i18n.js?v=294';
 
 const F1_BASE = { turbine: 0.283, hv: 1.6 };
-const REWIND_VER = 'v293';   // versión visible del build (subir junto al cache-bust)
+const REWIND_VER = 'v294';   // versión visible del build (subir junto al cache-bust)
 const FS = 62.5;   // frecuencia de muestreo de la señal (Hz), igual que shm_worker.js
 // Clasificador ML de daño (0..4)
 const CLS = ['Sin daño', 'Leve', 'Moderado', 'Alto', 'Muy alto'];
@@ -120,7 +121,8 @@ async function boot() {
   const statusBar = buildStatusBar(fleet, { source: liveUrl ? t('src.live') : t('src.sim') });
   const _alarmLevel = {};   // R-23a: último nivel de alarma por umbrales por estructura
   const _alarmTh = { t: 0 };
-  ds.onTick = (msg) => {
+  // R-37: manejador único del tick, reutilizado por el replay (ReplaySource).
+  const handleTick = (msg) => {
     const alarmed = [];
     rawAnom.clear();
     const th = Alarms.getThresholds();
@@ -138,7 +140,7 @@ async function boot() {
         thLevel = Alarms.worstLevel(ta);
         const prev = _alarmLevel[id] || null;
         const rank = { warn: 1, crit: 2 };
-        if (thLevel && (rank[thLevel] || 0) > (rank[prev] || 0)) {   // transición a peor
+        if (thLevel && (rank[thLevel] || 0) > (rank[prev] || 0) && !window.shmReplaying) {   // transición a peor (no en replay)
           const a = ta.find(x => x.level === thLevel);
           Alarms.logEvent({ t: Date.now(), id, label: st?.label || id, metric: a.metric, level: thLevel, value: +a.value.toFixed(1), th: a.th });
           notifyAlarm(st?.label || id, a, thLevel);
@@ -158,6 +160,50 @@ async function boot() {
     dash.onTick(msg);
     statusBar.onTick(msg); statusBar.setAlarms(alarmed.length);
   };
+  ds.onTick = handleTick;
+  window.shmHandleTick = handleTick;   // el replay lo invoca con muestras del histórico
+
+  // R-37: reproducción del histórico (time-scrubber). Reusa handleTick → el
+  // dashboard no distingue vivo de replay. Pausa la fuente viva mientras corre.
+  const replay = new ReplaySource({ onTick: handleTick, sensorsFor: (id) => fleet.getStructure(id)?.sensors || [] });
+  window.shmReplay = replay;
+  window.shmReplayUI = buildReplayControl(replay, ds, handleTick);
+  function buildReplayControl(replay, ds, handleTick) {
+    const wrap = document.getElementById('viewport-wrap') || document.body;
+    const box = document.createElement('div'); box.id = 'shm-replay'; box.style.display = 'none';
+    box.innerHTML = `<button class="rp-play" type="button" title="${t('rp.play')}">▶</button>
+      <input type="range" class="rp-scrub" min="0" max="1000" value="0" aria-label="scrubber">
+      <span class="rp-time">—</span>
+      <select class="rp-speed" aria-label="velocidad"><option value="10">10×</option><option value="60" selected>60×</option><option value="300">300×</option></select>
+      <button class="rp-x" type="button" title="${t('rp.exit')}">${t('rp.live')}</button>`;
+    wrap.appendChild(box);
+    const $q = (s) => box.querySelector(s);
+    const play = $q('.rp-play'), scrub = $q('.rp-scrub'), timeL = $q('.rp-time'), speed = $q('.rp-speed');
+    const lc = getLang() === 'en' ? 'en-GB' : 'es-CL';
+    const fmt = (ms) => new Date(ms).toLocaleString(lc, { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' });
+    const setTime = (ms) => { timeL.textContent = fmt(ms); if (replay.to > replay.from) scrub.value = Math.round((ms - replay.from) / (replay.to - replay.from) * 1000); };
+    const setPlaying = (on) => { play.textContent = on ? '⏸' : '▶'; };
+    replay.onProgress = setTime; replay.onEnd = () => setPlaying(false);
+    play.addEventListener('click', () => { if (replay.playing()) { replay.stop(); setPlaying(false); } else { replay.play(+speed.value); setPlaying(true); } });
+    speed.addEventListener('change', () => { if (replay.playing()) replay.play(+speed.value); });
+    scrub.addEventListener('input', () => { replay.stop(); setPlaying(false); replay.seek(replay.from + (+scrub.value / 1000) * (replay.to - replay.from)); });
+    $q('.rp-x').addEventListener('click', exit);
+    async function enter() {
+      const ids = fleet.structures.map(s => s.id);
+      const to = Date.now(), from = to - 24 * 3600 * 1000;
+      const info = await replay.load(ids, from, to);
+      if (info.samples < 2) { alert(t('rp.noData')); return; }
+      window.shmReplaying = true; document.body.classList.add('replaying');
+      statusBar.setSource?.(t('src.replay'));
+      ds.onTick = () => {};             // pausar la fuente viva
+      box.style.display = 'flex'; setPlaying(false); replay.seek(replay.from);
+    }
+    function exit() {
+      replay.stop(); window.shmReplaying = false; document.body.classList.remove('replaying');
+      ds.onTick = handleTick; box.style.display = 'none'; statusBar.setSource?.(liveUrl ? t('src.live') : t('src.sim'));
+    }
+    return { enter, exit, toggle: () => (box.style.display === 'none' ? enter() : exit()) };
+  }
 
   // ── Carga del parque con barra de progreso en la portada ──────────────────
   const delay = (ms) => new Promise(r => setTimeout(r, ms));
@@ -304,7 +350,7 @@ async function boot() {
   // ── Relieve conceptual del terreno (DEM vendorizado) — encendido por defecto ─
   setLoad(88, 'Cargando relieve…'); await delay(40);
   try {
-    await fleet.loadTerrain('data/caman_dem.json?v=293');
+    await fleet.loadTerrain('data/caman_dem.json?v=294');
     fleet.setTerrainVisible(true);
     document.getElementById('shm-relieve-tool')?.classList.add('active');
   } catch (e) { console.warn('[shm] relieve no disponible', e); }
@@ -532,6 +578,8 @@ function buildMenubar(fleet, getPM = () => null) {
       { sep: 1 },
       { label: t('mi.exportInsp'), fn: exportInsp },
       { label: t('mi.importInsp'), fn: importInsp, mut: 1 },
+      { sep: 1 },
+      { label: t('mi.replay'), fn: () => window.shmReplayUI?.toggle() },
     ] },
     { label: t('menu.quality'), items: [
       { label: t('mi.calPanel'), fn: () => Calidad.showPanel() },
@@ -826,6 +874,7 @@ function buildStatusBar(fleet, o = {}) {
   clock(); setInterval(clock, 1000);
   return {
     setParque(name, count) { $('sb-parque').querySelector('b').textContent = name || '—'; if (count != null) $('sb-struct').textContent = `${t('sb.struct')}: ${count}`; },
+    setSource(src) { const e = $('sb-source'); if (e) e.textContent = `${t('sb.source')}: ${src}`; },   // R-37: vivo ⇄ replay
     setSelected(obj) {
       let txt = obj ? `${t('sb.sel')}: ${obj.label}` : t('sb.nosel');
       if (obj) { const q = Calidad.structureSummary?.(obj.id); if (q) txt += ` · ${t('cal.tc.quality')} ${Math.round(q.pctAprobado * 100)}% (${q.pendientes} ${t('cal.tc.pend')})`; }
@@ -1892,7 +1941,7 @@ function buildDashboard(panel, fleet, actions) {
       lastHistT = now;
       for (const id in msg.summaries) {
         const s = msg.summaries[id];
-        Hist.record(id, { t: now, f1: s.f1, rms: s.rms, wind: s.wind, tilt: s.tilt });   // R-34: persiste 1/min (decima solo)
+        if (!window.shmReplaying) Hist.record(id, { t: now, f1: s.f1, rms: s.rms, wind: s.wind, tilt: s.tilt });   // R-34 (no grabar en replay)
         const cls = msg.summaries[id].cls || 0;
         const h = (clsHist[id] || (clsHist[id] = []));
         const prev = h.length ? h[h.length - 1].cls : null;

@@ -120,6 +120,14 @@ body.role-viewer .cal-edit, body.role-viewer .cal-del, body.role-viewer .cal-for
 .cmp-tbl thead th { text-align: center; }
 .cmp-tbl tbody th { text-align: left; color: var(--text-muted); font-weight: 600; }
 .cmp-tbl select { background: var(--bg1, rgba(255,255,255,.05)); border: 1px solid var(--border2); border-radius: 6px; padding: 4px 6px; color: var(--text); font: inherit; font-size: 12px; max-width: 130px; }
+/* Replay / time-scrubber (R-37) */
+#shm-replay { position: absolute; bottom: 16px; left: 50%; transform: translateX(-50%); z-index: 40; display: flex; align-items: center; gap: 10px; padding: 8px 14px; background: var(--glass, rgba(15,20,28,.86)); border: 1px solid var(--border2); border-radius: 12px; backdrop-filter: blur(8px); box-shadow: 0 10px 30px rgba(0,0,0,.4); }
+#shm-replay button { background: var(--accent); color: #fff; border: 0; border-radius: 7px; cursor: pointer; font-size: 13px; padding: 5px 10px; }
+#shm-replay .rp-x { background: transparent; color: var(--text); border: 1px solid var(--border2); }
+#shm-replay .rp-scrub { width: 220px; max-width: 40vw; accent-color: var(--accent); }
+#shm-replay .rp-time { font-size: 12px; color: var(--text); font-variant-numeric: tabular-nums; min-width: 92px; text-align: center; }
+#shm-replay .rp-speed { background: var(--bg1, rgba(255,255,255,.06)); border: 1px solid var(--border2); border-radius: 6px; color: var(--text); font: inherit; font-size: 12px; padding: 3px 5px; }
+body.replaying #sb-source { color: var(--accent); font-weight: 700; }
 /* Rosa de vientos viva (R-13x) */
 .shm-windrose:empty { display: none; }
 .shm-windrose { margin: 8px 0; padding: 8px; border: 1px solid var(--border2); border-radius: 8px; text-align: center; }
