@@ -9,7 +9,7 @@
 // migraremos a InstancedMesh + atenuación por shader (ver docs/wind-shm-issues.md).
 // ─────────────────────────────────────────────────────────────────────────────
 import * as THREE from 'three';
-import { circularFoundation } from './structures.js?v=294';
+import { circularFoundation } from './structures.js?v=295';
 
 export const TOWER_H = 90;          // altura de buje (m), coherente con el macromodelo
 
