@@ -75,6 +75,11 @@ const DICT = {
     'cal.f.element': 'Elemento (WTG NN)', 'cal.f.spec': 'Especialidad', 'cal.f.milestone': 'Hito de pago',
     'cal.f.state': 'Estado', 'cal.f.desc': 'Descripción',
     'cal.f.create': '＋ Crear', 'cal.f.saveEdit': '✓ Guardar', 'cal.f.cancel': 'Cancelar',
+    // Integración con Obra (4D + ficha)
+    'cal.avanceOn': '▣ Reflejar en 4D', 'cal.avanceOff': '▣ Avance real: ON',
+    'cal.avanceTip': 'Llenar cada torre en el 4D según su % de protocolos aprobados',
+    'cal.avanceNone': 'No hay estructuras con protocolos de calidad para reflejar en el 4D.',
+    'cal.tc.quality': 'Calidad', 'cal.tc.pend': 'pend.',
     'about.desc': 'Monitoreo de salud estructural (SHM) de torres eólicas — gemelo digital físico, fatiga, inspección y avance de obra para el parque Camán I.',
     'about.credit': 'Instituto de Obras Civiles · Universidad Austral de Chile. Motor de elementos finitos heredado, reutilizado como gemelo digital.',
     // Alertas de las acciones del menú
@@ -400,6 +405,11 @@ const DICT = {
     'cal.f.element': 'Element (WTG NN)', 'cal.f.spec': 'Specialty', 'cal.f.milestone': 'Payment milestone',
     'cal.f.state': 'State', 'cal.f.desc': 'Description',
     'cal.f.create': '＋ Create', 'cal.f.saveEdit': '✓ Save', 'cal.f.cancel': 'Cancel',
+    // Works integration (4D + card)
+    'cal.avanceOn': '▣ Reflect in 4D', 'cal.avanceOff': '▣ Real progress: ON',
+    'cal.avanceTip': 'Fill each turbine in the 4D by its % of approved protocols',
+    'cal.avanceNone': 'No structures with quality protocols to reflect in the 4D.',
+    'cal.tc.quality': 'Quality', 'cal.tc.pend': 'pend.',
     'about.desc': 'Structural health monitoring (SHM) of wind turbines — physics-based digital twin, fatigue, inspection and construction progress for the Camán I wind farm.',
     'about.credit': 'Institute of Civil Works · Universidad Austral de Chile. Inherited finite-element engine, reused as the digital twin.',
     'alert.noPark': 'No park to export.',

@@ -8,23 +8,23 @@
 //   inspecciones y señal temporal EN VIVO desde un Web Worker (DataSource).
 // Recortes (modelado) los hace shm.css ocultando, no borrando.
 // ─────────────────────────────────────────────────────────────────────────────
-import { FleetView } from './fleet_view.js?v=279';
-import { DataSource } from './data_source.js?v=279';
-import { computeTwin } from './digital_twin.js?v=279';
-import { ParkManager, loadParksStore } from './parks.js?v=279';
-import { MapView } from './map_view.js?v=279';
-import { defaultStages, builtFromStages } from './parks_data_caman.js?v=279';
-import { compassRoseSVG } from './compass.js?v=279';
-import { buildAvanceHUD } from './avance_hud.js?v=279';
-import { renderAvance } from './avance_dashboard.js?v=279';
-import * as Insp from './inspection.js?v=279';
-import * as Fat from './fatigue.js?v=279';
-import * as Instr from './instrumentation.js?v=279';
-import * as Calidad from './calidad.js?v=279';
-import { t, getLang, setLang } from './i18n.js?v=279';
+import { FleetView } from './fleet_view.js?v=280';
+import { DataSource } from './data_source.js?v=280';
+import { computeTwin } from './digital_twin.js?v=280';
+import { ParkManager, loadParksStore } from './parks.js?v=280';
+import { MapView } from './map_view.js?v=280';
+import { defaultStages, builtFromStages } from './parks_data_caman.js?v=280';
+import { compassRoseSVG } from './compass.js?v=280';
+import { buildAvanceHUD } from './avance_hud.js?v=280';
+import { renderAvance } from './avance_dashboard.js?v=280';
+import * as Insp from './inspection.js?v=280';
+import * as Fat from './fatigue.js?v=280';
+import * as Instr from './instrumentation.js?v=280';
+import * as Calidad from './calidad.js?v=280';
+import { t, getLang, setLang } from './i18n.js?v=280';
 
 const F1_BASE = { turbine: 0.283, hv: 1.6 };
-const REWIND_VER = 'v279';   // versión visible del build (subir junto al cache-bust)
+const REWIND_VER = 'v280';   // versión visible del build (subir junto al cache-bust)
 const FS = 62.5;   // frecuencia de muestreo de la señal (Hz), igual que shm_worker.js
 // Clasificador ML de daño (0..4)
 const CLS = ['Sin daño', 'Leve', 'Moderado', 'Alto', 'Muy alto'];
@@ -270,7 +270,7 @@ async function boot() {
   // ── Relieve conceptual del terreno (DEM vendorizado) — encendido por defecto ─
   setLoad(88, 'Cargando relieve…'); await delay(40);
   try {
-    await fleet.loadTerrain('data/caman_dem.json?v=279');
+    await fleet.loadTerrain('data/caman_dem.json?v=280');
     fleet.setTerrainVisible(true);
     document.getElementById('shm-relieve-tool')?.classList.add('active');
   } catch (e) { console.warn('[shm] relieve no disponible', e); }
@@ -324,6 +324,9 @@ function buildToolbar(toolbar, fleet, getPM = () => null) {
     `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M5 21V11h4v10M10 21V7h4v14M15 21V3h4v18"/></svg>`,
     t('tool.avance'), () => { const on = !fleet.constructionMode; fleet.setConstructionMode(on); avance.classList.toggle('active', on); });
   if (fleet.constructionMode) avance.classList.add('active');
+  // Sincroniza el estado del botón cuando el 4D se activa desde otro lado
+  // (p.ej. «avance real» de Calidad enciende constructionMode).
+  window.shmSyncAvanceBtns = () => avance.classList.toggle('active', fleet.constructionMode);
   // Relieve conceptual del terreno (curvas de nivel + tinte hipsométrico).
   const relieve = mk('shm-relieve-tool', t('tool.relieve.tip'),
     `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M3 20 L9 8 L13 15 L16 10 L21 20 Z"/></svg>`,
@@ -659,7 +662,11 @@ function buildStatusBar(fleet, o = {}) {
   clock(); setInterval(clock, 1000);
   return {
     setParque(name, count) { $('sb-parque').querySelector('b').textContent = name || '—'; if (count != null) $('sb-struct').textContent = `${t('sb.struct')}: ${count}`; },
-    setSelected(obj) { $('sb-selstruct').textContent = obj ? `${t('sb.sel')}: ${obj.label}` : t('sb.nosel'); },
+    setSelected(obj) {
+      let txt = obj ? `${t('sb.sel')}: ${obj.label}` : t('sb.nosel');
+      if (obj) { const q = Calidad.structureSummary?.(obj.id); if (q) txt += ` · ${t('cal.tc.quality')} ${Math.round(q.pctAprobado * 100)}% (${q.pendientes} ${t('cal.tc.pend')})`; }
+      $('sb-selstruct').textContent = txt;
+    },
     setAlarms(n) { const e = $('sb-alarm'); e.textContent = `${t('sb.alarm')}: ${n}`; e.classList.toggle('on', n > 0); },
     onTick(msg) {
       let ok = 0, fault = 0, wsum = 0, wn = 0;

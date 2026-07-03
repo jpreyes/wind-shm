@@ -17,7 +17,7 @@
 import { readSacyr, normEstado, wtgToId, diasHabilesSacyr } from '../../tools/sacyr_reader.mjs';
 import { writeSacyrAuto } from '../../tools/sacyr_writer.mjs';
 import { computeDerived } from '../../tools/sacyr_derived.mjs';
-import { t } from './i18n.js?v=279';
+import { t } from './i18n.js?v=280';
 
 const STORE = 'rewind.calidad.v1';
 const XLSX_MIME = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
@@ -34,7 +34,10 @@ function heat(x) {
 }
 
 // ── Persistencia (best-effort; el modelo completo puede rondar 2–4 MB) ────────
+let derivedCache = null;   // computeDerived memoizado; se invalida en cada persist/import
+
 function persist(data) {
+  derivedCache = null;
   try { localStorage.setItem(STORE, JSON.stringify(data)); }
   catch {
     // Sin cupo para _raw: guardar versión ligera (dashboard sí, export necesita re-importar).
@@ -47,7 +50,41 @@ function load() {
   try { const s = localStorage.getItem(STORE); if (s) current = JSON.parse(s); } catch { }
   return current;
 }
+function getDerived() { const d = load(); if (!d) return null; return (derivedCache ??= computeDerived(d)); }
 export function hasData() { return !!load(); }
+
+// Resumen de calidad de UNA estructura (Tnn) para la ficha de torre / integración
+// con Obra. Devuelve null si no hay datos o la estructura no tiene protocolos.
+export function structureSummary(id) {
+  const d = getDerived(); if (!d) return null;
+  const q = d.porEstructura?.[id]; if (!q) return null;
+  return { total: q.total, aprobado: q.aprobado, pctAprobado: q.pctAprobado, pendientes: q.total - q.aprobado - q.informativo - q.nulo };
+}
+
+// ── Integración con el 4D: «avance real» desde la calidad (opt-in) ────────────
+// on=true  → cada torre se «llena» según su % de protocolos aprobados (col P);
+// on=false → restaura el avance previo (etapas manuales). Guarda un backup por id.
+export function applyToFleet(on, fleet) {
+  fleet = fleet || window.shmFleet; if (!fleet) return false;
+  if (on) {
+    const d = getDerived(); if (!d) return false;
+    fleet._calidadBackup = fleet._calidadBackup || {};
+    let n = 0;
+    for (const st of fleet.structures) {
+      const q = d.porEstructura?.[st.id]; if (!q) continue;
+      if (!(st.id in fleet._calidadBackup)) fleet._calidadBackup[st.id] = st.built ?? null;
+      fleet.setProgress(st.id, q.pctAprobado); n++;
+    }
+    if (n && !fleet.constructionMode) fleet.setConstructionMode(true);
+    window.shmCalidadAvance = n > 0;
+    return n > 0;
+  }
+  const bk = fleet._calidadBackup || {};
+  for (const id in bk) if (bk[id] != null) fleet.setProgress(id, bk[id]);
+  fleet._calidadBackup = null;
+  window.shmCalidadAvance = false;
+  return true;
+}
 
 // ── Importar / exportar ──────────────────────────────────────────────────────
 function pickXlsx(cb) {
@@ -185,6 +222,13 @@ export function showPanel() {
     if (e.target.closest('.cal-import')) { close(); importXlsx(); return; }
     if (e.target.closest('.cal-new')) { crearVacio(); return; }        // recrea overlay
     if (e.target.closest('.cal-export')) return exportXlsx();
+    if (e.target.closest('.cal-avance')) {
+      const ok = applyToFleet(!window.shmCalidadAvance);
+      if (!ok && !window.shmCalidadAvance) { alert(t('cal.avanceNone')); return; }
+      close();   // cerrar el overlay para ver el 4D actualizado
+      window.shmSyncAvanceBtns?.();
+      return;
+    }
     if (e.target.closest('.cal-manage')) { view = 'manage'; editingId = null; paint(); return; }
     if (e.target.closest('.cal-back')) { view = 'dash'; paint(); return; }
     if (e.target.closest('.cal-add')) { editingId = null; view = 'manage'; paint(); focusForm(ov); return; }
@@ -255,9 +299,10 @@ function dashboardHTML(data) {
     <div class="cal-head">
       <h2>${t('cal.title')}</h2>
       <div class="cal-actions">
-        <button class="cal-btn cal-manage" type="button">${t('cal.manage')}</button>
+        <button class="cal-btn cal-avance ${window.shmCalidadAvance ? 'cal-on' : 'cal-import-alt'}" type="button" title="${esc(t('cal.avanceTip'))}">${window.shmCalidadAvance ? t('cal.avanceOff') : t('cal.avanceOn')}</button>
+        <button class="cal-btn cal-import-alt cal-manage" type="button">${t('cal.manage')}</button>
         <button class="cal-btn cal-export" type="button" title="${esc(t('cal.exportTip'))}">${t('cal.export')}</button>
-        <button class="cal-btn cal-import" type="button">${t('cal.reimportFile')}</button>
+        <button class="cal-btn cal-import-alt cal-import" type="button">${t('cal.reimportFile')}</button>
       </div>
     </div>
     <div class="cal-mut">${esc(data.meta?.fuente || 'SACYR')} · ${t('cal.importedAt')} ${esc(imp)}</div>
