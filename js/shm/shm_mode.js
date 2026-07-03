@@ -8,26 +8,27 @@
 //   inspecciones y señal temporal EN VIVO desde un Web Worker (DataSource).
 // Recortes (modelado) los hace shm.css ocultando, no borrando.
 // ─────────────────────────────────────────────────────────────────────────────
-import { FleetView } from './fleet_view.js?v=287';
-import { DataSource } from './data_source.js?v=287';
-import { computeTwin } from './digital_twin.js?v=287';
-import { ParkManager, loadParksStore } from './parks.js?v=287';
-import { MapView } from './map_view.js?v=287';
-import { defaultStages, builtFromStages } from './parks_data_caman.js?v=287';
-import { compassRoseSVG } from './compass.js?v=287';
-import { buildAvanceHUD } from './avance_hud.js?v=287';
-import { renderAvance } from './avance_dashboard.js?v=287';
-import * as Insp from './inspection.js?v=287';
-import * as Fat from './fatigue.js?v=287';
-import * as Instr from './instrumentation.js?v=287';
-import * as Calidad from './calidad.js?v=287';
-import * as Hist from './history.js?v=287';
-import * as Health from './health.js?v=287';
-import { esc, safeUrl } from './util.js?v=287';
-import { t, getLang, setLang } from './i18n.js?v=287';
+import { FleetView } from './fleet_view.js?v=288';
+import { DataSource } from './data_source.js?v=288';
+import { computeTwin } from './digital_twin.js?v=288';
+import { ParkManager, loadParksStore } from './parks.js?v=288';
+import { MapView } from './map_view.js?v=288';
+import { defaultStages, builtFromStages } from './parks_data_caman.js?v=288';
+import { compassRoseSVG } from './compass.js?v=288';
+import { buildAvanceHUD } from './avance_hud.js?v=288';
+import { renderAvance } from './avance_dashboard.js?v=288';
+import * as Insp from './inspection.js?v=288';
+import * as Fat from './fatigue.js?v=288';
+import * as Instr from './instrumentation.js?v=288';
+import * as Calidad from './calidad.js?v=288';
+import * as Hist from './history.js?v=288';
+import * as Health from './health.js?v=288';
+import * as Bench from './benchmark.js?v=288';
+import { esc, safeUrl } from './util.js?v=288';
+import { t, getLang, setLang } from './i18n.js?v=288';
 
 const F1_BASE = { turbine: 0.283, hv: 1.6 };
-const REWIND_VER = 'v287';   // versión visible del build (subir junto al cache-bust)
+const REWIND_VER = 'v288';   // versión visible del build (subir junto al cache-bust)
 const FS = 62.5;   // frecuencia de muestreo de la señal (Hz), igual que shm_worker.js
 // Clasificador ML de daño (0..4)
 const CLS = ['Sin daño', 'Leve', 'Moderado', 'Alto', 'Muy alto'];
@@ -276,7 +277,7 @@ async function boot() {
   // ── Relieve conceptual del terreno (DEM vendorizado) — encendido por defecto ─
   setLoad(88, 'Cargando relieve…'); await delay(40);
   try {
-    await fleet.loadTerrain('data/caman_dem.json?v=287');
+    await fleet.loadTerrain('data/caman_dem.json?v=288');
     fleet.setTerrainVisible(true);
     document.getElementById('shm-relieve-tool')?.classList.add('active');
   } catch (e) { console.warn('[shm] relieve no disponible', e); }
@@ -921,6 +922,7 @@ function buildDashboard(panel, fleet, actions) {
         <div class="shm-stat"><div class="k">${t('sb.alarm')}</div><div class="v" style="color:var(--danger)" id="shm-alarm-count">0</div></div>
       </div>
       <div class="shm-parkprog" id="shm-parkprog"></div>
+      <div class="shm-anom" id="shm-anom"></div>
       <div class="shm-venc" id="shm-venc"></div>
       <div class="shm-listwrap">
         <div class="shm-list-h">${t('pq.listH')}</div>
@@ -1050,6 +1052,7 @@ function buildDashboard(panel, fleet, actions) {
   let inspSel = null;   // id de la inspección abierta en la pestaña Inspección
   let specOff = null, specLast = 0;                 // espectrograma (offscreen + scroll)
   const clsHist = {}, clsEvents = {}; let lastHistT = 0;   // histórico de clasificación ML
+  let lastAnomT = 0;   // R-26: throttle del benchmarking de flota
   const SPEC_W = 170, SPEC_BINS = 48, SPEC_FMAX = 6;
   const heat = (t) => {
     t = Math.max(0, Math.min(1, t));
@@ -1817,6 +1820,31 @@ function buildDashboard(panel, fleet, actions) {
     }
 
     if (current) { updateDynamic(msg.summaries[current.id]); updateAlarmBar(); }
+
+    // R-26: benchmarking de flota cada ~5 s (solo torres operativas).
+    if (now - lastAnomT > 5000 && el.querySelector('#shm-anom')) { lastAnomT = now; updateAnomalies(msg); }
+  }
+
+  // R-26: card «Anomalías de flota» (z-score robusto de f₁ y RMS).
+  function updateAnomalies(msg) {
+    const box = $('#shm-anom'); if (!box) return;
+    const rows = [];
+    for (const id in msg.summaries) {
+      const s = msg.summaries[id]; if (s.standby) continue;   // torres en montaje fuera
+      rows.push({ id, f1: s.f1, rms: s.rms });
+    }
+    const an = Bench.fleetAnomalies(rows, 2.5);
+    if (!an.length) { box.innerHTML = `<div class="anom-h">${t('anom.h')}</div><div class="anom-ok">${t('anom.none')}</div>`; return; }
+    const items = an.slice(0, 5).map(a => {
+      const lbl = fleet.getStructure(a.id)?.label || a.id;
+      const dir = a.z > 0 ? '▲' : '▼';
+      const mlab = a.metric === 'f1' ? 'f₁' : 'RMS';
+      const val = a.metric === 'f1' ? a.value.toFixed(3) + ' Hz' : (a.value * 1000).toFixed(1) + ' mg';
+      return `<button class="anom-row" data-anom="${esc(a.id)}"><span class="anom-dot ${Math.abs(a.z) > 4 ? 'bad' : 'warn'}"></span>
+        <span class="anom-nm">${esc(lbl)}</span><span class="anom-metric">${mlab} ${dir} <b>z=${Math.abs(a.z).toFixed(1)}</b></span><span class="anom-val">${val}</span></button>`;
+    }).join('');
+    box.innerHTML = `<div class="anom-h">${t('anom.h')} <span class="anom-sum">${t('anom.count', an.length)}</span></div>${items}`;
+    box.querySelectorAll('[data-anom]').forEach(b => b.addEventListener('click', () => fleet.selectById(b.dataset.anom)));
   }
 
   // Dibujo de la señal en vivo desde los buffers.

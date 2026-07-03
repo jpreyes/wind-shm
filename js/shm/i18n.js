@@ -170,6 +170,8 @@ const DICT = {
     'banner.anom': 'ANOMALÍA DETECTADA', 'banner.more': (n) => ` y ${n} más`,
     // Pestaña Parque
     'pq.faults': 'Fallas', 'pq.listH': 'Estructuras del parque',
+    'anom.h': '⚠ Anomalías de flota', 'anom.none': 'Sin anomalías (flota homogénea).',
+    'anom.count': (n) => `${n} torre${n === 1 ? '' : 's'} · |z|>2,5`,
     'pq.progress': 'Avance de obra del parque', 'pq.noStruct': 'Sin estructuras.',
     'pp.parkProg': 'Avance del parque',
     'pp.sub': (done, mont, found) => `${done} completas · ${mont} en montaje · ${found} solo fundación`,
@@ -508,6 +510,8 @@ const DICT = {
     'np.anom': '⚠ Anomaly detected',
     'banner.anom': 'ANOMALY DETECTED', 'banner.more': (n) => ` and ${n} more`,
     'pq.faults': 'Faults', 'pq.listH': 'Park structures',
+    'anom.h': '⚠ Fleet anomalies', 'anom.none': 'No anomalies (homogeneous fleet).',
+    'anom.count': (n) => `${n} tower${n === 1 ? '' : 's'} · |z|>2.5`,
     'pq.progress': 'Park construction progress', 'pq.noStruct': 'No structures.',
     'pp.parkProg': 'Park progress',
     'pp.sub': (done, mont, found) => `${done} complete · ${mont} erecting · ${found} foundation only`,

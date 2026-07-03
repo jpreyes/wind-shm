@@ -105,6 +105,19 @@ body.shm #menubar { min-width: 0; overflow-x: auto; }
 .shm-sensor.editing { outline: 1px solid var(--accent); border-radius: 6px; }
 .cs-edit { color: var(--text-muted); }
 .cs-edit:hover { color: var(--accent); }
+/* Anomalías de flota (R-26) */
+.shm-anom:empty { display: none; }
+.shm-anom { margin: 8px 0; }
+.anom-h { font-size: 11.5px; font-weight: 700; color: var(--text); margin-bottom: 5px; }
+.anom-sum { font-weight: 400; color: var(--text-muted); font-size: 10.5px; }
+.anom-ok { font-size: 11.5px; color: var(--text-muted); }
+.anom-row { display: flex; align-items: center; gap: 7px; width: 100%; text-align: left; background: var(--bg1, rgba(255,255,255,.03)); border: 1px solid var(--border2); border-radius: 7px; padding: 5px 8px; margin-bottom: 4px; cursor: pointer; font: inherit; }
+.anom-row:hover { border-color: var(--accent); }
+.anom-dot { width: 8px; height: 8px; border-radius: 50%; flex: 0 0 auto; }
+.anom-dot.bad { background: #ef4444; box-shadow: 0 0 6px #ef4444; } .anom-dot.warn { background: #f59e0b; }
+.anom-nm { flex: 1; font-size: 12px; color: var(--text); }
+.anom-metric { font-size: 11px; color: var(--text-muted); } .anom-metric b { color: var(--text); }
+.anom-val { font-size: 11px; color: var(--text-muted); margin-left: 6px; }
 /* Índice de Salud unificado (R-35) */
 .hi-gauge { display: flex; align-items: center; gap: 12px; padding: 6px 2px 12px; margin-bottom: 6px; border-bottom: 1px solid var(--border2); }
 .hi-gauge svg { flex: 0 0 auto; }
