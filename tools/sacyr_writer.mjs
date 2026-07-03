@@ -38,7 +38,7 @@ export function writeSacyrXlsx(data) {
 }
 
 // ── CLI ───────────────────────────────────────────────────────────────────────
-const isMain = process.argv[1] && import.meta.url.endsWith(process.argv[1].replace(/\\/g, '/'));
+const isMain = typeof process !== 'undefined' && process.argv?.[1] && import.meta.url.endsWith(process.argv[1].replace(/\\/g, '/'));
 if (isMain) {
   const fs = await import('node:fs');
   const { readSacyr } = await import('./sacyr_reader.mjs');

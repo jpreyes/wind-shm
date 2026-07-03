@@ -43,6 +43,38 @@ body.shm #menubar { min-width: 0; overflow-x: auto; }
 .mb-about-card .mb-about-mut { color: var(--text-muted); font-size: 11.5px; }
 .mb-about-x { position: absolute; top: 12px; right: 14px; background: none; border: 0; color: var(--text-muted); cursor: pointer; font-size: 16px; }
 .mb-about-x:hover { color: var(--text); }
+
+/* ── Panel «Calidad de obra» (Frente 5) ─────────────────────────────────────── */
+.cal-card { max-width: 780px; width: calc(100% - 40px); max-height: 88vh; overflow-y: auto; padding: 20px 24px; }
+.cal-card h3 { margin: 18px 0 8px; font-size: 13px; color: var(--text); text-transform: uppercase; letter-spacing: .04em; border-bottom: 1px solid var(--border2); padding-bottom: 5px; }
+.cal-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+.cal-actions { display: flex; gap: 8px; }
+.cal-btn { background: var(--accent); color: #fff; border: 0; border-radius: 8px; padding: 7px 12px; font-size: 12px; font-weight: 600; cursor: pointer; }
+.cal-btn:hover { filter: brightness(1.08); }
+.cal-btn.cal-import { background: var(--bg3, #2a3340); color: var(--text); border: 1px solid var(--border2); }
+.cal-mut { color: var(--text-muted); font-size: 11.5px; margin: 4px 0; }
+.cal-warn { background: rgba(230,160,30,.12); border: 1px solid rgba(230,160,30,.4); color: var(--text); border-radius: 8px; padding: 7px 10px; font-size: 12px; margin: 8px 0; }
+.cal-link { background: none; border: 0; color: var(--accent); cursor: pointer; font-size: 12px; text-decoration: underline; padding: 0; }
+.cal-empty { text-align: center; max-width: 440px; }
+.cal-empty .cal-btn { margin-top: 12px; }
+.cal-kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(96px, 1fr)); gap: 10px; margin: 14px 0 4px; }
+.cal-kpi { background: var(--bg1, rgba(255,255,255,.03)); border: 1px solid var(--border2); border-radius: 10px; padding: 10px 8px; text-align: center; }
+.cal-kpi-v { font-size: 20px; font-weight: 700; color: var(--text); }
+.cal-kpi-l { font-size: 10.5px; color: var(--text-muted); margin-top: 2px; }
+.cal-tbl { width: 100%; border-collapse: collapse; font-size: 12px; }
+.cal-tbl th { text-align: left; color: var(--text-muted); font-weight: 600; padding: 4px 8px; border-bottom: 1px solid var(--border2); }
+.cal-tbl td { padding: 4px 8px; border-bottom: 1px solid rgba(255,255,255,.05); color: var(--text); vertical-align: middle; }
+.cal-bar { display: inline-block; width: 70px; height: 7px; background: rgba(255,255,255,.09); border-radius: 4px; overflow: hidden; vertical-align: middle; margin-right: 6px; }
+.cal-bar span { display: block; height: 100%; }
+.cal-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.cal-chip { display: flex; align-items: center; gap: 5px; border: 1px solid var(--border2); border-left-width: 3px; border-radius: 7px; padding: 4px 8px; font-size: 11.5px; background: var(--bg1, rgba(255,255,255,.03)); }
+.cal-chip b { color: var(--text); }
+.cal-tag { display: inline-block; padding: 1px 7px; border-radius: 10px; font-size: 10.5px; font-weight: 600; }
+.cal-tag-warn { background: rgba(230,160,30,.16); color: #e6a41e; }
+.cal-eg { display: flex; align-items: center; gap: 8px; margin: 3px 0; font-size: 12px; }
+.cal-eg-l { width: 52px; color: var(--text); }
+.cal-eg .cal-bar { width: 220px; max-width: 46vw; }
+.cal-eg-n { color: var(--text-muted); }
 @media (min-width: 821px) and (max-width: 1024px) { body.shm #main { grid-template-columns: var(--tree-w) var(--toolbar-w) 1fr 5px min(var(--panel-w), 46vw); } }
 
 #drawer-backdrop { display: none; }                     /* oculto en escritorio */

@@ -270,8 +270,8 @@ export async function readSacyr(bytes) {
 }
 
 // ── CLI ───────────────────────────────────────────────────────────────────────
-const isMain = import.meta.url === `file://${process.argv[1]}` ||
-  (process.argv[1] && import.meta.url.endsWith(process.argv[1].replace(/\\/g, '/')));
+const isMain = typeof process !== 'undefined' && process.argv?.[1] &&
+  (import.meta.url === `file://${process.argv[1]}` || import.meta.url.endsWith(process.argv[1].replace(/\\/g, '/')));
 if (isMain) {
   const fs = await import('node:fs');
   const path = process.argv[2] || 'C:/Users/jprey/Downloads/Log protocolos SACYR.xlsx';
