@@ -107,6 +107,9 @@ body.shm #menubar { min-width: 0; overflow-x: auto; }
 .wbs-chip { display: inline-block; background: rgba(90,140,200,.18); border: 1px solid var(--border2); border-radius: 10px; padding: 1px 8px; margin: 1px 2px; font-size: 11px; }
 tr.wbs-unmapped td { background: rgba(230,150,40,.10); }
 tr.wbs-unmapped td:first-child::before { content: '⚠ '; color: #e69628; }
+.wbs-protos { white-space: nowrap; }
+.wbs-n { display: inline-block; min-width: 18px; text-align: center; font-weight: 600; }
+.wbs-addproto { font-size: 14px; }
 .cal-tag-ok { background: rgba(40,180,110,.16); color: #28b46e; }
 .cal-form { margin: 6px 0 4px; }
 .cal-form-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 10px 14px; }

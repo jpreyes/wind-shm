@@ -20,7 +20,7 @@ import { writeSacyrAuto } from '../../tools/sacyr_writer.mjs';
 import { readQuality, writeTemplate, blankTemplate } from '../../tools/rewind_template.mjs';
 import { computeDerived } from '../../tools/sacyr_derived.mjs';
 import { defaultWbs, wbsProgress, partidaForProtocol } from '../../tools/wbs.js';
-import { t } from './i18n.js?v=300';
+import { t } from './i18n.js?v=301';
 
 const STORE = 'rewind.calidad.v1';
 const XLSX_MIME = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
@@ -257,19 +257,22 @@ export function saveProtocolo(fields, id) {
       documento: fields.documento || null, especialidad: fields.especialidad || null,
       hitoPago: fields.hitoPago || null, estadoActualRaw, estadoActual: normEstado(estadoActualRaw),
     });
-  } else {
-    data.protocolos.push({
-      id: uid(), item: nextItem(data),
-      codigoDocumento: fields.codigoDocumento || null, codigoSharepoint: null, hyperlink: null,
-      area: fields.area || null, elemento: fields.elemento || null, estructuraId,
-      descripcion: fields.descripcion || null, documento: fields.documento || null,
-      especialidad: fields.especialidad || null, hitoPago: fields.hitoPago || null,
-      fechaDocumento: fields.fechaDocumento || null, correlativo: null, cicloDocumento: null,
-      estadoActual: normEstado(estadoActualRaw), estadoActualRaw,
-      ciclos: [], _origen: { hoja: 'ReWind', fila: null },
-    });
+    markDirty(data);
+    return id;
   }
+  const newId = uid();
+  data.protocolos.push({
+    id: newId, item: nextItem(data),
+    codigoDocumento: fields.codigoDocumento || null, codigoSharepoint: null, hyperlink: null,
+    area: fields.area || null, elemento: fields.elemento || null, estructuraId,
+    descripcion: fields.descripcion || null, documento: fields.documento || null,
+    especialidad: fields.especialidad || null, hitoPago: fields.hitoPago || null,
+    fechaDocumento: fields.fechaDocumento || null, correlativo: null, cicloDocumento: null,
+    estadoActual: normEstado(estadoActualRaw), estadoActualRaw,
+    ciclos: [], _origen: { hoja: 'ReWind', fila: null },
+  });
   markDirty(data);
+  return newId;
 }
 
 export function deleteProtocolo(id) {
@@ -299,6 +302,7 @@ let view = 'dash';        // 'dash' | 'manage' | 'wbs'
 let editingId = null;     // id del protocolo en edición (o null = nuevo)
 let wbsType = 'turbine';  // tipo de estructura en edición en el HUD de partidas
 let wbsDraft = null;      // copia de trabajo del WBS ({turbine:[], hv:[]}) mientras se edita
+let presetPartida = null; // partida preseleccionada al crear un protocolo desde el HUD
 
 const normLit = (s) => String(s ?? '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^a-z0-9]+/g, ' ').trim();
 
@@ -364,6 +368,12 @@ export function showPanel() {
       if (confirm(t('cal.wbs.confirmReset'))) { wbsDraft[wbsType] = defaultWbs(wbsType); paint(); }
       return;
     }
+    const addProto = e.target.closest('.wbs-addproto');
+    if (addProto) {   // crear un protocolo YA asignado a esta partida (sin Excel)
+      saveWbs('turbine', wbsDraft.turbine); saveWbs('hv', wbsDraft.hv);   // persistir el WBS antes de saltar
+      presetPartida = addProto.dataset.pid; editingId = null; view = 'manage'; paint(); focusForm(ov);
+      return;
+    }
     if (e.target.closest('.cal-add')) { editingId = null; view = 'manage'; paint(); focusForm(ov); return; }
     const editBtn = e.target.closest('.cal-edit');
     if (editBtn) { editingId = editBtn.dataset.id; view = 'manage'; paint(); focusForm(ov); return; }
@@ -376,10 +386,9 @@ export function showPanel() {
     const form = e.target.closest('.cal-form'); if (!form) return;
     e.preventDefault();
     const f = Object.fromEntries(new FormData(form).entries());
-    const wasEditing = editingId;
-    saveProtocolo(f, editingId || null);
-    if (wasEditing && 'partidaOverride' in f) setOverride(wasEditing, f.partidaOverride || null);   // override manual protocolo→partida
-    editingId = null; paint();
+    const savedId = saveProtocolo(f, editingId || null);
+    if (savedId && 'partidaOverride' in f) setOverride(savedId, f.partidaOverride || null);   // asignar a partida (crear o editar)
+    editingId = null; presetPartida = null; paint();
   });
 
   // Edición en vivo del HUD de partidas (inputs/selects) sin re-pintar en cada tecla.
@@ -502,14 +511,20 @@ function wbsHTML(data) {
   const geomOpts = (sel) => GEOMS[wbsType].map(([v, l]) => `<option value="${v}"${v === sel ? ' selected' : ''}>${esc(l)}</option>`).join('') + `<option value=""${!sel ? ' selected' : ''}>—</option>`;
   const partOpts = (sel) => `<option value=""${!sel ? ' selected' : ''}>— sin asignar —</option>` + wbs.map((p) => `<option value="${p.id}"${p.id === sel ? ' selected' : ''}>${esc(p.nombre)}</option>`).join('');
 
+  // Conteo de protocolos que hoy caen en cada partida (regla + override).
+  const countByPid = {};
+  for (const p of (data.protocolos || [])) { const pid = partidaForProtocol(p, wbs, getOverrides()); if (pid) countByPid[pid] = (countByPid[pid] || 0) + 1; }
+
   const rows = wbs.map((p, i) => {
     const chips = (p.match || []).map((m) => `<span class="wbs-chip">${esc(m)}</span>`).join('') || '<span class="cal-mut">—</span>';
+    const n = countByPid[p.id] || 0;
     return `<tr data-pid="${p.id}">
       <td class="wbs-ord"><button class="wbs-up" data-pid="${p.id}" title="Subir"${i === 0 ? ' disabled' : ''}>▲</button><button class="wbs-down" data-pid="${p.id}" title="Bajar"${i === wbs.length - 1 ? ' disabled' : ''}>▼</button></td>
       <td><input class="wbs-in" data-wbs="nombre" data-pid="${p.id}" value="${esc(p.nombre)}"></td>
       <td><input class="wbs-in wbs-peso" data-wbs="peso" data-pid="${p.id}" type="number" min="0" step="0.5" value="${p.peso ?? 1}"></td>
       <td><select class="wbs-in" data-wbs="geom" data-pid="${p.id}">${geomOpts(p.geom)}</select></td>
       <td class="wbs-match">${chips}</td>
+      <td class="wbs-protos"><span class="wbs-n" title="${esc(t('cal.wbs.protos', n))}">${n}</span><button class="wbs-addproto cal-icon-btn" data-pid="${p.id}" title="${esc(t('cal.wbs.addProto'))}">＋</button></td>
       <td><button class="wbs-del cal-icon-btn" data-pid="${p.id}" title="${esc(t('cal.del'))}">🗑</button></td>
     </tr>`;
   }).join('');
@@ -543,7 +558,7 @@ function wbsHTML(data) {
 
     <h3>${t('cal.wbs.partidas')} <span class="cal-mut">(${wbs.length})</span></h3>
     <table class="cal-tbl wbs-tbl"><thead><tr>
-      <th></th><th>${t('cal.wbs.partida')}</th><th>${t('cal.wbs.weight')}</th><th>${t('cal.wbs.geom')}</th><th>${t('cal.wbs.areas')}</th><th></th>
+      <th></th><th>${t('cal.wbs.partida')}</th><th>${t('cal.wbs.weight')}</th><th>${t('cal.wbs.geom')}</th><th>${t('cal.wbs.areas')}</th><th>${t('cal.wbs.protosCol')}</th><th></th>
     </tr></thead><tbody>${rows}</tbody></table>
     <button class="cal-btn cal-import-alt wbs-add" type="button">${t('cal.wbs.add')}</button>
 
@@ -573,7 +588,7 @@ function manageHTML(data) {
       ${field('hitoPago', t('cal.f.milestone'), editing?.hitoPago, 'placeholder="1er"')}
       <label class="cal-fl"><span>${t('cal.f.state')}</span><select name="estadoActualRaw"><option value=""></option>${opts(estados, editing?.estadoActualRaw)}</select></label>
       ${field('descripcion', t('cal.f.desc'), editing?.descripcion)}
-      ${editing ? `<label class="cal-fl"><span>${t('cal.wbs.override')}</span><select name="partidaOverride"><option value="">— auto —</option>${getWbs('turbine').map((wp) => `<option value="${esc(wp.id)}"${getOverrides()[editing.id] === wp.id ? ' selected' : ''}>${esc(wp.nombre)}</option>`).join('')}</select></label>` : ''}
+      <label class="cal-fl"><span>${t('cal.wbs.assign')}</span><select name="partidaOverride"><option value="">${editing ? '— auto —' : t('cal.wbs.assignAuto')}</option>${getWbs('turbine').map((wp) => { const sel = editing ? getOverrides()[editing.id] === wp.id : presetPartida === wp.id; return `<option value="${esc(wp.id)}"${sel ? ' selected' : ''}>${esc(wp.nombre)}</option>`; }).join('')}</select></label>
     </div>
     <div class="cal-form-actions">
       <button class="cal-btn" type="submit">${editing ? t('cal.f.saveEdit') : t('cal.f.create')}</button>
