@@ -9,12 +9,12 @@
 // más un botón «Abrir partida» (vista completa). Sólo DOM/overlay; el 3D lo provee
 // fleet_view (anchorScreenAt / focusComponent).
 // ─────────────────────────────────────────────────────────────────────────────
-import { TURBINE_COMPONENTS, HV_COMPONENTS, enrichStages } from './parks_data_caman.js?v=291';
-import * as CTwin from './construction_twin.js?v=291';
-import * as Insp from './inspection.js?v=291';
-import { t, getLang } from './i18n.js?v=291';
-import * as Instr from './instrumentation.js?v=291';
-import { esc } from './util.js?v=291';
+import { TURBINE_COMPONENTS, HV_COMPONENTS, enrichStages } from './parks_data_caman.js?v=292';
+import * as CTwin from './construction_twin.js?v=292';
+import * as Insp from './inspection.js?v=292';
+import { t, getLang } from './i18n.js?v=292';
+import * as Instr from './instrumentation.js?v=292';
+import { esc } from './util.js?v=292';
 
 const fmt = (iso) => { if (!iso) return '—'; const [y, m, d] = iso.split('-'); return `${d}/${m}/${y.slice(2)}`; };
 

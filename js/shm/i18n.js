@@ -178,6 +178,7 @@ const DICT = {
     'banner.anom': 'ANOMALÍA DETECTADA', 'banner.more': (n) => ` y ${n} más`,
     // Pestaña Parque
     'pq.faults': 'Fallas', 'pq.listH': 'Estructuras del parque',
+    'wr.title': '🧭 Rosa de vientos', 'wr.now': 'Viento actual',
     'anom.h': '⚠ Anomalías de flota', 'anom.none': 'Sin anomalías (flota homogénea).',
     'anom.count': (n) => `${n} torre${n === 1 ? '' : 's'} · |z|>2,5`,
     'pq.progress': 'Avance de obra del parque', 'pq.noStruct': 'Sin estructuras.',
@@ -526,6 +527,7 @@ const DICT = {
     'np.anom': '⚠ Anomaly detected',
     'banner.anom': 'ANOMALY DETECTED', 'banner.more': (n) => ` and ${n} more`,
     'pq.faults': 'Faults', 'pq.listH': 'Park structures',
+    'wr.title': '🧭 Wind rose', 'wr.now': 'Current wind',
     'anom.h': '⚠ Fleet anomalies', 'anom.none': 'No anomalies (homogeneous fleet).',
     'anom.count': (n) => `${n} tower${n === 1 ? '' : 's'} · |z|>2.5`,
     'pq.progress': 'Park construction progress', 'pq.noStruct': 'No structures.',

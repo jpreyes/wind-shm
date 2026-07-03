@@ -8,28 +8,29 @@
 //   inspecciones y señal temporal EN VIVO desde un Web Worker (DataSource).
 // Recortes (modelado) los hace shm.css ocultando, no borrando.
 // ─────────────────────────────────────────────────────────────────────────────
-import { FleetView } from './fleet_view.js?v=291';
-import { DataSource } from './data_source.js?v=291';
-import { computeTwin } from './digital_twin.js?v=291';
-import { ParkManager, loadParksStore } from './parks.js?v=291';
-import { MapView } from './map_view.js?v=291';
-import { defaultStages, builtFromStages } from './parks_data_caman.js?v=291';
-import { compassRoseSVG } from './compass.js?v=291';
-import { buildAvanceHUD } from './avance_hud.js?v=291';
-import { renderAvance } from './avance_dashboard.js?v=291';
-import * as Insp from './inspection.js?v=291';
-import * as Fat from './fatigue.js?v=291';
-import * as Instr from './instrumentation.js?v=291';
-import * as Calidad from './calidad.js?v=291';
-import * as Hist from './history.js?v=291';
-import * as Health from './health.js?v=291';
-import * as Bench from './benchmark.js?v=291';
-import * as Alarms from './alarms.js?v=291';
-import { esc, safeUrl } from './util.js?v=291';
-import { t, getLang, setLang } from './i18n.js?v=291';
+import { FleetView } from './fleet_view.js?v=292';
+import { DataSource } from './data_source.js?v=292';
+import { computeTwin } from './digital_twin.js?v=292';
+import { ParkManager, loadParksStore } from './parks.js?v=292';
+import { MapView } from './map_view.js?v=292';
+import { defaultStages, builtFromStages } from './parks_data_caman.js?v=292';
+import { compassRoseSVG } from './compass.js?v=292';
+import { buildAvanceHUD } from './avance_hud.js?v=292';
+import { renderAvance } from './avance_dashboard.js?v=292';
+import * as Insp from './inspection.js?v=292';
+import * as Fat from './fatigue.js?v=292';
+import * as Instr from './instrumentation.js?v=292';
+import * as Calidad from './calidad.js?v=292';
+import * as Hist from './history.js?v=292';
+import * as Health from './health.js?v=292';
+import * as Bench from './benchmark.js?v=292';
+import * as Alarms from './alarms.js?v=292';
+import { METEO_CAMAN } from './meteo_caman.js?v=292';
+import { esc, safeUrl } from './util.js?v=292';
+import { t, getLang, setLang } from './i18n.js?v=292';
 
 const F1_BASE = { turbine: 0.283, hv: 1.6 };
-const REWIND_VER = 'v291';   // versión visible del build (subir junto al cache-bust)
+const REWIND_VER = 'v292';   // versión visible del build (subir junto al cache-bust)
 const FS = 62.5;   // frecuencia de muestreo de la señal (Hz), igual que shm_worker.js
 // Clasificador ML de daño (0..4)
 const CLS = ['Sin daño', 'Leve', 'Moderado', 'Alto', 'Muy alto'];
@@ -303,7 +304,7 @@ async function boot() {
   // ── Relieve conceptual del terreno (DEM vendorizado) — encendido por defecto ─
   setLoad(88, 'Cargando relieve…'); await delay(40);
   try {
-    await fleet.loadTerrain('data/caman_dem.json?v=291');
+    await fleet.loadTerrain('data/caman_dem.json?v=292');
     fleet.setTerrainVisible(true);
     document.getElementById('shm-relieve-tool')?.classList.add('active');
   } catch (e) { console.warn('[shm] relieve no disponible', e); }
@@ -966,6 +967,7 @@ function buildDashboard(panel, fleet, actions) {
         <div class="shm-stat"><div class="k">${t('sb.alarm')}</div><div class="v" style="color:var(--danger)" id="shm-alarm-count">0</div></div>
       </div>
       <div class="shm-parkprog" id="shm-parkprog"></div>
+      <div class="shm-windrose" id="shm-windrose"></div>
       <div class="shm-anom" id="shm-anom"></div>
       <div class="shm-venc" id="shm-venc"></div>
       <div class="shm-listwrap">
@@ -1902,7 +1904,34 @@ function buildDashboard(panel, fleet, actions) {
     if (current) { updateDynamic(msg.summaries[current.id]); updateAlarmBar(); }
 
     // R-26: benchmarking de flota cada ~5 s (solo torres operativas).
-    if (now - lastAnomT > 5000 && el.querySelector('#shm-anom')) { lastAnomT = now; updateAnomalies(msg); }
+    if (now - lastAnomT > 5000 && el.querySelector('#shm-anom')) { lastAnomT = now; updateAnomalies(msg); updateWindRose(msg); }
+  }
+
+  // R-13x: rosa de vientos viva — climatología del sitio + sector actual resaltado.
+  function windRoseSVG(cur, meanWind) {
+    const rose = METEO_CAMAN.windRose, n = rose.length;
+    const cx = 68, cy = 66, R = 50, r0 = 8, maxF = Math.max(...rose);
+    let wedges = '';
+    for (let s = 0; s < n; s++) {
+      const a0 = (s - 0.5) / n * 2 * Math.PI - Math.PI / 2, a1 = (s + 0.5) / n * 2 * Math.PI - Math.PI / 2;
+      const r = r0 + (rose[s] / maxF) * (R - r0);
+      const P = (ang, rad) => `${(cx + Math.cos(ang) * rad).toFixed(1)} ${(cy + Math.sin(ang) * rad).toFixed(1)}`;
+      const hl = s === cur;
+      wedges += `<path d="M${P(a0, r0)} L${P(a0, r)} A${r} ${r} 0 0 1 ${P(a1, r)} L${P(a1, r0)} A${r0} ${r0} 0 0 0 ${P(a0, r0)} Z" fill="var(--accent)" opacity="${hl ? 0.92 : 0.30}"/>`;
+    }
+    const na = cur / n * 2 * Math.PI - Math.PI / 2;
+    const needle = `<line x1="${cx}" y1="${cy}" x2="${(cx + Math.cos(na) * (R + 4)).toFixed(1)}" y2="${(cy + Math.sin(na) * (R + 4)).toFixed(1)}" stroke="var(--danger)" stroke-width="2"/><circle cx="${cx}" cy="${cy}" r="3" fill="var(--danger)"/>`;
+    const dl = ['N', 'E', 'S', 'O'].map((L, i) => { const a = i * Math.PI / 2 - Math.PI / 2; return `<text x="${(cx + Math.cos(a) * (R + 9)).toFixed(1)}" y="${(cy + Math.sin(a) * (R + 9) + 3).toFixed(1)}" text-anchor="middle" font-size="9" fill="var(--text-muted)">${L}</text>`; }).join('');
+    return `<div class="wr-h">${t('wr.title')}</div><svg viewBox="0 0 136 132" style="width:136px;height:132px;display:block;margin:0 auto">${wedges}${needle}${dl}</svg><div class="wr-cur">${t('wr.now')}: <b>${meanWind} m/s</b> · ${['N', 'NNE', 'NE', 'ENE', 'E', 'ESE', 'SE', 'SSE', 'S', 'SSO', 'SO', 'OSO', 'O', 'ONO', 'NO', 'NNO'][cur]}</div>`;
+  }
+  function updateWindRose(msg) {
+    const box = $('#shm-windrose'); if (!box) return;
+    let wsum = 0, wn = 0;
+    for (const id in msg.summaries) { const w = msg.summaries[id].wind; if (w != null) { wsum += w; wn++; } }
+    const mean = wn ? wsum / wn : 0;
+    // Dirección «actual» sintética (deriva lenta, ~12 min por vuelta) hasta tener veleta real.
+    const cur = Math.floor(((Date.now() / 1000 / 45) % 16 + 16) % 16);
+    box.innerHTML = windRoseSVG(cur, mean.toFixed(1));
   }
 
   // R-26: card «Anomalías de flota» (z-score robusto de f₁ y RMS).
