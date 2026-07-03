@@ -18,7 +18,7 @@ import { normEstado, wtgToId, diasHabilesSacyr } from '../../tools/sacyr_reader.
 import { writeSacyrAuto } from '../../tools/sacyr_writer.mjs';
 import { readQuality, writeTemplate, blankTemplate } from '../../tools/rewind_template.mjs';
 import { computeDerived } from '../../tools/sacyr_derived.mjs';
-import { t } from './i18n.js?v=295';
+import { t } from './i18n.js?v=296';
 
 const STORE = 'rewind.calidad.v1';
 const XLSX_MIME = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
@@ -45,6 +45,8 @@ function persist(data) {
     try { const { _raw, ...lite } = data; localStorage.setItem(STORE, JSON.stringify({ ...lite, _rawOmitido: true })); }
     catch { console.warn('[calidad] no se pudo persistir en localStorage'); }
   }
+  // Avisa a la UI (lista/árbol) que cambió qué estructuras tienen datos de calidad.
+  try { window.dispatchEvent(new CustomEvent('calidad-changed')); } catch { /* */ }
 }
 function load() {
   if (current) return current;

@@ -160,6 +160,8 @@ body.replaying #sb-source { color: var(--accent); font-weight: 700; }
 .alm-dot { width: 7px; height: 7px; border-radius: 50%; flex: 0 0 auto; }
 .alm-dot.bad { background: #ef4444; } .alm-dot.warn { background: #f59e0b; }
 .alm-ev-nm { flex: 1; color: var(--text); } .alm-ev-m { color: var(--text-muted); } .alm-ev-t { color: var(--text-muted); font-variant-numeric: tabular-nums; }
+/* Ícono de «tiene datos de calidad» (Excel) junto al nombre */
+.nm-cal, .pt-cal { font-size: 10px; opacity: 0.85; vertical-align: baseline; }
 /* Índice de Salud unificado (R-35) */
 .hi-gauge { display: flex; align-items: center; gap: 12px; padding: 6px 2px 12px; margin-bottom: 6px; border-bottom: 1px solid var(--border2); }
 .hi-gauge svg { flex: 0 0 auto; }

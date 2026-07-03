@@ -8,30 +8,30 @@
 //   inspecciones y señal temporal EN VIVO desde un Web Worker (DataSource).
 // Recortes (modelado) los hace shm.css ocultando, no borrando.
 // ─────────────────────────────────────────────────────────────────────────────
-import { FleetView } from './fleet_view.js?v=295';
-import { DataSource } from './data_source.js?v=295';
-import { computeTwin } from './digital_twin.js?v=295';
-import { ParkManager, loadParksStore } from './parks.js?v=295';
-import { MapView } from './map_view.js?v=295';
-import { defaultStages, builtFromStages } from './parks_data_caman.js?v=295';
-import { compassRoseSVG } from './compass.js?v=295';
-import { buildAvanceHUD } from './avance_hud.js?v=295';
-import { renderAvance } from './avance_dashboard.js?v=295';
-import * as Insp from './inspection.js?v=295';
-import * as Fat from './fatigue.js?v=295';
-import * as Instr from './instrumentation.js?v=295';
-import * as Calidad from './calidad.js?v=295';
-import * as Hist from './history.js?v=295';
-import * as Health from './health.js?v=295';
-import * as Bench from './benchmark.js?v=295';
-import * as Alarms from './alarms.js?v=295';
-import { METEO_CAMAN } from './meteo_caman.js?v=295';
-import { ReplaySource } from './replay.js?v=295';
-import { esc, safeUrl } from './util.js?v=295';
-import { t, getLang, setLang } from './i18n.js?v=295';
+import { FleetView } from './fleet_view.js?v=296';
+import { DataSource } from './data_source.js?v=296';
+import { computeTwin } from './digital_twin.js?v=296';
+import { ParkManager, loadParksStore } from './parks.js?v=296';
+import { MapView } from './map_view.js?v=296';
+import { defaultStages, builtFromStages } from './parks_data_caman.js?v=296';
+import { compassRoseSVG } from './compass.js?v=296';
+import { buildAvanceHUD } from './avance_hud.js?v=296';
+import { renderAvance } from './avance_dashboard.js?v=296';
+import * as Insp from './inspection.js?v=296';
+import * as Fat from './fatigue.js?v=296';
+import * as Instr from './instrumentation.js?v=296';
+import * as Calidad from './calidad.js?v=296';
+import * as Hist from './history.js?v=296';
+import * as Health from './health.js?v=296';
+import * as Bench from './benchmark.js?v=296';
+import * as Alarms from './alarms.js?v=296';
+import { METEO_CAMAN } from './meteo_caman.js?v=296';
+import { ReplaySource } from './replay.js?v=296';
+import { esc, safeUrl } from './util.js?v=296';
+import { t, getLang, setLang } from './i18n.js?v=296';
 
 const F1_BASE = { turbine: 0.283, hv: 1.6 };
-const REWIND_VER = 'v295';   // versión visible del build (subir junto al cache-bust)
+const REWIND_VER = 'v296';   // versión visible del build (subir junto al cache-bust)
 const FS = 62.5;   // frecuencia de muestreo de la señal (Hz), igual que shm_worker.js
 // Clasificador ML de daño (0..4)
 const CLS = ['Sin daño', 'Leve', 'Moderado', 'Alto', 'Muy alto'];
@@ -83,6 +83,7 @@ async function boot() {
   fleet.renderer.domElement.classList.add('shm-canvas');
   window.shmFleet = fleet;
   window.shmHist = Hist;
+  window.shmCalidad = Calidad;   // el árbol (parks.js) marca las torres con datos de calidad
   // R-38: rol solo-lectura vía ?role=viewer → oculta crear/editar/borrar (CSS) y
   // desactiva los atajos de teclado destructivos. La auth real llega con R-10.
   window.shmViewer = new URLSearchParams(location.search).get('role') === 'viewer';
@@ -350,7 +351,7 @@ async function boot() {
   // ── Relieve conceptual del terreno (DEM vendorizado) — encendido por defecto ─
   setLoad(88, 'Cargando relieve…'); await delay(40);
   try {
-    await fleet.loadTerrain('data/caman_dem.json?v=295');
+    await fleet.loadTerrain('data/caman_dem.json?v=296');
     fleet.setTerrainVisible(true);
     document.getElementById('shm-relieve-tool')?.classList.add('active');
   } catch (e) { console.warn('[shm] relieve no disponible', e); }
@@ -377,6 +378,9 @@ async function boot() {
   // R-33b: marcadores 3D de instrumentación — pintar los existentes + sincronizar.
   for (const st of fleet.structures) { const ss = Instr.getSensors(st.id); if (ss.length) fleet.setInstrMarkers(st.id, ss); }
   addEventListener('instr-changed', (e) => fleet.setInstrMarkers?.(e.detail.structId, Instr.getSensors(e.detail.structId)));
+
+  // Al importar/editar calidad → refrescar la lista de estructuras y el árbol (ícono 📋).
+  addEventListener('calidad-changed', () => { dash.setStructures?.(fleet.getStructures()); pm?.render?.(); });
 
   setLoad(100, 'Listo'); await delay(280);
   window.__rewindCloseLanding?.();
@@ -1177,7 +1181,9 @@ function buildDashboard(panel, fleet, actions) {
       const row = document.createElement('button');
       row.className = 'shm-row'; row.dataset.id = s.id;
       const c = progColor(fleet.getStructure(s.id));
-      row.innerHTML = `<span class="dot" style="background:${c};box-shadow:0 0 6px ${c}"></span><span class="nm">${esc(s.label)}</span><span class="ty">${s.type === 'hv' ? 'AT' : 'T'}</span>`;
+      const q = Calidad.structureSummary?.(s.id);   // ícono si la torre tiene datos de calidad (Excel)
+      const calIco = q ? ` <span class="nm-cal" title="${esc(t('cal.hasData', q.total))}">📋</span>` : '';
+      row.innerHTML = `<span class="dot" style="background:${c};box-shadow:0 0 6px ${c}"></span><span class="nm">${esc(s.label)}${calIco}</span><span class="ty">${s.type === 'hv' ? 'AT' : 'T'}</span>`;
       row.addEventListener('click', () => fleet.selectById(s.id));
       lc.appendChild(row);
     }

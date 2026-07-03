@@ -8,7 +8,7 @@
 // El ParkManager mantiene el store, sincroniza con el FleetView y pinta el árbol.
 // ─────────────────────────────────────────────────────────────────────────────
 
-import { buildCamanPark } from './parks_data_caman.js?v=295';
+import { buildCamanPark } from './parks_data_caman.js?v=296';
 
 const KEY = 'rewind-parks';
 const SEED = 'caman-i-v6';      // sello de siembra; al cambiarlo se re-siembra el store (v6: etapas con % de avance)
@@ -214,9 +214,10 @@ export class ParkManager {
           ${z ? `<span class="pt-acts"><button class="pt-icon" data-act="rename-zone" data-id="${z.id}" title="Renombrar">✎</button><button class="pt-icon" data-act="del-zone" data-id="${z.id}" title="Eliminar">🗑</button></span>` : ''}
         </div>`;
         for (const st of structs) {
+          const cal = window.shmCalidad?.structureSummary?.(st.id);   // 📋 si tiene datos de calidad (Excel)
           h += `<div class="pt-tower" data-id="${st.id}">
             <span class="pt-dot ${st.type}"></span>
-            <span class="pt-name" data-act="select" data-id="${st.id}" title="Seleccionar">${esc(st.label)}</span>
+            <span class="pt-name" data-act="select" data-id="${st.id}" title="Seleccionar">${esc(st.label)}${cal ? ' <span class="pt-cal" title="Con datos de calidad">📋</span>' : ''}</span>
             <span class="pt-acts"><button class="pt-icon" data-act="rename-tower" data-id="${st.id}" title="Renombrar">✎</button><button class="pt-icon" data-act="del-tower" data-id="${st.id}" title="Eliminar">🗑</button></span>
             <select class="pt-zsel" data-id="${st.id}" title="Mover a zona">${zoneOpts(st.zone || '')}</select>
           </div>`;
