@@ -20,7 +20,7 @@ import { writeSacyrAuto } from '../../tools/sacyr_writer.mjs';
 import { readQuality, writeTemplate, blankTemplate } from '../../tools/rewind_template.mjs';
 import { computeDerived } from '../../tools/sacyr_derived.mjs';
 import { defaultWbs, wbsProgress, partidaForProtocol } from '../../tools/wbs.js';
-import { t } from './i18n.js?v=301';
+import { t } from './i18n.js?v=302';
 
 const STORE = 'rewind.calidad.v1';
 const XLSX_MIME = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';

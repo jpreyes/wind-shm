@@ -398,6 +398,22 @@ body.shm.view-2d .vp-pip-resize {
 #shm-towercard .tc-btn:hover { filter: brightness(1.08); }
 #shm-towercard .tc-r b.ok { color: #34d399; }
 #shm-towercard .tc-r b.bad { color: #f87171; }
+#shm-towercard .tc-sec { font-size: 9.5px; text-transform: uppercase; letter-spacing: .05em; color: #7d8ea0; margin: 7px 0 3px; border-top: 1px solid rgba(255,255,255,.1); padding-top: 6px; }
+#shm-towercard .tc-hr { display: flex; align-items: center; gap: 6px; line-height: 1.5; font-size: 11px; }
+#shm-towercard .tc-hr span { flex: 0 0 62px; color: #9fb0c0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+#shm-towercard .tc-hr .tc-bar-sm { flex: 1; margin: 0; height: 5px; }
+#shm-towercard .tc-hr b { flex: 0 0 auto; font-variant-numeric: tabular-nums; }
+#shm-towercard .tc-hn { color: #7d8ea0; font-weight: 400; font-size: 10px; }
+/* Calidad por hito en la ficha de Selección */
+.shm-hito-sec { margin: 4px 12px 8px; padding-top: 8px; border-top: 1px solid var(--border2); }
+.shm-hito-h { font-size: 10px; text-transform: uppercase; letter-spacing: .05em; color: var(--muted, #8b97a3); margin-bottom: 5px; }
+.shm-hito-r { display: flex; align-items: center; gap: 8px; line-height: 1.7; font-size: 12px; }
+.shm-hito-r span { flex: 0 0 82px; color: var(--muted, #9fb0c0); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.shm-hito-bar { flex: 1; height: 6px; background: rgba(128,128,128,.2); border-radius: 4px; overflow: hidden; }
+.shm-hito-bar i { display: block; height: 100%; border-radius: 4px; }
+.shm-hito-r b { flex: 0 0 auto; font-variant-numeric: tabular-nums; }
+.shm-hito-r small { color: var(--muted, #7d8ea0); font-weight: 400; }
+.shm-hito-na { font-size: 10.5px; color: var(--muted, #8b97a3); margin-top: 5px; }
 
 /* ── HUD de avance «tipo Stark» (Frente 1) ─────────────────────────────────── */
 #avance-hud { position: absolute; inset: 0; z-index: 8; pointer-events: none; font-family: inherit; }

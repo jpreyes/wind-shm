@@ -8,30 +8,30 @@
 //   inspecciones y señal temporal EN VIVO desde un Web Worker (DataSource).
 // Recortes (modelado) los hace shm.css ocultando, no borrando.
 // ─────────────────────────────────────────────────────────────────────────────
-import { FleetView } from './fleet_view.js?v=301';
-import { DataSource } from './data_source.js?v=301';
-import { computeTwin } from './digital_twin.js?v=301';
-import { ParkManager, loadParksStore } from './parks.js?v=301';
-import { MapView } from './map_view.js?v=301';
-import { defaultStages, builtFromStages } from './parks_data_caman.js?v=301';
-import { compassRoseSVG } from './compass.js?v=301';
-import { buildAvanceHUD } from './avance_hud.js?v=301';
-import { renderAvance } from './avance_dashboard.js?v=301';
-import * as Insp from './inspection.js?v=301';
-import * as Fat from './fatigue.js?v=301';
-import * as Instr from './instrumentation.js?v=301';
-import * as Calidad from './calidad.js?v=301';
-import * as Hist from './history.js?v=301';
-import * as Health from './health.js?v=301';
-import * as Bench from './benchmark.js?v=301';
-import * as Alarms from './alarms.js?v=301';
-import { METEO_CAMAN } from './meteo_caman.js?v=301';
-import { ReplaySource } from './replay.js?v=301';
-import { esc, safeUrl } from './util.js?v=301';
-import { t, getLang, setLang } from './i18n.js?v=301';
+import { FleetView } from './fleet_view.js?v=302';
+import { DataSource } from './data_source.js?v=302';
+import { computeTwin } from './digital_twin.js?v=302';
+import { ParkManager, loadParksStore } from './parks.js?v=302';
+import { MapView } from './map_view.js?v=302';
+import { defaultStages, builtFromStages } from './parks_data_caman.js?v=302';
+import { compassRoseSVG } from './compass.js?v=302';
+import { buildAvanceHUD } from './avance_hud.js?v=302';
+import { renderAvance } from './avance_dashboard.js?v=302';
+import * as Insp from './inspection.js?v=302';
+import * as Fat from './fatigue.js?v=302';
+import * as Instr from './instrumentation.js?v=302';
+import * as Calidad from './calidad.js?v=302';
+import * as Hist from './history.js?v=302';
+import * as Health from './health.js?v=302';
+import * as Bench from './benchmark.js?v=302';
+import * as Alarms from './alarms.js?v=302';
+import { METEO_CAMAN } from './meteo_caman.js?v=302';
+import { ReplaySource } from './replay.js?v=302';
+import { esc, safeUrl } from './util.js?v=302';
+import { t, getLang, setLang } from './i18n.js?v=302';
 
 const F1_BASE = { turbine: 0.283, hv: 1.6 };
-const REWIND_VER = 'v301';   // versión visible del build (subir junto al cache-bust)
+const REWIND_VER = 'v302';   // versión visible del build (subir junto al cache-bust)
 const FS = 62.5;   // frecuencia de muestreo de la señal (Hz), igual que shm_worker.js
 // Clasificador ML de daño (0..4)
 const CLS = ['Sin daño', 'Leve', 'Moderado', 'Alto', 'Muy alto'];
@@ -351,7 +351,7 @@ async function boot() {
   // ── Relieve conceptual del terreno (DEM vendorizado) — encendido por defecto ─
   setLoad(88, 'Cargando relieve…'); await delay(40);
   try {
-    await fleet.loadTerrain('data/caman_dem.json?v=301');
+    await fleet.loadTerrain('data/caman_dem.json?v=302');
     fleet.setTerrainVisible(true);
     document.getElementById('shm-relieve-tool')?.classList.add('active');
   } catch (e) { console.warn('[shm] relieve no disponible', e); }
@@ -379,8 +379,9 @@ async function boot() {
   for (const st of fleet.structures) { const ss = Instr.getSensors(st.id); if (ss.length) fleet.setInstrMarkers(st.id, ss); }
   addEventListener('instr-changed', (e) => fleet.setInstrMarkers?.(e.detail.structId, Instr.getSensors(e.detail.structId)));
 
-  // Al importar/editar calidad → refrescar la lista de estructuras y el árbol (ícono 📋).
-  addEventListener('calidad-changed', () => { dash.setStructures?.(fleet.getStructures()); pm?.render?.(); });
+  // Al importar/editar calidad → refrescar la lista, el árbol (ícono 📋) y la ficha
+  // de la torre seleccionada (calidad por hito).
+  addEventListener('calidad-changed', () => { dash.setStructures?.(fleet.getStructures()); pm?.render?.(); dash.refresh?.(); });
 
   setLoad(100, 'Listo'); await delay(280);
   window.__rewindCloseLanding?.();
@@ -931,6 +932,13 @@ function buildTowerCard(vpwrap, fleet, o = {}) {
     const sp = (s) => s.pct != null ? s.pct : (s.done ? 100 : 0);
     const doneN = cur.stages ? cur.stages.filter(s => sp(s) >= 100).length : 0;
     const etapa = cur.stages ? (pct >= 100 ? 'Obra completa' : `${doneN}/${cur.stages.length} etapas`) : '';
+    // Calidad por hito (partida): sólo las partidas que tienen protocolos.
+    const wq = Calidad.wbsSummary?.(cur.id, cur.type);
+    const hitos = wq ? Object.values(wq.porPartida).filter(b => b.total > 0) : [];
+    const hitoHTML = hitos.length ? `<div class="tc-sec">${t('cal.tc.byHito')}</div>` + hitos.map(b => {
+      const hp = Math.round(b.pct * 100);
+      return `<div class="tc-hr"><span title="${esc(b.nombre)}">${esc(b.nombre)}</span><div class="tc-bar tc-bar-sm"><i style="width:${hp}%;background:${hp >= 100 ? '#28b46e' : 'var(--accent)'}"></i></div><b>${hp}% <span class="tc-hn">${b.aprobado}/${b.total}</span></b></div>`;
+    }).join('') : '';
     el.innerHTML = `
       <div class="tc-h">${esc(cur.label)}<button class="tc-x" type="button" title="Cerrar">✕</button></div>
       <div class="tc-r"><span>${cur.type === 'hv' ? 'Torre AT' : 'Aerogenerador'}</span><b>${cur.height} m</b></div>
@@ -940,6 +948,7 @@ function buildTowerCard(vpwrap, fleet, o = {}) {
       <div class="tc-r"><span>Avance</span><b>${pct}%</b></div>
       <div class="tc-bar"><i style="width:${pct}%"></i></div>
       <div class="tc-stage">${etapa}</div>
+      ${hitoHTML}
       <button class="tc-btn" type="button">Ver avance ›</button>`;
   };
   const tick = () => {                    // llamado por fleet.onFrame (bucle de render)
@@ -1295,6 +1304,20 @@ function buildDashboard(panel, fleet, actions) {
     setTopView('seleccion');     // por defecto; fleet.onSelect lo redirige a Obra/Shadow según el modo
   }
 
+  // Calidad de obra por hito (partida) para la ficha de Selección — sólo si la
+  // torre tiene protocolos. Cada partida con su % (protocolos aprobados/total).
+  function calidadHitosBlock(o) {
+    const wq = Calidad.wbsSummary?.(o.id, o.type);
+    const hitos = wq ? Object.values(wq.porPartida).filter(b => b.total > 0) : [];
+    if (!hitos.length) return '';
+    const rows = hitos.map(b => {
+      const p = Math.round(b.pct * 100);
+      return `<div class="shm-hito-r"><span title="${esc(b.nombre)}">${esc(b.nombre)}</span><div class="shm-hito-bar"><i style="width:${p}%;background:${p >= 100 ? '#28b46e' : 'var(--accent)'}"></i></div><b>${p}% <small>${b.aprobado}/${b.total}</small></b></div>`;
+    }).join('');
+    const na = wq.sinAsignar.length ? `<div class="shm-hito-na">${t('cal.wbs.unassigned', wq.sinAsignar.length)}</div>` : '';
+    return `<div class="shm-hito-sec"><div class="shm-hito-h">${t('cal.tc.byHito')}</div>${rows}${na}</div>`;
+  }
+
   // Selección: IDENTIDAD de la estructura + condiciones actuales + orientación.
   // (Estado por sensores → SHM · evaluación/inspección → Inspección · avance → Obra.)
   function renderDetail() {
@@ -1319,6 +1342,7 @@ function buildDashboard(panel, fleet, actions) {
         </div>
         <div class="note" style="font-size:10px">${t('det.note')}</div>
       </div>
+      ${calidadHitosBlock(o)}
       <div class="shm-detail-foot"><button id="shm-tower-report">${t('det.report')}</button></div>`;
     _abKey = ''; updateAlarmBar();
     const sl = $('#yaw-slider'), vv = $('#yaw-val');
@@ -2400,6 +2424,16 @@ function buildDashboard(panel, fleet, actions) {
           </div>
           <div class="note">${t('brep.defNote')}</div>`;
       }
+      // Calidad de obra por hito (partida) — sólo si la torre tiene protocolos.
+      const wq2 = Calidad.wbsSummary?.(o.id, o.type);
+      let calidadBlock = '';
+      if (wq2) {
+        const parts = Object.values(wq2.porPartida);
+        const rowsC = parts.map(b => `<tr><td>${esc(b.nombre)}</td><td>${b.aprobado}/${b.total}</td><td>${Math.round(b.pct * 100)} %</td></tr>`).join('');
+        const na = wq2.sinAsignar.length ? `<div class="note">${t('cal.wbs.unassigned', wq2.sinAsignar.length)}</div>` : '';
+        calidadBlock = `<h3>${t('brep.hQuality')}</h3>
+          <table><thead><tr><th>${t('cal.wbs.partida')}</th><th>${t('brep.thProtocols')}</th><th>${t('cal.col.progress')}</th></tr></thead><tbody>${rowsC}</tbody></table>${na}`;
+      }
       detalle = `
         <h2>2 · ${t('brep.struct')} ${esc(o.label)}</h2>
         <div style="text-align:center;margin:6px 0 14px">${imgGauge(cls, d.dmg)}</div>
@@ -2417,6 +2451,7 @@ function buildDashboard(panel, fleet, actions) {
           </table>
         </div>
         ${estado}
+        ${calidadBlock}
         <h3>${t('brep.hSensors')}</h3>
         <table><thead><tr><th>${t('brep.thID')}</th><th>${t('brep.thType')}</th><th>${t('brep.thLoc')}</th><th>${t('brep.thStatus')}</th><th>${t('brep.thRMS')}</th></tr></thead><tbody>${sensRows}</tbody></table>
         <h3>${t('brep.hAnom')}</h3>
