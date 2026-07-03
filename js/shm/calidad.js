@@ -1,14 +1,15 @@
 // ─────────────────────────────────────────────────────────────────────────────
 // calidad.js — Frente 5 · pestaña «Calidad» (client-side, fases 5.4 + 5.6).
 //
-// Puente de UI entre el motor de datos SACYR (lib + tools, Node+navegador) y
-// ReWind:
-//  · IMPORTA el «Log protocolos SACYR.xlsx» en el navegador y lo guarda.
+// Puente de UI entre el motor de datos de calidad (lib + tools, Node+navegador)
+// y ReWind:
+//  · IMPORTA un Excel de protocolos (plantilla ReWind o formato de contratista,
+//    autodetectado) en el navegador y lo guarda.
 //  · CREA de cero sin Excel (dataset vacío) y EDITA/BORRA/RENOMBRA protocolos.
 //  · Muestra un dashboard de calidad (KPIs · por área · por estructura ·
 //    pendientes · ensayos) y una vista de gestión (formulario + tabla).
-//  · EXPORTA a Excel — vía `writeSacyrAuto`: si el `_raw` sigue intacto usa la
-//    ruta lossless (F5.2); si los datos se crearon/editaron, serializa el modelo.
+//  · EXPORTA a Excel — si el `_raw` original sigue intacto usa la ruta lossless
+//    (round-trip F5.2); si los datos se crearon/editaron, serializa el modelo.
 //
 // El núcleo (reader/writer/derived) se trata como librería compartida (imports
 // planos, sin ?v=, igual que numeric.js) para poder testearlo en Node; este
@@ -18,7 +19,7 @@ import { normEstado, wtgToId, diasHabilesSacyr } from '../../tools/sacyr_reader.
 import { writeSacyrAuto } from '../../tools/sacyr_writer.mjs';
 import { readQuality, writeTemplate, blankTemplate } from '../../tools/rewind_template.mjs';
 import { computeDerived } from '../../tools/sacyr_derived.mjs';
-import { t } from './i18n.js?v=296';
+import { t } from './i18n.js?v=297';
 
 const STORE = 'rewind.calidad.v1';
 const XLSX_MIME = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
@@ -65,18 +66,23 @@ export function structureSummary(id) {
 }
 
 // ── Integración con el 4D: «avance real» desde la calidad (opt-in) ────────────
-// on=true  → cada torre se «llena» según su % de protocolos aprobados (col P);
+// Cada torre se «llena» según su % de protocolos aprobados. Dos modos:
+//   · mode='update' (actualizar) → SÓLO toca las torres que tienen protocolos;
+//     las que no aparecen conservan su avance actual (no se ponen en 0).
+//   · mode='load'  (cargar parque completo) → refleja TODAS las estructuras:
+//     las que no tienen protocolos se ponen en 0 (el Excel es la foto completa).
 // on=false → restaura el avance previo (etapas manuales). Guarda un backup por id.
-export function applyToFleet(on, fleet) {
+export function applyToFleet(on, fleet, mode = 'update') {
   fleet = fleet || window.shmFleet; if (!fleet) return false;
   if (on) {
     const d = getDerived(); if (!d) return false;
     fleet._calidadBackup = fleet._calidadBackup || {};
+    const backup = (st) => { if (!(st.id in fleet._calidadBackup)) fleet._calidadBackup[st.id] = st.built ?? null; };
     let n = 0;
     for (const st of fleet.structures) {
-      const q = d.porEstructura?.[st.id]; if (!q) continue;
-      if (!(st.id in fleet._calidadBackup)) fleet._calidadBackup[st.id] = st.built ?? null;
-      fleet.setProgress(st.id, q.pctAprobado); n++;
+      const q = d.porEstructura?.[st.id];
+      if (q) { backup(st); fleet.setProgress(st.id, q.pctAprobado); n++; }
+      else if (mode === 'load') { backup(st); fleet.setProgress(st.id, 0); }
     }
     if (n && !fleet.constructionMode) fleet.setConstructionMode(true);
     window.shmCalidadAvance = n > 0;
@@ -123,11 +129,12 @@ export function downloadTemplate() {
 export function exportXlsx() {
   const data = load();
   if (!data) { alert(t('cal.noData')); return; }
-  // SACYR prístino (sin editar) → se devuelve en SU formato, sin pérdida (round-trip F5.2).
-  // Todo lo demás (editado / creado / plantilla) → se exporta en el formato estándar ReWind.
-  const pristineSacyr = data.meta?.formato === 'sacyr' && data._raw && !data._dirty && !data._rawOmitido;
-  const bytes = pristineSacyr ? writeSacyrAuto(data) : writeTemplate(data);
-  const name = pristineSacyr ? `Log-protocolos-SACYR-${stamp()}.xlsx` : `Calidad-ReWind-${stamp()}.xlsx`;
+  // Archivo importado en su formato original (sin editar) → se devuelve tal cual,
+  // sin pérdida (round-trip F5.2). Todo lo demás (editado / creado / plantilla) →
+  // se exporta en el formato estándar ReWind.
+  const pristineOriginal = data.meta?.formato === 'sacyr' && data._raw && !data._dirty && !data._rawOmitido;
+  const bytes = pristineOriginal ? writeSacyrAuto(data) : writeTemplate(data);
+  const name = pristineOriginal ? `Log-protocolos-original-${stamp()}.xlsx` : `Calidad-ReWind-${stamp()}.xlsx`;
   const url = URL.createObjectURL(new Blob([bytes], { type: XLSX_MIME }));
   const a = document.createElement('a'); a.href = url; a.download = name; a.click();
   setTimeout(() => URL.revokeObjectURL(url), 3000);
@@ -238,9 +245,16 @@ export function showPanel() {
     if (e.target.closest('.cal-import')) { close(); importXlsx(); return; }
     if (e.target.closest('.cal-new')) { crearVacio(); return; }        // recrea overlay
     if (e.target.closest('.cal-export')) return exportXlsx();
-    if (e.target.closest('.cal-avance')) {
-      const ok = applyToFleet(!window.shmCalidadAvance);
-      if (!ok && !window.shmCalidadAvance) { alert(t('cal.avanceNone')); return; }
+    if (e.target.closest('.cal-avance-off')) {
+      applyToFleet(false);
+      close(); window.shmSyncAvanceBtns?.();
+      return;
+    }
+    const avBtn = e.target.closest('.cal-avance-load, .cal-avance-update');
+    if (avBtn) {
+      const mode = avBtn.classList.contains('cal-avance-load') ? 'load' : 'update';
+      const ok = applyToFleet(true, null, mode);
+      if (!ok) { alert(t('cal.avanceNone')); return; }
       close();   // cerrar el overlay para ver el 4D actualizado
       window.shmSyncAvanceBtns?.();
       return;
@@ -315,14 +329,17 @@ function dashboardHTML(data) {
     <div class="cal-head">
       <h2>${t('cal.title')}</h2>
       <div class="cal-actions">
-        <button class="cal-btn cal-avance ${window.shmCalidadAvance ? 'cal-on' : 'cal-import-alt'}" type="button" title="${esc(t('cal.avanceTip'))}">${window.shmCalidadAvance ? t('cal.avanceOff') : t('cal.avanceOn')}</button>
+        ${window.shmCalidadAvance
+          ? `<button class="cal-btn cal-avance-off cal-on" type="button" title="${esc(t('cal.avanceOffTip'))}">${t('cal.avanceOff')}</button>`
+          : `<button class="cal-btn cal-import-alt cal-avance-load" type="button" title="${esc(t('cal.avanceLoadTip'))}">${t('cal.avanceLoad')}</button>
+             <button class="cal-btn cal-import-alt cal-avance-update" type="button" title="${esc(t('cal.avanceUpdateTip'))}">${t('cal.avanceUpdate')}</button>`}
         <button class="cal-btn cal-import-alt cal-manage" type="button">${t('cal.manage')}</button>
         <button class="cal-btn cal-export" type="button" title="${esc(t('cal.exportTip'))}">${t('cal.export')}</button>
         <button class="cal-btn cal-import-alt cal-template" type="button" title="${esc(t('cal.templateHint'))}">${t('cal.template')}</button>
         <button class="cal-btn cal-import-alt cal-import" type="button">${t('cal.reimportFile')}</button>
       </div>
     </div>
-    <div class="cal-mut">${esc(data.meta?.fuente || 'SACYR')} · ${t('cal.importedAt')} ${esc(imp)}</div>
+    <div class="cal-mut">${esc(data.meta?.fuente || 'ReWind')} · ${t('cal.importedAt')} ${esc(imp)}</div>
     ${reimport}
     <div class="cal-kpis">${kpis}</div>
 
