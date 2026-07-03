@@ -8,24 +8,24 @@
 //   inspecciones y señal temporal EN VIVO desde un Web Worker (DataSource).
 // Recortes (modelado) los hace shm.css ocultando, no borrando.
 // ─────────────────────────────────────────────────────────────────────────────
-import { FleetView } from './fleet_view.js?v=284';
-import { DataSource } from './data_source.js?v=284';
-import { computeTwin } from './digital_twin.js?v=284';
-import { ParkManager, loadParksStore } from './parks.js?v=284';
-import { MapView } from './map_view.js?v=284';
-import { defaultStages, builtFromStages } from './parks_data_caman.js?v=284';
-import { compassRoseSVG } from './compass.js?v=284';
-import { buildAvanceHUD } from './avance_hud.js?v=284';
-import { renderAvance } from './avance_dashboard.js?v=284';
-import * as Insp from './inspection.js?v=284';
-import * as Fat from './fatigue.js?v=284';
-import * as Instr from './instrumentation.js?v=284';
-import * as Calidad from './calidad.js?v=284';
-import { esc, safeUrl } from './util.js?v=284';
-import { t, getLang, setLang } from './i18n.js?v=284';
+import { FleetView } from './fleet_view.js?v=285';
+import { DataSource } from './data_source.js?v=285';
+import { computeTwin } from './digital_twin.js?v=285';
+import { ParkManager, loadParksStore } from './parks.js?v=285';
+import { MapView } from './map_view.js?v=285';
+import { defaultStages, builtFromStages } from './parks_data_caman.js?v=285';
+import { compassRoseSVG } from './compass.js?v=285';
+import { buildAvanceHUD } from './avance_hud.js?v=285';
+import { renderAvance } from './avance_dashboard.js?v=285';
+import * as Insp from './inspection.js?v=285';
+import * as Fat from './fatigue.js?v=285';
+import * as Instr from './instrumentation.js?v=285';
+import * as Calidad from './calidad.js?v=285';
+import { esc, safeUrl } from './util.js?v=285';
+import { t, getLang, setLang } from './i18n.js?v=285';
 
 const F1_BASE = { turbine: 0.283, hv: 1.6 };
-const REWIND_VER = 'v284';   // versión visible del build (subir junto al cache-bust)
+const REWIND_VER = 'v285';   // versión visible del build (subir junto al cache-bust)
 const FS = 62.5;   // frecuencia de muestreo de la señal (Hz), igual que shm_worker.js
 // Clasificador ML de daño (0..4)
 const CLS = ['Sin daño', 'Leve', 'Moderado', 'Alto', 'Muy alto'];
@@ -272,7 +272,7 @@ async function boot() {
   // ── Relieve conceptual del terreno (DEM vendorizado) — encendido por defecto ─
   setLoad(88, 'Cargando relieve…'); await delay(40);
   try {
-    await fleet.loadTerrain('data/caman_dem.json?v=284');
+    await fleet.loadTerrain('data/caman_dem.json?v=285');
     fleet.setTerrainVisible(true);
     document.getElementById('shm-relieve-tool')?.classList.add('active');
   } catch (e) { console.warn('[shm] relieve no disponible', e); }
@@ -298,6 +298,7 @@ async function boot() {
 
   setLoad(100, 'Listo'); await delay(280);
   window.__rewindCloseLanding?.();
+  maybeRunTour();   // R-36d: tour de bienvenida en el primer uso
 }
 
 // ── Toolbar: Árbol · Torre · Torre AT · Detener · Editar ─────────────────────
@@ -306,6 +307,7 @@ function buildToolbar(toolbar, fleet, getPM = () => null) {
   const mk = (id, title, svg, label, onclick) => {
     const b = document.createElement('button');
     b.id = id; b.className = 'tool tool-action'; b.title = title;
+    b.setAttribute('aria-label', title);   // R-36e: SR (el motor de tooltips borra `title`)
     b.innerHTML = `${svg}<span>${label}</span>`;
     b.addEventListener('click', () => onclick(b));
     return b;
@@ -330,7 +332,7 @@ function buildToolbar(toolbar, fleet, getPM = () => null) {
   paint();
   const del = mk('shm-del-tool', t('tool.del.tip'),
     `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M5 7h14M10 7V5h4v2M6 7l1 13h10l1-13"/></svg>`,
-    t('tool.del'), () => { if (fleet.selected) fleet.removeStructure(fleet.selected.id); });
+    t('tool.del'), () => { const s = fleet.selected; if (s && confirm(t('alert.delStruct', s.label || s.id))) fleet.removeStructure(s.id); });
   // Avance de obra (4D): conmuta el «llenado» de las torres (sólido erigido + silueta de lo que falta).
   const avance = mk('shm-avance-tool', t('tool.avance.tip'),
     `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M5 21V11h4v10M10 21V7h4v14M15 21V3h4v18"/></svg>`,
@@ -403,13 +405,35 @@ function buildToolbar(toolbar, fleet, getPM = () => null) {
   );
   if (document.body.classList.contains('tree-open')) tree.classList.add('active');
 
+  // R-36e: los toggles del toolbar reflejan su estado en aria-pressed (para SR).
+  // Un observer espeja la clase `.active` → aria-pressed en cualquier botón que la use.
+  const seen = new WeakSet();
+  const mirror = (b) => { if (b.classList.contains('active')) seen.add(b); if (seen.has(b)) b.setAttribute('aria-pressed', b.classList.contains('active') ? 'true' : 'false'); };
+  toolbar.querySelectorAll('.tool').forEach(mirror);
+  new MutationObserver(muts => muts.forEach(m => m.target.classList?.contains('tool') && mirror(m.target)))
+    .observe(toolbar, { subtree: true, attributes: true, attributeFilter: ['class'] });
+
   // Supr/Delete borra la estructura seleccionada (sólo en modo edición).
   addEventListener('keydown', (e) => {
     if (!fleet.editMode || !fleet.selected) return;
     if (e.key !== 'Delete' && e.key !== 'Backspace') return;
     if (/^(INPUT|TEXTAREA|SELECT)$/.test(document.activeElement?.tagName || '')) return;
     e.preventDefault();
-    fleet.removeStructure(fleet.selected.id);
+    const s = fleet.selected;   // R-36b: confirmar (evita perder una torre por un despiste)
+    if (confirm(t('alert.delStruct', s.label || s.id))) fleet.removeStructure(s.id);
+  });
+
+  // R-36c: Ctrl+Z / Cmd+Z deshace la última edición del parque (crear/borrar/mover/
+  // renombrar). Restaura el snapshot del store y recarga para reconstruir la flota.
+  addEventListener('keydown', (e) => {
+    if (!(e.key === 'z' || e.key === 'Z') || !(e.ctrlKey || e.metaKey) || e.shiftKey) return;
+    if (/^(INPUT|TEXTAREA|SELECT)$/.test(document.activeElement?.tagName || '')) return;
+    if (!pm?.canUndo()) return;
+    e.preventDefault();
+    if (pm.undo()) {
+      try { sessionStorage.setItem('rewind-lang-restore', JSON.stringify({ sel: fleet.selected?.id || null, view: document.querySelector('.shm-toptab.active')?.dataset.v || null })); } catch { /* ignore */ }
+      location.reload();
+    }
   });
 }
 
@@ -547,11 +571,56 @@ function openReportWindow(html, filename = 'informe-rewind.html') {
   return false;
 }
 
+// R-36d: tour de bienvenida (4 pasos anclados). Efecto «spotlight» con el truco
+// del box-shadow gigante del anillo. Se marca `rewind_tour_done` al terminar/saltar.
+function runTour() {
+  const steps = [
+    { sel: '#viewport-wrap', key: 'tour.s1' },
+    { sel: '#toolbar', key: 'tour.s2' },
+    { sel: '#panel', key: 'tour.s3' },
+    { sel: '#menubar', key: 'tour.s4' },
+  ];
+  let i = 0;
+  const ov = document.createElement('div'); ov.className = 'tour-ov'; ov.id = 'tour-ov';
+  ov.innerHTML = `<div class="tour-ring"></div>
+    <div class="tour-box" role="dialog" aria-modal="true">
+      <p class="tour-txt"></p>
+      <div class="tour-nav"><button class="tour-skip" type="button"></button><span class="tour-dots"></span><button class="tour-next ins-btn" type="button"></button></div>
+    </div>`;
+  document.body.appendChild(ov);
+  const $q = (s) => ov.querySelector(s);
+  const ring = $q('.tour-ring'), box = $q('.tour-box'), txt = $q('.tour-txt'), next = $q('.tour-next'), skip = $q('.tour-skip'), dots = $q('.tour-dots');
+  const finish = () => { try { localStorage.setItem('rewind_tour_done', '1'); } catch { /* */ } ov.remove(); removeEventListener('keydown', onKey); removeEventListener('resize', show); };
+  const show = () => {
+    const s = steps[i], el = document.querySelector(s.sel);
+    txt.textContent = t(s.key);
+    dots.textContent = `${i + 1}/${steps.length}`;
+    next.textContent = i === steps.length - 1 ? t('tour.done') : t('tour.next');
+    skip.textContent = t('tour.skip');
+    if (el) {
+      const r = el.getBoundingClientRect();
+      ring.style.cssText = `left:${r.left}px;top:${r.top}px;width:${r.width}px;height:${r.height}px`;
+      box.style.left = Math.min(Math.max(8, r.left + 8), innerWidth - 300) + 'px';
+      box.style.top = (r.bottom + 12 + 160 < innerHeight ? r.bottom + 12 : Math.max(8, r.top - 168)) + 'px';
+    }
+  };
+  next.addEventListener('click', () => { if (i < steps.length - 1) { i++; show(); } else finish(); });
+  skip.addEventListener('click', finish);
+  const onKey = (e) => { if (e.key === 'Escape') finish(); };
+  addEventListener('keydown', onKey); addEventListener('resize', show);
+  show();
+}
+function maybeRunTour() {
+  try { if (localStorage.getItem('rewind_tour_done')) return; } catch { return; }
+  if (navigator.webdriver) return;   // no molestar bajo automatización/preview
+  setTimeout(() => { if (!document.getElementById('tour-ov')) runTour(); }, 700);
+}
+
 // «Acerca de ReWind» — tarjeta modal ligera (versión + crédito + fuente).
 function showAbout() {
   document.getElementById('mb-about')?.remove();
   const ov = document.createElement('div'); ov.id = 'mb-about'; ov.className = 'mb-about';
-  ov.innerHTML = `<div class="mb-about-card" role="dialog" aria-label="Acerca de ReWind">
+  ov.innerHTML = `<div class="mb-about-card" role="dialog" aria-modal="true" aria-label="Acerca de ReWind">
     <button class="mb-about-x" type="button" aria-label="Cerrar">✕</button>
     <h2>ReWind <span>${REWIND_VER}</span></h2>
     <p>${t('about.desc')}</p>
@@ -973,6 +1042,7 @@ function buildDashboard(panel, fleet, actions) {
   function showShadow() { setTopView('shadow'); }
 
   let list = [], current = null, pane = 'datos', sigBuf = {}, sigRAF = null, freqHist = {};
+  let editSensorId = null;   // R-36f: id del sensor de instrumentación en edición (o null)
   let inspSel = null;   // id de la inspección abierta en la pestaña Inspección
   let specOff = null, specLast = 0;                 // espectrograma (offscreen + scroll)
   const clsHist = {}, clsEvents = {}; let lastHistT = 0;   // histórico de clasificación ML
@@ -1192,32 +1262,39 @@ function buildDashboard(panel, fleet, actions) {
         ? `<div class="shm-sensor"><span class="dot ok"></span><span style="flex:1">📶 ${t('ahud.gateway')} <span class="ins-mut" style="font-size:10px">(${t('ahud.gwRoleV')})</span></span><b style="color:var(--success)">${t('ahud.gwOnline')}</b></div>`
         : '';
       const custom = Instr.getSensors(o.id);
+      if (editSensorId && !custom.some(c => c.id === editSensorId)) editSensorId = null;   // el sensor pudo borrarse
+      const editing = editSensorId ? custom.find(c => c.id === editSensorId) : null;
       const customRows = custom.map(cs =>
-        `<div class="shm-sensor"><span class="dot ok"></span><span style="flex:1">${Instr.typeIcon(cs.type)} ${esc(cs.label || Instr.typeLabel(cs.type))} <span class="ins-mut" style="font-size:10px">· ${Math.round((cs.yFrac || 0) * 100)}%</span></span><b class="s-custom" data-cs-id="${esc(cs.id)}" data-cs-type="${esc(cs.type)}">—</b><button class="ins-x cs-del" data-csd="${esc(cs.id)}" title="${t('instr.remove')}">✕</button></div>`
+        `<div class="shm-sensor ${cs.id === editSensorId ? 'editing' : ''}"><span class="dot ok"></span><span style="flex:1">${Instr.typeIcon(cs.type)} ${esc(cs.label || Instr.typeLabel(cs.type))} <span class="ins-mut" style="font-size:10px">· ${Math.round((cs.yFrac || 0) * 100)}%</span></span><b class="s-custom" data-cs-id="${esc(cs.id)}" data-cs-type="${esc(cs.type)}">—</b><button class="ins-x cs-edit" data-cse="${esc(cs.id)}" title="${t('instr.edit')}">✎</button><button class="ins-x cs-del" data-csd="${esc(cs.id)}" title="${t('instr.remove')}">✕</button></div>`
       ).join('');
-      const typeOpts = Instr.SENSOR_TYPES.map(ty => `<option value="${ty.key}">${Instr.typeLabel(ty.key)}</option>`).join('');
+      const typeOpts = Instr.SENSOR_TYPES.map(ty => `<option value="${ty.key}"${editing && editing.type === ty.key ? ' selected' : ''}>${Instr.typeLabel(ty.key)}</option>`).join('');
       body.innerHTML = o.sensors.map(se =>
         `<div class="shm-sensor"><span class="dot ${se.status}"></span><span style="flex:1">${se.id}</span><b class="s-rms" data-sid="${se.id}">—</b></div>`
       ).join('') + gwRow
         + (custom.length ? `<div class="shm-sub2">${t('instr.custom')} · ${custom.length}</div>${customRows}` : '')
         + `<div class="instr-add">
              <select id="cs-type">${typeOpts}</select>
-             <input type="text" id="cs-label" placeholder="${t('instr.labelPh')}">
-             <label class="cs-h">${t('instr.height')} <input type="range" id="cs-yfrac" min="0" max="100" step="5" value="60"><b id="cs-yv">60%</b></label>
-             <button id="cs-add" class="ins-btn">${t('instr.add')}</button>
+             <input type="text" id="cs-label" placeholder="${t('instr.labelPh')}" value="${esc(editing?.label || '')}">
+             <label class="cs-h">${t('instr.height')} <input type="range" id="cs-yfrac" min="0" max="100" step="5" value="${editing ? Math.round((editing.yFrac || 0) * 100) : 60}"><b id="cs-yv">${editing ? Math.round((editing.yFrac || 0) * 100) : 60}%</b></label>
+             <button id="cs-add" class="ins-btn">${editing ? t('instr.save') : t('instr.add')}</button>
+             ${editing ? `<button id="cs-cancel" class="ins-btn cal-import-alt">${t('instr.cancel')}</button>` : ''}
            </div>`
         + `<div class="note">${t('sens.note')} ${t('instr.note')}</div>`;
       const yf = body.querySelector('#cs-yfrac'), yv = body.querySelector('#cs-yv');
       yf?.addEventListener('input', () => yv.textContent = yf.value + '%');
+      const refreshHud = () => { if (window.shmAvanceHUD && current === o) window.shmAvanceHUD.show(o, 'shm'); };
       body.querySelector('#cs-add')?.addEventListener('click', () => {
-        Instr.addSensor(o.id, { type: body.querySelector('#cs-type').value, label: body.querySelector('#cs-label').value, yFrac: (+yf.value || 0) / 100 });
-        if (window.shmAvanceHUD && current === o) window.shmAvanceHUD.show(o, 'shm');   // refleja en el HUD
-        renderSHMPane();
+        const patch = { type: body.querySelector('#cs-type').value, label: body.querySelector('#cs-label').value, yFrac: (+yf.value || 0) / 100 };
+        if (editSensorId) { Instr.updateSensor(o.id, editSensorId, patch); editSensorId = null; }   // R-36f: editar sin recrear
+        else Instr.addSensor(o.id, patch);
+        refreshHud(); renderSHMPane();
       });
+      body.querySelector('#cs-cancel')?.addEventListener('click', () => { editSensorId = null; renderSHMPane(); });
+      body.querySelectorAll('.cs-edit').forEach(b => b.addEventListener('click', () => { editSensorId = b.dataset.cse; renderSHMPane(); }));
       body.querySelectorAll('.cs-del').forEach(b => b.addEventListener('click', () => {
         Instr.removeSensor(o.id, b.dataset.csd);
-        if (window.shmAvanceHUD && current === o) window.shmAvanceHUD.show(o, 'shm');
-        renderSHMPane();
+        if (editSensorId === b.dataset.csd) editSensorId = null;
+        refreshHud(); renderSHMPane();
       }));
     } else if (pane === 'fatiga') {
       if ((o.built ?? 1) < 0.97) {   // R-40e: torre en montaje → sin fatiga «consumida»
@@ -1453,18 +1530,18 @@ function buildDashboard(panel, fleet, actions) {
 
           <div class="shm-sub2">${t('ins.tests')} · ${sel.tests.length}</div>
           <div class="ins-mini">${sel.tests.map(t2 => { const c = Insp.classifyTest(t2.test_type); return `<div class="ins-li"><span class="ins-tbadge ${c.ndt ? 'ndt' : ''}">${c.label}</span> <b>${esc(t2.test_type)}</b> — ${esc(t2.result_summary || '—')} <button class="ins-x" data-del-test="${esc(t2.id)}">✕</button></div>`; }).join('') || `<div class="ins-mut">${t('ins.noTests')}</div>`}</div>
-          <button id="ins-addtest" class="ins-mini-btn">${t('ins.addTest')}</button>
+          <div class="ins-add"><input type="text" id="nt-type" placeholder="${t('ins.pTestType')}"><input type="text" id="nt-res" placeholder="${t('ins.pTestResult')}"><button id="ins-addtest" class="ins-btn" title="${t('ins.addTest')}">＋</button></div>
 
           <div class="shm-sub2">${t('ins.docs')} · ${sel.documents.length}</div>
           <div class="ins-mini">${sel.documents.map(dc => `<div class="ins-li">📎 <b>${esc(dc.title)}</b> <span class="ins-mut">(${esc(dc.category)})</span> <button class="ins-x" data-del-doc="${esc(dc.id)}">✕</button></div>`).join('') || `<div class="ins-mut">${t('ins.noDocs')}</div>`}</div>
-          <button id="ins-adddoc" class="ins-mini-btn">${t('ins.addDoc')}</button>
+          <div class="ins-add"><input type="text" id="ndc-title" placeholder="${t('ins.pDocTitle')}"><input type="text" id="ndc-cat" placeholder="${t('ins.pDocCat')}" value="informe"><button id="ins-adddoc" class="ins-btn" title="${t('ins.addDoc')}">＋</button></div>
 
           <div class="shm-sub2">${t('ins.wos')} · ${(sel.workOrders || []).length}</div>
           <div class="ins-mini">${(sel.workOrders || []).map(w => { const dd = Insp.dueState(w.due); return `<div class="ins-wo">
             <button class="ins-wost s-${esc(String(w.status).replace(/ /g, ''))}" data-wo="${esc(w.id)}" title="${t('ins.woStateTip')}">${esc(w.status)}</button>
             <span class="ins-wo-v"><b>${esc(w.title)}</b><br><span class="ins-mut">${esc(w.assignee || t('ins.unassigned'))} · ${t('ins.prio')} ${esc(w.priority)}${w.due ? ` · ${t('ins.dueWord')} ${esc(w.due)}${dd.overdue ? ' ⚠' : ''}` : ''}</span></span>
             <button class="ins-x" data-del-wo="${esc(w.id)}">✕</button></div>`; }).join('') || `<div class="ins-mut">${t('ins.noWos')}</div>`}</div>
-          <button id="ins-addwo" class="ins-mini-btn">${t('ins.addWo')}</button>
+          <div class="ins-add ins-add-wo"><input type="text" id="nw-title" placeholder="${t('ins.pWoTitle')}"><input type="text" id="nw-assignee" placeholder="${t('ins.pWoAssignee')}"><select id="nw-prio">${Insp.WO_PRIORITY.map(p => `<option value="${p}"${p === 'media' ? ' selected' : ''}>${p}</option>`).join('')}</select><button id="ins-addwo" class="ins-btn" title="${t('ins.addWo')}">＋</button></div>
 
           <div class="ins-foot"><button id="ins-report" class="ins-btn">${t('ins.report')}</button>
             <button id="ins-del" class="ins-del">${t('ins.del')}</button></div>
@@ -1487,15 +1564,15 @@ function buildDashboard(panel, fleet, actions) {
       sel.damages.push({ id: Insp.uid(), damage_type: $('#nd-type').value, damage_cause: $('#nd-cause').value, severity: $('#nd-sev').value, extent: $('#nd-ext').value.trim(), location: $('#nd-loc').value.trim(), comments: '' });
       sel.condition = Insp.conditionFromScore(Insp.inspectionScore(sel.damages)); save();
     });
-    host.querySelector('#ins-addtest').addEventListener('click', () => { const tt = (prompt(t('ins.pTestType'), '') || '').trim(); if (!tt) return; const r = (prompt(t('ins.pTestResult'), '') || '').trim(); sel.tests.push({ id: Insp.uid(), test_type: tt, result_summary: r, executed_at: new Date().toISOString().slice(0, 10) }); save(); });
-    host.querySelector('#ins-adddoc').addEventListener('click', () => { const tt = (prompt(t('ins.pDocTitle'), '') || '').trim(); if (!tt) return; const c = (prompt(t('ins.pDocCat'), 'informe') || 'otro').trim(); sel.documents.push({ id: Insp.uid(), title: tt, category: c, issued_at: new Date().toISOString().slice(0, 10) }); save(); });
+    host.querySelector('#ins-addtest').addEventListener('click', () => { const tt = ($('#nt-type').value || '').trim(); if (!tt) { $('#nt-type').focus(); return; } const r = ($('#nt-res').value || '').trim(); sel.tests.push({ id: Insp.uid(), test_type: tt, result_summary: r, executed_at: new Date().toISOString().slice(0, 10) }); save(); });
+    host.querySelector('#ins-adddoc').addEventListener('click', () => { const tt = ($('#ndc-title').value || '').trim(); if (!tt) { $('#ndc-title').focus(); return; } const c = ($('#ndc-cat').value || 'otro').trim(); sel.documents.push({ id: Insp.uid(), title: tt, category: c, issued_at: new Date().toISOString().slice(0, 10) }); save(); });
     host.querySelectorAll('[data-del-test]').forEach(b => b.addEventListener('click', () => { sel.tests = sel.tests.filter(t => t.id !== b.dataset.delTest); save(); }));
     host.querySelectorAll('[data-del-doc]').forEach(b => b.addEventListener('click', () => { sel.documents = sel.documents.filter(d => d.id !== b.dataset.delDoc); save(); }));
     // Órdenes de trabajo
     host.querySelector('#ins-addwo').addEventListener('click', () => {
-      const title = (prompt(t('ins.pWoTitle'), '') || '').trim(); if (!title) return;
-      const assignee = (prompt(t('ins.pWoAssignee'), '') || '').trim();
-      const priority = (prompt(t('ins.pWoPrio'), 'media') || 'media').trim().toLowerCase();
+      const title = ($('#nw-title').value || '').trim(); if (!title) { $('#nw-title').focus(); return; }
+      const assignee = ($('#nw-assignee').value || '').trim();
+      const priority = ($('#nw-prio').value || 'media').trim().toLowerCase();
       (sel.workOrders ||= []).push({ id: Insp.uid(), title, assignee, priority: Insp.WO_PRIORITY.includes(priority) ? priority : 'media', status: 'abierto', due: sel.nextDate || '' });
       save();
     });

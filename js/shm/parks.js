@@ -8,7 +8,7 @@
 // El ParkManager mantiene el store, sincroniza con el FleetView y pinta el árbol.
 // ─────────────────────────────────────────────────────────────────────────────
 
-import { buildCamanPark } from './parks_data_caman.js?v=284';
+import { buildCamanPark } from './parks_data_caman.js?v=285';
 
 const KEY = 'rewind-parks';
 const SEED = 'caman-i-v6';      // sello de siembra; al cambiarlo se re-siembra el store (v6: etapas con % de avance)
@@ -34,10 +34,31 @@ export class ParkManager {
     this.onSync = onSync || (() => {});
     this.activeZoneId = this.active?.zones[0]?.id || null;   // zona enfocada / destino de torres nuevas
     this.collapsed = new Set();                              // ids de parque colapsados en el árbol
+    this._undo = [];        // R-36c: pila de snapshots del store (máx. 10)
+    this._lastSnap = 0;     // para coalescer ráfagas de save() (p.ej. arrastre del yaw)
   }
 
   get active() { return this.store.parks.find(p => p.id === this.store.activeId) || this.store.parks[0]; }
-  save() { try { localStorage.setItem(KEY, JSON.stringify(this.store)); } catch {} }
+  save() {
+    // R-36c: apilar el estado PREVIO antes de sobrescribir (coalescer ráfagas <250 ms).
+    try {
+      const prev = localStorage.getItem(KEY);
+      const now = Date.now();
+      if (prev != null && !(now - this._lastSnap < 250 && this._undo.length)) {
+        this._undo.push(prev); if (this._undo.length > 10) this._undo.shift();
+      }
+      this._lastSnap = now;
+    } catch { /* sin undo si el storage falla */ }
+    try { localStorage.setItem(KEY, JSON.stringify(this.store)); } catch {}
+  }
+  canUndo() { return this._undo.length > 0; }
+  /** Restaura el último snapshot del store (R-36c). Devuelve true si había algo que deshacer. */
+  undo() {
+    const prev = this._undo.pop();
+    if (prev == null) return false;
+    try { localStorage.setItem(KEY, prev); } catch { return false; }
+    return true;
+  }
 
   // Vuelca posiciones/yaw/zona de la flota viva en el parque activo del store.
   syncFleetToActive() {

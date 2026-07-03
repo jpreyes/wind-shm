@@ -38,12 +38,12 @@ Este roadmap **unifica** los ítems históricos, las brechas de la auditoría in
 | ✅ `R-40d` | **Perf del rollup**: `Insp.getAll()` con un solo `JSON.parse` por rollup (hoy: parse del store completo × 43 estructuras). | horas | Pestaña Parque sin jank con fotos cargadas. |
 | ✅ `R-40e` | **Coherencia física**: torres con `built < 0.97` no muestran fatiga «consumida» ni sensores «operando» (mensaje «torre en montaje — sin datos operacionales»; worker emite `standby`). | ½ día | Una torre en fundación no reporta vida consumida ni RMS. |
 | ✅ `R-40f` | Menores: fuga de listener en «Acerca de» (remover en `close()`), aviso de popup bloqueado en todos los informes (helper común con fallback a descarga, copiar `_openReport`), orientación EXIF en `imageToThumb` (`createImageBitmap(file,{imageOrientation:'from-image'})`), `theme-color`/manifest claros (media query + JS en el toggle), `.gitignore` de `data/` con excepción `!data/*.json`, restaurar vista/selección tras cambiar idioma (`sessionStorage`). | 1 día | Checklist completo. |
-| ⬜ `R-36a` | **Formularios inline** para Ensayo/Documento/OT (reemplazar `prompt()` encadenados; replicar el patrón `.instr-add` ya estilado). | ½ día | Cero `prompt()` en el CMMS. |
-| ⬜ `R-36b` | **Confirmación al borrar con Supr** en modo edición (hoy borra directo) — o mejor, junto con `R-36c`. | horas | No se pierde una torre por un despiste. |
-| ⬜ `R-36c` | **Undo básico en edición**: pila de snapshots del store de parques (máx. 10) + Ctrl+Z. | ½ día | Mover/borrar/crear es reversible. |
-| ⬜ `R-36d` | **Tour de bienvenida** (vanilla, 4 pasos anclados: torre clicable → pestañas → modos del toolbar → informes; flag `rewind_tour_done`). | ½ día | Primer uso guiado. |
-| ⬜ `R-36e` | Accesibilidad: `aria-label` en botones icon-only (el motor de tooltips borra `title`), `aria-pressed` en toggles del toolbar, `role="dialog"`+focus-trap en modales, icono de tema 🌙⇄☀️ según estado. | ½–1 día | Navegable por teclado/SR en lo esencial. |
-| ⬜ `R-36f` | **Edición de sensores** de instrumentación (hoy solo agregar/quitar; `updateSensor` ya existe) + verificación de cajones/HUD **en móvil real**. | ½ día | Mover un sensor sin recrearlo. |
+| ✅ `R-36a` | **Formularios inline** para Ensayo/Documento/OT (reemplazar `prompt()` encadenados; replicar el patrón `.instr-add` ya estilado). | ½ día | Cero `prompt()` en el CMMS. |
+| ✅ `R-36b` | **Confirmación al borrar con Supr** en modo edición (hoy borra directo) — o mejor, junto con `R-36c`. | horas | No se pierde una torre por un despiste. |
+| ✅ `R-36c` | **Undo básico en edición**: pila de snapshots del store de parques (máx. 10) + Ctrl+Z. | ½ día | Mover/borrar/crear es reversible. |
+| ✅ `R-36d` | **Tour de bienvenida** (vanilla, 4 pasos anclados: torre clicable → pestañas → modos del toolbar → informes; flag `rewind_tour_done`). | ½ día | Primer uso guiado. |
+| ✅ `R-36e` | Accesibilidad: `aria-label` en botones icon-only (el motor de tooltips borra `title`), `aria-pressed` en toggles del toolbar, `role="dialog"`+focus-trap en modales, icono de tema 🌙⇄☀️ según estado. | ½–1 día | Navegable por teclado/SR en lo esencial. |
+| ✅ `R-36f` | **Edición de sensores** de instrumentación (hoy solo agregar/quitar; `updateSensor` ya existe) + verificación de cajones/HUD **en móvil real**. | ½ día | Mover un sensor sin recrearlo. |
 
 ### Fase 2 — Analítica coherente (client-side; prepara y aprovecha el backend)
 *El salto de «maqueta» a «monitoreo»: memoria, coherencia y comparación. Sin backend.*

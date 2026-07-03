@@ -96,6 +96,24 @@ body.shm #menubar { min-width: 0; overflow-x: auto; }
 /* Estado vacío de inspección (R-40b): sin re-siembra de demo */
 .ins-empty { padding: 20px 14px; color: var(--text-muted); font-size: 12.5px; line-height: 1.6; text-align: center; }
 .ins-empty .ins-btn { display: inline-block; margin-top: 10px; }
+/* Formularios inline del CMMS (R-36a): reemplazan los prompt() encadenados */
+.ins-add { display: flex; gap: 5px; align-items: center; margin: 5px 0 2px; flex-wrap: wrap; }
+.ins-add input, .ins-add select { flex: 1; min-width: 70px; background: var(--bg1, rgba(255,255,255,.04)); border: 1px solid var(--border2); border-radius: 6px; padding: 5px 7px; color: var(--text); font: inherit; font-size: 12px; }
+.ins-add .ins-btn { flex: 0 0 auto; padding: 5px 10px; }
+.ins-add-wo select { flex: 0 0 auto; min-width: 0; }
+/* Sensor de instrumentación en edición (R-36f) */
+.shm-sensor.editing { outline: 1px solid var(--accent); border-radius: 6px; }
+.cs-edit { color: var(--text-muted); }
+.cs-edit:hover { color: var(--accent); }
+/* Tour de bienvenida (R-36d): spotlight con box-shadow gigante del anillo */
+.tour-ov { position: fixed; inset: 0; z-index: 9600; }
+.tour-ring { position: fixed; border: 2px solid var(--accent); border-radius: 10px; box-shadow: 0 0 0 4000px rgba(8,12,18,.6); pointer-events: none; transition: all .22s ease; }
+.tour-box { position: fixed; z-index: 9601; width: 280px; max-width: calc(100vw - 24px); background: var(--bg2); border: 1px solid var(--border2); border-radius: 12px; padding: 14px 16px; box-shadow: 0 16px 40px rgba(0,0,0,.4); }
+.tour-txt { margin: 0 0 12px; font-size: 13px; line-height: 1.5; color: var(--text); }
+.tour-nav { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.tour-skip { background: none; border: 0; color: var(--text-muted); cursor: pointer; font-size: 12px; padding: 0; }
+.tour-skip:hover { color: var(--text); }
+.tour-dots { color: var(--text-muted); font-size: 11.5px; }
 @media (min-width: 821px) and (max-width: 1024px) { body.shm #main { grid-template-columns: var(--tree-w) var(--toolbar-w) 1fr 5px min(var(--panel-w), 46vw); } }
 
 #drawer-backdrop { display: none; }                     /* oculto en escritorio */
