@@ -25,7 +25,7 @@ export class DataSource {
 
   _startSim() {
     this._mode = 'sim';
-    this.worker = new Worker(new URL('./shm_worker.js?v=288', import.meta.url));
+    this.worker = new Worker(new URL('./shm_worker.js?v=289', import.meta.url));
     this.worker.onmessage = (e) => this._handleTick(e.data);
     if (this._initMsg) this.worker.postMessage(this._initMsg);
     if (this._focusId) this.worker.postMessage({ type: 'focus', id: this._focusId });

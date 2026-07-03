@@ -44,7 +44,10 @@ const DICT = {
     'mi.exportTelem': '⤓ Exportar telemetría (.json)',
     'mi.exportInsp': '⤓ Exportar inspecciones (.json)', 'mi.importInsp': '⤒ Importar inspecciones (.json)',
     'mi.parkReport': '📄 Informe del parque', 'mi.selReport': '📄 Informe de la selección',
-    'mi.about': 'ⓘ Acerca de ReWind',
+    'mi.compare': '⇄ Comparar torres', 'mi.about': 'ⓘ Acerca de ReWind',
+    'cmp.title': 'Comparar torres', 'cmp.need2': 'Se necesitan al menos 2 estructuras.',
+    'cmp.base': 'Línea base', 'cmp.dev': 'Desviación f₁', 'cmp.fat': 'Vida de fatiga', 'cmp.insp': 'Score inspección', 'cmp.avance': 'Avance',
+    'cmp.note': 'Comparación en vivo. HI = Índice de Salud; f₁ vs línea base del gemelo; RMS instantáneo.',
     // Menú y panel «Calidad de obra» (Frente 5)
     'menu.quality': 'Calidad',
     'mi.calImport': '⤒ Importar Excel (SACYR o plantilla)', 'mi.calPanel': '📋 Panel de calidad', 'mi.calExport': '⤓ Exportar Excel',
@@ -396,7 +399,10 @@ const DICT = {
     'mi.exportTelem': '⤓ Export telemetry (.json)',
     'mi.exportInsp': '⤓ Export inspections (.json)', 'mi.importInsp': '⤒ Import inspections (.json)',
     'mi.parkReport': '📄 Park report', 'mi.selReport': '📄 Selection report',
-    'mi.about': 'ⓘ About ReWind',
+    'mi.compare': '⇄ Compare towers', 'mi.about': 'ⓘ About ReWind',
+    'cmp.title': 'Compare towers', 'cmp.need2': 'At least 2 structures are needed.',
+    'cmp.base': 'Baseline', 'cmp.dev': 'f₁ deviation', 'cmp.fat': 'Fatigue life', 'cmp.insp': 'Inspection score', 'cmp.avance': 'Progress',
+    'cmp.note': 'Live comparison. HI = Health Index; f₁ vs twin baseline; instantaneous RMS.',
     // «Quality of works» menu and panel (Front 5)
     'menu.quality': 'Quality',
     'mi.calImport': '⤒ Import Excel (SACYR or template)', 'mi.calPanel': '📋 Quality panel', 'mi.calExport': '⤓ Export Excel',

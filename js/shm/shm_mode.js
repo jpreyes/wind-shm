@@ -8,27 +8,27 @@
 //   inspecciones y señal temporal EN VIVO desde un Web Worker (DataSource).
 // Recortes (modelado) los hace shm.css ocultando, no borrando.
 // ─────────────────────────────────────────────────────────────────────────────
-import { FleetView } from './fleet_view.js?v=288';
-import { DataSource } from './data_source.js?v=288';
-import { computeTwin } from './digital_twin.js?v=288';
-import { ParkManager, loadParksStore } from './parks.js?v=288';
-import { MapView } from './map_view.js?v=288';
-import { defaultStages, builtFromStages } from './parks_data_caman.js?v=288';
-import { compassRoseSVG } from './compass.js?v=288';
-import { buildAvanceHUD } from './avance_hud.js?v=288';
-import { renderAvance } from './avance_dashboard.js?v=288';
-import * as Insp from './inspection.js?v=288';
-import * as Fat from './fatigue.js?v=288';
-import * as Instr from './instrumentation.js?v=288';
-import * as Calidad from './calidad.js?v=288';
-import * as Hist from './history.js?v=288';
-import * as Health from './health.js?v=288';
-import * as Bench from './benchmark.js?v=288';
-import { esc, safeUrl } from './util.js?v=288';
-import { t, getLang, setLang } from './i18n.js?v=288';
+import { FleetView } from './fleet_view.js?v=289';
+import { DataSource } from './data_source.js?v=289';
+import { computeTwin } from './digital_twin.js?v=289';
+import { ParkManager, loadParksStore } from './parks.js?v=289';
+import { MapView } from './map_view.js?v=289';
+import { defaultStages, builtFromStages } from './parks_data_caman.js?v=289';
+import { compassRoseSVG } from './compass.js?v=289';
+import { buildAvanceHUD } from './avance_hud.js?v=289';
+import { renderAvance } from './avance_dashboard.js?v=289';
+import * as Insp from './inspection.js?v=289';
+import * as Fat from './fatigue.js?v=289';
+import * as Instr from './instrumentation.js?v=289';
+import * as Calidad from './calidad.js?v=289';
+import * as Hist from './history.js?v=289';
+import * as Health from './health.js?v=289';
+import * as Bench from './benchmark.js?v=289';
+import { esc, safeUrl } from './util.js?v=289';
+import { t, getLang, setLang } from './i18n.js?v=289';
 
 const F1_BASE = { turbine: 0.283, hv: 1.6 };
-const REWIND_VER = 'v288';   // versión visible del build (subir junto al cache-bust)
+const REWIND_VER = 'v289';   // versión visible del build (subir junto al cache-bust)
 const FS = 62.5;   // frecuencia de muestreo de la señal (Hz), igual que shm_worker.js
 // Clasificador ML de daño (0..4)
 const CLS = ['Sin daño', 'Leve', 'Moderado', 'Alto', 'Muy alto'];
@@ -277,7 +277,7 @@ async function boot() {
   // ── Relieve conceptual del terreno (DEM vendorizado) — encendido por defecto ─
   setLoad(88, 'Cargando relieve…'); await delay(40);
   try {
-    await fleet.loadTerrain('data/caman_dem.json?v=288');
+    await fleet.loadTerrain('data/caman_dem.json?v=289');
     fleet.setTerrainVisible(true);
     document.getElementById('shm-relieve-tool')?.classList.add('active');
   } catch (e) { console.warn('[shm] relieve no disponible', e); }
@@ -511,6 +511,7 @@ function buildMenubar(fleet, getPM = () => null) {
     { label: t('menu.report'), items: [
       { label: t('mi.parkReport'), fn: parkReport },
       { label: t('mi.selReport'), fn: selReport },
+      { label: t('mi.compare'), fn: () => window.shmDash?.showCompare?.() },
       { sep: 1 },
       { label: t('mi.about'), fn: showAbout },
     ] },
@@ -2348,7 +2349,68 @@ ${detalle}${compilado}
     const v = el.querySelector('.shm-toptab.active')?.dataset.v;
     if (v === 'shm') renderSHM(); else if (v === 'insp') renderInsp(); else if (v === 'obra') showObra();
   }
-  return { setStructures, select, onTick, setAlarms, showShadow, showObra, showInsp: () => setTopView('insp'), showSHM: () => setTopView('shm'), showSeleccion: () => setTopView('seleccion'), showParque: () => setTopView('parque'), refreshShadow: renderShadow, refresh, buildReport };
+  // ── R-39: comparador de torres lado a lado ─────────────────────────────────
+  function towerMetrics(o) {
+    const sum = window.shmData?.get(o.id);
+    const base = window.shmTwin?.[o.type] || null;
+    const insps = Insp.getInspections(o.id);
+    const inspScore = insps.length ? Insp.inspectionScore(insps[0].damages) : null;
+    const operativa = (o.built ?? 1) >= 0.97;
+    const fat = operativa ? assessFatigueFor(o, sum) : null;
+    const hi = Health.computeHealth(healthInputsFor(o, sum));
+    return {
+      hi: hi.hi, band: hi.band,
+      f1: (sum && !sum.standby) ? sum.f1 : null, base,
+      dev: (base && sum && !sum.standby && typeof sum.f1 === 'number') ? (sum.f1 - base) / base * 100 : null,
+      rms: (sum && !sum.standby) ? sum.rms : null,
+      fat: fat ? fat.Delapsed : null, insp: inspScore, avance: (o.built ?? 1),
+    };
+  }
+  function showCompare(preA, preB) {
+    document.getElementById('cmp-ov')?.remove();
+    const turbs = fleet.structures;
+    if (turbs.length < 2) { alert(t('cmp.need2')); return; }
+    const ov = document.createElement('div'); ov.id = 'cmp-ov'; ov.className = 'mb-about';
+    const opts = (selId) => turbs.map(s => `<option value="${esc(s.id)}"${s.id === selId ? ' selected' : ''}>${esc(s.label)}</option>`).join('');
+    let a = preA || fleet.selected?.id || turbs[0].id;
+    let b = preB || turbs.find(s => s.id !== a)?.id || turbs[1].id;
+    const fmtHz = (v) => v == null ? '—' : v.toFixed(3) + ' Hz';
+    const cell = (va, vb, fmt = (x) => x, better) => {
+      const fa = va == null ? '—' : fmt(va), fb = vb == null ? '—' : fmt(vb);
+      return `<td>${fa}</td><td>${fb}</td>`;
+    };
+    const paint = () => {
+      const oA = fleet.getStructure(a), oB = fleet.getStructure(b);
+      const mA = towerMetrics(oA), mB = towerMetrics(oB);
+      const hiCol = (m) => m.hi == null ? 'var(--text-muted)' : Health.healthColor(m.hi);
+      const rows = `
+        <tr><th>${t('hi.name')}</th><td style="color:${hiCol(mA)};font-weight:700">${mA.hi ?? '—'}</td><td style="color:${hiCol(mB)};font-weight:700">${mB.hi ?? '—'}</td></tr>
+        <tr><th>f₁</th>${cell(mA.f1, mB.f1, fmtHz)}</tr>
+        <tr><th>${t('cmp.base')}</th>${cell(mA.base, mB.base, fmtHz)}</tr>
+        <tr><th>${t('cmp.dev')}</th><td>${mA.dev == null ? '—' : (mA.dev >= 0 ? '+' : '') + mA.dev.toFixed(1) + '%'}</td><td>${mB.dev == null ? '—' : (mB.dev >= 0 ? '+' : '') + mB.dev.toFixed(1) + '%'}</td></tr>
+        <tr><th>RMS</th>${cell(mA.rms, mB.rms, (v) => (v * 1000).toFixed(1) + ' mg')}</tr>
+        <tr><th>${t('cmp.fat')}</th>${cell(mA.fat, mB.fat, (v) => (v * 100).toFixed(0) + '%')}</tr>
+        <tr><th>${t('cmp.insp')}</th>${cell(mA.insp, mB.insp, (v) => v.toFixed(0))}</tr>
+        <tr><th>${t('cmp.avance')}</th>${cell(mA.avance, mB.avance, (v) => Math.round(v * 100) + '%')}</tr>`;
+      ov.querySelector('#cmp-tbl tbody').innerHTML = rows;
+    };
+    ov.innerHTML = `<div class="mb-about-card cmp-card" role="dialog" aria-modal="true" aria-label="${esc(t('cmp.title'))}">
+      <button class="mb-about-x" type="button" aria-label="✕">✕</button>
+      <h2>${t('cmp.title')}</h2>
+      <table id="cmp-tbl" class="cmp-tbl"><thead><tr><th></th>
+        <th><select id="cmp-a">${opts(a)}</select></th>
+        <th><select id="cmp-b">${opts(b)}</select></th></tr></thead><tbody></tbody></table>
+      <div class="note" style="font-size:10px">${t('cmp.note')}</div></div>`;
+    const close = () => { ov.remove(); removeEventListener('keydown', onKey); };
+    const onKey = (e) => { if (e.key === 'Escape') close(); };
+    ov.addEventListener('click', (e) => { if (e.target === ov || e.target.closest('.mb-about-x')) close(); });
+    ov.querySelector('#cmp-a').addEventListener('change', (e) => { a = e.target.value; paint(); });
+    ov.querySelector('#cmp-b').addEventListener('change', (e) => { b = e.target.value; paint(); });
+    addEventListener('keydown', onKey);
+    document.body.appendChild(ov); paint();
+  }
+
+  return { setStructures, select, onTick, setAlarms, showShadow, showObra, showInsp: () => setTopView('insp'), showSHM: () => setTopView('shm'), showSeleccion: () => setTopView('seleccion'), showParque: () => setTopView('parque'), refreshShadow: renderShadow, refresh, buildReport, showCompare };
 }
 
 // R-40c: aviso (una vez por sesión) cuando el localStorage se llena al guardar.
