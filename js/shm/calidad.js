@@ -19,7 +19,8 @@ import { normEstado, wtgToId, diasHabilesSacyr } from '../../tools/sacyr_reader.
 import { writeSacyrAuto } from '../../tools/sacyr_writer.mjs';
 import { readQuality, writeTemplate, blankTemplate } from '../../tools/rewind_template.mjs';
 import { computeDerived } from '../../tools/sacyr_derived.mjs';
-import { t } from './i18n.js?v=298';
+import { defaultWbs, wbsProgress } from '../../tools/wbs.js';
+import { t } from './i18n.js?v=299';
 
 const STORE = 'rewind.calidad.v1';
 const XLSX_MIME = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
@@ -65,28 +66,51 @@ export function structureSummary(id) {
   return { total: q.total, aprobado: q.aprobado, pctAprobado: q.pctAprobado, pendientes: q.total - q.aprobado - q.informativo - q.nulo };
 }
 
-// ── «Cargar / Actualizar parque» desde la calidad → avance 4D ────────────────
-// Refleja el % de protocolos aprobados en el avance de obra 4D. Dos modos:
-//   · mode='load'   (cargar parque completo) → REINICIA el parque con la foto del
-//     Excel: las torres sin protocolos se ponen en 0 (obra sin empezar). Borra el
-//     avance anterior — para arrancar la webapp con la construcción real.
-//   · mode='update' (actualizar) → SÓLO toca las torres que tienen protocolos;
-//     las demás conservan su avance actual.
-// El nuevo avance se PERSISTE en el parque activo del store (sobrevive recarga) y
-// deja un punto de deshacer. Devuelve cuántas estructuras recibieron % del Excel
-// (0 = ninguna coincide con la flota → nada que aplicar).
+// ── WBS de obra (partidas / hitos) ────────────────────────────────────────────
+// Config editable (fase B): WBS por tipo + overrides manuales protocolo→partida.
+// Por ahora se semilla con el WBS por defecto; overrides vacío.
+const WBS_STORE = 'rewind.wbs.v1';
+function loadWbsCfg() { try { return JSON.parse(localStorage.getItem(WBS_STORE)) || {}; } catch { return {}; } }
+export function getWbs(type = 'turbine') { const c = loadWbsCfg(); return (c.wbs && c.wbs[type]) || defaultWbs(type); }
+export function getOverrides() { return loadWbsCfg().overrides || {}; }
+
+// Avance WBS de UNA estructura (Tnn) — para la ficha de torre / HUD (fase B).
+export function wbsSummary(id, type = 'turbine') {
+  const d = load(); if (!d) return null;
+  const ps = d.protocolos.filter((p) => p.estructuraId === id);
+  if (!ps.length) return null;
+  return wbsProgress(ps, getWbs(type), getOverrides());
+}
+
+// ── «Cargar / Actualizar parque» desde la calidad → avance 4D POR PARTIDA ─────
+// Cada PARTIDA (hito) se llena con el % de SUS propios protocolos aprobados — no
+// un único % por torre. Así, si el Excel solo tiene protocolos de fundación, solo
+// la partida Fundación avanza y las demás quedan en 0 (obra sin empezar). Modos:
+//   · mode='load'   → REINICIA el parque con la foto del Excel (torres/partidas
+//     sin protocolos → 0). Borra el avance anterior.
+//   · mode='update' → SÓLO toca las torres que tienen protocolos.
+// El nuevo avance se PERSISTE en el parque activo (sobrevive recarga) y deja punto
+// de deshacer. Devuelve cuántas estructuras recibieron % del Excel (0 = nada).
 export function applyToFleet(mode = 'update', fleet) {
   fleet = fleet || window.shmFleet; if (!fleet) return 0;
-  const d = getDerived(); if (!d) return 0;
+  const data = load(); if (!data) return 0;
   const ids = new Set(fleet.structures.map((s) => s.id));
-  const pctById = {};
+  const overrides = getOverrides();
+  // Agrupa los protocolos por estructura viva en la flota.
+  const byId = {};
+  for (const p of data.protocolos) {
+    if (p.estructuraId && ids.has(p.estructuraId)) (byId[p.estructuraId] ??= []).push(p);
+  }
+  const byStructure = {};
   let applicable = 0;
-  for (const [id, q] of Object.entries(d.porEstructura || {})) {
-    if (!ids.has(id)) continue;
-    pctById[id] = q.pctAprobado; applicable++;
+  for (const [id, ps] of Object.entries(byId)) {
+    const type = fleet.getStructure(id)?.type || 'turbine';
+    const r = wbsProgress(ps, getWbs(type), overrides);
+    byStructure[id] = { pctOrdenado: r.pctOrdenado, torrePct: r.torrePct };
+    applicable++;
   }
   if (!applicable) return 0;
-  fleet.applyAvanceFromQuality(pctById, mode);
+  fleet.applyWbsProgress(byStructure, mode);
   // Persistir el nuevo avance en el parque activo (con snapshot para deshacer).
   try {
     const pm = window.shmParks;
@@ -348,6 +372,14 @@ function dashboardHTML(data) {
   const ensayos = Object.entries(eg).sort((a, b) => b[1] - a[1]).map(([g, n]) =>
     `<div class="cal-eg"><span class="cal-eg-l">${esc(g)}</span><div class="cal-bar"><span style="width:${(100 * n / egMax).toFixed(0)}%;background:var(--accent)"></span></div><span class="cal-eg-n">${n}</span></div>`).join('');
 
+  // Por PARTIDA (hito) — mapeo protocolo→partida sobre el WBS de torre (fase A).
+  const wp = wbsProgress(data.protocolos, getWbs('turbine'), getOverrides());
+  const partidaRows = Object.values(wp.porPartida).map((b) =>
+    `<tr><td>${esc(b.nombre)}</td><td>${b.total}</td><td>${b.aprobado}</td>
+     <td><div class="cal-bar"><span style="width:${pct(b.pct)};background:${heat(b.pct)}"></span></div>${pct(b.pct)}</td></tr>`).join('');
+  const sinAsignar = wp.sinAsignar.length
+    ? `<div class="cal-mut" style="margin-top:6px">${t('cal.wbs.unassigned', wp.sinAsignar.length)}</div>` : '';
+
   const reimport = data._rawOmitido ? `<div class="cal-warn">${t('cal.rawOmitted')} <button class="cal-link cal-reimport" type="button">${t('cal.reimport')}</button></div>` : '';
 
   return `<div class="mb-about-card cal-card" role="dialog" aria-label="${esc(t('cal.title'))}">
@@ -365,6 +397,10 @@ function dashboardHTML(data) {
     <div class="cal-mut">${esc(data.meta?.fuente || 'ReWind')} · ${t('cal.importedAt')} ${esc(imp)}</div>
     ${reimport}
     <div class="cal-kpis">${kpis}</div>
+
+    <h3>${t('cal.wbs.byPartida')} <span class="cal-mut">${t('cal.wbs.hint')}</span></h3>
+    <table class="cal-tbl"><thead><tr><th>${t('cal.wbs.partida')}</th><th>${t('cal.col.total')}</th><th>${t('cal.col.approved')}</th><th>${t('cal.col.progress')}</th></tr></thead><tbody>${partidaRows}</tbody></table>
+    ${sinAsignar}
 
     <h3>${t('cal.byArea')}</h3>
     <table class="cal-tbl"><thead><tr><th>${t('cal.col.area')}</th><th>${t('cal.col.total')}</th><th>${t('cal.col.approved')}</th><th>${t('cal.col.comments')}</th><th>${t('cal.col.progress')}</th></tr></thead><tbody>${areaRows}</tbody></table>
