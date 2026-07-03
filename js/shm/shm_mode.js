@@ -8,27 +8,28 @@
 //   inspecciones y señal temporal EN VIVO desde un Web Worker (DataSource).
 // Recortes (modelado) los hace shm.css ocultando, no borrando.
 // ─────────────────────────────────────────────────────────────────────────────
-import { FleetView } from './fleet_view.js?v=290';
-import { DataSource } from './data_source.js?v=290';
-import { computeTwin } from './digital_twin.js?v=290';
-import { ParkManager, loadParksStore } from './parks.js?v=290';
-import { MapView } from './map_view.js?v=290';
-import { defaultStages, builtFromStages } from './parks_data_caman.js?v=290';
-import { compassRoseSVG } from './compass.js?v=290';
-import { buildAvanceHUD } from './avance_hud.js?v=290';
-import { renderAvance } from './avance_dashboard.js?v=290';
-import * as Insp from './inspection.js?v=290';
-import * as Fat from './fatigue.js?v=290';
-import * as Instr from './instrumentation.js?v=290';
-import * as Calidad from './calidad.js?v=290';
-import * as Hist from './history.js?v=290';
-import * as Health from './health.js?v=290';
-import * as Bench from './benchmark.js?v=290';
-import { esc, safeUrl } from './util.js?v=290';
-import { t, getLang, setLang } from './i18n.js?v=290';
+import { FleetView } from './fleet_view.js?v=291';
+import { DataSource } from './data_source.js?v=291';
+import { computeTwin } from './digital_twin.js?v=291';
+import { ParkManager, loadParksStore } from './parks.js?v=291';
+import { MapView } from './map_view.js?v=291';
+import { defaultStages, builtFromStages } from './parks_data_caman.js?v=291';
+import { compassRoseSVG } from './compass.js?v=291';
+import { buildAvanceHUD } from './avance_hud.js?v=291';
+import { renderAvance } from './avance_dashboard.js?v=291';
+import * as Insp from './inspection.js?v=291';
+import * as Fat from './fatigue.js?v=291';
+import * as Instr from './instrumentation.js?v=291';
+import * as Calidad from './calidad.js?v=291';
+import * as Hist from './history.js?v=291';
+import * as Health from './health.js?v=291';
+import * as Bench from './benchmark.js?v=291';
+import * as Alarms from './alarms.js?v=291';
+import { esc, safeUrl } from './util.js?v=291';
+import { t, getLang, setLang } from './i18n.js?v=291';
 
 const F1_BASE = { turbine: 0.283, hv: 1.6 };
-const REWIND_VER = 'v290';   // versión visible del build (subir junto al cache-bust)
+const REWIND_VER = 'v291';   // versión visible del build (subir junto al cache-bust)
 const FS = 62.5;   // frecuencia de muestreo de la señal (Hz), igual que shm_worker.js
 // Clasificador ML de daño (0..4)
 const CLS = ['Sin daño', 'Leve', 'Moderado', 'Alto', 'Muy alto'];
@@ -116,14 +117,35 @@ async function boot() {
   const ds = new DataSource(liveUrl ? { liveUrl } : {});
   window.shmData = ds;
   const statusBar = buildStatusBar(fleet, { source: liveUrl ? t('src.live') : t('src.sim') });
+  const _alarmLevel = {};   // R-23a: último nivel de alarma por umbrales por estructura
+  const _alarmTh = { t: 0 };
   ds.onTick = (msg) => {
     const alarmed = [];
     rawAnom.clear();
+    const th = Alarms.getThresholds();
+    const evalTh = Date.now() - _alarmTh.t > 2000;   // evaluar umbrales cada 2 s
+    if (evalTh) _alarmTh.t = Date.now();
     for (const id in msg.summaries) {
       const sum = msg.summaries[id];
       for (const se of sum.sensors) fleet.setSensorStatus(id, se.id, se.status);
-      // Anomalía = clasificación ML alta (≥ Alto) o algún sensor en falla
-      const anom = (sum.cls || 0) >= 3 || sum.sensors.some(s => s.status === 'fault');
+      // R-23a: alarmas por UMBRAL configurable (RMS, Δf₁, viento) con log + notificación.
+      let thLevel = _alarmLevel[id] || null;
+      if (evalTh) {
+        const st = fleet.getStructure(id);
+        const base = window.shmTwin?.[st?.type];
+        const ta = Alarms.evaluate(sum, base, th);
+        thLevel = Alarms.worstLevel(ta);
+        const prev = _alarmLevel[id] || null;
+        const rank = { warn: 1, crit: 2 };
+        if (thLevel && (rank[thLevel] || 0) > (rank[prev] || 0)) {   // transición a peor
+          const a = ta.find(x => x.level === thLevel);
+          Alarms.logEvent({ t: Date.now(), id, label: st?.label || id, metric: a.metric, level: thLevel, value: +a.value.toFixed(1), th: a.th });
+          notifyAlarm(st?.label || id, a, thLevel);
+        }
+        _alarmLevel[id] = thLevel;
+      }
+      // Anomalía = clasificación ML alta (≥ Alto), sensor en falla, o alarma crítica por umbral
+      const anom = (sum.cls || 0) >= 3 || sum.sensors.some(s => s.status === 'fault') || thLevel === 'crit';
       if (anom) rawAnom.add(id);
       const eff = anom && !ack.has(id);   // reconocida (descartada) → se silencia el titileo
       fleet.setAlarm(id, eff);
@@ -281,7 +303,7 @@ async function boot() {
   // ── Relieve conceptual del terreno (DEM vendorizado) — encendido por defecto ─
   setLoad(88, 'Cargando relieve…'); await delay(40);
   try {
-    await fleet.loadTerrain('data/caman_dem.json?v=290');
+    await fleet.loadTerrain('data/caman_dem.json?v=291');
     fleet.setTerrainVisible(true);
     document.getElementById('shm-relieve-tool')?.classList.add('active');
   } catch (e) { console.warn('[shm] relieve no disponible', e); }
@@ -588,6 +610,14 @@ function openReportWindow(html, filename = 'informe-rewind.html') {
   } catch { /* sin fallback posible */ }
   alert(t('alert.popupBlocked'));
   return false;
+}
+
+// R-23a: notificación del navegador para alarmas críticas (si la PWA tiene permiso).
+function notifyAlarm(label, a, level) {
+  try {
+    if (level !== 'crit' || typeof Notification === 'undefined' || Notification.permission !== 'granted') return;
+    new Notification(`ReWind · ${label}`, { body: `${Alarms.METRIC_LABEL[a.metric]} = ${a.value.toFixed(1)} (umbral ${a.th})`, tag: 'rewind-alarm-' + label });
+  } catch { /* Notification no disponible */ }
 }
 
 // R-36d: tour de bienvenida (4 pasos anclados). Efecto «spotlight» con el truco
@@ -1268,7 +1298,9 @@ function buildDashboard(panel, fleet, actions) {
         <div class="row"><span>${t('sh.dmg')}</span><b id="sh-dmg">${dmg}%</b></div>
         <div class="row"><span>${t('sh.sensOk')}</span><b id="sh-ns">—</b></div>
         <div class="row"><span>${t('sh.f1now')}</span><b id="sh-f1">—</b></div>
-        <div class="note" style="font-size:10px">${t('sh.note')}</div>`;
+        <div class="note" style="font-size:10px">${t('sh.note')}</div>`
+        + alarmsEditorHTML();
+      wireAlarmsEditor(body);
     } else if (pane === 'senal') {
       body.innerHTML = `<div class="note" style="margin-top:0">${t('sig.note')}</div><div id="sig-wrap"></div>`;
       const wrap = body.querySelector('#sig-wrap');
@@ -1438,6 +1470,40 @@ function buildDashboard(panel, fleet, actions) {
       <div class="hi-info"><div class="hi-band" style="color:${col}">${t('hi.title')}: ${t('hi.band.' + h.band)}</div>
         <div class="hi-bd">${esc(breakdown)}</div></div>
     </div>`;
+  }
+
+  // R-23a: editor de umbrales de alarma + eventos recientes (pestaña Estado).
+  function alarmsEditorHTML() {
+    const th = Alarms.getThresholds();
+    const num = (id, v) => `<input type="number" id="${id}" value="${v}" min="0" step="1">`;
+    const log = Alarms.getLog().slice(-6).reverse();
+    const lc = getLang() === 'en' ? 'en-GB' : 'es-CL';
+    const evRows = log.map(e => `<div class="alm-ev"><span class="alm-dot ${e.level === 'crit' ? 'bad' : 'warn'}"></span><span class="alm-ev-nm">${esc(e.label)}</span><span class="alm-ev-m">${Alarms.METRIC_LABEL[e.metric]} ${e.value}</span><span class="alm-ev-t">${new Date(e.t).toLocaleTimeString(lc)}</span></div>`).join('') || `<div class="ins-mut">${t('alm.noEvents')}</div>`;
+    const notifState = (typeof Notification !== 'undefined' && Notification.permission === 'granted') ? '✓' : '';
+    return `<details class="alm-box"><summary>${t('alm.title')}</summary>
+      <div class="alm-grid">
+        <label>${t('alm.rmsWarn')} <span>mg</span>${num('alm-rmsW', th.rmsWarn)}</label>
+        <label>${t('alm.rmsCrit')} <span>mg</span>${num('alm-rmsC', th.rmsCrit)}</label>
+        <label>${t('alm.df1Warn')} <span>%</span>${num('alm-df1W', th.df1Warn)}</label>
+        <label>${t('alm.df1Crit')} <span>%</span>${num('alm-df1C', th.df1Crit)}</label>
+        <label>${t('alm.windCrit')} <span>m/s</span>${num('alm-windC', th.windCrit)}</label>
+      </div>
+      <div class="alm-actions"><button id="alm-save" class="ins-btn">${t('alm.save')}</button>
+        <button id="alm-notif" class="ins-btn cal-import-alt">${notifState} ${t('alm.notif')}</button></div>
+      <div class="shm-sub2">${t('alm.events')}</div>
+      <div class="alm-events">${evRows}</div>
+    </details>`;
+  }
+  function wireAlarmsEditor(body) {
+    body.querySelector('#alm-save')?.addEventListener('click', () => {
+      const v = (id) => Math.max(0, +body.querySelector('#' + id).value || 0);
+      Alarms.setThresholds({ rmsWarn: v('alm-rmsW'), rmsCrit: v('alm-rmsC'), df1Warn: v('alm-df1W'), df1Crit: v('alm-df1C'), windCrit: v('alm-windC') });
+      const b = body.querySelector('#alm-save'); b.textContent = '✓'; setTimeout(() => { b.textContent = t('alm.save'); }, 1200);
+    });
+    body.querySelector('#alm-notif')?.addEventListener('click', () => {
+      if (typeof Notification === 'undefined') { alert(t('alm.noNotif')); return; }
+      Notification.requestPermission().then(() => renderSHMPane());
+    });
   }
 
   // R-34: tendencia de f₁ vs tiempo (histórico persistente) + banda de la línea base
