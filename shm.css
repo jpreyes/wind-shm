@@ -92,6 +92,21 @@ body.shm #menubar { min-width: 0; overflow-x: auto; }
 .cal-apply-load { border-color: rgba(230,150,40,.5); }
 .cal-apply-load:hover { border-color: #e69628; }
 .cal-apply-skip { margin-top: 4px; }
+/* HUD de partidas (WBS) */
+.cal-wbs-card { max-width: 860px; }
+.wbs-typesel { display: inline-flex; align-items: center; gap: 8px; font-size: 12.5px; color: var(--muted, #8b97a3); margin: 4px 0 2px; }
+.wbs-typesel select { background: var(--bg3, #2a3340); color: var(--text); border: 1px solid var(--border2); border-radius: 6px; padding: 4px 8px; font-size: 12.5px; }
+.wbs-tbl td { vertical-align: middle; }
+.wbs-in { width: 100%; box-sizing: border-box; background: var(--bg3, #2a3340); color: var(--text); border: 1px solid var(--border2); border-radius: 6px; padding: 4px 7px; font-size: 12.5px; }
+.wbs-peso { width: 64px; }
+.wbs-ord { white-space: nowrap; }
+.wbs-ord button, .cal-icon-btn { background: none; border: 0; color: var(--muted, #8b97a3); cursor: pointer; font-size: 12px; padding: 1px 3px; }
+.wbs-ord button:hover:not([disabled]), .cal-icon-btn:hover { color: var(--accent); }
+.wbs-ord button[disabled] { opacity: .3; cursor: default; }
+.wbs-match { max-width: 220px; }
+.wbs-chip { display: inline-block; background: rgba(90,140,200,.18); border: 1px solid var(--border2); border-radius: 10px; padding: 1px 8px; margin: 1px 2px; font-size: 11px; }
+tr.wbs-unmapped td { background: rgba(230,150,40,.10); }
+tr.wbs-unmapped td:first-child::before { content: '⚠ '; color: #e69628; }
 .cal-tag-ok { background: rgba(40,180,110,.16); color: #28b46e; }
 .cal-form { margin: 6px 0 4px; }
 .cal-form-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 10px 14px; }

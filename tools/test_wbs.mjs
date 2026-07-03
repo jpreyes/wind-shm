@@ -39,5 +39,20 @@ ok(!!bs.T01 && !!bs.T02, 'agrupa T01 y T02');
 ok(near(bs.T01.porPartida.fundacion.pct, 2 / 3), 'T01 fundación 2/3');
 ok(near(bs.T02.torrePct, 1 / 5), 'T02 torre 20%');
 
+console.log('6) pctByGeom (gobierna el llenado 4D por componente)');
+const rg = wbsProgress(protos, wbs);
+ok(near(rg.pctByGeom.fundacion, 2 / 3), 'geom fundacion = 2/3');
+ok(rg.pctByGeom.fuste === 0 && rg.pctByGeom.gondola === 0, 'geoms sin protocolos = 0');
+
+console.log('7) regla editable `match` (consolidar un área nueva a una partida)');
+const wbs2 = defaultWbs('turbine');
+wbs2.find((p) => p.id === 'cableado').match = ['Plataforma'];   // el usuario mapea «Plataforma» → Puesta en marcha
+ok(partidaForProtocol({ id: 'z', area: 'Plataforma' }, wbs2) === 'cableado', 'área «Plataforma» → cableado vía match editado');
+
+console.log('8) reordenar el WBS no rompe el mapeo por geom');
+const reord = [...defaultWbs('turbine')].reverse();
+const rr = wbsProgress(protos, reord);
+ok(near(rr.pctByGeom.fundacion, 2 / 3), 'pctByGeom.fundacion estable tras reordenar');
+
 console.log(fail ? `\n✗ ${fail} fallo(s)` : '\n✓ todo OK');
 if (fail) process.exit(1);

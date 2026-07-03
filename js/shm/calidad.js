@@ -19,8 +19,8 @@ import { normEstado, wtgToId, diasHabilesSacyr } from '../../tools/sacyr_reader.
 import { writeSacyrAuto } from '../../tools/sacyr_writer.mjs';
 import { readQuality, writeTemplate, blankTemplate } from '../../tools/rewind_template.mjs';
 import { computeDerived } from '../../tools/sacyr_derived.mjs';
-import { defaultWbs, wbsProgress } from '../../tools/wbs.js';
-import { t } from './i18n.js?v=299';
+import { defaultWbs, wbsProgress, partidaForProtocol } from '../../tools/wbs.js';
+import { t } from './i18n.js?v=300';
 
 const STORE = 'rewind.calidad.v1';
 const XLSX_MIME = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
@@ -66,15 +66,41 @@ export function structureSummary(id) {
   return { total: q.total, aprobado: q.aprobado, pctAprobado: q.pctAprobado, pendientes: q.total - q.aprobado - q.informativo - q.nulo };
 }
 
-// ── WBS de obra (partidas / hitos) ────────────────────────────────────────────
-// Config editable (fase B): WBS por tipo + overrides manuales protocolo→partida.
-// Por ahora se semilla con el WBS por defecto; overrides vacío.
+// ── WBS de obra (partidas / hitos) — config editable en el HUD (fase B) ───────
+// { wbs: { turbine:[{id,nombre,geom,peso,match[]}], hv:[…] }, overrides:{protoId:partidaId} }
 const WBS_STORE = 'rewind.wbs.v1';
 function loadWbsCfg() { try { return JSON.parse(localStorage.getItem(WBS_STORE)) || {}; } catch { return {}; } }
+function saveWbsCfg(c) { try { localStorage.setItem(WBS_STORE, JSON.stringify(c)); } catch (e) { console.warn('[wbs] no se pudo persistir', e); } }
 export function getWbs(type = 'turbine') { const c = loadWbsCfg(); return (c.wbs && c.wbs[type]) || defaultWbs(type); }
+export function saveWbs(type, list) { const c = loadWbsCfg(); (c.wbs ??= {})[type] = list; saveWbsCfg(c); }
+export function resetWbs(type) { const c = loadWbsCfg(); if (c.wbs) delete c.wbs[type]; saveWbsCfg(c); }
 export function getOverrides() { return loadWbsCfg().overrides || {}; }
+export function setOverride(protoId, partidaId) {
+  const c = loadWbsCfg(); c.overrides ??= {};
+  if (partidaId) c.overrides[protoId] = partidaId; else delete c.overrides[protoId];
+  saveWbsCfg(c);
+}
+const wbsUid = () => 'w-' + Date.now().toString(36) + Math.random().toString(36).slice(2, 5);
 
-// Avance WBS de UNA estructura (Tnn) — para la ficha de torre / HUD (fase B).
+// Geoms (componentes físicos) disponibles por tipo — opciones del select en el HUD.
+const GEOMS = {
+  turbine: [['fundacion', 'Fundación'], ['fuste', 'Fuste'], ['gondola', 'Góndola'], ['rotor', 'Rotor'], ['cableado', 'Cableado / P.M.']],
+  hv: [['fundacion', 'Fundación'], ['celosia', 'Celosía'], ['conductores', 'Conductores'], ['energizacion', 'Energización']],
+};
+
+// Áreas/hitos distintos hallados en los datos + a qué partida mapea cada uno hoy
+// (para el consolidador de nomenclatura del HUD).
+function detectAreas(data, wbs) {
+  const seen = new Map();   // literal → {area, total, partida}
+  for (const p of (data.protocolos || [])) {
+    const key = p.area || '(sin área)';
+    if (!seen.has(key)) seen.set(key, { area: p.area || null, total: 0, partida: partidaForProtocol(p, wbs, getOverrides()) });
+    seen.get(key).total++;
+  }
+  return [...seen.values()].sort((a, b) => b.total - a.total);
+}
+
+// Avance WBS de UNA estructura (Tnn) — para la ficha de torre / HUD.
 export function wbsSummary(id, type = 'turbine') {
   const d = load(); if (!d) return null;
   const ps = d.protocolos.filter((p) => p.estructuraId === id);
@@ -106,7 +132,7 @@ export function applyToFleet(mode = 'update', fleet) {
   for (const [id, ps] of Object.entries(byId)) {
     const type = fleet.getStructure(id)?.type || 'turbine';
     const r = wbsProgress(ps, getWbs(type), overrides);
-    byStructure[id] = { pctOrdenado: r.pctOrdenado, torrePct: r.torrePct };
+    byStructure[id] = { pctByGeom: r.pctByGeom, torrePct: r.torrePct };
     applicable++;
   }
   if (!applicable) return 0;
@@ -268,9 +294,13 @@ export function addCiclo(id, { estadoRaw, fechaEnvio, fechaRetorno, comentarios,
   markDirty(data);
 }
 
-// ── Overlay (dashboard ↔ gestión) ────────────────────────────────────────────
-let view = 'dash';        // 'dash' | 'manage'
+// ── Overlay (dashboard ↔ gestión ↔ WBS) ──────────────────────────────────────
+let view = 'dash';        // 'dash' | 'manage' | 'wbs'
 let editingId = null;     // id del protocolo en edición (o null = nuevo)
+let wbsType = 'turbine';  // tipo de estructura en edición en el HUD de partidas
+let wbsDraft = null;      // copia de trabajo del WBS ({turbine:[], hv:[]}) mientras se edita
+
+const normLit = (s) => String(s ?? '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^a-z0-9]+/g, ' ').trim();
 
 export function showPanel() {
   document.getElementById('cal-ov')?.remove();
@@ -293,7 +323,7 @@ export function showPanel() {
         <p class="cal-mut" style="margin-top:10px">${t('cal.templateHint')}</p>
       </div>`;
     } else {
-      ov.innerHTML = view === 'manage' ? manageHTML(data) : dashboardHTML(data);
+      ov.innerHTML = view === 'wbs' ? wbsHTML(data) : view === 'manage' ? manageHTML(data) : dashboardHTML(data);
     }
   };
   paint();
@@ -310,7 +340,30 @@ export function showPanel() {
       return;
     }
     if (e.target.closest('.cal-manage')) { view = 'manage'; editingId = null; paint(); return; }
+    if (e.target.closest('.cal-wbs')) { wbsDraft = { turbine: getWbs('turbine'), hv: getWbs('hv') }; view = 'wbs'; paint(); return; }
     if (e.target.closest('.cal-back')) { view = 'dash'; paint(); return; }
+    // ── HUD de partidas (WBS) ──
+    if (e.target.closest('.wbs-add')) { wbsDraft[wbsType].push({ id: wbsUid(), nombre: t('cal.wbs.newPartida'), geom: '', peso: 1, match: [] }); paint(); return; }
+    const wDel = e.target.closest('.wbs-del');
+    if (wDel) { wbsDraft[wbsType] = wbsDraft[wbsType].filter((p) => p.id !== wDel.dataset.pid); paint(); return; }
+    const wUp = e.target.closest('.wbs-up'), wDn = e.target.closest('.wbs-down');
+    if (wUp || wDn) {
+      const arr = wbsDraft[wbsType]; const pid = (wUp || wDn).dataset.pid;
+      const i = arr.findIndex((p) => p.id === pid); const j = wUp ? i - 1 : i + 1;
+      if (i >= 0 && j >= 0 && j < arr.length) { [arr[i], arr[j]] = [arr[j], arr[i]]; paint(); }
+      return;
+    }
+    if (e.target.closest('.wbs-save')) {
+      saveWbs('turbine', wbsDraft.turbine); saveWbs('hv', wbsDraft.hv);
+      const applied = window.shmCalidadAvance ? applyToFleet('update') : 0;   // refleja si el 4D ya estaba cargado
+      alert(t('cal.wbs.saved') + (applied ? ' ' + t('cal.wbs.reapplied', applied) : ''));
+      view = 'dash'; paint(); window.dispatchEvent(new CustomEvent('calidad-changed'));
+      return;
+    }
+    if (e.target.closest('.wbs-reset')) {
+      if (confirm(t('cal.wbs.confirmReset'))) { wbsDraft[wbsType] = defaultWbs(wbsType); paint(); }
+      return;
+    }
     if (e.target.closest('.cal-add')) { editingId = null; view = 'manage'; paint(); focusForm(ov); return; }
     const editBtn = e.target.closest('.cal-edit');
     if (editBtn) { editingId = editBtn.dataset.id; view = 'manage'; paint(); focusForm(ov); return; }
@@ -323,8 +376,33 @@ export function showPanel() {
     const form = e.target.closest('.cal-form'); if (!form) return;
     e.preventDefault();
     const f = Object.fromEntries(new FormData(form).entries());
+    const wasEditing = editingId;
     saveProtocolo(f, editingId || null);
+    if (wasEditing && 'partidaOverride' in f) setOverride(wasEditing, f.partidaOverride || null);   // override manual protocolo→partida
     editingId = null; paint();
+  });
+
+  // Edición en vivo del HUD de partidas (inputs/selects) sin re-pintar en cada tecla.
+  ov.addEventListener('change', (e) => {
+    if (view !== 'wbs' || !wbsDraft) return;
+    const wbs = wbsDraft[wbsType];
+    // Selector de tipo (torre / AT).
+    if (e.target.matches('.wbs-type')) { wbsType = e.target.value; paint(); return; }
+    // Campos de una partida (nombre / peso / geom).
+    const field = e.target.dataset?.wbs;
+    if (field) {
+      const p = wbs.find((x) => x.id === e.target.dataset.pid); if (!p) return;
+      if (field === 'peso') p.peso = Math.max(0, +e.target.value || 0);
+      else p[field] = e.target.value;
+      return;   // no re-pintar (no perder foco)
+    }
+    // Consolidador: mapear un área/hito a una partida (escribe en partida.match).
+    if (e.target.dataset?.areamap != null) {
+      const area = e.target.dataset.areamap, pid = e.target.value;
+      for (const p of wbs) p.match = (p.match || []).filter((m) => normLit(m) !== normLit(area));
+      if (pid) { const p = wbs.find((x) => x.id === pid); if (p) (p.match ??= []).push(area); }
+      paint();
+    }
   });
 
   addEventListener('keydown', function escFn(e) { if (e.key === 'Escape') { close(); removeEventListener('keydown', escFn); } });
@@ -388,6 +466,7 @@ function dashboardHTML(data) {
       <h2>${t('cal.title')}</h2>
       <div class="cal-actions">
         <button class="cal-btn cal-apply4d ${window.shmCalidadAvance ? 'cal-on' : 'cal-import-alt'}" type="button" title="${esc(t('cal.apply.tip'))}">${t('cal.apply.btn')}</button>
+        <button class="cal-btn cal-import-alt cal-wbs" type="button" title="${esc(t('cal.wbs.tip'))}">${t('cal.wbs.btn')}</button>
         <button class="cal-btn cal-import-alt cal-manage" type="button">${t('cal.manage')}</button>
         <button class="cal-btn cal-export" type="button" title="${esc(t('cal.exportTip'))}">${t('cal.export')}</button>
         <button class="cal-btn cal-import-alt cal-template" type="button" title="${esc(t('cal.templateHint'))}">${t('cal.template')}</button>
@@ -417,6 +496,63 @@ function dashboardHTML(data) {
   </div>`;
 }
 
+// ── HUD de partidas (WBS): crear/editar hitos + consolidar áreas → partida ────
+function wbsHTML(data) {
+  const wbs = wbsDraft[wbsType];
+  const geomOpts = (sel) => GEOMS[wbsType].map(([v, l]) => `<option value="${v}"${v === sel ? ' selected' : ''}>${esc(l)}</option>`).join('') + `<option value=""${!sel ? ' selected' : ''}>—</option>`;
+  const partOpts = (sel) => `<option value=""${!sel ? ' selected' : ''}>— sin asignar —</option>` + wbs.map((p) => `<option value="${p.id}"${p.id === sel ? ' selected' : ''}>${esc(p.nombre)}</option>`).join('');
+
+  const rows = wbs.map((p, i) => {
+    const chips = (p.match || []).map((m) => `<span class="wbs-chip">${esc(m)}</span>`).join('') || '<span class="cal-mut">—</span>';
+    return `<tr data-pid="${p.id}">
+      <td class="wbs-ord"><button class="wbs-up" data-pid="${p.id}" title="Subir"${i === 0 ? ' disabled' : ''}>▲</button><button class="wbs-down" data-pid="${p.id}" title="Bajar"${i === wbs.length - 1 ? ' disabled' : ''}>▼</button></td>
+      <td><input class="wbs-in" data-wbs="nombre" data-pid="${p.id}" value="${esc(p.nombre)}"></td>
+      <td><input class="wbs-in wbs-peso" data-wbs="peso" data-pid="${p.id}" type="number" min="0" step="0.5" value="${p.peso ?? 1}"></td>
+      <td><select class="wbs-in" data-wbs="geom" data-pid="${p.id}">${geomOpts(p.geom)}</select></td>
+      <td class="wbs-match">${chips}</td>
+      <td><button class="wbs-del cal-icon-btn" data-pid="${p.id}" title="${esc(t('cal.del'))}">🗑</button></td>
+    </tr>`;
+  }).join('');
+
+  // Consolidador de nomenclatura: cada área/hito de los datos → una partida.
+  const areas = detectAreas(data, wbs);
+  const areaMapRows = areas.map((a) => {
+    if (!a.area) return `<tr><td class="cal-mut">(sin área)</td><td>${a.total}</td><td class="cal-mut">— (usar override por protocolo)</td></tr>`;
+    const cls = a.partida ? '' : ' wbs-unmapped';
+    return `<tr class="${cls}"><td>${esc(a.area)}</td><td>${a.total}</td>
+      <td><select class="wbs-in" data-areamap="${esc(a.area)}">${partOpts(a.partida)}</select></td></tr>`;
+  }).join('');
+
+  return `<div class="mb-about-card cal-card cal-wbs-card" role="dialog" aria-label="${esc(t('cal.wbs.title'))}">
+    <button class="mb-about-x" type="button" aria-label="✕">✕</button>
+    <div class="cal-head">
+      <h2>${t('cal.wbs.title')}</h2>
+      <div class="cal-actions">
+        <button class="cal-btn cal-import-alt cal-back" type="button">${t('cal.back')}</button>
+        <button class="cal-btn cal-import-alt wbs-reset" type="button" title="${esc(t('cal.wbs.confirmReset'))}">${t('cal.wbs.reset')}</button>
+        <button class="cal-btn wbs-save" type="button">${t('cal.wbs.save')}</button>
+      </div>
+    </div>
+    <p class="cal-mut">${t('cal.wbs.desc')}</p>
+    <label class="wbs-typesel">${t('cal.wbs.type')}
+      <select class="wbs-type">
+        <option value="turbine"${wbsType === 'turbine' ? ' selected' : ''}>${t('cal.wbs.turbine')}</option>
+        <option value="hv"${wbsType === 'hv' ? ' selected' : ''}>${t('cal.wbs.hv')}</option>
+      </select>
+    </label>
+
+    <h3>${t('cal.wbs.partidas')} <span class="cal-mut">(${wbs.length})</span></h3>
+    <table class="cal-tbl wbs-tbl"><thead><tr>
+      <th></th><th>${t('cal.wbs.partida')}</th><th>${t('cal.wbs.weight')}</th><th>${t('cal.wbs.geom')}</th><th>${t('cal.wbs.areas')}</th><th></th>
+    </tr></thead><tbody>${rows}</tbody></table>
+    <button class="cal-btn cal-import-alt wbs-add" type="button">${t('cal.wbs.add')}</button>
+
+    <h3>${t('cal.wbs.consolidate')} <span class="cal-mut">${t('cal.wbs.consolidateHint')}</span></h3>
+    <table class="cal-tbl"><thead><tr><th>${t('cal.col.area')}</th><th>${t('cal.col.total')}</th><th>${t('cal.wbs.partida')}</th></tr></thead>
+      <tbody>${areaMapRows || `<tr><td colspan="3" class="cal-mut">${t('cal.none')}</td></tr>`}</tbody></table>
+  </div>`;
+}
+
 // ── Vista de gestión: formulario crear/editar + tabla con editar/borrar ──────
 function manageHTML(data) {
   const cat = data.catalogos || {};
@@ -437,6 +573,7 @@ function manageHTML(data) {
       ${field('hitoPago', t('cal.f.milestone'), editing?.hitoPago, 'placeholder="1er"')}
       <label class="cal-fl"><span>${t('cal.f.state')}</span><select name="estadoActualRaw"><option value=""></option>${opts(estados, editing?.estadoActualRaw)}</select></label>
       ${field('descripcion', t('cal.f.desc'), editing?.descripcion)}
+      ${editing ? `<label class="cal-fl"><span>${t('cal.wbs.override')}</span><select name="partidaOverride"><option value="">— auto —</option>${getWbs('turbine').map((wp) => `<option value="${esc(wp.id)}"${getOverrides()[editing.id] === wp.id ? ' selected' : ''}>${esc(wp.nombre)}</option>`).join('')}</select></label>` : ''}
     </div>
     <div class="cal-form-actions">
       <button class="cal-btn" type="submit">${editing ? t('cal.f.saveEdit') : t('cal.f.create')}</button>

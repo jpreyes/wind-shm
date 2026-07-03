@@ -60,14 +60,22 @@ export const SYNONYMS = {
   energizacion: ['energizacion', 'puesta en tension', 'energizado'],
 };
 
+// Literales que hacen «match» a una partida: sus `match` explícitos (editados en el
+// HUD) ∪ los sinónimos por defecto de su geom. Aditivo → los defaults siguen valiendo.
+function partidaSyns(part) {
+  const explicit = (part.match || []).map(norm).filter(Boolean);
+  const syn = SYNONYMS[part.geom || part.id] || [norm(part.nombre)];
+  return [...explicit, ...syn];
+}
+
 // ¿A qué partida (id) corresponde un protocolo?  override manual > regla por
-// área/hito de pago/descripción > null (sin asignar). Devuelve el id de la partida.
+// área/hito de pago/descripción (match ∪ sinónimos) > null (sin asignar).
 export function partidaForProtocol(p, wbs, overrides = {}) {
   if (p && overrides && overrides[p.id]) return overrides[p.id];
   const hay = [p?.area, p?.hitoPago, p?.descripcion].map(norm).filter(Boolean);
   if (!hay.length) return null;
   for (const part of wbs) {
-    const syns = SYNONYMS[part.geom || part.id] || [norm(part.nombre)];
+    const syns = partidaSyns(part);
     for (const h of hay) for (const s of syns) if (h === s || h.includes(s) || s.includes(h)) return part.id;
   }
   return null;
@@ -95,14 +103,20 @@ export function wbsProgress(protocolos, wbs, overrides = {}) {
   }
   let wSum = 0, wPct = 0;
   const pctOrdenado = [];
+  const geomAcc = {};   // geom → {w, wp} para promedio ponderado por peso
   for (const part of wbs) {
     const b = porPartida[part.id];
     b.pct = b.total ? +(b.aprobado / b.total).toFixed(4) : 0;
     pctOrdenado.push(b.pct);
     wSum += b.peso; wPct += b.peso * b.pct;
+    if (part.geom) { const g = (geomAcc[part.geom] ??= { w: 0, wp: 0 }); g.w += b.peso; g.wp += b.peso * b.pct; }
   }
+  // Avance por componente físico (geom) → gobierna el llenado 4D. Si varias partidas
+  // comparten geom, se promedia ponderado por peso.
+  const pctByGeom = {};
+  for (const [g, a] of Object.entries(geomAcc)) pctByGeom[g] = a.w ? +(a.wp / a.w).toFixed(4) : 0;
   const torrePct = wSum ? +(wPct / wSum).toFixed(4) : 0;
-  return { porPartida, pctOrdenado, torrePct, sinAsignar };
+  return { porPartida, pctOrdenado, pctByGeom, torrePct, sinAsignar };
 }
 
 // Agrupa los protocolos por estructura y calcula el avance WBS de cada una.

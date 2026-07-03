@@ -7,11 +7,11 @@
 // ─────────────────────────────────────────────────────────────────────────────
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
-import { createTurbine, TOWER_H } from './turbine_mesh.js?v=299';
-import { createSubstationTower, groundCable, overheadLine } from './structures.js?v=299';
-import { toScene, CAMAN_CENTER, LAYOUT_SCALE, defaultStages, builtFromStages } from './parks_data_caman.js?v=299';
-import { CAMAN_ROADS } from './caman_roads.js?v=299';
-import { solarPosition, dateFromLocal, sunSceneDir } from './solar.js?v=299';
+import { createTurbine, TOWER_H } from './turbine_mesh.js?v=300';
+import { createSubstationTower, groundCable, overheadLine } from './structures.js?v=300';
+import { toScene, CAMAN_CENTER, LAYOUT_SCALE, defaultStages, builtFromStages } from './parks_data_caman.js?v=300';
+import { CAMAN_ROADS } from './caman_roads.js?v=300';
+import { solarPosition, dateFromLocal, sunSceneDir } from './solar.js?v=300';
 
 const SPACING = 235;
 const TOWER_SCALE = 2.2;   // agranda las torres (vista esquemática) para que destaquen sobre el relieve
@@ -270,7 +270,7 @@ export class FleetView {
   // ── Relieve conceptual (capa de terreno) ─────────────────────────────────────
   // Carga el DEM vendorizado y añade la malla (oculta hasta activarla).
   async loadTerrain(url) {
-    const { Terrain } = await import('./terrain.js?v=299');
+    const { Terrain } = await import('./terrain.js?v=300');
     this._TerrainClass = Terrain;                     // para reconstruir al cambiar de escala
     const dem = await (await fetch(url)).json();
     this.terrain = new Terrain(dem, { vex: 1.5 });   // relieve exagerado (esquemático)
@@ -628,13 +628,20 @@ export class FleetView {
   //                     están en el mapa quedan en 0 (reinicio del parque).
   //   · mode='update' → sólo toca las estructuras presentes en el mapa.
   applyWbsProgress(byStructure, mode = 'update') {
+    // Orden geom de las etapas 4D físicas por tipo (para mapear partida→etapa por
+    // componente, robusto a que el WBS se reordene/edite en el HUD).
+    const GEOM_BY_TYPE = {
+      turbine: ['fundacion', 'fuste', 'gondola', 'rotor', 'cableado'],
+      hv: ['fundacion', 'celosia', 'conductores', 'energizacion'],
+    };
     let touched = 0, applied = 0;
     for (const st of this.structures) {
       const rec = byStructure[st.id];
       if (mode === 'update' && !rec) continue;
       let stages = (st.stages && st.stages.length) ? st.stages : defaultStages(st.type, 0);
-      const pcts = rec?.pctOrdenado || [];
-      stages = stages.map((s, i) => ({ ...s, pct: Math.round((rec ? (pcts[i] ?? 0) : 0) * 100) }));
+      const geoms = GEOM_BY_TYPE[st.type] || GEOM_BY_TYPE.turbine;
+      const byGeom = rec?.pctByGeom || {};
+      stages = stages.map((s, i) => ({ ...s, pct: Math.round((rec ? (byGeom[geoms[i]] ?? 0) : 0) * 100) }));
       st.stages = stages;                       // borra las partidas previas y las re-siembra
       st.built = builtFromStages(stages);
       touched++; if (rec) applied++;
