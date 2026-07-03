@@ -1,6 +1,7 @@
 # Frente 4 — Backend de datos reales (`R-10`/`R-11`)
 
-**Estado:** plan · **Hardware real:** ADXL355 (acelerómetro MEMS 20-bit, bajo ruido) +
+**Estado:** plan · **listo para arrancar el Sprint 0 (§3, sin hardware ni costo)** ·
+**Hardware real:** ADXL355 (acelerómetro MEMS 20-bit, bajo ruido) +
 inclinómetro, **gateway Raspberry Pi**, 2–3 sensores por gateway. Hoy ~10 sensores
 (~4 gateways); piloto ~200 sensores (~70–100 gateways).
 
@@ -138,9 +139,64 @@ photos(meta, path), work_orders, alarm_rules, alarm_events, users(role), baselin
 - **Respaldo:** `pg_dump` nocturno + `influx backup` semanal + rsync de `raw/` a un
   segundo disco/NAS. Sin esto no hay piloto serio.
 
+### Layout del repo (dónde vive cada cosa)
+
+El backend NO va a GitHub Pages (que es solo el sitio estático). Convive en el repo
+pero se despliega aparte. Lo ya existente en negrita:
+
+```
+bridge/                    # ya existe — decodificador de tramas + bridge MQTT→Influx
+  accel_frame.mjs          #  ✅ trama binaria (v1 hoy) → extender a v2 (3 ejes µg/int32)
+  esp32_sim.mjs            #  ✅ simulador de nodo (publica tramas a MQTT)
+  mqtt_influx_bridge.mjs   #  ✅ suscribe rewind/accel/# → Influx (adaptar a v2 + features)
+  package.json             #  ✅
+server/                    # NUEVO — el servicio rewind-api (Node)
+  ws_live.mjs              #  WS /live → {type:'tick', summaries, waves} (mismo esquema)
+  rest.mjs                 #  REST: metadatos, CMMS, queries de replay
+  alarms_engine.mjs        #  reglas Postgres + evaluación en el stream + notifier
+  features.mjs             #  RMS/σ/pico/kurtosis/f1(Welch)/tilt/temp desde el crudo
+firmware/rewind_sensor/    # ✅ ya existe — referencia ESP32 (.ino); el gateway real es Pi
+gateway/                   # NUEVO — la Raspberry Pi
+  sampler.py               #  ADXL355 SPI (FIFO/DRDY) + chrony + trama v2 + cola SQLite + LWT
+  provision.sh             #  id + credenciales desde Postgres → /etc/rewind
+infra/                     # NUEVO — despliegue
+  docker-compose.yml       #  mosquitto · influxdb:2 · postgres:16 · rewind-api · caddy
+  Caddyfile · mosquitto.conf · schema.sql (Postgres)
+js/shm/data_source.js      # ✅ el cliente YA soporta ?live=wss://…/live (LiveSource)
+```
+
+> Regla: `bridge/`, `server/`, `gateway/`, `infra/` quedan **fuera** del deploy de Pages
+> (ya lo están: `bridge/`/`firmware/` no se sirven). El cliente no cambia salvo la
+> reconexión WS (auditoría A2).
+
 ---
 
 ## 3. Cómo montarlo — fases (cada una termina en algo demostrable)
+
+### ▶ Sprint 0 — cadena punta a punta SIN hardware ni costo (lo que desbloquea todo)
+
+**La validación más barata y más importante:** probar que `esp32_sim → MQTT → bridge →
+Influx → rewind-api → WS /live → el dashboard real` funciona, **sin comprar ni instalar
+nada**. Todo en el laptop, con Docker. Si esto anda, el resto es «poner sensores».
+
+Bucle mínimo (≈2–3 días):
+1. `infra/docker-compose.yml` con Mosquitto + InfluxDB (Postgres/Caddy pueden esperar).
+2. Extender `accel_frame.mjs` a **v2** (3 ejes, µg/int32) + test Node (round-trip de trama).
+3. `esp32_sim.mjs` publica tramas v2 sintéticas (reusar la señal del `shm_worker`); el
+   `mqtt_influx_bridge` las decodifica, calcula features 1/min y las escribe a Influx.
+4. `server/ws_live.mjs` lee las features (+ ring crudo de la foco) y emite el tick 1 Hz.
+5. Abrir **`app.html?live=wss://localhost:PORT/live`** → el dashboard que ya existe se
+   pinta con datos del banco. **Cero cambios en el front.**
+
+**Criterio de éxito (Sprint 0):** la app en modo `?live=` muestra f₁/RMS/viento moviéndose
+desde el banco; el histórico (R-34) y el replay (R-37) siguen funcionando sobre ese dato;
+la barra de estado dice «En vivo». *(Esto valida la arquitectura `DataSource`/`LiveSource`/
+`handleTick` que ya construimos en la Fase 2.)*
+
+**Pendiente del front que aparece aquí:** reconexión automática del WebSocket (auditoría
+**A2**) — hoy `DataSource` cae a simulación si el WS falla; agregar back-off + reintento.
+
+### Detalle de fases (1–2 = el Sprint 0 de arriba en detalle; 3+ ya con hardware)
 
 1. **Banco local (sin hardware, 1–2 días).** `docker-compose.yml` con los 5 servicios;
    extender `accel_frame.mjs` a **v2 (3 ejes, µg/int32)** con test Node; adaptar
@@ -208,3 +264,32 @@ Starlink como enlace del parque tiene 3 implicancias de diseño:
 - **¿Continuo vs ciclo?** para R-21: preguntar a JP qué densidad de ventanas necesita
   su método; el ciclo es configurable por sensor desde Postgres.
 - Cadena de custodia de datos (piloto con cliente): definir retención contractual.
+
+---
+
+## 5. Decisiones a tomar AHORA (para arrancar el Sprint 0)
+
+Ninguna necesita hardware; son las que fijan el arranque:
+
+- [ ] **Confirmar stack:** Node en servidor, Python en la Pi, Docker Compose on-prem. *(recomendado, ya alineado con `bridge/`)*
+- [ ] **Formato de trama v2:** `u8 axes` + XYZ int32 en µg, lote ~1 s @125 Hz. *(cerrar antes de tocar `accel_frame.mjs`)*
+- [ ] **Features 1/min:** lista mínima = `rms, std, pk, kurt, f1(Welch), tilt_x, tilt_y, temp`. *(¿alguna más para el dashboard actual?)*
+- [ ] **Ciclo de crudo para OMA:** continuo (10 sensores) vs ventana 10/30 min (200). → **preguntar a JP** qué densidad necesita su método ultramétrico (R-21).
+- [ ] **Persistencia CMMS:** ¿migramos inspecciones/calidad a Postgres en la fase 5, o antes? Define cuándo aparece el multiusuario.
+- [ ] **Acceso remoto:** Cloudflare Tunnel (dashboard clientes) + Tailscale (operación/SSH a Pis). *(decidido en §4; confirmar cuentas)*
+- [ ] **Red intra-parque:** fibra del colector / radios PtP / 4G por cluster — condiciona dónde van los ~100 gateways. *(dato de terreno pendiente)*
+
+## 6. Definición de «listo» (piloto)
+
+El piloto se considera montado cuando:
+1. **Sprint 0 verde:** app en `?live=` con datos del banco, con reconexión WS.
+2. **≥2 sensores reales** de una torre en el dashboard, con timestamp disciplinado.
+3. **Tendencia de f₁ real de ≥1 semana** visible (features en Influx + retención).
+4. **Ventanas crudas archivándose** y reprocesables por el módulo OMA (R-21).
+5. **CMMS/calidad en Postgres** (multiusuario + roles reales, cierra R-38/R-32/R-41 v2).
+6. **Alarma 24/7** con notificación (incl. «gateway offline» por LWT).
+7. **Backups probados** (restaurar una vez) + acceso remoto operativo + doc de operación.
+
+> **Orden recomendado de valor/costo:** Sprint 0 → Pi de referencia (2 sensores) →
+> features+archivo → alarmas → CMMS a Postgres → endurecer. El Sprint 0 es el que
+> convierte «arquitectura en papel» en «cadena que anda», al menor costo posible.
