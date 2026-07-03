@@ -17,7 +17,7 @@
 import { readSacyr, normEstado, wtgToId, diasHabilesSacyr } from '../../tools/sacyr_reader.mjs';
 import { writeSacyrAuto } from '../../tools/sacyr_writer.mjs';
 import { computeDerived } from '../../tools/sacyr_derived.mjs';
-import { t } from './i18n.js?v=280';
+import { t } from './i18n.js?v=281';
 
 const STORE = 'rewind.calidad.v1';
 const XLSX_MIME = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';

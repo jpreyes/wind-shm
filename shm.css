@@ -26,7 +26,10 @@ body.shm #menubar { min-width: 0; overflow-x: auto; }
 .mb-menu { position: relative; }
 .mb-top { background: none; border: 0; color: var(--text); cursor: pointer; font: inherit; font-size: 12.5px; padding: 6px 10px; border-radius: 6px; }
 .mb-top:hover, .mb-menu.open .mb-top { background: var(--bg4); }
-.mb-dd { position: absolute; top: 100%; left: 0; min-width: 220px; background: var(--bg2); border: 1px solid var(--border2); border-radius: 8px; box-shadow: 0 8px 24px rgba(0,0,0,.28); padding: 5px; display: none; z-index: 200; }
+/* position: fixed → el desplegable escapa del `overflow-x:auto` del #menubar
+   (que si no lo recorta) y de cualquier contexto de apilamiento. La posición
+   (left/top) la fija el JS al abrir, bajo el botón. */
+.mb-dd { position: fixed; min-width: 220px; background: var(--bg2); border: 1px solid var(--border2); border-radius: 8px; box-shadow: 0 8px 24px rgba(0,0,0,.28); padding: 5px; display: none; z-index: 9000; }
 .mb-menu.open .mb-dd { display: block; }
 .mb-item { display: block; width: 100%; text-align: left; background: none; border: 0; color: var(--text); cursor: pointer; font: inherit; font-size: 12.5px; padding: 7px 10px; border-radius: 6px; white-space: nowrap; }
 .mb-item:hover { background: var(--accent); color: #fff; }
