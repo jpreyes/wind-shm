@@ -107,6 +107,13 @@ body.shm #menubar { min-width: 0; overflow-x: auto; }
 .wbs-chip { display: inline-block; background: rgba(90,140,200,.18); border: 1px solid var(--border2); border-radius: 10px; padding: 1px 8px; margin: 1px 2px; font-size: 11px; }
 tr.wbs-unmapped td { background: rgba(230,150,40,.10); }
 tr.wbs-unmapped td:first-child::before { content: '⚠ '; color: #e69628; }
+/* Asistente de importación agnóstico */
+.cal-wiz-card { max-width: 640px; }
+.wiz-fl { display: flex; align-items: center; gap: 10px; margin: 8px 0; font-size: 12.5px; }
+.wiz-fl > span { flex: 0 0 130px; color: var(--muted, #8b97a3); }
+.wiz-fl select, .wiz-fl input { flex: 1; background: var(--bg3, #2a3340); color: var(--text); border: 1px solid var(--border2); border-radius: 6px; padding: 5px 8px; font-size: 12.5px; }
+.wiz-in { width: 100%; box-sizing: border-box; background: var(--bg3, #2a3340); color: var(--text); border: 1px solid var(--border2); border-radius: 6px; padding: 4px 7px; font-size: 12.5px; }
+.wiz-req { color: #e69628; font-weight: 700; }
 .wbs-protos { white-space: nowrap; }
 .wbs-n { display: inline-block; min-width: 18px; text-align: center; font-weight: 600; }
 .wbs-addproto { font-size: 14px; }
