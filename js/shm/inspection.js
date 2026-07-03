@@ -123,13 +123,31 @@ export const conditionLabel = (k) => (CONDITIONS.find(c => c.key === k) || CONDI
 // ── Almacén local (localStorage) por estructura ──────────────────────────────
 const KEY = 'rewind.inspections.v1';
 const loadAll = () => { try { return JSON.parse(localStorage.getItem(KEY)) || {}; } catch { return {}; } };
-const saveAll = (o) => { try { localStorage.setItem(KEY, JSON.stringify(o)); } catch (e) { console.warn('[insp] no se pudo guardar', e); } };
+// R-40c: al llenarse el localStorage, avisar (evento) en vez de fallar en silencio.
+const saveAll = (o) => {
+  try { localStorage.setItem(KEY, JSON.stringify(o)); return true; }
+  catch (e) {
+    console.warn('[insp] no se pudo guardar', e);
+    const quota = e && (e.name === 'QuotaExceededError' || e.name === 'NS_ERROR_DOM_QUOTA_REACHED' || e.code === 22 || e.code === 1014);
+    if (quota && typeof window !== 'undefined') window.dispatchEvent(new CustomEvent('rewind-storage-full', { detail: { key: KEY } }));
+    return false;
+  }
+};
 export const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
+
+/** Mapa completo {structId: [inspecciones]} con UN solo parse (R-40d: rollup sin N parses). */
+export function getAll() { return loadAll(); }
 
 /** Inspecciones de una estructura, ordenadas por fecha desc. */
 export function getInspections(structId) {
   return (loadAll()[structId] || []).slice().sort((a, b) => (b.date || '').localeCompare(a.date || ''));
 }
+
+// ── R-40b: marca de «sembrada» por estructura (borrar la última NO re-siembra) ──
+const SEED_KEY = 'rewind.inspSeeded.v1';
+const loadSeeded = () => { try { return new Set(JSON.parse(localStorage.getItem(SEED_KEY)) || []); } catch { return new Set(); } };
+export function wasSeeded(id) { return loadSeeded().has(id); }
+export function markSeeded(id) { const s = loadSeeded(); s.add(id); try { localStorage.setItem(SEED_KEY, JSON.stringify([...s])); } catch { /* cuota: no crítico */ } }
 export function setInspections(structId, list) { const a = loadAll(); a[structId] = list; saveAll(a); }
 
 /** Crea (y persiste) una inspección nueva para la estructura. */
@@ -192,7 +210,19 @@ export function classifyTest(type) {
 }
 
 // ── Foto → thumbnail (data URI) reescalado, para no inflar localStorage ───────
-export function imageToThumb(file, maxW = 760, quality = 0.72) {
+export async function imageToThumb(file, maxW = 760, quality = 0.72) {
+  // R-40f: createImageBitmap con corrección de orientación EXIF (las fotos de
+  // celular suelen venir rotadas). Fallback al camino FileReader+Image si no está.
+  if (typeof createImageBitmap === 'function') {
+    try {
+      const bmp = await createImageBitmap(file, { imageOrientation: 'from-image' });
+      const scale = Math.min(1, maxW / bmp.width);
+      const w = Math.round(bmp.width * scale), h = Math.round(bmp.height * scale);
+      const c = document.createElement('canvas'); c.width = w; c.height = h;
+      c.getContext('2d').drawImage(bmp, 0, 0, w, h); bmp.close?.();
+      return c.toDataURL('image/jpeg', quality);
+    } catch { /* navegador sin soporte de opciones → fallback */ }
+  }
   return new Promise((resolve, reject) => {
     const fr = new FileReader();
     fr.onerror = reject;

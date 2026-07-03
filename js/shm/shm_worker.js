@@ -18,7 +18,7 @@ self.onmessage = (e) => {
   const m = e.data;
   if (m.type === 'init') {
     structs = (m.structs || []).map(s => ({
-      id: s.id, type: s.type, f1: s.f1 || 0.3, dmg: s.dmg || 0,
+      id: s.id, type: s.type, f1: s.f1 || 0.3, dmg: s.dmg || 0, built: s.built ?? 1,
       sensors: (s.sensors || []).map(se => ({ id: se.id, status: se.status || 'ok' })),
     }));
     start();
@@ -33,6 +33,8 @@ function tick() {
   const now = (typeof performance !== 'undefined' ? performance.now() : Date.now()) / 1000;
   const summaries = {}, waves = {};
   for (const s of structs) {
+    // R-40e: torre en montaje (built<0.97) → sin datos operacionales (standby).
+    const standby = (s.built ?? 1) < 0.97;
     // f₁ con leve deriva + caída por daño (indicador SHM)
     const f1 = s.f1 * (1 - s.dmg * 0.04) + (Math.random() - 0.5) * 0.002;
     const temp = 18 + 7 * Math.sin(now * 0.04 + s.id.length) + (Math.random() - 0.5);
@@ -42,15 +44,19 @@ function tick() {
     const sensors = s.sensors.map(se => {
       const ok = se.status === 'ok';
       const amp = se.id.includes('mid') ? 0.5 : 1;
-      const r = ok ? (0.018 + 0.012 * Math.abs(Math.sin(now * 0.3 + se.id.length)) + Math.random() * 0.004) * amp
-                   : 0.001 * Math.random();
+      // En montaje los acelerómetros aún no están operativos → sin RMS.
+      const r = standby ? 0 : (ok ? (0.018 + 0.012 * Math.abs(Math.sin(now * 0.3 + se.id.length)) + Math.random() * 0.004) * amp
+                   : 0.001 * Math.random());
       rms = Math.max(rms, r);
-      return { id: se.id, status: se.status, rms: r };
+      return { id: se.id, status: standby ? 'standby' : se.status, rms: r };
     });
     // Clasificador ML (simulado): nivel de daño 0..4 desde daño + estado de sensores.
     let cls = s.dmg < 0.05 ? 0 : s.dmg < 0.15 ? 1 : s.dmg < 0.30 ? 2 : s.dmg < 0.50 ? 3 : 4;
     if (sensors.some(se => se.status === 'fault')) cls = Math.max(cls, 2);
-    summaries[s.id] = { f1, temp, wind, dmg: s.dmg, cls, rms, sensors };
+    // Standby: sin clase de daño ni RMS operacional; se conserva f₁ (predicha del
+    // gemelo) y viento/temp (ambientales). El flag `standby` lo consume la UI.
+    summaries[s.id] = standby ? { f1, temp, wind, dmg: 0, cls: 0, rms: 0, sensors, standby: true }
+                              : { f1, temp, wind, dmg: s.dmg, cls, rms, sensors };
 
     if (s.id === focus) {
       waves[s.id] = s.sensors.map(se => {

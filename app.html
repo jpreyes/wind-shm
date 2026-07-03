@@ -29,10 +29,10 @@
       window.dispatchEvent(new Event('pwa-installed'));
     });
   </script>
-  <link rel="stylesheet" href="lib/leaflet/leaflet.css?v=283">
-  <link rel="stylesheet" href="style.css?v=283">
-  <link rel="stylesheet" href="ui-v2.css?v=283">
-  <link rel="stylesheet" href="shm.css?v=283">
+  <link rel="stylesheet" href="lib/leaflet/leaflet.css?v=284">
+  <link rel="stylesheet" href="style.css?v=284">
+  <link rel="stylesheet" href="ui-v2.css?v=284">
+  <link rel="stylesheet" href="shm.css?v=284">
   <script type="importmap">
   {
     "imports": {
@@ -187,13 +187,21 @@ setTimeout(function () { window.__rewindCloseLanding(); }, 25000);   // fallback
 <!-- numeric.js para el gemelo digital (solver modal/estático) -->
 <script src="lib/numeric.js"></script>
 <!-- Leaflet (vista 2D del parque en ReWind) — global window.L, antes de los módulos -->
-<script src="lib/leaflet/leaflet.js?v=283"></script>
+<script src="lib/leaflet/leaflet.js?v=284"></script>
 <!-- Toggle de tema (claro/oscuro). ReWind lo cablea aquí. -->
 <script>
   (function () {
+    // R-40f: mantener <meta name="theme-color"> coherente con el tema (barra del
+    // navegador/PWA clara en modo claro, oscura en modo oscuro).
+    function applyThemeColor() {
+      var m = document.querySelector('meta[name="theme-color"]');
+      if (m) m.setAttribute('content', document.documentElement.dataset.theme === 'dark' ? '#0b1018' : '#eef2f6');
+    }
+    applyThemeColor();
     function toggle() {
       var d = document.documentElement, next = d.dataset.theme === 'dark' ? 'light' : 'dark';
       d.dataset.theme = next; try { localStorage.setItem('rewind_theme', next); } catch (e) {}
+      applyThemeColor();
     }
     addEventListener('DOMContentLoaded', function () {
       ['btn-theme', 'landing-theme'].forEach(function (id) {
@@ -203,7 +211,7 @@ setTimeout(function () { window.__rewindCloseLanding(); }, 25000);   // fallback
   })();
 </script>
 <!-- ReWind: SHM de torres eólicas (se auto-bootea sobre el shell) -->
-<script type="module" src="js/shm/shm_mode.js?v=283"></script>
+<script type="module" src="js/shm/shm_mode.js?v=284"></script>
 
 <!-- PWA: registrar el service worker (offline). Solo en contexto seguro
      (https o localhost); el navegador deja navigator.serviceWorker undefined

@@ -93,6 +93,9 @@ body.shm #menubar { min-width: 0; overflow-x: auto; }
 .cal-row-act { white-space: nowrap; text-align: right; }
 .cal-iconbtn { background: none; border: 1px solid var(--border2); border-radius: 6px; color: var(--text-muted); cursor: pointer; font-size: 13px; padding: 2px 7px; margin-left: 4px; }
 .cal-iconbtn:hover { color: var(--text); border-color: var(--accent); }
+/* Estado vacío de inspección (R-40b): sin re-siembra de demo */
+.ins-empty { padding: 20px 14px; color: var(--text-muted); font-size: 12.5px; line-height: 1.6; text-align: center; }
+.ins-empty .ins-btn { display: inline-block; margin-top: 10px; }
 @media (min-width: 821px) and (max-width: 1024px) { body.shm #main { grid-template-columns: var(--tree-w) var(--toolbar-w) 1fr 5px min(var(--panel-w), 46vw); } }
 
 #drawer-backdrop { display: none; }                     /* oculto en escritorio */

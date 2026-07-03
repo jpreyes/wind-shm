@@ -5,7 +5,10 @@ Thumbs.db
 *.log
 npm-debug.log*
 .claude/
-data/
+# data/: ignora el contenido pesado (KMZ/DEM binarios) PERO conserva los .json que
+# la app necesita (p.ej. caman_dem.json — heightmap del relieve). R-40f.
+data/*
+!data/*.json
 
 # Archivos del profesor (fuente local, NO se publican): Excel de normas y PDFs
 excel/

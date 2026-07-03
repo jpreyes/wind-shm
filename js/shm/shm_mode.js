@@ -8,24 +8,24 @@
 //   inspecciones y señal temporal EN VIVO desde un Web Worker (DataSource).
 // Recortes (modelado) los hace shm.css ocultando, no borrando.
 // ─────────────────────────────────────────────────────────────────────────────
-import { FleetView } from './fleet_view.js?v=283';
-import { DataSource } from './data_source.js?v=283';
-import { computeTwin } from './digital_twin.js?v=283';
-import { ParkManager, loadParksStore } from './parks.js?v=283';
-import { MapView } from './map_view.js?v=283';
-import { defaultStages, builtFromStages } from './parks_data_caman.js?v=283';
-import { compassRoseSVG } from './compass.js?v=283';
-import { buildAvanceHUD } from './avance_hud.js?v=283';
-import { renderAvance } from './avance_dashboard.js?v=283';
-import * as Insp from './inspection.js?v=283';
-import * as Fat from './fatigue.js?v=283';
-import * as Instr from './instrumentation.js?v=283';
-import * as Calidad from './calidad.js?v=283';
-import { esc, safeUrl } from './util.js?v=283';
-import { t, getLang, setLang } from './i18n.js?v=283';
+import { FleetView } from './fleet_view.js?v=284';
+import { DataSource } from './data_source.js?v=284';
+import { computeTwin } from './digital_twin.js?v=284';
+import { ParkManager, loadParksStore } from './parks.js?v=284';
+import { MapView } from './map_view.js?v=284';
+import { defaultStages, builtFromStages } from './parks_data_caman.js?v=284';
+import { compassRoseSVG } from './compass.js?v=284';
+import { buildAvanceHUD } from './avance_hud.js?v=284';
+import { renderAvance } from './avance_dashboard.js?v=284';
+import * as Insp from './inspection.js?v=284';
+import * as Fat from './fatigue.js?v=284';
+import * as Instr from './instrumentation.js?v=284';
+import * as Calidad from './calidad.js?v=284';
+import { esc, safeUrl } from './util.js?v=284';
+import { t, getLang, setLang } from './i18n.js?v=284';
 
 const F1_BASE = { turbine: 0.283, hv: 1.6 };
-const REWIND_VER = 'v283';   // versión visible del build (subir junto al cache-bust)
+const REWIND_VER = 'v284';   // versión visible del build (subir junto al cache-bust)
 const FS = 62.5;   // frecuencia de muestreo de la señal (Hz), igual que shm_worker.js
 // Clasificador ML de daño (0..4)
 const CLS = ['Sin daño', 'Leve', 'Moderado', 'Alto', 'Muy alto'];
@@ -158,6 +158,7 @@ async function boot() {
 
   const buildManifest = () => fleet.structures.map(s => ({
     id: s.id, type: s.type, f1: F1_BASE[s.type] || 0.5, dmg: dmgMap[s.id] || 0,
+    built: s.built ?? 1,   // R-40e: torre en montaje (<0.97) → el worker emite standby
     sensors: s.sensors.map(se => ({ id: se.id, status: se.status || 'ok' })),
   }));
   let mapView = null;   // vista 2D Leaflet (se crea más abajo)
@@ -271,7 +272,7 @@ async function boot() {
   // ── Relieve conceptual del terreno (DEM vendorizado) — encendido por defecto ─
   setLoad(88, 'Cargando relieve…'); await delay(40);
   try {
-    await fleet.loadTerrain('data/caman_dem.json?v=283');
+    await fleet.loadTerrain('data/caman_dem.json?v=284');
     fleet.setTerrainVisible(true);
     document.getElementById('shm-relieve-tool')?.classList.add('active');
   } catch (e) { console.warn('[shm] relieve no disponible', e); }
@@ -284,6 +285,16 @@ async function boot() {
   if (tw.hv) F1_BASE.hv = tw.hv;
   syncData();           // re-init worker con las f₁ del gemelo
   dash.refresh();
+
+  // R-40f: restaurar selección + vista tras un cambio de idioma (que recarga la app).
+  try {
+    const r = JSON.parse(sessionStorage.getItem('rewind-lang-restore') || 'null');
+    sessionStorage.removeItem('rewind-lang-restore');
+    if (r) {
+      if (r.sel) fleet.selectById?.(r.sel);
+      if (r.view) setTopView(r.view);
+    }
+  } catch { /* nada que restaurar */ }
 
   setLoad(100, 'Listo'); await delay(280);
   window.__rewindCloseLanding?.();
@@ -514,8 +525,26 @@ function buildMenubar(fleet, getPM = () => null) {
   const langBtn = document.createElement('button');
   langBtn.id = 'btn-lang'; langBtn.type = 'button'; langBtn.title = t('lang.tip');
   langBtn.textContent = getLang() === 'es' ? 'EN' : 'ES';
-  langBtn.addEventListener('click', () => { setLang(getLang() === 'es' ? 'en' : 'es'); location.reload(); });
+  langBtn.addEventListener('click', () => {
+    // R-40f: recordar selección + vista para restaurarlas tras el reload.
+    try { sessionStorage.setItem('rewind-lang-restore', JSON.stringify({ sel: fleet.selected?.id || null, view: document.querySelector('.shm-toptab.active')?.dataset.v || null })); } catch { /* ignore */ }
+    setLang(getLang() === 'es' ? 'en' : 'es'); location.reload();
+  });
   if (right) right.insertBefore(langBtn, right.firstChild); else bar.appendChild(langBtn);
+}
+
+// R-40f: abre un informe en pestaña nueva; si el navegador BLOQUEA el popup,
+// cae a descargar el HTML como archivo y avisa (antes se perdía en silencio).
+function openReportWindow(html, filename = 'informe-rewind.html') {
+  const w = window.open('', '_blank');
+  if (w) { w.document.open(); w.document.write(html); w.document.close(); return true; }
+  try {
+    const url = URL.createObjectURL(new Blob([html], { type: 'text/html;charset=utf-8' }));
+    const a = document.createElement('a'); a.href = url; a.download = filename; a.click();
+    setTimeout(() => URL.revokeObjectURL(url), 4000);
+  } catch { /* sin fallback posible */ }
+  alert(t('alert.popupBlocked'));
+  return false;
 }
 
 // «Acerca de ReWind» — tarjeta modal ligera (versión + crédito + fuente).
@@ -528,9 +557,12 @@ function showAbout() {
     <p>${t('about.desc')}</p>
     <p class="mb-about-mut">${t('about.credit')}</p>
   </div>`;
-  const close = () => ov.remove();
+  // R-40f: quitar el listener de teclado al cerrar por CUALQUIER vía (X/backdrop/Esc),
+  // no solo con Escape (antes se filtraba si cerrabas con la X).
+  const onKey = (e) => { if (e.key === 'Escape') close(); };
+  const close = () => { ov.remove(); removeEventListener('keydown', onKey); };
   ov.addEventListener('click', (e) => { if (e.target === ov || e.target.closest('.mb-about-x')) close(); });
-  addEventListener('keydown', function esc(e) { if (e.key === 'Escape') { close(); removeEventListener('keydown', esc); } });
+  addEventListener('keydown', onKey);
   document.body.appendChild(ov);
 }
 
@@ -996,8 +1028,10 @@ function buildDashboard(panel, fleet, actions) {
     const box = $('#shm-venc'); if (!box) return;
     let vOverdue = 0, vSoon = 0, woOpen = 0, woOverdue = 0;
     const items = [];
+    const all = Insp.getAll();   // R-40d: un solo parse para todo el rollup
     for (const st of fleet.structures) {
-      const insps = Insp.getInspections(st.id); if (!insps.length) continue;
+      const list = all[st.id]; if (!list || !list.length) continue;
+      const insps = list.slice().sort((a, b) => (b.date || '').localeCompare(a.date || ''));
       const latest = insps[0], due = Insp.dueState(latest.nextDate);
       let open = 0, odue = 0;
       for (const ins of insps) for (const w of (ins.workOrders || [])) if (w.status !== 'cerrado') { open++; if (Insp.dueState(w.due).overdue) odue++; }
@@ -1186,25 +1220,29 @@ function buildDashboard(panel, fleet, actions) {
         renderSHMPane();
       }));
     } else if (pane === 'fatiga') {
-      const a = assessFatigueFor(o, sum);
-      const st = Fat.fatigueState(a.Delapsed);
-      const yr = t('units.years');
-      const rulLab = !isFinite(a.rul) ? '∞' : a.rul <= 0 ? `0 ${yr} ⚠` : `${a.rul.toFixed(0)} ${yr}`;
-      const lifeLab = !isFinite(a.lifeYears) ? '∞' : `${a.lifeYears.toFixed(0)} ${yr}`;
-      body.innerHTML = `
-        <div class="fat-kpis">
-          <div class="fat-kpi"><div class="k">${t('fat.lifeUsed')}</div><div class="v ${st.key}">${(a.Delapsed * 100).toFixed(0)}%</div></div>
-          <div class="fat-kpi"><div class="k">${t('fat.rul')}</div><div class="v ${a.rul <= 2 ? 'critica' : ''}">${rulLab}</div></div>
-          <div class="fat-kpi"><div class="k">${t('fat.dmgYear')}</div><div class="v">${a.Dyear.toExponential(1)}</div></div>
-          <div class="fat-kpi"><div class="k">DEL (m=3)</div><div class="v">${a.del3.toFixed(0)}<small> MPa</small></div></div>
-        </div>
-        <div class="row"><span>${t('fat.state')}</span><b class="${st.key}">${t('fat.state.' + st.key)}</b></div>
-        <div class="row"><span>${t('fat.designLife')}</span><b>${lifeLab}</b></div>
-        <div class="row"><span>${t('fat.yis')}</span><b>${a.yearsInService} ${yr}</b></div>
-        <div class="row" style="border:0"><span>${t('fat.detail')}</span><b>EN 1993-1-9 · ΔσC ${a.detail}</b></div>
-        <div class="shm-sub2">${t('fat.spectrum')}</div>
-        ${fatigueSpectrumSVG(a)}
-        <div class="note" style="font-size:10px">${t('fat.note')}</div>`;
+      if ((o.built ?? 1) < 0.97) {   // R-40e: torre en montaje → sin fatiga «consumida»
+        body.innerHTML = `<div class="ins-mut" style="padding:16px 12px;line-height:1.5">${t('phys.montaje')}</div>`;
+      } else {
+        const a = assessFatigueFor(o, sum);
+        const st = Fat.fatigueState(a.Delapsed);
+        const yr = t('units.years');
+        const rulLab = !isFinite(a.rul) ? '∞' : a.rul <= 0 ? `0 ${yr} ⚠` : `${a.rul.toFixed(0)} ${yr}`;
+        const lifeLab = !isFinite(a.lifeYears) ? '∞' : `${a.lifeYears.toFixed(0)} ${yr}`;
+        body.innerHTML = `
+          <div class="fat-kpis">
+            <div class="fat-kpi"><div class="k">${t('fat.lifeUsed')}</div><div class="v ${st.key}">${(a.Delapsed * 100).toFixed(0)}%</div></div>
+            <div class="fat-kpi"><div class="k">${t('fat.rul')}</div><div class="v ${a.rul <= 2 ? 'critica' : ''}">${rulLab}</div></div>
+            <div class="fat-kpi"><div class="k">${t('fat.dmgYear')}</div><div class="v">${a.Dyear.toExponential(1)}</div></div>
+            <div class="fat-kpi"><div class="k">DEL (m=3)</div><div class="v">${a.del3.toFixed(0)}<small> MPa</small></div></div>
+          </div>
+          <div class="row"><span>${t('fat.state')}</span><b class="${st.key}">${t('fat.state.' + st.key)}</b></div>
+          <div class="row"><span>${t('fat.designLife')}</span><b>${lifeLab}</b></div>
+          <div class="row"><span>${t('fat.yis')}</span><b>${a.yearsInService} ${yr}</b></div>
+          <div class="row" style="border:0"><span>${t('fat.detail')}</span><b>EN 1993-1-9 · ΔσC ${a.detail}</b></div>
+          <div class="shm-sub2">${t('fat.spectrum')}</div>
+          ${fatigueSpectrumSVG(a)}
+          <div class="note" style="font-size:10px">${t('fat.note')}</div>`;
+      }
     } else if (pane === 'avz') {
       const nvm = o.type === 'turbine'
         ? `<div class="note">${t('avz.nvmNote')}</div>
@@ -1320,7 +1358,15 @@ function buildDashboard(panel, fleet, actions) {
     if (!host) return;
     if (!o) { host.innerHTML = `<div class="empty">${t('empty.select')}</div>`; return; }
     let inspections = Insp.getInspections(o.id);
-    if (!inspections.length) { seedInspection(o); inspections = Insp.getInspections(o.id); }
+    if (!inspections.length) {
+      if (Insp.wasSeeded(o.id)) {   // R-40b: ya se sembró/vació antes → NO re-sembrar demo
+        host.innerHTML = `<div class="shm-body ins-body"><div class="ins-head">Inspección · ${esc(o.label)}</div>
+          <div class="ins-empty">${t('ins.empty')}<button id="ins-first" class="ins-btn">${t('ins.newFirst')}</button></div></div>`;
+        host.querySelector('#ins-first').addEventListener('click', () => { const ni = Insp.addInspection(o.id, {}); inspSel = ni.id; renderInsp(); });
+        return;
+      }
+      seedInspection(o); Insp.markSeeded(o.id); inspections = Insp.getInspections(o.id);
+    }
     if (!inspSel || !inspections.some(i => i.id === inspSel)) inspSel = inspections[0].id;
     const sel = inspections.find(i => i.id === inspSel);
     const score = Insp.inspectionScore(sel.damages), band = Insp.scoreBand(score);
@@ -1470,7 +1516,7 @@ function buildDashboard(panel, fleet, actions) {
       catch (err) { alert(t('ins.photoFail', err?.message || err)); }
     });
     host.querySelectorAll('[data-del-photo]').forEach(b => b.addEventListener('click', (e) => { e.stopPropagation(); sel.photos = (sel.photos || []).filter(p => p.id !== b.dataset.delPhoto); save(); }));
-    host.querySelectorAll('.ins-photo').forEach(d => d.addEventListener('click', (e) => { if (e.target.closest('.ins-px')) return; const p = (sel.photos || []).find(x => x.id === d.dataset.photo); if (p) { const w = window.open('', '_blank'); if (w) w.document.write(`<img src="${p.url}" style="max-width:100%">`); } }));
+    host.querySelectorAll('.ins-photo').forEach(d => d.addEventListener('click', (e) => { if (e.target.closest('.ins-px')) return; const p = (sel.photos || []).find(x => x.id === d.dataset.photo); if (p) { const w = window.open('', '_blank'); if (w) w.document.write(`<img src="${safeUrl(p.url)}" style="max-width:100%">`); else alert(t('alert.popupBlocked')); } }));
     // Fotos por hallazgo (input oculto compartido + objetivo recordado)
     let dmgPhotoTarget = null;
     const dpf = host.querySelector('#nd-photo-file');
@@ -1491,7 +1537,7 @@ function buildDashboard(panel, fleet, actions) {
     host.querySelectorAll('.ins-dphoto').forEach(elp => elp.addEventListener('click', (e) => {
       if (e.target.closest('.ins-px')) return;
       const d = sel.damages.find(x => x.id === elp.dataset.d); const p = d && (d.photos || []).find(x => x.id === elp.dataset.p);
-      if (p) { const w = window.open('', '_blank'); if (w) w.document.write(`<img src="${p.url}" style="max-width:100%">`); }
+      if (p) { const w = window.open('', '_blank'); if (w) w.document.write(`<img src="${safeUrl(p.url)}" style="max-width:100%">`); else alert(t('alert.popupBlocked')); }
     }));
   }
 
@@ -1527,7 +1573,7 @@ function buildDashboard(panel, fleet, actions) {
         <table><thead><tr><th>${t('irep.thOrder')}</th><th>${t('irep.thAssignee')}</th><th>${t('irep.thPrio')}</th><th>${t('irep.thStatus')}</th><th>${t('irep.thDue')}</th></tr></thead><tbody>${wos}</tbody></table>
         <p class="mut" style="margin-top:18px">${t('irep.nextLabel')}: <b>${insp.nextDate || '—'}</b> · ${t('rep.gen')} ${new Date().toLocaleString(lc)} · ReWind. ${t('irep.footTail')}</p>
       </div></html>`;
-    const w = window.open('', '_blank'); if (w) { w.document.write(html); w.document.close(); }
+    openReportWindow(html, 'informe-inspeccion-rewind.html');
   }
 
   // Actualiza los números dinámicos del panel abierto (sólo toca lo que EXISTE en
@@ -2105,6 +2151,13 @@ ${detalle}${compilado}
   }
   return { setStructures, select, onTick, setAlarms, showShadow, showObra, showInsp: () => setTopView('insp'), showSHM: () => setTopView('shm'), showSeleccion: () => setTopView('seleccion'), showParque: () => setTopView('parque'), refreshShadow: renderShadow, refresh, buildReport };
 }
+
+// R-40c: aviso (una vez por sesión) cuando el localStorage se llena al guardar.
+let _quotaWarned = false;
+window.addEventListener('rewind-storage-full', () => {
+  if (_quotaWarned) return; _quotaWarned = true;
+  alert(t('alert.storageFull'));
+});
 
 function startBoot() { boot().catch(e => { console.error('[shm] boot', e); window.__rewindCloseLanding?.(); }); }
 if (document.readyState === 'complete') startBoot();
