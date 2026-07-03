@@ -150,7 +150,7 @@ ciclos se recalculan en JS (lun–vie) y se validan contra los del archivo.
 |---|---|---|---|
 | ✅ 5.1 | **Reader** (`lib/xlsx_lite.mjs` + `tools/sacyr_reader.mjs`) + JSON canónico + tests (`tools/test_sacyr_reader.mjs`) | 2 días | **Hecho:** 1.364 protocolos/1.949 ciclos, 455 ensayos, catálogos; distribuciones == SPEC verbatim (estados P, áreas F, grados/plantas); **días hábiles recalculados = archivo 1845/1845 (100%)**; spot-check fila 7; cobertura raw 46.852 celdas. |
 | ✅ 5.2 | **Writer de valores** (`lib/xlsx_write.mjs` + `tools/sacyr_writer.mjs`) + **diff de información** (`tools/sacyr_diff.mjs`) | 1–2 días | **Hecho:** round-trip original→JSON→export→JSON' **sin pérdida** — 0 diffs en 72.338 celdas (7 hojas incl. «Listas») + JSON canónico idéntico; export (4 MB) abre en openpyxl/Excel sin advertencias (fechas reconocidas). Test autocontenido `tools/test_xlsx_roundtrip.mjs` (todos los tipos, sin archivo real). |
-| ⬜ 5.3 | **Derivados en JS** (matriz por WTG, KPIs turnaround, pendientes) + validación cruzada contra los valores del archivo | 1–2 días | Nuestros agregados == valores del archivo original. |
+| ✅ 5.3 | **Derivados en JS** (`tools/sacyr_derived.mjs`): completitud por estructura/área/especialidad, KPIs de turnaround (días hábiles/ciclo), pendientes, resumen de ensayos + validación (`tools/test_sacyr_derived.mjs`) | 1–2 días | **Hecho:** partición íntegra (Σ estados = Σ áreas = 1364); **reproduce las fórmulas O «Ciclo Documento» y P «Estado Documento» del archivo 1364/1364**; turnaround (avg 3,74 dh, p90 8, max 51) con días hábiles == archivo. **Nota de alcance:** las hojas Matriz/KPI´s usan OTRO modelo (matriz de ~75 actividades planificadas × WTG, «planificado vs entregado»), NO derivable del LOG de eventos → se leen como referencia, no se recalculan; la validación cruzada real es O/P + partición + turnaround. |
 | ⬜ 5.4 | **Pestaña «Calidad»** (import navegador + dashboard + drill) | 3 días | El xlsx real se importa y navega; KPIs coinciden con la hoja KPI´s. |
 | ⬜ 5.5 | **Integración** Obra/HUD/CMMS (avance real opt-in, ensayos hormigón) | 2 días | El 4D puede mostrar % real de protocolos por torre. |
 | ⬜ 5.6 | **Edición + export** (ciclos/protocolos nuevos → writer en navegador) | 1–2 días | Un ciclo registrado en ReWind aparece en el Excel exportado; el resto de la información, idéntica. |
@@ -164,7 +164,10 @@ ciclos se recalculan en JS (lun–vie) y se validan contra los del archivo.
   actualizar anexo+mapas es un cambio corto.
 - **Agregados que no cuadran** (nuestras fórmulas vs las del archivo): la
   validación cruzada de 5.3 es la puerta; ante discrepancia, manda el archivo
-  (se documenta la regla real y se ajusta el cálculo JS).
+  (se documenta la regla real y se ajusta el cálculo JS). **Resuelto en 5.3:** las
+  Matrices/KPI´s NO son derivables del LOG (modelo distinto: actividades
+  planificadas × WTG) → se leen como referencia; lo validado contra el archivo es
+  la reproducción de sus fórmulas O/P (1364/1364) y los días hábiles.
 - **Confidencialidad**: el xlsx y el anexo NO se versionan en este repo público
   (`auditoria/` gitignoreada; el archivo vive fuera del repo / en el backend).
   La UI no expone nombres de personas.
