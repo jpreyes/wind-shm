@@ -8,24 +8,25 @@
 //   inspecciones y señal temporal EN VIVO desde un Web Worker (DataSource).
 // Recortes (modelado) los hace shm.css ocultando, no borrando.
 // ─────────────────────────────────────────────────────────────────────────────
-import { FleetView } from './fleet_view.js?v=285';
-import { DataSource } from './data_source.js?v=285';
-import { computeTwin } from './digital_twin.js?v=285';
-import { ParkManager, loadParksStore } from './parks.js?v=285';
-import { MapView } from './map_view.js?v=285';
-import { defaultStages, builtFromStages } from './parks_data_caman.js?v=285';
-import { compassRoseSVG } from './compass.js?v=285';
-import { buildAvanceHUD } from './avance_hud.js?v=285';
-import { renderAvance } from './avance_dashboard.js?v=285';
-import * as Insp from './inspection.js?v=285';
-import * as Fat from './fatigue.js?v=285';
-import * as Instr from './instrumentation.js?v=285';
-import * as Calidad from './calidad.js?v=285';
-import { esc, safeUrl } from './util.js?v=285';
-import { t, getLang, setLang } from './i18n.js?v=285';
+import { FleetView } from './fleet_view.js?v=286';
+import { DataSource } from './data_source.js?v=286';
+import { computeTwin } from './digital_twin.js?v=286';
+import { ParkManager, loadParksStore } from './parks.js?v=286';
+import { MapView } from './map_view.js?v=286';
+import { defaultStages, builtFromStages } from './parks_data_caman.js?v=286';
+import { compassRoseSVG } from './compass.js?v=286';
+import { buildAvanceHUD } from './avance_hud.js?v=286';
+import { renderAvance } from './avance_dashboard.js?v=286';
+import * as Insp from './inspection.js?v=286';
+import * as Fat from './fatigue.js?v=286';
+import * as Instr from './instrumentation.js?v=286';
+import * as Calidad from './calidad.js?v=286';
+import * as Hist from './history.js?v=286';
+import { esc, safeUrl } from './util.js?v=286';
+import { t, getLang, setLang } from './i18n.js?v=286';
 
 const F1_BASE = { turbine: 0.283, hv: 1.6 };
-const REWIND_VER = 'v285';   // versión visible del build (subir junto al cache-bust)
+const REWIND_VER = 'v286';   // versión visible del build (subir junto al cache-bust)
 const FS = 62.5;   // frecuencia de muestreo de la señal (Hz), igual que shm_worker.js
 // Clasificador ML de daño (0..4)
 const CLS = ['Sin daño', 'Leve', 'Moderado', 'Alto', 'Muy alto'];
@@ -76,6 +77,8 @@ async function boot() {
   const fleet = new FleetView(container);
   fleet.renderer.domElement.classList.add('shm-canvas');
   window.shmFleet = fleet;
+  window.shmHist = Hist;
+  Hist.purge();   // R-34: retención rodante — descarta el histórico más viejo que 60 días
 
   // Estado de reconocimiento/informe de anomalías + bitácora de mantenimiento
   const ack = new Set(), informed = new Set(), rawAnom = new Set(), maintLog = [];
@@ -272,7 +275,7 @@ async function boot() {
   // ── Relieve conceptual del terreno (DEM vendorizado) — encendido por defecto ─
   setLoad(88, 'Cargando relieve…'); await delay(40);
   try {
-    await fleet.loadTerrain('data/caman_dem.json?v=285');
+    await fleet.loadTerrain('data/caman_dem.json?v=286');
     fleet.setTerrainVisible(true);
     document.getElementById('shm-relieve-tool')?.classList.add('active');
   } catch (e) { console.warn('[shm] relieve no disponible', e); }
@@ -1220,11 +1223,12 @@ function buildDashboard(panel, fleet, actions) {
   // ── Pestaña SHM: estado por sensores + señal + sensores + avanzado ───────────
   function renderSHM() {
     const o = current; if (!o) { const h = $('#shm-shm'); if (h) h.innerHTML = `<div class="empty">${t('empty.select')}</div>`; return; }
-    if (!['estado', 'senal', 'sensores', 'avz', 'fatiga'].includes(pane)) pane = 'estado';
+    if (!['estado', 'senal', 'tendencia', 'sensores', 'avz', 'fatiga'].includes(pane)) pane = 'estado';
     $('#shm-shm').innerHTML = `
       <div class="shm-tabs">
         <button class="shm-tab" data-p="estado">${t('tab.estado')}</button>
         <button class="shm-tab" data-p="senal">${t('tab.senal')}</button>
+        <button class="shm-tab" data-p="tendencia">${t('tab.tendencia')}</button>
         <button class="shm-tab" data-p="sensores">${t('tab.sensores')}</button>
         <button class="shm-tab" data-p="fatiga">${t('tab.fatiga')}</button>
         <button class="shm-tab" data-p="avz">${t('tab.avz')}</button>
@@ -1257,6 +1261,14 @@ function buildDashboard(panel, fleet, actions) {
         wrap.append(lab, cv);
       }
       startSig();
+    } else if (pane === 'tendencia') {
+      // R-34: tendencia de f₁ desde el histórico persistente (IndexedDB).
+      body.innerHTML = `<div class="ins-mut" style="padding:12px">${t('trend.loading')}</div>`;
+      const oid = o.id, days = 30;
+      Hist.range(oid, Date.now() - days * 864e5).then((rows) => {
+        if (pane !== 'tendencia' || current?.id !== oid) return;   // cambió de pestaña/torre
+        body.innerHTML = trendHTML(rows, o, days);
+      });
     } else if (pane === 'sensores') {
       const gwRow = o.gateway?.mesh
         ? `<div class="shm-sensor"><span class="dot ok"></span><span style="flex:1">📶 ${t('ahud.gateway')} <span class="ins-mut" style="font-size:10px">(${t('ahud.gwRoleV')})</span></span><b style="color:var(--success)">${t('ahud.gwOnline')}</b></div>`
@@ -1374,6 +1386,49 @@ function buildDashboard(panel, fleet, actions) {
 
   // Espectro de carga (rainflow): barras ciclos/año vs rango de tensión (log-y),
   // con los umbrales S-N ΔσD (m1→m2) y ΔσL (corte).
+  // R-34: tendencia de f₁ vs tiempo (histórico persistente) + banda de la línea base
+  // del gemelo. Devuelve el HTML del panel «Tendencia».
+  function trendHTML(rows, o, days) {
+    const pts = (rows || []).filter(r => typeof r.f1 === 'number' && isFinite(r.f1));
+    const base = window.shmTwin?.[o.type] || null;   // f₁ de línea base del gemelo digital
+    if (pts.length < 2) {
+      return `<div class="ins-mut" style="padding:14px;line-height:1.5">${t('trend.empty')}${base ? `<br><br>${t('trend.baseline')}: <b>${base.toFixed(3)} Hz</b>` : ''}</div>`;
+    }
+    const t0 = pts[0].t, t1 = pts[pts.length - 1].t, span = Math.max(1, t1 - t0);
+    const f1s = pts.map(p => p.f1);
+    const cur = f1s[f1s.length - 1];
+    let lo = Math.min(...f1s), hi = Math.max(...f1s);
+    if (base) { lo = Math.min(lo, base * 0.97); hi = Math.max(hi, base * 1.03); }
+    const pad = (hi - lo) * 0.12 || 0.01; lo -= pad; hi += pad;
+    const W = 300, H = 130, ml = 40, mb = 18, mt = 10, mr = 8, pw = W - ml - mr, ph = H - mt - mb;
+    const X = (tt) => ml + ((tt - t0) / span) * pw;
+    const Y = (v) => mt + (1 - (v - lo) / (hi - lo)) * ph;
+    const line = pts.map((p, i) => `${X(p.t).toFixed(1)},${Y(p.f1).toFixed(1)}`).join(' ');
+    const band = base ? `<rect x="${ml}" y="${Y(base * 1.03).toFixed(1)}" width="${pw}" height="${(Y(base * 0.97) - Y(base * 1.03)).toFixed(1)}" fill="var(--accent)" opacity="0.10"/>
+      <line x1="${ml}" y1="${Y(base).toFixed(1)}" x2="${ml + pw}" y2="${Y(base).toFixed(1)}" stroke="var(--accent)" stroke-width="1" stroke-dasharray="4 3" opacity="0.7"/>` : '';
+    const yTicks = [lo + (hi - lo) * 0.15, (lo + hi) / 2, hi - (hi - lo) * 0.15]
+      .map(v => `<text x="${ml - 5}" y="${(Y(v) + 3).toFixed(1)}" text-anchor="end" font-size="8" fill="var(--text-muted)">${v.toFixed(3)}</text>`).join('');
+    const fmtD = (ms) => new Date(ms).toLocaleDateString(getLang() === 'en' ? 'en-GB' : 'es-CL', { day: '2-digit', month: '2-digit' });
+    const dev = base ? ((cur - base) / base * 100) : null;
+    const devCls = dev == null ? '' : Math.abs(dev) > 3 ? 'critica' : Math.abs(dev) > 1.5 ? 'observacion' : 'operativa';
+    return `
+      <div class="fat-kpis">
+        <div class="fat-kpi"><div class="k">${t('trend.now')}</div><div class="v">${cur.toFixed(3)}<small> Hz</small></div></div>
+        <div class="fat-kpi"><div class="k">${t('trend.base')}</div><div class="v">${base ? base.toFixed(3) : '—'}<small> Hz</small></div></div>
+        <div class="fat-kpi"><div class="k">${t('trend.dev')}</div><div class="v ${devCls}">${dev == null ? '—' : (dev >= 0 ? '+' : '') + dev.toFixed(1) + '%'}</div></div>
+        <div class="fat-kpi"><div class="k">${t('trend.samples')}</div><div class="v">${pts.length}</div></div>
+      </div>
+      <div class="shm-sub2">${t('trend.title')} · ${fmtD(t0)}–${fmtD(t1)}</div>
+      <svg viewBox="0 0 ${W} ${H}" style="width:100%;height:auto;aspect-ratio:${W}/${H};display:block;background:var(--bg3);border:1px solid var(--border);border-radius:6px">
+        ${band}${yTicks}
+        <polyline points="${line}" fill="none" stroke="var(--accent,#38bdf8)" stroke-width="1.6"/>
+        <circle cx="${X(t1).toFixed(1)}" cy="${Y(cur).toFixed(1)}" r="2.8" fill="var(--accent)"/>
+        <text x="${ml}" y="${H - 5}" font-size="8" fill="var(--text-muted)">${fmtD(t0)}</text>
+        <text x="${ml + pw}" y="${H - 5}" text-anchor="end" font-size="8" fill="var(--text-muted)">${fmtD(t1)}</text>
+      </svg>
+      <div class="note" style="font-size:10px">${t('trend.note')}</div>`;
+  }
+
   function fatigueSpectrumSVG(a) {
     const sp = a.spectrum.filter(b => b.perYear > 0);
     if (!sp.length) return '<div class="ins-mut">Sin ciclos de fatiga.</div>';
@@ -1710,6 +1765,8 @@ function buildDashboard(panel, fleet, actions) {
     if (now - lastHistT > 1000) {
       lastHistT = now;
       for (const id in msg.summaries) {
+        const s = msg.summaries[id];
+        Hist.record(id, { t: now, f1: s.f1, rms: s.rms, wind: s.wind, tilt: s.tilt });   // R-34: persiste 1/min (decima solo)
         const cls = msg.summaries[id].cls || 0;
         const h = (clsHist[id] || (clsHist[id] = []));
         const prev = h.length ? h[h.length - 1].cls : null;
