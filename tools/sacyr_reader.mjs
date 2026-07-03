@@ -288,3 +288,6 @@ if (isMain) {
   const outPath = process.argv[3];
   if (outPath) { fs.writeFileSync(outPath, JSON.stringify(data, null, 2)); console.log('→ escrito', outPath); }
 }
+
+// Helpers de normalización reutilizables (edición client-side, calidad.js).
+export { normEstado, wtgToId, diasHabilesSacyr };

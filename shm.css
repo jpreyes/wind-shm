@@ -75,6 +75,20 @@ body.shm #menubar { min-width: 0; overflow-x: auto; }
 .cal-eg-l { width: 52px; color: var(--text); }
 .cal-eg .cal-bar { width: 220px; max-width: 46vw; }
 .cal-eg-n { color: var(--text-muted); }
+/* Edición: formulario + tabla de gestión */
+.cal-btn.cal-import-alt { background: transparent; color: var(--text); border: 1px solid var(--border2); }
+.cal-tag-ok { background: rgba(40,180,110,.16); color: #28b46e; }
+.cal-form { margin: 6px 0 4px; }
+.cal-form-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 10px 14px; }
+.cal-fl { display: flex; flex-direction: column; gap: 3px; font-size: 11.5px; color: var(--text-muted); }
+.cal-fl span { font-weight: 600; }
+.cal-fl input, .cal-fl select { background: var(--bg1, rgba(255,255,255,.04)); border: 1px solid var(--border2); border-radius: 7px; padding: 6px 8px; color: var(--text); font-size: 12.5px; font-family: inherit; }
+.cal-fl input:focus, .cal-fl select:focus { outline: none; border-color: var(--accent); }
+.cal-form-actions { display: flex; gap: 8px; margin-top: 12px; }
+.cal-mng-tbl td { vertical-align: middle; }
+.cal-row-act { white-space: nowrap; text-align: right; }
+.cal-iconbtn { background: none; border: 1px solid var(--border2); border-radius: 6px; color: var(--text-muted); cursor: pointer; font-size: 13px; padding: 2px 7px; margin-left: 4px; }
+.cal-iconbtn:hover { color: var(--text); border-color: var(--accent); }
 @media (min-width: 821px) and (max-width: 1024px) { body.shm #main { grid-template-columns: var(--tree-w) var(--toolbar-w) 1fr 5px min(var(--panel-w), 46vw); } }
 
 #drawer-backdrop { display: none; }                     /* oculto en escritorio */

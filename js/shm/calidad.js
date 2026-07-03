@@ -1,19 +1,23 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// calidad.js — Frente 5 · fase 5.4 · pestaña «Calidad» (client-side).
+// calidad.js — Frente 5 · pestaña «Calidad» (client-side, fases 5.4 + 5.6).
 //
 // Puente de UI entre el motor de datos SACYR (lib + tools, Node+navegador) y
-// ReWind: importa el «Log protocolos SACYR.xlsx» en el navegador, lo guarda,
-// muestra un dashboard de calidad de obra (KPIs · por área · por estructura ·
-// pendientes · ensayos) y re-exporta el Excel (round-trip de información, F5.2).
+// ReWind:
+//  · IMPORTA el «Log protocolos SACYR.xlsx» en el navegador y lo guarda.
+//  · CREA de cero sin Excel (dataset vacío) y EDITA/BORRA/RENOMBRA protocolos.
+//  · Muestra un dashboard de calidad (KPIs · por área · por estructura ·
+//    pendientes · ensayos) y una vista de gestión (formulario + tabla).
+//  · EXPORTA a Excel — vía `writeSacyrAuto`: si el `_raw` sigue intacto usa la
+//    ruta lossless (F5.2); si los datos se crearon/editaron, serializa el modelo.
 //
 // El núcleo (reader/writer/derived) se trata como librería compartida (imports
 // planos, sin ?v=, igual que numeric.js) para poder testearlo en Node; este
 // módulo es la capa de navegador y sí se versiona.
 // ─────────────────────────────────────────────────────────────────────────────
-import { readSacyr } from '../../tools/sacyr_reader.mjs';
-import { writeSacyrXlsx } from '../../tools/sacyr_writer.mjs';
+import { readSacyr, normEstado, wtgToId, diasHabilesSacyr } from '../../tools/sacyr_reader.mjs';
+import { writeSacyrAuto } from '../../tools/sacyr_writer.mjs';
 import { computeDerived } from '../../tools/sacyr_derived.mjs';
-import { t } from './i18n.js?v=278';
+import { t } from './i18n.js?v=279';
 
 const STORE = 'rewind.calidad.v1';
 const XLSX_MIME = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
@@ -72,40 +76,138 @@ export function importXlsx() {
 export function exportXlsx() {
   const data = load();
   if (!data) { alert(t('cal.noData')); return; }
-  if (data._rawOmitido || !data._raw) { alert(t('cal.exportReimport')); return; }
-  const bytes = writeSacyrXlsx(data);
+  // writeSacyrAuto elige: `_raw` intacto → lossless; editado/creado → desde el modelo.
+  const bytes = writeSacyrAuto(data);
   const url = URL.createObjectURL(new Blob([bytes], { type: XLSX_MIME }));
   const a = document.createElement('a'); a.href = url; a.download = `Log-protocolos-SACYR-${stamp()}.xlsx`; a.click();
   setTimeout(() => URL.revokeObjectURL(url), 3000);
 }
 
-// ── Dashboard (overlay modal) ────────────────────────────────────────────────
+// ── Crear / editar sin Excel ──────────────────────────────────────────────────
+const DEFAULT_AREAS = ['Fundación', 'Plataforma', 'Vial', 'LAT', 'Subestación Camán', 'Subestación Huichahue'];
+const DEFAULT_ESTADOS = ['Sin Comentarios', 'Con comentarios', 'En Revisión', 'Nulo', 'Informativo'];
+const DEFAULT_ESPEC = ['Topografía', 'Civil', 'Eléctrico', 'Calidad', 'Registro', 'Informativo'];
+
+function markDirty(data) { data._dirty = true; persist(data); }
+function nextItem(data) { return data.protocolos.reduce((m, p) => Math.max(m, +p.item || 0), 0) + 1; }
+function uid() { return 'rw-' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6); }
+
+export function crearVacio() {
+  current = {
+    meta: { fuente: 'ReWind', importado: new Date().toISOString() },
+    protocolos: [], ensayosHormigon: [], resumen: [],
+    catalogos: { areasTrabajo: [...DEFAULT_AREAS], estados: [...DEFAULT_ESTADOS], areas: [] },
+    _dirty: true,
+  };
+  persist(current); showPanel();
+}
+
+// Crea (id nulo) o actualiza (id existente) un protocolo desde campos de formulario.
+export function saveProtocolo(fields, id) {
+  const data = load(); if (!data) return;
+  const estructuraId = wtgToId(fields.elemento);
+  const estadoActualRaw = fields.estadoActualRaw || null;
+  if (id) {
+    const p = data.protocolos.find((x) => x.id === id); if (!p) return;
+    Object.assign(p, {
+      codigoDocumento: fields.codigoDocumento || null, area: fields.area || null,
+      elemento: fields.elemento || null, estructuraId, descripcion: fields.descripcion || null,
+      documento: fields.documento || null, especialidad: fields.especialidad || null,
+      hitoPago: fields.hitoPago || null, estadoActualRaw, estadoActual: normEstado(estadoActualRaw),
+    });
+  } else {
+    data.protocolos.push({
+      id: uid(), item: nextItem(data),
+      codigoDocumento: fields.codigoDocumento || null, codigoSharepoint: null, hyperlink: null,
+      area: fields.area || null, elemento: fields.elemento || null, estructuraId,
+      descripcion: fields.descripcion || null, documento: fields.documento || null,
+      especialidad: fields.especialidad || null, hitoPago: fields.hitoPago || null,
+      fechaDocumento: fields.fechaDocumento || null, correlativo: null, cicloDocumento: null,
+      estadoActual: normEstado(estadoActualRaw), estadoActualRaw,
+      ciclos: [], _origen: { hoja: 'ReWind', fila: null },
+    });
+  }
+  markDirty(data);
+}
+
+export function deleteProtocolo(id) {
+  const data = load(); if (!data) return;
+  data.protocolos = data.protocolos.filter((p) => p.id !== id);
+  markDirty(data);
+}
+
+// Agrega un ciclo de revisión y sincroniza el estado actual (col P) del protocolo.
+export function addCiclo(id, { estadoRaw, fechaEnvio, fechaRetorno, comentarios, tmlEnvio, tmlRetorno }) {
+  const data = load(); if (!data) return;
+  const p = data.protocolos.find((x) => x.id === id); if (!p) return;
+  const dh = (fechaEnvio && fechaRetorno) ? diasHabilesSacyr(new Date(fechaEnvio + 'T00:00:00Z'), new Date(fechaRetorno + 'T00:00:00Z')) : null;
+  p.ciclos.push({
+    n: p.ciclos.length + 1, tmlEnvio: tmlEnvio || null, fechaEnvio: fechaEnvio || null,
+    estado: normEstado(estadoRaw), estadoRaw: estadoRaw || null, tmlRetorno: tmlRetorno || null,
+    item: null, fechaRetorno: fechaRetorno || null, comentarios: comentarios || null,
+    diasCorridos: null, diasHabiles: dh, diasHabilesCalc: dh,
+  });
+  p.estadoActualRaw = estadoRaw || null; p.estadoActual = normEstado(estadoRaw);
+  p.cicloDocumento = ['1er', '2da', '3ero', '4to', '5to'][p.ciclos.length - 1] || null;
+  markDirty(data);
+}
+
+// ── Overlay (dashboard ↔ gestión) ────────────────────────────────────────────
+let view = 'dash';        // 'dash' | 'manage'
+let editingId = null;     // id del protocolo en edición (o null = nuevo)
+
 export function showPanel() {
   document.getElementById('cal-ov')?.remove();
-  const data = load();
+  view = 'dash'; editingId = null;
   const ov = document.createElement('div'); ov.id = 'cal-ov'; ov.className = 'mb-about cal-ov';
-
-  if (!data) {
-    ov.innerHTML = `<div class="mb-about-card cal-card cal-empty" role="dialog">
-      <button class="mb-about-x" type="button" aria-label="✕">✕</button>
-      <h2>${t('cal.title')}</h2>
-      <p>${t('cal.emptyHint')}</p>
-      <button class="cal-btn cal-import" type="button">${t('cal.import')}</button>
-    </div>`;
-  } else {
-    ov.innerHTML = dashboardHTML(data);
-  }
-
   const close = () => ov.remove();
+
+  const paint = () => {
+    const data = load();
+    if (!data) {
+      ov.innerHTML = `<div class="mb-about-card cal-card cal-empty" role="dialog">
+        <button class="mb-about-x" type="button" aria-label="✕">✕</button>
+        <h2>${t('cal.title')}</h2>
+        <p>${t('cal.emptyHint')}</p>
+        <div class="cal-actions" style="justify-content:center;margin-top:14px">
+          <button class="cal-btn cal-import" type="button">${t('cal.import')}</button>
+          <button class="cal-btn cal-import-alt cal-new" type="button">${t('cal.createEmpty')}</button>
+        </div>
+      </div>`;
+    } else {
+      ov.innerHTML = view === 'manage' ? manageHTML(data) : dashboardHTML(data);
+    }
+  };
+  paint();
+
   ov.addEventListener('click', (e) => {
     if (e.target === ov || e.target.closest('.mb-about-x')) return close();
-    if (e.target.closest('.cal-import')) { close(); importXlsx(); }
-    if (e.target.closest('.cal-export')) exportXlsx();
-    if (e.target.closest('.cal-reimport')) { close(); importXlsx(); }
+    if (e.target.closest('.cal-import')) { close(); importXlsx(); return; }
+    if (e.target.closest('.cal-new')) { crearVacio(); return; }        // recrea overlay
+    if (e.target.closest('.cal-export')) return exportXlsx();
+    if (e.target.closest('.cal-manage')) { view = 'manage'; editingId = null; paint(); return; }
+    if (e.target.closest('.cal-back')) { view = 'dash'; paint(); return; }
+    if (e.target.closest('.cal-add')) { editingId = null; view = 'manage'; paint(); focusForm(ov); return; }
+    const editBtn = e.target.closest('.cal-edit');
+    if (editBtn) { editingId = editBtn.dataset.id; view = 'manage'; paint(); focusForm(ov); return; }
+    const delBtn = e.target.closest('.cal-del');
+    if (delBtn) { if (confirm(t('cal.confirmDel'))) { deleteProtocolo(delBtn.dataset.id); editingId = null; paint(); } return; }
+    if (e.target.closest('.cal-form-cancel')) { editingId = null; paint(); return; }
   });
+
+  ov.addEventListener('submit', (e) => {
+    const form = e.target.closest('.cal-form'); if (!form) return;
+    e.preventDefault();
+    const f = Object.fromEntries(new FormData(form).entries());
+    saveProtocolo(f, editingId || null);
+    editingId = null; paint();
+  });
+
   addEventListener('keydown', function escFn(e) { if (e.key === 'Escape') { close(); removeEventListener('keydown', escFn); } });
   document.body.appendChild(ov);
 }
+
+function focusForm(ov) { setTimeout(() => ov.querySelector('.cal-form [name="codigoDocumento"]')?.focus(), 30); }
 
 function dashboardHTML(data) {
   const d = computeDerived(data);
@@ -153,6 +255,7 @@ function dashboardHTML(data) {
     <div class="cal-head">
       <h2>${t('cal.title')}</h2>
       <div class="cal-actions">
+        <button class="cal-btn cal-manage" type="button">${t('cal.manage')}</button>
         <button class="cal-btn cal-export" type="button" title="${esc(t('cal.exportTip'))}">${t('cal.export')}</button>
         <button class="cal-btn cal-import" type="button">${t('cal.reimportFile')}</button>
       </div>
@@ -173,5 +276,55 @@ function dashboardHTML(data) {
 
     <h3>${t('cal.ensayos')} <span class="cal-mut">(${d.ensayosHormigon.total})</span></h3>
     <div class="cal-ensayos">${ensayos || '<div class="cal-mut">—</div>'}</div>
+  </div>`;
+}
+
+// ── Vista de gestión: formulario crear/editar + tabla con editar/borrar ──────
+function manageHTML(data) {
+  const cat = data.catalogos || {};
+  const areas = cat.areasTrabajo?.length ? cat.areasTrabajo : DEFAULT_AREAS;
+  const estados = cat.estados?.length ? cat.estados : DEFAULT_ESTADOS;
+  const editing = editingId ? data.protocolos.find((p) => p.id === editingId) : null;
+  const v = (x) => esc(x ?? '');
+
+  const opts = (arr, sel) => arr.map((o) => `<option value="${esc(o)}"${(sel || '') === o ? ' selected' : ''}>${esc(o)}</option>`).join('');
+  const field = (name, label, val, extra = '') => `<label class="cal-fl"><span>${esc(label)}</span><input name="${name}" value="${v(val)}" ${extra}></label>`;
+  const form = `<form class="cal-form">
+    <div class="cal-form-grid">
+      ${field('codigoDocumento', t('cal.f.code'), editing?.codigoDocumento, 'placeholder="CL19-…"')}
+      ${field('documento', t('cal.f.doc'), editing?.documento)}
+      <label class="cal-fl"><span>${t('cal.f.area')}</span><select name="area"><option value=""></option>${opts(areas, editing?.area)}</select></label>
+      ${field('elemento', t('cal.f.element'), editing?.elemento, 'placeholder="WTG 05"')}
+      <label class="cal-fl"><span>${t('cal.f.spec')}</span><select name="especialidad"><option value=""></option>${opts(DEFAULT_ESPEC, editing?.especialidad)}</select></label>
+      ${field('hitoPago', t('cal.f.milestone'), editing?.hitoPago, 'placeholder="1er"')}
+      <label class="cal-fl"><span>${t('cal.f.state')}</span><select name="estadoActualRaw"><option value=""></option>${opts(estados, editing?.estadoActualRaw)}</select></label>
+      ${field('descripcion', t('cal.f.desc'), editing?.descripcion)}
+    </div>
+    <div class="cal-form-actions">
+      <button class="cal-btn" type="submit">${editing ? t('cal.f.saveEdit') : t('cal.f.create')}</button>
+      ${editing ? `<button class="cal-btn cal-import-alt cal-form-cancel" type="button">${t('cal.f.cancel')}</button>` : ''}
+    </div>
+  </form>`;
+
+  const rows = data.protocolos.map((p) => `<tr>
+    <td>${v(p.item)}</td><td>${v(p.codigoDocumento || p.documento)}</td><td>${v(p.area)}</td>
+    <td>${v(p.elemento)}</td><td><span class="cal-tag ${p.estadoActual === 'aprobado' ? 'cal-tag-ok' : 'cal-tag-warn'}">${esc(t('est.' + p.estadoActual) || p.estadoActual || '—')}</span></td>
+    <td class="cal-row-act"><button class="cal-iconbtn cal-edit" data-id="${p.id}" title="${esc(t('cal.edit'))}" type="button">✎</button>
+    <button class="cal-iconbtn cal-del" data-id="${p.id}" title="${esc(t('cal.del'))}" type="button">🗑</button></td></tr>`).join('');
+
+  return `<div class="mb-about-card cal-card" role="dialog" aria-label="${esc(t('cal.mng'))}">
+    <button class="mb-about-x" type="button" aria-label="✕">✕</button>
+    <div class="cal-head">
+      <h2>${t('cal.mng')} <span class="cal-mut">(${data.protocolos.length})</span></h2>
+      <div class="cal-actions">
+        <button class="cal-btn cal-import-alt cal-back" type="button">${t('cal.back')}</button>
+        <button class="cal-btn cal-export" type="button">${t('cal.export')}</button>
+      </div>
+    </div>
+    <h3>${editing ? t('cal.editProto') : t('cal.newProto')}</h3>
+    ${form}
+    <h3>${t('cal.list')}</h3>
+    <table class="cal-tbl cal-mng-tbl"><thead><tr><th>#</th><th>${t('cal.col.doc')}</th><th>${t('cal.col.area')}</th><th>${t('cal.col.struct')}</th><th>${t('cal.col.state')}</th><th></th></tr></thead>
+    <tbody>${rows || `<tr><td colspan="6" class="cal-mut">${t('cal.emptyList')}</td></tr>`}</tbody></table>
   </div>`;
 }

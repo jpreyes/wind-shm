@@ -48,6 +48,7 @@ const DICT = {
     // Menú y panel «Calidad de obra» (Frente 5)
     'menu.quality': 'Calidad',
     'mi.calImport': '⤒ Importar Log SACYR (.xlsx)', 'mi.calPanel': '📋 Panel de calidad', 'mi.calExport': '⤓ Exportar Excel',
+    'mi.calNew': '＋ Nuevo (vacío, sin Excel)',
     'cal.title': 'Calidad de obra — Log de protocolos',
     'cal.emptyHint': 'Aún no hay datos. Importá el «Log protocolos SACYR.xlsx» para ver el estado de calidad del parque.',
     'cal.import': '⤒ Importar Log SACYR (.xlsx)', 'cal.reimportFile': '⤒ Reimportar', 'cal.reimport': 'reimportar',
@@ -65,6 +66,15 @@ const DICT = {
     'cal.col.progress': 'Avance', 'cal.col.struct': 'Estructura', 'cal.col.doc': 'Documento', 'cal.col.state': 'Estado',
     'est.aprobado': 'Aprobado', 'est.conComentarios': 'Con comentarios', 'est.enRevision': 'En revisión',
     'est.nulo': 'Nulo', 'est.informativo': 'Informativo', 'est.rechazado': 'Rechazado', 'est.otro': 'Otro',
+    // Edición (crear/editar/borrar sin Excel)
+    'cal.createEmpty': '＋ Crear vacío (sin Excel)', 'cal.manage': '✎ Gestionar', 'cal.back': '← Volver al panel',
+    'cal.mng': 'Gestión de protocolos', 'cal.newProto': 'Nuevo protocolo', 'cal.editProto': 'Editar protocolo',
+    'cal.list': 'Protocolos', 'cal.emptyList': 'Sin protocolos aún — creá el primero arriba.',
+    'cal.edit': 'Editar', 'cal.del': 'Borrar', 'cal.confirmDel': '¿Borrar este protocolo?',
+    'cal.f.code': 'Código documento', 'cal.f.doc': 'Documento', 'cal.f.area': 'Área',
+    'cal.f.element': 'Elemento (WTG NN)', 'cal.f.spec': 'Especialidad', 'cal.f.milestone': 'Hito de pago',
+    'cal.f.state': 'Estado', 'cal.f.desc': 'Descripción',
+    'cal.f.create': '＋ Crear', 'cal.f.saveEdit': '✓ Guardar', 'cal.f.cancel': 'Cancelar',
     'about.desc': 'Monitoreo de salud estructural (SHM) de torres eólicas — gemelo digital físico, fatiga, inspección y avance de obra para el parque Camán I.',
     'about.credit': 'Instituto de Obras Civiles · Universidad Austral de Chile. Motor de elementos finitos heredado, reutilizado como gemelo digital.',
     // Alertas de las acciones del menú
@@ -363,6 +373,7 @@ const DICT = {
     // «Quality of works» menu and panel (Front 5)
     'menu.quality': 'Quality',
     'mi.calImport': '⤒ Import SACYR Log (.xlsx)', 'mi.calPanel': '📋 Quality panel', 'mi.calExport': '⤓ Export Excel',
+    'mi.calNew': '＋ New (blank, no Excel)',
     'cal.title': 'Quality of works — Protocol log',
     'cal.emptyHint': 'No data yet. Import the «Log protocolos SACYR.xlsx» to see the park quality status.',
     'cal.import': '⤒ Import SACYR Log (.xlsx)', 'cal.reimportFile': '⤒ Re-import', 'cal.reimport': 're-import',
@@ -380,6 +391,15 @@ const DICT = {
     'cal.col.progress': 'Progress', 'cal.col.struct': 'Structure', 'cal.col.doc': 'Document', 'cal.col.state': 'State',
     'est.aprobado': 'Approved', 'est.conComentarios': 'With comments', 'est.enRevision': 'Under review',
     'est.nulo': 'Void', 'est.informativo': 'Informative', 'est.rechazado': 'Rejected', 'est.otro': 'Other',
+    // Editing (create/edit/delete without Excel)
+    'cal.createEmpty': '＋ Create blank (no Excel)', 'cal.manage': '✎ Manage', 'cal.back': '← Back to panel',
+    'cal.mng': 'Protocol management', 'cal.newProto': 'New protocol', 'cal.editProto': 'Edit protocol',
+    'cal.list': 'Protocols', 'cal.emptyList': 'No protocols yet — create the first one above.',
+    'cal.edit': 'Edit', 'cal.del': 'Delete', 'cal.confirmDel': 'Delete this protocol?',
+    'cal.f.code': 'Document code', 'cal.f.doc': 'Document', 'cal.f.area': 'Area',
+    'cal.f.element': 'Element (WTG NN)', 'cal.f.spec': 'Specialty', 'cal.f.milestone': 'Payment milestone',
+    'cal.f.state': 'State', 'cal.f.desc': 'Description',
+    'cal.f.create': '＋ Create', 'cal.f.saveEdit': '✓ Save', 'cal.f.cancel': 'Cancel',
     'about.desc': 'Structural health monitoring (SHM) of wind turbines — physics-based digital twin, fatigue, inspection and construction progress for the Camán I wind farm.',
     'about.credit': 'Institute of Civil Works · Universidad Austral de Chile. Inherited finite-element engine, reused as the digital twin.',
     'alert.noPark': 'No park to export.',
