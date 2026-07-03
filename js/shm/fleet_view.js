@@ -7,11 +7,11 @@
 // ─────────────────────────────────────────────────────────────────────────────
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
-import { createTurbine, TOWER_H } from './turbine_mesh.js?v=297';
-import { createSubstationTower, groundCable, overheadLine } from './structures.js?v=297';
-import { toScene, CAMAN_CENTER, LAYOUT_SCALE } from './parks_data_caman.js?v=297';
-import { CAMAN_ROADS } from './caman_roads.js?v=297';
-import { solarPosition, dateFromLocal, sunSceneDir } from './solar.js?v=297';
+import { createTurbine, TOWER_H } from './turbine_mesh.js?v=298';
+import { createSubstationTower, groundCable, overheadLine } from './structures.js?v=298';
+import { toScene, CAMAN_CENTER, LAYOUT_SCALE, defaultStages } from './parks_data_caman.js?v=298';
+import { CAMAN_ROADS } from './caman_roads.js?v=298';
+import { solarPosition, dateFromLocal, sunSceneDir } from './solar.js?v=298';
 
 const SPACING = 235;
 const TOWER_SCALE = 2.2;   // agranda las torres (vista esquemática) para que destaquen sobre el relieve
@@ -270,7 +270,7 @@ export class FleetView {
   // ── Relieve conceptual (capa de terreno) ─────────────────────────────────────
   // Carga el DEM vendorizado y añade la malla (oculta hasta activarla).
   async loadTerrain(url) {
-    const { Terrain } = await import('./terrain.js?v=297');
+    const { Terrain } = await import('./terrain.js?v=298');
     this._TerrainClass = Terrain;                     // para reconstruir al cambiar de escala
     const dem = await (await fetch(url)).json();
     this.terrain = new Terrain(dem, { vex: 1.5 });   // relieve exagerado (esquemático)
@@ -617,6 +617,30 @@ export class FleetView {
       if (st.type === 'turbine') st.operational = true;
       for (const s of st.sensors) s.mesh.visible = true;
     }
+  }
+
+  // ── «Cargar / Actualizar parque» desde la calidad (Excel) ────────────────────
+  // Re-siembra el avance 4D a partir de un mapa { id → fracción [0,1] }.
+  //   · mode='load'   → foto completa: BORRA el avance anterior de TODAS las
+  //                     estructuras y las re-siembra; las que no están en el mapa
+  //                     quedan en 0 (obra sin empezar). Es un «reinicio» del parque.
+  //   · mode='update' → sólo toca las estructuras presentes en el mapa; el resto
+  //                     conserva su avance actual.
+  // Regenera `stages` (no sólo `built`) para que el llenado por componente refleje
+  // el nuevo valor — de lo contrario `_setTurbineProgress4D` ignoraría el escalar.
+  applyAvanceFromQuality(pctById, mode = 'update') {
+    let touched = 0, applied = 0;
+    for (const st of this.structures) {
+      const has = Object.prototype.hasOwnProperty.call(pctById, st.id);
+      if (mode === 'update' && !has) continue;
+      const built = has ? Math.max(0, Math.min(1, pctById[st.id])) : 0;
+      st.stages = defaultStages(st.type, built);   // borra las partidas previas y las re-siembra
+      st.built = built;
+      touched++; if (has) applied++;
+    }
+    if (touched && !this.constructionMode) this.setConstructionMode(true);
+    else for (const st of this.structures) this.setProgress(st.id, st.built);   // re-pinta con las nuevas etapas
+    return { touched, applied };
   }
 
   // Alarma de emergencia: faro rojo titilante sobre la estructura.

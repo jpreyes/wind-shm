@@ -81,6 +81,17 @@ body.shm #menubar { min-width: 0; overflow-x: auto; }
 /* Edición: formulario + tabla de gestión */
 .cal-btn.cal-import-alt { background: transparent; color: var(--text); border: 1px solid var(--border2); }
 .cal-btn.cal-on { background: rgba(40,180,110,.18); color: #28b46e; border: 1px solid rgba(40,180,110,.5); }
+/* Paso de decisión «Cargar / Actualizar parque» al importar */
+.cal-apply { max-width: 560px; text-align: center; }
+.cal-apply h2 { margin: 0 0 4px; }
+.cal-apply-opts { display: flex; gap: 12px; margin: 16px 0 12px; flex-wrap: wrap; }
+.cal-apply-btn { flex: 1 1 220px; display: flex; flex-direction: column; gap: 6px; text-align: left; padding: 14px 16px; border-radius: 10px; border: 1px solid var(--border2); background: var(--bg3, #2a3340); color: var(--text); cursor: pointer; transition: border-color .12s, transform .12s; }
+.cal-apply-btn:hover { border-color: var(--accent); transform: translateY(-1px); }
+.cal-apply-h { font-size: 14px; font-weight: 700; }
+.cal-apply-d { font-size: 11.5px; line-height: 1.45; color: var(--muted, #8b97a3); }
+.cal-apply-load { border-color: rgba(230,150,40,.5); }
+.cal-apply-load:hover { border-color: #e69628; }
+.cal-apply-skip { margin-top: 4px; }
 .cal-tag-ok { background: rgba(40,180,110,.16); color: #28b46e; }
 .cal-form { margin: 6px 0 4px; }
 .cal-form-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 10px 14px; }

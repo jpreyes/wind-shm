@@ -19,7 +19,7 @@ import { normEstado, wtgToId, diasHabilesSacyr } from '../../tools/sacyr_reader.
 import { writeSacyrAuto } from '../../tools/sacyr_writer.mjs';
 import { readQuality, writeTemplate, blankTemplate } from '../../tools/rewind_template.mjs';
 import { computeDerived } from '../../tools/sacyr_derived.mjs';
-import { t } from './i18n.js?v=297';
+import { t } from './i18n.js?v=298';
 
 const STORE = 'rewind.calidad.v1';
 const XLSX_MIME = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
@@ -65,34 +65,36 @@ export function structureSummary(id) {
   return { total: q.total, aprobado: q.aprobado, pctAprobado: q.pctAprobado, pendientes: q.total - q.aprobado - q.informativo - q.nulo };
 }
 
-// ── Integración con el 4D: «avance real» desde la calidad (opt-in) ────────────
-// Cada torre se «llena» según su % de protocolos aprobados. Dos modos:
+// ── «Cargar / Actualizar parque» desde la calidad → avance 4D ────────────────
+// Refleja el % de protocolos aprobados en el avance de obra 4D. Dos modos:
+//   · mode='load'   (cargar parque completo) → REINICIA el parque con la foto del
+//     Excel: las torres sin protocolos se ponen en 0 (obra sin empezar). Borra el
+//     avance anterior — para arrancar la webapp con la construcción real.
 //   · mode='update' (actualizar) → SÓLO toca las torres que tienen protocolos;
-//     las que no aparecen conservan su avance actual (no se ponen en 0).
-//   · mode='load'  (cargar parque completo) → refleja TODAS las estructuras:
-//     las que no tienen protocolos se ponen en 0 (el Excel es la foto completa).
-// on=false → restaura el avance previo (etapas manuales). Guarda un backup por id.
-export function applyToFleet(on, fleet, mode = 'update') {
-  fleet = fleet || window.shmFleet; if (!fleet) return false;
-  if (on) {
-    const d = getDerived(); if (!d) return false;
-    fleet._calidadBackup = fleet._calidadBackup || {};
-    const backup = (st) => { if (!(st.id in fleet._calidadBackup)) fleet._calidadBackup[st.id] = st.built ?? null; };
-    let n = 0;
-    for (const st of fleet.structures) {
-      const q = d.porEstructura?.[st.id];
-      if (q) { backup(st); fleet.setProgress(st.id, q.pctAprobado); n++; }
-      else if (mode === 'load') { backup(st); fleet.setProgress(st.id, 0); }
-    }
-    if (n && !fleet.constructionMode) fleet.setConstructionMode(true);
-    window.shmCalidadAvance = n > 0;
-    return n > 0;
+//     las demás conservan su avance actual.
+// El nuevo avance se PERSISTE en el parque activo del store (sobrevive recarga) y
+// deja un punto de deshacer. Devuelve cuántas estructuras recibieron % del Excel
+// (0 = ninguna coincide con la flota → nada que aplicar).
+export function applyToFleet(mode = 'update', fleet) {
+  fleet = fleet || window.shmFleet; if (!fleet) return 0;
+  const d = getDerived(); if (!d) return 0;
+  const ids = new Set(fleet.structures.map((s) => s.id));
+  const pctById = {};
+  let applicable = 0;
+  for (const [id, q] of Object.entries(d.porEstructura || {})) {
+    if (!ids.has(id)) continue;
+    pctById[id] = q.pctAprobado; applicable++;
   }
-  const bk = fleet._calidadBackup || {};
-  for (const id in bk) if (bk[id] != null) fleet.setProgress(id, bk[id]);
-  fleet._calidadBackup = null;
-  window.shmCalidadAvance = false;
-  return true;
+  if (!applicable) return 0;
+  fleet.applyAvanceFromQuality(pctById, mode);
+  // Persistir el nuevo avance en el parque activo (con snapshot para deshacer).
+  try {
+    const pm = window.shmParks;
+    if (pm) { pm.syncFleetToActive(); pm.save(); pm.render(); }
+  } catch (e) { console.warn('[calidad] no se pudo persistir el avance', e); }
+  window.shmCalidadAvance = true;
+  window.shmSyncAvanceBtns?.();
+  return applicable;
 }
 
 // ── Importar / exportar ──────────────────────────────────────────────────────
@@ -110,13 +112,46 @@ function pickXlsx(cb) {
 export function importXlsx() {
   pickXlsx(async (bytes) => {
     let data;
-    try { data = await readQuality(bytes); }   // autodetecta: Log SACYR ↔ plantilla ReWind
+    try { data = await readQuality(bytes); }   // autodetecta formato (contratista ↔ plantilla)
     catch (e) { alert(t('cal.parseErr') + ' ' + e.message); return; }
     data.meta = { ...(data.meta || {}), importado: new Date().toISOString() };
     current = data; persist(data);
-    alert(t('cal.imported', data.protocolos.length));
-    showPanel();
+    showApplyChoice();   // 1º elegir cargar/actualizar (antes del panel); luego el panel
   });
+}
+
+// Paso de decisión que aparece al importar (y desde el panel): elegir cómo se
+// refleja el Excel en el avance 4D — CARGAR parque (reinicia) o ACTUALIZAR.
+export function showApplyChoice() {
+  const d = load(); if (!d) { showPanel(); return; }
+  document.getElementById('cal-apply-ov')?.remove();
+  const ov = document.createElement('div'); ov.id = 'cal-apply-ov'; ov.className = 'mb-about cal-ov';
+  const n = d.protocolos?.length || 0;
+  const opt = (cls, head, desc) => `<button class="cal-apply-btn ${cls}" type="button">
+    <span class="cal-apply-h">${head}</span><span class="cal-apply-d">${esc(desc)}</span></button>`;
+  ov.innerHTML = `<div class="mb-about-card cal-card cal-apply" role="dialog" aria-label="${esc(t('cal.apply.title'))}">
+    <button class="mb-about-x" type="button" aria-label="✕">✕</button>
+    <h2>${t('cal.apply.title')}</h2>
+    <p class="cal-mut">${t('cal.apply.sub', n)}</p>
+    <div class="cal-apply-opts">
+      ${opt('cal-apply-load', t('cal.avanceLoad'), t('cal.avanceLoadTip'))}
+      ${opt('cal-apply-update', t('cal.avanceUpdate'), t('cal.avanceUpdateTip'))}
+    </div>
+    <button class="cal-link cal-apply-skip" type="button">${t('cal.apply.skip')}</button>
+  </div>`;
+  const close = () => ov.remove();
+  ov.addEventListener('click', (e) => {
+    if (e.target === ov || e.target.closest('.mb-about-x') || e.target.closest('.cal-apply-skip')) { close(); showPanel(); return; }
+    const isLoad = e.target.closest('.cal-apply-load'), isUpd = e.target.closest('.cal-apply-update');
+    if (isLoad || isUpd) {
+      const applied = applyToFleet(isLoad ? 'load' : 'update');
+      close();
+      if (!applied) alert(t('cal.avanceNone'));
+      showPanel();
+    }
+  });
+  addEventListener('keydown', function escFn(e) { if (e.key === 'Escape') { close(); removeEventListener('keydown', escFn); } });
+  document.body.appendChild(ov);
 }
 
 // Descarga la plantilla estándar ReWind (vacía) para que el contratista la llene.
@@ -245,18 +280,9 @@ export function showPanel() {
     if (e.target.closest('.cal-import')) { close(); importXlsx(); return; }
     if (e.target.closest('.cal-new')) { crearVacio(); return; }        // recrea overlay
     if (e.target.closest('.cal-export')) return exportXlsx();
-    if (e.target.closest('.cal-avance-off')) {
-      applyToFleet(false);
-      close(); window.shmSyncAvanceBtns?.();
-      return;
-    }
-    const avBtn = e.target.closest('.cal-avance-load, .cal-avance-update');
-    if (avBtn) {
-      const mode = avBtn.classList.contains('cal-avance-load') ? 'load' : 'update';
-      const ok = applyToFleet(true, null, mode);
-      if (!ok) { alert(t('cal.avanceNone')); return; }
-      close();   // cerrar el overlay para ver el 4D actualizado
-      window.shmSyncAvanceBtns?.();
+    if (e.target.closest('.cal-apply4d')) {
+      close();   // cerrar el panel para ver el 4D tras elegir
+      showApplyChoice();
       return;
     }
     if (e.target.closest('.cal-manage')) { view = 'manage'; editingId = null; paint(); return; }
@@ -329,10 +355,7 @@ function dashboardHTML(data) {
     <div class="cal-head">
       <h2>${t('cal.title')}</h2>
       <div class="cal-actions">
-        ${window.shmCalidadAvance
-          ? `<button class="cal-btn cal-avance-off cal-on" type="button" title="${esc(t('cal.avanceOffTip'))}">${t('cal.avanceOff')}</button>`
-          : `<button class="cal-btn cal-import-alt cal-avance-load" type="button" title="${esc(t('cal.avanceLoadTip'))}">${t('cal.avanceLoad')}</button>
-             <button class="cal-btn cal-import-alt cal-avance-update" type="button" title="${esc(t('cal.avanceUpdateTip'))}">${t('cal.avanceUpdate')}</button>`}
+        <button class="cal-btn cal-apply4d ${window.shmCalidadAvance ? 'cal-on' : 'cal-import-alt'}" type="button" title="${esc(t('cal.apply.tip'))}">${t('cal.apply.btn')}</button>
         <button class="cal-btn cal-import-alt cal-manage" type="button">${t('cal.manage')}</button>
         <button class="cal-btn cal-export" type="button" title="${esc(t('cal.exportTip'))}">${t('cal.export')}</button>
         <button class="cal-btn cal-import-alt cal-template" type="button" title="${esc(t('cal.templateHint'))}">${t('cal.template')}</button>
