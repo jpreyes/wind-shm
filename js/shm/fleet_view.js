@@ -7,11 +7,11 @@
 // ─────────────────────────────────────────────────────────────────────────────
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
-import { createTurbine, TOWER_H } from './turbine_mesh.js?v=292';
-import { createSubstationTower, groundCable, overheadLine } from './structures.js?v=292';
-import { toScene, CAMAN_CENTER, LAYOUT_SCALE } from './parks_data_caman.js?v=292';
-import { CAMAN_ROADS } from './caman_roads.js?v=292';
-import { solarPosition, dateFromLocal, sunSceneDir } from './solar.js?v=292';
+import { createTurbine, TOWER_H } from './turbine_mesh.js?v=293';
+import { createSubstationTower, groundCable, overheadLine } from './structures.js?v=293';
+import { toScene, CAMAN_CENTER, LAYOUT_SCALE } from './parks_data_caman.js?v=293';
+import { CAMAN_ROADS } from './caman_roads.js?v=293';
+import { solarPosition, dateFromLocal, sunSceneDir } from './solar.js?v=293';
 
 const SPACING = 235;
 const TOWER_SCALE = 2.2;   // agranda las torres (vista esquemática) para que destaquen sobre el relieve
@@ -270,7 +270,7 @@ export class FleetView {
   // ── Relieve conceptual (capa de terreno) ─────────────────────────────────────
   // Carga el DEM vendorizado y añade la malla (oculta hasta activarla).
   async loadTerrain(url) {
-    const { Terrain } = await import('./terrain.js?v=292');
+    const { Terrain } = await import('./terrain.js?v=293');
     this._TerrainClass = Terrain;                     // para reconstruir al cambiar de escala
     const dem = await (await fetch(url)).json();
     this.terrain = new Terrain(dem, { vex: 1.5 });   // relieve exagerado (esquemático)
@@ -509,6 +509,31 @@ export class FleetView {
   setSensorStatus(structId, sensorId, status) {
     const st = this.getStructure(structId); if (!st) return;
     const se = st.sensors.find(x => x.id === sensorId); if (se) se.status = status;
+  }
+
+  // R-33b: marcadores 3D de la instrumentación del usuario — una esfera «capa de
+  // vida» por sensor, a yFrac·H sobre el fuste, coloreada por tipo.
+  setInstrMarkers(structId, sensors = []) {
+    const st = this.getStructure(structId); if (!st || !st.group) return;
+    if (st._instrGroup) {   // limpiar los previos
+      st.group.remove(st._instrGroup);
+      st._instrGroup.traverse(o => { o.geometry?.dispose?.(); o.material?.dispose?.(); });
+    }
+    if (!sensors.length) { st._instrGroup = null; return; }
+    const COLOR = { acc: 0x38bdf8, tilt: 0xf59e0b, strain: 0xa78bfa, temp: 0xef4444 };
+    const H = st.height || TOWER_H;
+    const g = new THREE.Group(); g.userData.turbineId = structId;
+    for (const s of sensors) {
+      const col = COLOR[s.type] || 0x38bdf8;
+      const mesh = new THREE.Mesh(new THREE.SphereGeometry(1.6, 14, 14), new THREE.MeshBasicMaterial({ color: col }));
+      mesh.position.set(3.2, (s.yFrac ?? 0.6) * H, 0);   // apenas fuera del fuste
+      mesh.userData.turbineId = structId;
+      // Halo tenue («capa de vida»).
+      const halo = new THREE.Mesh(new THREE.SphereGeometry(2.6, 14, 14), new THREE.MeshBasicMaterial({ color: col, transparent: true, opacity: 0.22, depthWrite: false }));
+      halo.position.copy(mesh.position);
+      g.add(halo, mesh);
+    }
+    st.group.add(g); st._instrGroup = g;
   }
 
   // Orientación (yaw): gira el cabezal de la turbina (góndola+rotor) o la torre AT.

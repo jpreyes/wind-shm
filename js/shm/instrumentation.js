@@ -9,7 +9,7 @@
 // El valor en vivo es SINTÉTICO y determinista por sensor/tipo hasta conectar el
 // hardware real (DataSource/`R-10`). Módulo de datos puro (sin DOM/Three.js).
 // ─────────────────────────────────────────────────────────────────────────────
-import { t } from './i18n.js?v=292';
+import { t } from './i18n.js?v=293';
 
 const KEY = 'rewind.instrumentation.v1';
 let _seq = 0;
@@ -28,6 +28,8 @@ export const typeIcon = (key) => typeOf(key).icon;
 
 function load() { try { return JSON.parse(localStorage.getItem(KEY)) || {}; } catch { return {}; } }
 function save(o) { try { localStorage.setItem(KEY, JSON.stringify(o)); } catch {} }
+// R-33b: avisa a la escena 3D (y otros) que cambió la instrumentación de una torre.
+function emitChanged(structId) { try { if (typeof window !== 'undefined') window.dispatchEvent(new CustomEvent('instr-changed', { detail: { structId } })); } catch {} }
 
 /** Sensores definidos por el usuario para una estructura. */
 export function getSensors(structId) { return load()[structId] || []; }
@@ -35,17 +37,17 @@ export function getSensors(structId) { return load()[structId] || []; }
 export function addSensor(structId, s) {
   const o = load();
   (o[structId] ||= []).push({ id: uid(), type: s.type || 'acc', label: (s.label || '').trim(), yFrac: clamp01(s.yFrac ?? 0.6) });
-  save(o);
+  save(o); emitChanged(structId);
   return o[structId];
 }
 
 export function removeSensor(structId, id) {
-  const o = load(); o[structId] = (o[structId] || []).filter(x => x.id !== id); save(o);
+  const o = load(); o[structId] = (o[structId] || []).filter(x => x.id !== id); save(o); emitChanged(structId);
 }
 
 export function updateSensor(structId, id, patch) {
   const o = load(); const s = (o[structId] || []).find(x => x.id === id);
-  if (s) { Object.assign(s, patch); if (patch.yFrac != null) s.yFrac = clamp01(patch.yFrac); save(o); }
+  if (s) { Object.assign(s, patch); if (patch.yFrac != null) s.yFrac = clamp01(patch.yFrac); save(o); emitChanged(structId); }
 }
 
 const clamp01 = (v) => Math.max(0, Math.min(1, +v || 0));
