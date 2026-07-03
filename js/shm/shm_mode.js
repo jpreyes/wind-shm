@@ -8,25 +8,26 @@
 //   inspecciones y señal temporal EN VIVO desde un Web Worker (DataSource).
 // Recortes (modelado) los hace shm.css ocultando, no borrando.
 // ─────────────────────────────────────────────────────────────────────────────
-import { FleetView } from './fleet_view.js?v=286';
-import { DataSource } from './data_source.js?v=286';
-import { computeTwin } from './digital_twin.js?v=286';
-import { ParkManager, loadParksStore } from './parks.js?v=286';
-import { MapView } from './map_view.js?v=286';
-import { defaultStages, builtFromStages } from './parks_data_caman.js?v=286';
-import { compassRoseSVG } from './compass.js?v=286';
-import { buildAvanceHUD } from './avance_hud.js?v=286';
-import { renderAvance } from './avance_dashboard.js?v=286';
-import * as Insp from './inspection.js?v=286';
-import * as Fat from './fatigue.js?v=286';
-import * as Instr from './instrumentation.js?v=286';
-import * as Calidad from './calidad.js?v=286';
-import * as Hist from './history.js?v=286';
-import { esc, safeUrl } from './util.js?v=286';
-import { t, getLang, setLang } from './i18n.js?v=286';
+import { FleetView } from './fleet_view.js?v=287';
+import { DataSource } from './data_source.js?v=287';
+import { computeTwin } from './digital_twin.js?v=287';
+import { ParkManager, loadParksStore } from './parks.js?v=287';
+import { MapView } from './map_view.js?v=287';
+import { defaultStages, builtFromStages } from './parks_data_caman.js?v=287';
+import { compassRoseSVG } from './compass.js?v=287';
+import { buildAvanceHUD } from './avance_hud.js?v=287';
+import { renderAvance } from './avance_dashboard.js?v=287';
+import * as Insp from './inspection.js?v=287';
+import * as Fat from './fatigue.js?v=287';
+import * as Instr from './instrumentation.js?v=287';
+import * as Calidad from './calidad.js?v=287';
+import * as Hist from './history.js?v=287';
+import * as Health from './health.js?v=287';
+import { esc, safeUrl } from './util.js?v=287';
+import { t, getLang, setLang } from './i18n.js?v=287';
 
 const F1_BASE = { turbine: 0.283, hv: 1.6 };
-const REWIND_VER = 'v286';   // versión visible del build (subir junto al cache-bust)
+const REWIND_VER = 'v287';   // versión visible del build (subir junto al cache-bust)
 const FS = 62.5;   // frecuencia de muestreo de la señal (Hz), igual que shm_worker.js
 // Clasificador ML de daño (0..4)
 const CLS = ['Sin daño', 'Leve', 'Moderado', 'Alto', 'Muy alto'];
@@ -275,7 +276,7 @@ async function boot() {
   // ── Relieve conceptual del terreno (DEM vendorizado) — encendido por defecto ─
   setLoad(88, 'Cargando relieve…'); await delay(40);
   try {
-    await fleet.loadTerrain('data/caman_dem.json?v=286');
+    await fleet.loadTerrain('data/caman_dem.json?v=287');
     fleet.setTerrainVisible(true);
     document.getElementById('shm-relieve-tool')?.classList.add('active');
   } catch (e) { console.warn('[shm] relieve no disponible', e); }
@@ -1245,7 +1246,7 @@ function buildDashboard(panel, fleet, actions) {
     const sum = (window.shmData && window.shmData.get(o.id)) || null;
     if (pane === 'estado') {
       const dmg = sum ? Math.round((sum.dmg || 0) * 100) : 0;
-      body.innerHTML = `
+      body.innerHTML = healthGaugeHTML(o, sum) + `
         <div class="row"><span>${t('sh.cls')}</span><b id="sh-cls">…</b></div>
         <div class="row"><span>${t('sh.dmg')}</span><b id="sh-dmg">${dmg}%</b></div>
         <div class="row"><span>${t('sh.sensOk')}</span><b id="sh-ns">—</b></div>
@@ -1386,6 +1387,42 @@ function buildDashboard(panel, fleet, actions) {
 
   // Espectro de carga (rainflow): barras ciclos/año vs rango de tensión (log-y),
   // con los umbrales S-N ΔσD (m1→m2) y ΔσL (corte).
+  // R-35: reúne las fuentes de salud disponibles para una estructura.
+  function healthInputsFor(o, sum) {
+    const insps = Insp.getInspections(o.id);
+    const inspScore = insps.length ? Insp.inspectionScore(insps[0].damages) : undefined;
+    const operativa = (o.built ?? 1) >= 0.97;
+    const fat = operativa ? assessFatigueFor(o, sum).Delapsed : undefined;
+    // Defecto del gemelo (R-31): f₁ medida por debajo de la banda predicha.
+    let twin;
+    const base = window.shmTwin?.[o.type];
+    if (operativa && base && sum && typeof sum.f1 === 'number' && !sum.standby) {
+      const rel = (base - sum.f1) / base;             // caída relativa de f₁
+      twin = rel <= 0.01 ? 0 : Math.min(1, (rel - 0.01) / 0.05);   // >1% empieza a penalizar, satura a 6%
+    }
+    const cls = (sum && !sum.standby && typeof sum.cls === 'number') ? sum.cls : undefined;
+    return { cls, insp: inspScore, fat, twin };
+  }
+
+  // R-35: medidor del Índice de Salud (HI 0–100) + desglose de contribuciones.
+  function healthGaugeHTML(o, sum) {
+    const h = Health.computeHealth(healthInputsFor(o, sum));
+    if (h.hi == null) return '';
+    const col = Health.healthColor(h.hi);
+    const breakdown = h.contributions.filter(c => c.penalty > 0).map(c => `${Health.HI_LABEL[c.source]} −${c.share}`).join(' · ') || t('hi.allGood');
+    const r = 26, C = 2 * Math.PI * r, off = C * (1 - h.hi / 100);
+    return `<div class="hi-gauge">
+      <svg viewBox="0 0 64 64" width="60" height="60" aria-label="Health Index ${h.hi}">
+        <circle cx="32" cy="32" r="${r}" fill="none" stroke="var(--border2)" stroke-width="6"/>
+        <circle cx="32" cy="32" r="${r}" fill="none" stroke="${col}" stroke-width="6" stroke-linecap="round" stroke-dasharray="${C.toFixed(1)}" stroke-dashoffset="${off.toFixed(1)}" transform="rotate(-90 32 32)"/>
+        <text x="32" y="35" text-anchor="middle" font-size="17" font-weight="700" fill="${col}">${h.hi}</text>
+        <text x="32" y="47" text-anchor="middle" font-size="7" fill="var(--text-muted)">HI</text>
+      </svg>
+      <div class="hi-info"><div class="hi-band" style="color:${col}">${t('hi.title')}: ${t('hi.band.' + h.band)}</div>
+        <div class="hi-bd">${esc(breakdown)}</div></div>
+    </div>`;
+  }
+
   // R-34: tendencia de f₁ vs tiempo (histórico persistente) + banda de la línea base
   // del gemelo. Devuelve el HTML del panel «Tendencia».
   function trendHTML(rows, o, days) {

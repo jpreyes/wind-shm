@@ -105,6 +105,12 @@ body.shm #menubar { min-width: 0; overflow-x: auto; }
 .shm-sensor.editing { outline: 1px solid var(--accent); border-radius: 6px; }
 .cs-edit { color: var(--text-muted); }
 .cs-edit:hover { color: var(--accent); }
+/* Índice de Salud unificado (R-35) */
+.hi-gauge { display: flex; align-items: center; gap: 12px; padding: 6px 2px 12px; margin-bottom: 6px; border-bottom: 1px solid var(--border2); }
+.hi-gauge svg { flex: 0 0 auto; }
+.hi-info { min-width: 0; }
+.hi-band { font-size: 13px; font-weight: 700; }
+.hi-bd { font-size: 10.5px; color: var(--text-muted); margin-top: 3px; line-height: 1.4; }
 /* Tour de bienvenida (R-36d): spotlight con box-shadow gigante del anillo */
 .tour-ov { position: fixed; inset: 0; z-index: 9600; }
 .tour-ring { position: fixed; border: 2px solid var(--accent); border-radius: 10px; box-shadow: 0 0 0 4000px rgba(8,12,18,.6); pointer-events: none; transition: all .22s ease; }

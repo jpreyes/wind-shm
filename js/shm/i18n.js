@@ -138,6 +138,8 @@ const DICT = {
     // SHM · Estado
     'sh.cls': 'Clasificación (sensores)', 'sh.dmg': 'Índice de daño',
     'sh.sensOk': 'Sensores OK', 'sh.f1now': 'f₁ actual',
+    'hi.title': 'Salud', 'hi.allGood': 'Sin penalizaciones', 'hi.name': 'Índice de Salud',
+    'hi.band.operativa': 'Operativa', 'hi.band.observacion': 'Observación', 'hi.band.critica': 'Crítica', 'hi.band.unknown': '—',
     'sh.note': 'Estado/clasificación EN VIVO del servicio ML que vigila los sensores. Es distinto de la <b>evaluación de inspección</b> (pestaña Inspección).',
     'sig.note': 'Señal de aceleración en vivo (se mueve en tiempo real):',
     'sens.note': 'Verde = operativo · Rojo = en falla. Estado y RMS en vivo desde el gateway (sim).',
@@ -478,6 +480,8 @@ const DICT = {
     'det.report': '📄 Report of this tower',
     'sh.cls': 'Classification (sensors)', 'sh.dmg': 'Damage index',
     'sh.sensOk': 'Sensors OK', 'sh.f1now': 'f₁ current',
+    'hi.title': 'Health', 'hi.allGood': 'No penalties', 'hi.name': 'Health Index',
+    'hi.band.operativa': 'Operational', 'hi.band.observacion': 'Watch', 'hi.band.critica': 'Critical', 'hi.band.unknown': '—',
     'sh.note': 'LIVE status/classification from the ML service watching the sensors. Different from the <b>inspection assessment</b> (Inspection tab).',
     'sig.note': 'Live acceleration signal (updates in real time):',
     'sens.note': 'Green = operational · Red = fault. Live status and RMS from the gateway (sim).',
