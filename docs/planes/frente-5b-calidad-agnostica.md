@@ -123,10 +123,16 @@ Dos caminos que conviven: *adaptarnos a su Excel* (perfiles) **o** *que adopten 
 | ⬜ 5B.2 | **Store de perfiles** (localStorage/backend) + selector de perfil al importar | 0.5 d | Se elige perfil al importar; el built-in SACYR aparece por defecto. |
 | ⬜ 5B.3 | **Asistente de mapeo** (elegir hoja · mapear columnas con heurística de sinónimos · mapear estados · modo de ciclos · guardar perfil) | 3 d | Importar un Excel *distinto* de prueba → poblar el dashboard sin tocar código. |
 | ⬜ 5B.4 | **Catálogo normativo** built-in (vocabulario de estado ↔ ISO 19650; tipos de ensayo ↔ ASTM/EN/NCh) + `e.norma` en el modelo | 1 d | El módulo muestra la norma del ensayo; estados etiquetados con su equivalente ISO. |
-| ⬜ 5B.5 | **Plantilla estándar ReWind** (workbook ISO limpio) + perfil zero-config | 1 d | Descargar plantilla, llenarla, reimportar sin mapeo. |
+| ✅ 5B.5 | **Plantilla estándar ReWind** (`tools/rewind_template.mjs`) + **autodetección de formato** (`readQuality`) | 1 d | **HECHO:** workbook limpio (Instrucciones · Protocolos · **Ciclos normalizados** · Ensayos Hormigón · Catálogos ISO); lectura por nombre de cabecera (sinónimos ES/EN); descarga desde el menú «Calidad»; `readQuality` autodetecta **SACYR ↔ plantilla ReWind**; datos creados/editados se exportan en formato ReWind, SACYR prístino se devuelve sin pérdida. Test `tools/test_rewind_template.mjs` (round-trip) + SACYR sin regresión. |
 
 *(Recomendado arrancar por 5B.1: es el refactor habilitante, de bajo riesgo — deja el SACYR
 como perfil y desbloquea todo lo demás. El modelo canónico ya está; no se toca.)*
+
+> **Ya entregado (fuera de orden, pedido por el proyecto):** la **plantilla estándar ReWind
+> (5B.5)** y la **autodetección** SACYR↔plantilla (`readQuality`). Estrategia adoptada: el
+> contratista **adopta nuestro modelo** (descarga la plantilla, la llena, la sube); si trae
+> un Excel propio distinto, para eso queda el **asistente de mapeo (5B.3)** — «el modificador
+> de tablas». El import de SACYR se mantiene intacto (es el proyecto que motiva todo esto).
 
 ## 4. Qué NO cambia
 El motor posterior al modelo (writer `modelToSheets`, `computeDerived`, dashboard, edición,

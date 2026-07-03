@@ -239,8 +239,12 @@ function parseCatalogos(sheet) {
 }
 
 // ── Entry point del reader ────────────────────────────────────────────────────
-export async function readSacyr(bytes) {
-  const wb = await readXlsx(bytes);
+// Detección de formato: ¿este workbook es el Log de SACYR?
+export function isSacyrWorkbook(wb) { return !!wb.sheet('LOG PTL Parque y SSEE'); }
+
+// Mapea un workbook YA parseado (readXlsx) → modelo canónico. Reutilizable por el
+// dispatcher de importación (auto-detección) sin re-parsear el zip.
+export function mapSacyr(wb) {
   const shLog = wb.sheet('LOG PTL Parque y SSEE');
   if (!shLog) throw new Error('sacyr_reader: falta la hoja «LOG PTL Parque y SSEE»');
 
@@ -263,11 +267,13 @@ export async function readSacyr(bytes) {
   }
 
   return {
-    meta: { fuente: 'Log protocolos SACYR.xlsx', hojas: wb.sheetNames, generado: new Date().toISOString() },
+    meta: { fuente: 'Log protocolos SACYR.xlsx', formato: 'sacyr', hojas: wb.sheetNames, generado: new Date().toISOString() },
     protocolos, ensayosHormigon, resumen, catalogos,
     _raw,
   };
 }
+
+export async function readSacyr(bytes) { return mapSacyr(await readXlsx(bytes)); }
 
 // ── CLI ───────────────────────────────────────────────────────────────────────
 const isMain = typeof process !== 'undefined' && process.argv?.[1] &&

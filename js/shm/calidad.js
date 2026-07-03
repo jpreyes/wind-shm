@@ -14,10 +14,11 @@
 // planos, sin ?v=, igual que numeric.js) para poder testearlo en Node; este
 // módulo es la capa de navegador y sí se versiona.
 // ─────────────────────────────────────────────────────────────────────────────
-import { readSacyr, normEstado, wtgToId, diasHabilesSacyr } from '../../tools/sacyr_reader.mjs';
+import { normEstado, wtgToId, diasHabilesSacyr } from '../../tools/sacyr_reader.mjs';
 import { writeSacyrAuto } from '../../tools/sacyr_writer.mjs';
+import { readQuality, writeTemplate, blankTemplate } from '../../tools/rewind_template.mjs';
 import { computeDerived } from '../../tools/sacyr_derived.mjs';
-import { t } from './i18n.js?v=281';
+import { t } from './i18n.js?v=282';
 
 const STORE = 'rewind.calidad.v1';
 const XLSX_MIME = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
@@ -101,7 +102,7 @@ function pickXlsx(cb) {
 export function importXlsx() {
   pickXlsx(async (bytes) => {
     let data;
-    try { data = await readSacyr(bytes); }
+    try { data = await readQuality(bytes); }   // autodetecta: Log SACYR ↔ plantilla ReWind
     catch (e) { alert(t('cal.parseErr') + ' ' + e.message); return; }
     data.meta = { ...(data.meta || {}), importado: new Date().toISOString() };
     current = data; persist(data);
@@ -110,13 +111,23 @@ export function importXlsx() {
   });
 }
 
+// Descarga la plantilla estándar ReWind (vacía) para que el contratista la llene.
+export function downloadTemplate() {
+  const url = URL.createObjectURL(new Blob([blankTemplate()], { type: XLSX_MIME }));
+  const a = document.createElement('a'); a.href = url; a.download = 'Plantilla-calidad-ReWind.xlsx'; a.click();
+  setTimeout(() => URL.revokeObjectURL(url), 3000);
+}
+
 export function exportXlsx() {
   const data = load();
   if (!data) { alert(t('cal.noData')); return; }
-  // writeSacyrAuto elige: `_raw` intacto → lossless; editado/creado → desde el modelo.
-  const bytes = writeSacyrAuto(data);
+  // SACYR prístino (sin editar) → se devuelve en SU formato, sin pérdida (round-trip F5.2).
+  // Todo lo demás (editado / creado / plantilla) → se exporta en el formato estándar ReWind.
+  const pristineSacyr = data.meta?.formato === 'sacyr' && data._raw && !data._dirty && !data._rawOmitido;
+  const bytes = pristineSacyr ? writeSacyrAuto(data) : writeTemplate(data);
+  const name = pristineSacyr ? `Log-protocolos-SACYR-${stamp()}.xlsx` : `Calidad-ReWind-${stamp()}.xlsx`;
   const url = URL.createObjectURL(new Blob([bytes], { type: XLSX_MIME }));
-  const a = document.createElement('a'); a.href = url; a.download = `Log-protocolos-SACYR-${stamp()}.xlsx`; a.click();
+  const a = document.createElement('a'); a.href = url; a.download = name; a.click();
   setTimeout(() => URL.revokeObjectURL(url), 3000);
 }
 
@@ -206,10 +217,12 @@ export function showPanel() {
         <button class="mb-about-x" type="button" aria-label="✕">✕</button>
         <h2>${t('cal.title')}</h2>
         <p>${t('cal.emptyHint')}</p>
-        <div class="cal-actions" style="justify-content:center;margin-top:14px">
+        <div class="cal-actions" style="justify-content:center;margin-top:14px;flex-wrap:wrap">
           <button class="cal-btn cal-import" type="button">${t('cal.import')}</button>
           <button class="cal-btn cal-import-alt cal-new" type="button">${t('cal.createEmpty')}</button>
+          <button class="cal-btn cal-import-alt cal-template" type="button">${t('cal.template')}</button>
         </div>
+        <p class="cal-mut" style="margin-top:10px">${t('cal.templateHint')}</p>
       </div>`;
     } else {
       ov.innerHTML = view === 'manage' ? manageHTML(data) : dashboardHTML(data);
@@ -219,6 +232,7 @@ export function showPanel() {
 
   ov.addEventListener('click', (e) => {
     if (e.target === ov || e.target.closest('.mb-about-x')) return close();
+    if (e.target.closest('.cal-template')) { downloadTemplate(); return; }
     if (e.target.closest('.cal-import')) { close(); importXlsx(); return; }
     if (e.target.closest('.cal-new')) { crearVacio(); return; }        // recrea overlay
     if (e.target.closest('.cal-export')) return exportXlsx();
@@ -302,6 +316,7 @@ function dashboardHTML(data) {
         <button class="cal-btn cal-avance ${window.shmCalidadAvance ? 'cal-on' : 'cal-import-alt'}" type="button" title="${esc(t('cal.avanceTip'))}">${window.shmCalidadAvance ? t('cal.avanceOff') : t('cal.avanceOn')}</button>
         <button class="cal-btn cal-import-alt cal-manage" type="button">${t('cal.manage')}</button>
         <button class="cal-btn cal-export" type="button" title="${esc(t('cal.exportTip'))}">${t('cal.export')}</button>
+        <button class="cal-btn cal-import-alt cal-template" type="button" title="${esc(t('cal.templateHint'))}">${t('cal.template')}</button>
         <button class="cal-btn cal-import-alt cal-import" type="button">${t('cal.reimportFile')}</button>
       </div>
     </div>

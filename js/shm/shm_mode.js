@@ -8,23 +8,23 @@
 //   inspecciones y señal temporal EN VIVO desde un Web Worker (DataSource).
 // Recortes (modelado) los hace shm.css ocultando, no borrando.
 // ─────────────────────────────────────────────────────────────────────────────
-import { FleetView } from './fleet_view.js?v=281';
-import { DataSource } from './data_source.js?v=281';
-import { computeTwin } from './digital_twin.js?v=281';
-import { ParkManager, loadParksStore } from './parks.js?v=281';
-import { MapView } from './map_view.js?v=281';
-import { defaultStages, builtFromStages } from './parks_data_caman.js?v=281';
-import { compassRoseSVG } from './compass.js?v=281';
-import { buildAvanceHUD } from './avance_hud.js?v=281';
-import { renderAvance } from './avance_dashboard.js?v=281';
-import * as Insp from './inspection.js?v=281';
-import * as Fat from './fatigue.js?v=281';
-import * as Instr from './instrumentation.js?v=281';
-import * as Calidad from './calidad.js?v=281';
-import { t, getLang, setLang } from './i18n.js?v=281';
+import { FleetView } from './fleet_view.js?v=282';
+import { DataSource } from './data_source.js?v=282';
+import { computeTwin } from './digital_twin.js?v=282';
+import { ParkManager, loadParksStore } from './parks.js?v=282';
+import { MapView } from './map_view.js?v=282';
+import { defaultStages, builtFromStages } from './parks_data_caman.js?v=282';
+import { compassRoseSVG } from './compass.js?v=282';
+import { buildAvanceHUD } from './avance_hud.js?v=282';
+import { renderAvance } from './avance_dashboard.js?v=282';
+import * as Insp from './inspection.js?v=282';
+import * as Fat from './fatigue.js?v=282';
+import * as Instr from './instrumentation.js?v=282';
+import * as Calidad from './calidad.js?v=282';
+import { t, getLang, setLang } from './i18n.js?v=282';
 
 const F1_BASE = { turbine: 0.283, hv: 1.6 };
-const REWIND_VER = 'v281';   // versión visible del build (subir junto al cache-bust)
+const REWIND_VER = 'v282';   // versión visible del build (subir junto al cache-bust)
 const FS = 62.5;   // frecuencia de muestreo de la señal (Hz), igual que shm_worker.js
 // Clasificador ML de daño (0..4)
 const CLS = ['Sin daño', 'Leve', 'Moderado', 'Alto', 'Muy alto'];
@@ -270,7 +270,7 @@ async function boot() {
   // ── Relieve conceptual del terreno (DEM vendorizado) — encendido por defecto ─
   setLoad(88, 'Cargando relieve…'); await delay(40);
   try {
-    await fleet.loadTerrain('data/caman_dem.json?v=281');
+    await fleet.loadTerrain('data/caman_dem.json?v=282');
     fleet.setTerrainVisible(true);
     document.getElementById('shm-relieve-tool')?.classList.add('active');
   } catch (e) { console.warn('[shm] relieve no disponible', e); }
@@ -463,6 +463,7 @@ function buildMenubar(fleet, getPM = () => null) {
       { label: t('mi.calPanel'), fn: () => Calidad.showPanel() },
       { label: t('mi.calNew'), fn: () => Calidad.crearVacio() },
       { sep: 1 },
+      { label: t('mi.calTemplate'), fn: () => Calidad.downloadTemplate() },
       { label: t('mi.calImport'), fn: () => Calidad.importXlsx() },
       { label: t('mi.calExport'), fn: () => Calidad.exportXlsx() },
     ] },
