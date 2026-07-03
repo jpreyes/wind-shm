@@ -9,11 +9,12 @@
 // más un botón «Abrir partida» (vista completa). Sólo DOM/overlay; el 3D lo provee
 // fleet_view (anchorScreenAt / focusComponent).
 // ─────────────────────────────────────────────────────────────────────────────
-import { TURBINE_COMPONENTS, HV_COMPONENTS, enrichStages } from './parks_data_caman.js?v=282';
-import * as CTwin from './construction_twin.js?v=282';
-import * as Insp from './inspection.js?v=282';
-import { t, getLang } from './i18n.js?v=282';
-import * as Instr from './instrumentation.js?v=282';
+import { TURBINE_COMPONENTS, HV_COMPONENTS, enrichStages } from './parks_data_caman.js?v=283';
+import * as CTwin from './construction_twin.js?v=283';
+import * as Insp from './inspection.js?v=283';
+import { t, getLang } from './i18n.js?v=283';
+import * as Instr from './instrumentation.js?v=283';
+import { esc } from './util.js?v=283';
 
 const fmt = (iso) => { if (!iso) return '—'; const [y, m, d] = iso.split('-'); return `${d}/${m}/${y.slice(2)}`; };
 
@@ -189,7 +190,7 @@ export function buildAvanceHUD(vpwrap, fleet) {
         <div class="ah-head">
           <span class="ah-dot ${sm.c}"></span>
           <span class="ah-ico">${co.comp.icon}</span>
-          <span class="ah-name">${co.comp.label}</span>
+          <span class="ah-name">${esc(co.comp.label)}</span>
           <span class="ah-pct">${s.pct}%</span>
           <span class="ah-chev">${open ? '▾' : '▸'}</span>
         </div>
@@ -222,11 +223,11 @@ export function buildAvanceHUD(vpwrap, fleet) {
         : ds.some(d => sevClass(d.severity) === 'wip') ? 'wip' : 'ok';
       const open = expanded === co.comp.component;
       co.el.classList.toggle('open', open);
-      const rows = ds.map(d => `<div class="ah-find"><span class="ah-dot ${sevClass(d.severity)}"></span><b>${d.damage_type}</b> <span class="ah-mut">${d.severity}${d.damage_cause ? ' · ' + d.damage_cause : ''}</span></div>`).join('') || `<div class="ah-mut">${t('ahud.noFind')}</div>`;
+      const rows = ds.map(d => `<div class="ah-find"><span class="ah-dot ${sevClass(d.severity)}"></span><b>${esc(d.damage_type)}</b> <span class="ah-mut">${esc(d.severity)}${d.damage_cause ? ' · ' + esc(d.damage_cause) : ''}</span></div>`).join('') || `<div class="ah-mut">${t('ahud.noFind')}</div>`;
       co.el.innerHTML = `
         <div class="ah-head">
           <span class="ah-dot ${cls}"></span><span class="ah-ico">${co.comp.icon}</span>
-          <span class="ah-name">${co.comp.label}</span>
+          <span class="ah-name">${esc(co.comp.label)}</span>
           <span class="ah-pct">${n ? n + '⚐' : '✓'}</span>
           <span class="ah-chev">${open ? '▾' : '▸'}</span>
         </div>
@@ -249,7 +250,7 @@ export function buildAvanceHUD(vpwrap, fleet) {
       co.el.innerHTML = `
         <div class="ah-head">
           <span class="ah-dot ${fault ? 'bad' : 'done'}"></span><span class="ah-ico">${co.comp.icon}</span>
-          <span class="ah-name">${co.comp.label}</span>
+          <span class="ah-name">${esc(co.comp.label)}</span>
           <span class="ah-pct ah-live-rms">${fault ? t('ahud.faultUp') : rms}</span>
           <span class="ah-chev">${open ? '▾' : '▸'}</span>
         </div>
@@ -271,7 +272,7 @@ export function buildAvanceHUD(vpwrap, fleet) {
     co.el.innerHTML = `
       <div class="ah-head">
         <span class="ah-dot done"></span><span class="ah-ico">${co.comp.icon}</span>
-        <span class="ah-name">${co.comp.label}</span>
+        <span class="ah-name">${esc(co.comp.label)}</span>
         <span class="ah-pct ah-live-cs" data-cs-id="${cs.id}" data-cs-type="${cs.type}">${val}</span>
         <span class="ah-chev">${open ? '▾' : '▸'}</span>
       </div>
@@ -291,7 +292,7 @@ export function buildAvanceHUD(vpwrap, fleet) {
     co.el.innerHTML = `
       <div class="ah-head">
         <span class="ah-dot done"></span><span class="ah-ico">${co.comp.icon}</span>
-        <span class="ah-name">${co.comp.label}</span>
+        <span class="ah-name">${esc(co.comp.label)}</span>
         <span class="ah-pct">${t('ahud.gwOnline')}</span>
         <span class="ah-chev">${open ? '▾' : '▸'}</span>
       </div>
@@ -400,7 +401,7 @@ export function buildAvanceHUD(vpwrap, fleet) {
       <div class="ah-modal-card">
         <div class="ah-modal-h">
           <span class="ah-ico">${co.comp.icon}</span>
-          <b>${cur.label} · ${co.comp.label}</b>
+          <b>${esc(cur.label)} · ${esc(co.comp.label)}</b>
           <span class="ah-dot ${sm.c}"></span><span class="ah-mut">${sm.t}</span>
           <button class="ah-x" type="button" title="${t('ahud.close')}">✕</button>
         </div>
@@ -436,13 +437,13 @@ export function buildAvanceHUD(vpwrap, fleet) {
   function partidaReport(co) {
     const s = co.stage, sm = sema(s), slip = slipDays(s);
     const lc = getLang() === 'en' ? 'en-GB' : 'es-CL';
-    const html = `<!doctype html><html lang="${getLang()}"><meta charset=utf-8><title>${t('ahud.repTitle')} — ${cur.label} · ${co.comp.label}</title>
+    const html = `<!doctype html><html lang="${getLang()}"><meta charset=utf-8><title>${t('ahud.repTitle')} — ${esc(cur.label)} · ${esc(co.comp.label)}</title>
       <style>body{font:14px/1.5 system-ui,sans-serif;margin:34px;color:#1b2533}h1{font-size:19px;margin:0 0 2px}
       .mut{color:#64748b}table{border-collapse:collapse;margin-top:12px}td{border:1px solid #cbd5e1;padding:6px 10px}
       td:first-child{color:#64748b;background:#f8fafc}.bar{height:12px;background:#e2e8f0;border-radius:6px;overflow:hidden;width:280px;margin:10px 0}
       .bar i{display:block;height:100%;background:#0e7490}</style>
-      <h1>${t('ahud.repTitle')} — ${co.comp.label}</h1>
-      <div class="mut">${cur.label} · ${t('rep.park')} · ${sm.t} · ${t('rep.gen')} ${new Date().toLocaleString(lc)}</div>
+      <h1>${t('ahud.repTitle')} — ${esc(co.comp.label)}</h1>
+      <div class="mut">${esc(cur.label)} · ${t('rep.park')} · ${sm.t} · ${t('rep.gen')} ${new Date().toLocaleString(lc)}</div>
       <div class="bar"><i style="width:${s.pct}%"></i></div><b>${s.pct}%</b>
       <table>
         <tr><td>${t('ahud.repPlanRange')}</td><td>${fmt(s.plannedStart)} → ${fmt(s.plannedEnd)}</td></tr>

@@ -8,23 +8,24 @@
 //   inspecciones y señal temporal EN VIVO desde un Web Worker (DataSource).
 // Recortes (modelado) los hace shm.css ocultando, no borrando.
 // ─────────────────────────────────────────────────────────────────────────────
-import { FleetView } from './fleet_view.js?v=282';
-import { DataSource } from './data_source.js?v=282';
-import { computeTwin } from './digital_twin.js?v=282';
-import { ParkManager, loadParksStore } from './parks.js?v=282';
-import { MapView } from './map_view.js?v=282';
-import { defaultStages, builtFromStages } from './parks_data_caman.js?v=282';
-import { compassRoseSVG } from './compass.js?v=282';
-import { buildAvanceHUD } from './avance_hud.js?v=282';
-import { renderAvance } from './avance_dashboard.js?v=282';
-import * as Insp from './inspection.js?v=282';
-import * as Fat from './fatigue.js?v=282';
-import * as Instr from './instrumentation.js?v=282';
-import * as Calidad from './calidad.js?v=282';
-import { t, getLang, setLang } from './i18n.js?v=282';
+import { FleetView } from './fleet_view.js?v=283';
+import { DataSource } from './data_source.js?v=283';
+import { computeTwin } from './digital_twin.js?v=283';
+import { ParkManager, loadParksStore } from './parks.js?v=283';
+import { MapView } from './map_view.js?v=283';
+import { defaultStages, builtFromStages } from './parks_data_caman.js?v=283';
+import { compassRoseSVG } from './compass.js?v=283';
+import { buildAvanceHUD } from './avance_hud.js?v=283';
+import { renderAvance } from './avance_dashboard.js?v=283';
+import * as Insp from './inspection.js?v=283';
+import * as Fat from './fatigue.js?v=283';
+import * as Instr from './instrumentation.js?v=283';
+import * as Calidad from './calidad.js?v=283';
+import { esc, safeUrl } from './util.js?v=283';
+import { t, getLang, setLang } from './i18n.js?v=283';
 
 const F1_BASE = { turbine: 0.283, hv: 1.6 };
-const REWIND_VER = 'v282';   // versión visible del build (subir junto al cache-bust)
+const REWIND_VER = 'v283';   // versión visible del build (subir junto al cache-bust)
 const FS = 62.5;   // frecuencia de muestreo de la señal (Hz), igual que shm_worker.js
 // Clasificador ML de daño (0..4)
 const CLS = ['Sin daño', 'Leve', 'Moderado', 'Alto', 'Muy alto'];
@@ -270,7 +271,7 @@ async function boot() {
   // ── Relieve conceptual del terreno (DEM vendorizado) — encendido por defecto ─
   setLoad(88, 'Cargando relieve…'); await delay(40);
   try {
-    await fleet.loadTerrain('data/caman_dem.json?v=282');
+    await fleet.loadTerrain('data/caman_dem.json?v=283');
     fleet.setTerrainVisible(true);
     document.getElementById('shm-relieve-tool')?.classList.add('active');
   } catch (e) { console.warn('[shm] relieve no disponible', e); }
@@ -705,7 +706,7 @@ function buildTowerCard(vpwrap, fleet, o = {}) {
   const renderShadow = () => {
     const r = shadowEntry, res = r.res;
     el.innerHTML = `
-      <div class="tc-h">☀️ Receptor · ${cur.label}<button class="tc-x" type="button" title="Cerrar">✕</button></div>
+      <div class="tc-h">☀️ Receptor · ${esc(cur.label)}<button class="tc-x" type="button" title="Cerrar">✕</button></div>
       <div class="tc-r"><span>Parpadeo (worst)</span><b class="${res.hoursYear > 30 ? 'bad' : ''}">${res.hoursYear.toFixed(1)} h/año</b></div>
       <div class="tc-r"><span>Máx por día</span><b class="${res.maxMinDay > 30 ? 'bad' : ''}">${res.maxMinDay} min</b></div>
       <div class="tc-r"><span>Días afectados</span><b>${res.daysAffected}</b></div>
@@ -723,7 +724,7 @@ function buildTowerCard(vpwrap, fleet, o = {}) {
     const doneN = cur.stages ? cur.stages.filter(s => sp(s) >= 100).length : 0;
     const etapa = cur.stages ? (pct >= 100 ? 'Obra completa' : `${doneN}/${cur.stages.length} etapas`) : '';
     el.innerHTML = `
-      <div class="tc-h">${cur.label}<button class="tc-x" type="button" title="Cerrar">✕</button></div>
+      <div class="tc-h">${esc(cur.label)}<button class="tc-x" type="button" title="Cerrar">✕</button></div>
       <div class="tc-r"><span>${cur.type === 'hv' ? 'Torre AT' : 'Aerogenerador'}</span><b>${cur.height} m</b></div>
       ${sum ? `<div class="tc-r"><span>f₁</span><b>${sum.f1.toFixed(3)} Hz</b></div>` : ''}
       ${sum ? `<div class="tc-r"><span>Viento</span><b>${sum.wind != null ? sum.wind.toFixed(1) + ' m/s' : '—'}</b></div>` : ''}
@@ -968,7 +969,7 @@ function buildDashboard(panel, fleet, actions) {
       const row = document.createElement('button');
       row.className = 'shm-row'; row.dataset.id = s.id;
       const c = progColor(fleet.getStructure(s.id));
-      row.innerHTML = `<span class="dot" style="background:${c};box-shadow:0 0 6px ${c}"></span><span class="nm">${s.label}</span><span class="ty">${s.type === 'hv' ? 'AT' : 'T'}</span>`;
+      row.innerHTML = `<span class="dot" style="background:${c};box-shadow:0 0 6px ${c}"></span><span class="nm">${esc(s.label)}</span><span class="ty">${s.type === 'hv' ? 'AT' : 'T'}</span>`;
       row.addEventListener('click', () => fleet.selectById(s.id));
       lc.appendChild(row);
     }
@@ -1013,9 +1014,9 @@ function buildDashboard(panel, fleet, actions) {
       box.innerHTML = `<div class="venc-h">${t('venc.h')} ${acts}</div><div class="venc-ok">${t('venc.ok')}</div>`;
     } else {
       const rows = items.slice(0, 8).map(it => `
-        <button class="venc-row" data-venc="${it.id}">
+        <button class="venc-row" data-venc="${esc(it.id)}">
           <span class="venc-dot ${it.due.overdue ? 'bad' : it.due.soon ? 'warn' : 'ok'}"></span>
-          <span class="venc-nm">${it.label}</span>
+          <span class="venc-nm">${esc(it.label)}</span>
           <span class="venc-badges">${it.due.overdue ? `<i class="b bad">${t('venc.overdue')}</i>` : it.due.soon ? `<i class="b warn">${t('venc.soon')}</i>` : ''}${it.open ? `<i class="b ${it.odue ? 'bad' : ''}">${it.open} OT${it.odue ? ` · ${it.odue}⚠` : ''}</i>` : ''}</span>
         </button>`).join('');
       box.innerHTML = `
@@ -1087,7 +1088,7 @@ function buildDashboard(panel, fleet, actions) {
     $('#shm-detail').innerHTML = `
       <div id="shm-alarmbar" style="display:none"></div>
       <div class="shm-body">
-        <div class="row"><span>${t('det.structure')}</span><b>${o.label}</b></div>
+        <div class="row"><span>${t('det.structure')}</span><b>${esc(o.label)}</b></div>
         <div class="row"><span>${t('det.type')}</span><b>${o.type === 'hv' ? t('det.typeHV') : t('det.typeTurbine')}</b></div>
         <div class="row"><span>${t('det.height')}</span><b>${o.height} m</b></div>
         ${o.type === 'turbine' ? `<div class="row"><span>${t('det.power')}</span><b>~3 MW</b></div>` : ''}
@@ -1158,7 +1159,7 @@ function buildDashboard(panel, fleet, actions) {
         : '';
       const custom = Instr.getSensors(o.id);
       const customRows = custom.map(cs =>
-        `<div class="shm-sensor"><span class="dot ok"></span><span style="flex:1">${Instr.typeIcon(cs.type)} ${cs.label || Instr.typeLabel(cs.type)} <span class="ins-mut" style="font-size:10px">· ${Math.round((cs.yFrac || 0) * 100)}%</span></span><b class="s-custom" data-cs-id="${cs.id}" data-cs-type="${cs.type}">—</b><button class="ins-x cs-del" data-csd="${cs.id}" title="${t('instr.remove')}">✕</button></div>`
+        `<div class="shm-sensor"><span class="dot ok"></span><span style="flex:1">${Instr.typeIcon(cs.type)} ${esc(cs.label || Instr.typeLabel(cs.type))} <span class="ins-mut" style="font-size:10px">· ${Math.round((cs.yFrac || 0) * 100)}%</span></span><b class="s-custom" data-cs-id="${esc(cs.id)}" data-cs-type="${esc(cs.type)}">—</b><button class="ins-x cs-del" data-csd="${esc(cs.id)}" title="${t('instr.remove')}">✕</button></div>`
       ).join('');
       const typeOpts = Instr.SENSOR_TYPES.map(ty => `<option value="${ty.key}">${Instr.typeLabel(ty.key)}</option>`).join('');
       body.innerHTML = o.sensors.map(se =>
@@ -1331,14 +1332,14 @@ function buildDashboard(panel, fleet, actions) {
     const dmgRows = sel.damages.length ? sel.damages.map(d => {
       const sc = Insp.scoreDamage(d), b = Insp.scoreBand(sc);
       const np = (d.photos || []).length;
-      const strip = np ? `<div class="ins-dmg-photos">${d.photos.map(p => `<div class="ins-dphoto" data-d="${d.id}" data-p="${p.id}" style="background-image:url('${p.url}')"><button class="ins-px" data-del-dmgphoto title="${t('ins.rmPhoto')}">✕</button></div>`).join('')}</div>` : '';
+      const strip = np ? `<div class="ins-dmg-photos">${d.photos.map(p => `<div class="ins-dphoto" data-d="${esc(d.id)}" data-p="${esc(p.id)}" style="background-image:url('${safeUrl(p.url)}')"><button class="ins-px" data-del-dmgphoto title="${t('ins.rmPhoto')}">✕</button></div>`).join('')}</div>` : '';
       return `<div class="ins-dmg-wrap">
         <div class="ins-dmg">
           <span class="ins-dmg-sc ${b.cls}">${sc.toFixed(0)}</span>
-          <span class="ins-dmg-v"><b>${d.damage_type}</b><br><span class="ins-mut">${d.severity} · ${d.damage_cause}${d.extent ? ' · ' + d.extent : ''}${d.location ? ' · ' + d.location : ''}</span></span>
-          <button class="ins-dmg-cam" data-dmg-addphoto="${d.id}" title="${t('ins.addPhotoFinding')}">📷${np ? ' ' + np : ''}</button>
-          <button class="ins-ot" data-ot="${d.id}" title="${t('ins.otTip')}">→ OT</button>
-          <button class="ins-x" data-del-dmg="${d.id}" title="${t('ins.rmFinding')}">✕</button>
+          <span class="ins-dmg-v"><b>${esc(d.damage_type)}</b><br><span class="ins-mut">${esc(d.severity)} · ${esc(d.damage_cause)}${d.extent ? ' · ' + esc(d.extent) : ''}${d.location ? ' · ' + esc(d.location) : ''}</span></span>
+          <button class="ins-dmg-cam" data-dmg-addphoto="${esc(d.id)}" title="${t('ins.addPhotoFinding')}">📷${np ? ' ' + np : ''}</button>
+          <button class="ins-ot" data-ot="${esc(d.id)}" title="${t('ins.otTip')}">→ OT</button>
+          <button class="ins-x" data-del-dmg="${esc(d.id)}" title="${t('ins.rmFinding')}">✕</button>
         </div>${strip}</div>`;
     }).join('') : `<div class="ins-mut">${t('ins.noFindings')}</div>`;
 
@@ -1346,15 +1347,15 @@ function buildDashboard(panel, fleet, actions) {
       const sc = Insp.inspectionScore(i.damages), b = Insp.scoreBand(sc);
       return `<button class="ins-row ${i.id === inspSel ? 'active' : ''}" data-insp="${i.id}">
         <span class="ins-dot ${Insp.conditionFromScore(sc)}"></span>
-        <span class="ins-row-d">${i.date}</span><span class="ins-row-i">${i.inspector}</span>
+        <span class="ins-row-d">${esc(i.date)}</span><span class="ins-row-i">${esc(i.inspector)}</span>
         <span class="ins-row-h" title="hallazgos">${i.damages.length}⚐</span>
         <span class="ins-row-s ${b.cls}">${sc.toFixed(0)}</span></button>`;
     }).join('');
 
     host.innerHTML = `
       <div class="shm-body ins-body">
-        <div class="ins-head">Inspección · ${o.label}
-          <span class="ins-cond ${sel.condition}">${Insp.conditionLabel(sel.condition)}</span></div>
+        <div class="ins-head">Inspección · ${esc(o.label)}
+          <span class="ins-cond ${esc(sel.condition)}">${Insp.conditionLabel(sel.condition)}</span></div>
         <div class="ins-kpis">
           <div class="ins-kpi"><div class="k">${t('ins.kInsp')}</div><div class="v">${inspections.length}</div></div>
           <div class="ins-kpi"><div class="k">${t('ins.kScore')}</div><div class="v ${band.cls}">${score.toFixed(0)}</div></div>
@@ -1374,19 +1375,19 @@ function buildDashboard(panel, fleet, actions) {
         <div class="shm-sub2">${t('ins.listH')}</div>
         <div class="ins-list">${listRows}</div>
         <div class="ins-card">
-          <div class="ins-card-h">${sel.date} · <b>${sel.inspector}</b>
+          <div class="ins-card-h">${esc(sel.date)} · <b>${esc(sel.inspector)}</b>
             <span class="ins-score ${band.cls}" title="${t('ins.scoreTitle')}">${score.toFixed(0)} <small>${band.label}</small></span></div>
           <div class="ins-meta">
-            <label>${t('ins.fDate')}<input type="date" id="ins-date" value="${sel.date}"></label>
-            <label>${t('ins.fInsp')}<input type="text" id="ins-insp" value="${sel.inspector}"></label>
+            <label>${t('ins.fDate')}<input type="date" id="ins-date" value="${esc(sel.date)}"></label>
+            <label>${t('ins.fInsp')}<input type="text" id="ins-insp" value="${esc(sel.inspector)}"></label>
             <label>${t('ins.fCond')}<select id="ins-cond">${condOpt}</select></label>
-            <label>${t('ins.fLoc')}<input type="text" id="ins-loc" value="${sel.location || ''}"></label>
-            <label>${t('ins.fNext')}<input type="date" id="ins-next" value="${sel.nextDate || ''}"></label>
+            <label>${t('ins.fLoc')}<input type="text" id="ins-loc" value="${esc(sel.location || '')}"></label>
+            <label>${t('ins.fNext')}<input type="date" id="ins-next" value="${esc(sel.nextDate || '')}"></label>
           </div>
-          <label class="ins-sumlbl">${t('ins.summary')}<textarea id="ins-sum" rows="2">${sel.summary || ''}</textarea></label>
+          <label class="ins-sumlbl">${t('ins.summary')}<textarea id="ins-sum" rows="2">${esc(sel.summary || '')}</textarea></label>
 
           <div class="shm-sub2">${t('ins.photos')} · ${(sel.photos || []).length}</div>
-          <div class="ins-photos">${(sel.photos || []).map(p => `<div class="ins-photo" data-photo="${p.id}" style="background-image:url('${p.url}')"><button class="ins-px" data-del-photo="${p.id}" title="${t('ins.rmPhoto')}">✕</button></div>`).join('') || `<div class="ins-mut">${t('ins.noPhotos')}</div>`}</div>
+          <div class="ins-photos">${(sel.photos || []).map(p => `<div class="ins-photo" data-photo="${esc(p.id)}" style="background-image:url('${safeUrl(p.url)}')"><button class="ins-px" data-del-photo="${esc(p.id)}" title="${t('ins.rmPhoto')}">✕</button></div>`).join('') || `<div class="ins-mut">${t('ins.noPhotos')}</div>`}</div>
           <input type="file" id="ins-photo-file" accept="image/*" style="display:none">
           <button id="ins-addphoto" class="ins-mini-btn">${t('ins.addPhoto')}</button>
 
@@ -1405,18 +1406,18 @@ function buildDashboard(panel, fleet, actions) {
           </div>
 
           <div class="shm-sub2">${t('ins.tests')} · ${sel.tests.length}</div>
-          <div class="ins-mini">${sel.tests.map(t2 => { const c = Insp.classifyTest(t2.test_type); return `<div class="ins-li"><span class="ins-tbadge ${c.ndt ? 'ndt' : ''}">${c.label}</span> <b>${t2.test_type}</b> — ${t2.result_summary || '—'} <button class="ins-x" data-del-test="${t2.id}">✕</button></div>`; }).join('') || `<div class="ins-mut">${t('ins.noTests')}</div>`}</div>
+          <div class="ins-mini">${sel.tests.map(t2 => { const c = Insp.classifyTest(t2.test_type); return `<div class="ins-li"><span class="ins-tbadge ${c.ndt ? 'ndt' : ''}">${c.label}</span> <b>${esc(t2.test_type)}</b> — ${esc(t2.result_summary || '—')} <button class="ins-x" data-del-test="${esc(t2.id)}">✕</button></div>`; }).join('') || `<div class="ins-mut">${t('ins.noTests')}</div>`}</div>
           <button id="ins-addtest" class="ins-mini-btn">${t('ins.addTest')}</button>
 
           <div class="shm-sub2">${t('ins.docs')} · ${sel.documents.length}</div>
-          <div class="ins-mini">${sel.documents.map(dc => `<div class="ins-li">📎 <b>${dc.title}</b> <span class="ins-mut">(${dc.category})</span> <button class="ins-x" data-del-doc="${dc.id}">✕</button></div>`).join('') || `<div class="ins-mut">${t('ins.noDocs')}</div>`}</div>
+          <div class="ins-mini">${sel.documents.map(dc => `<div class="ins-li">📎 <b>${esc(dc.title)}</b> <span class="ins-mut">(${esc(dc.category)})</span> <button class="ins-x" data-del-doc="${esc(dc.id)}">✕</button></div>`).join('') || `<div class="ins-mut">${t('ins.noDocs')}</div>`}</div>
           <button id="ins-adddoc" class="ins-mini-btn">${t('ins.addDoc')}</button>
 
           <div class="shm-sub2">${t('ins.wos')} · ${(sel.workOrders || []).length}</div>
           <div class="ins-mini">${(sel.workOrders || []).map(w => { const dd = Insp.dueState(w.due); return `<div class="ins-wo">
-            <button class="ins-wost s-${w.status.replace(/ /g, '')}" data-wo="${w.id}" title="${t('ins.woStateTip')}">${w.status}</button>
-            <span class="ins-wo-v"><b>${w.title}</b><br><span class="ins-mut">${w.assignee || t('ins.unassigned')} · ${t('ins.prio')} ${w.priority}${w.due ? ` · ${t('ins.dueWord')} ${w.due}${dd.overdue ? ' ⚠' : ''}` : ''}</span></span>
-            <button class="ins-x" data-del-wo="${w.id}">✕</button></div>`; }).join('') || `<div class="ins-mut">${t('ins.noWos')}</div>`}</div>
+            <button class="ins-wost s-${esc(String(w.status).replace(/ /g, ''))}" data-wo="${esc(w.id)}" title="${t('ins.woStateTip')}">${esc(w.status)}</button>
+            <span class="ins-wo-v"><b>${esc(w.title)}</b><br><span class="ins-mut">${esc(w.assignee || t('ins.unassigned'))} · ${t('ins.prio')} ${esc(w.priority)}${w.due ? ` · ${t('ins.dueWord')} ${esc(w.due)}${dd.overdue ? ' ⚠' : ''}` : ''}</span></span>
+            <button class="ins-x" data-del-wo="${esc(w.id)}">✕</button></div>`; }).join('') || `<div class="ins-mut">${t('ins.noWos')}</div>`}</div>
           <button id="ins-addwo" class="ins-mini-btn">${t('ins.addWo')}</button>
 
           <div class="ins-foot"><button id="ins-report" class="ins-btn">${t('ins.report')}</button>
@@ -1747,8 +1748,7 @@ function buildDashboard(panel, fleet, actions) {
     const o = target;
     const coverImg = new URL('images/example.jpg', location.href).href;   // ruta absoluta (la pestaña nueva no tiene base)
     const _lc = getLang() === 'en' ? 'en-GB' : 'es-CL';
-    const fmtT = (ms) => new Date(ms).toLocaleString(_lc);
-    const esc = (s) => String(s).replace(/[<>&]/g, c => ({ '<': '&lt;', '>': '&gt;', '&': '&amp;' }[c]));
+    const fmtT = (ms) => new Date(ms).toLocaleString(_lc);   // esc() ahora es el util compartido (R-40a)
 
     // — utilidades de imagen (lienzo blanco, tinta oscura; los dibujos sí llevan color) —
     const mk = (w, h) => { const c = document.createElement('canvas'); c.width = w * 2; c.height = h * 2; const g = c.getContext('2d'); g.scale(2, 2); g.fillStyle = '#fff'; g.fillRect(0, 0, w, h); return { c, g, w, h }; };
