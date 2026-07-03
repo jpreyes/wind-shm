@@ -22,6 +22,14 @@ mismas hojas, mismas cabeceras, **mismos valores en las mismas celdas**.
 > original, fórmulas de ejemplo, valores de estado observados y el catálogo de la
 > hoja «Listas»). Ese anexo + este plan = espec completa.
 
+> **➡ Continúa en [Frente 5B — módulo contratista-agnóstico](frente-5b-calidad-agnostica.md):**
+> el motor construido aquí (reader/writer/derived/dashboard/edición) opera sobre un
+> **modelo canónico que ES el estándar ISO 9001 / 19650 / 21500-21502 + ensayos
+> ASTM/EN/NCh**. El Frente 5B lo vuelve **agnóstico al contratista** (importar
+> cualquier Excel vía **perfiles de importación** + asistente de mapeo), dejando el
+> Excel de SACYR como un perfil built-in más. La agnosticidad se concentra en la
+> capa de importación; el resto ya es genérico por construcción.
+
 ---
 
 ## 1. Qué contiene el libro (análisis del archivo real)
