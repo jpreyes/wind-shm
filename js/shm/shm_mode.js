@@ -8,27 +8,27 @@
 //   inspecciones y señal temporal EN VIVO desde un Web Worker (DataSource).
 // Recortes (modelado) los hace shm.css ocultando, no borrando.
 // ─────────────────────────────────────────────────────────────────────────────
-import { FleetView } from './fleet_view.js?v=289';
-import { DataSource } from './data_source.js?v=289';
-import { computeTwin } from './digital_twin.js?v=289';
-import { ParkManager, loadParksStore } from './parks.js?v=289';
-import { MapView } from './map_view.js?v=289';
-import { defaultStages, builtFromStages } from './parks_data_caman.js?v=289';
-import { compassRoseSVG } from './compass.js?v=289';
-import { buildAvanceHUD } from './avance_hud.js?v=289';
-import { renderAvance } from './avance_dashboard.js?v=289';
-import * as Insp from './inspection.js?v=289';
-import * as Fat from './fatigue.js?v=289';
-import * as Instr from './instrumentation.js?v=289';
-import * as Calidad from './calidad.js?v=289';
-import * as Hist from './history.js?v=289';
-import * as Health from './health.js?v=289';
-import * as Bench from './benchmark.js?v=289';
-import { esc, safeUrl } from './util.js?v=289';
-import { t, getLang, setLang } from './i18n.js?v=289';
+import { FleetView } from './fleet_view.js?v=290';
+import { DataSource } from './data_source.js?v=290';
+import { computeTwin } from './digital_twin.js?v=290';
+import { ParkManager, loadParksStore } from './parks.js?v=290';
+import { MapView } from './map_view.js?v=290';
+import { defaultStages, builtFromStages } from './parks_data_caman.js?v=290';
+import { compassRoseSVG } from './compass.js?v=290';
+import { buildAvanceHUD } from './avance_hud.js?v=290';
+import { renderAvance } from './avance_dashboard.js?v=290';
+import * as Insp from './inspection.js?v=290';
+import * as Fat from './fatigue.js?v=290';
+import * as Instr from './instrumentation.js?v=290';
+import * as Calidad from './calidad.js?v=290';
+import * as Hist from './history.js?v=290';
+import * as Health from './health.js?v=290';
+import * as Bench from './benchmark.js?v=290';
+import { esc, safeUrl } from './util.js?v=290';
+import { t, getLang, setLang } from './i18n.js?v=290';
 
 const F1_BASE = { turbine: 0.283, hv: 1.6 };
-const REWIND_VER = 'v289';   // versión visible del build (subir junto al cache-bust)
+const REWIND_VER = 'v290';   // versión visible del build (subir junto al cache-bust)
 const FS = 62.5;   // frecuencia de muestreo de la señal (Hz), igual que shm_worker.js
 // Clasificador ML de daño (0..4)
 const CLS = ['Sin daño', 'Leve', 'Moderado', 'Alto', 'Muy alto'];
@@ -80,6 +80,10 @@ async function boot() {
   fleet.renderer.domElement.classList.add('shm-canvas');
   window.shmFleet = fleet;
   window.shmHist = Hist;
+  // R-38: rol solo-lectura vía ?role=viewer → oculta crear/editar/borrar (CSS) y
+  // desactiva los atajos de teclado destructivos. La auth real llega con R-10.
+  window.shmViewer = new URLSearchParams(location.search).get('role') === 'viewer';
+  if (window.shmViewer) document.body.classList.add('role-viewer');
   Hist.purge();   // R-34: retención rodante — descarta el histórico más viejo que 60 días
 
   // Estado de reconocimiento/informe de anomalías + bitácora de mantenimiento
@@ -277,7 +281,7 @@ async function boot() {
   // ── Relieve conceptual del terreno (DEM vendorizado) — encendido por defecto ─
   setLoad(88, 'Cargando relieve…'); await delay(40);
   try {
-    await fleet.loadTerrain('data/caman_dem.json?v=289');
+    await fleet.loadTerrain('data/caman_dem.json?v=290');
     fleet.setTerrainVisible(true);
     document.getElementById('shm-relieve-tool')?.classList.add('active');
   } catch (e) { console.warn('[shm] relieve no disponible', e); }
@@ -420,6 +424,7 @@ function buildToolbar(toolbar, fleet, getPM = () => null) {
 
   // Supr/Delete borra la estructura seleccionada (sólo en modo edición).
   addEventListener('keydown', (e) => {
+    if (window.shmViewer) return;   // R-38: solo lectura
     if (!fleet.editMode || !fleet.selected) return;
     if (e.key !== 'Delete' && e.key !== 'Backspace') return;
     if (/^(INPUT|TEXTAREA|SELECT)$/.test(document.activeElement?.tagName || '')) return;
@@ -431,6 +436,7 @@ function buildToolbar(toolbar, fleet, getPM = () => null) {
   // R-36c: Ctrl+Z / Cmd+Z deshace la última edición del parque (crear/borrar/mover/
   // renombrar). Restaura el snapshot del store y recarga para reconstruir la flota.
   addEventListener('keydown', (e) => {
+    if (window.shmViewer) return;   // R-38: solo lectura
     if (!(e.key === 'z' || e.key === 'Z') || !(e.ctrlKey || e.metaKey) || e.shiftKey) return;
     if (/^(INPUT|TEXTAREA|SELECT)$/.test(document.activeElement?.tagName || '')) return;
     if (!pm?.canUndo()) return;
@@ -487,25 +493,25 @@ function buildMenubar(fleet, getPM = () => null) {
   // ── Definición de menús ──
   const menus = [
     { label: t('menu.park'), items: [
-      { label: t('mi.newTower'), fn: newTurbine },
-      { label: t('mi.newHV'), fn: newHV },
+      { label: t('mi.newTower'), fn: newTurbine, mut: 1 },
+      { label: t('mi.newHV'), fn: newHV, mut: 1 },
       { sep: 1 },
       { label: t('mi.exportPark'), fn: exportPark },
-      { label: t('mi.importPark'), fn: importPark },
+      { label: t('mi.importPark'), fn: importPark, mut: 1 },
     ] },
     { label: t('menu.data'), items: [
       { label: () => t('mi.source') + (window.shmData?.mode === 'live' ? t('src.live') : t('src.sim')), info: 1 },
       { label: t('mi.exportTelem'), fn: exportTelemetry },
       { sep: 1 },
       { label: t('mi.exportInsp'), fn: exportInsp },
-      { label: t('mi.importInsp'), fn: importInsp },
+      { label: t('mi.importInsp'), fn: importInsp, mut: 1 },
     ] },
     { label: t('menu.quality'), items: [
       { label: t('mi.calPanel'), fn: () => Calidad.showPanel() },
-      { label: t('mi.calNew'), fn: () => Calidad.crearVacio() },
+      { label: t('mi.calNew'), fn: () => Calidad.crearVacio(), mut: 1 },
       { sep: 1 },
       { label: t('mi.calTemplate'), fn: () => Calidad.downloadTemplate() },
-      { label: t('mi.calImport'), fn: () => Calidad.importXlsx() },
+      { label: t('mi.calImport'), fn: () => Calidad.importXlsx(), mut: 1 },
       { label: t('mi.calExport'), fn: () => Calidad.exportXlsx() },
     ] },
     { label: t('menu.report'), items: [
@@ -525,6 +531,7 @@ function buildMenubar(fleet, getPM = () => null) {
     const dd = document.createElement('div'); dd.className = 'mb-dd';
     const refreshers = [];
     for (const it of def.items) {
+      if (it.mut && window.shmViewer) continue;   // R-38: ocultar acciones de mutación en solo-lectura
       if (it.sep) { const s = document.createElement('div'); s.className = 'mb-sep'; dd.appendChild(s); continue; }
       const mi = document.createElement('button'); mi.type = 'button'; mi.className = 'mb-item';
       const set = () => { mi.textContent = typeof it.label === 'function' ? it.label() : it.label; };
@@ -550,6 +557,12 @@ function buildMenubar(fleet, getPM = () => null) {
   document.addEventListener('click', closeAll);
   addEventListener('keydown', (e) => { if (e.key === 'Escape') closeAll(); });
   if (right) bar.insertBefore(nav, right); else bar.appendChild(nav);
+
+  // R-38: distintivo de solo-lectura cuando ?role=viewer.
+  if (window.shmViewer) {
+    const badge = document.createElement('span'); badge.className = 'mb-viewer'; badge.textContent = '👁 ' + t('role.viewer');
+    if (right) right.insertBefore(badge, right.firstChild); else bar.appendChild(badge);
+  }
 
   // Conmutador de idioma ES/EN (recarga la app para rehacer los render).
   const langBtn = document.createElement('button');

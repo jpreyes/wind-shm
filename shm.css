@@ -105,6 +105,14 @@ body.shm #menubar { min-width: 0; overflow-x: auto; }
 .shm-sensor.editing { outline: 1px solid var(--accent); border-radius: 6px; }
 .cs-edit { color: var(--text-muted); }
 .cs-edit:hover { color: var(--accent); }
+/* Rol solo-lectura (R-38): oculta toda la UI de mutación */
+.mb-viewer { display: inline-flex; align-items: center; font-size: 11px; font-weight: 700; color: #f59e0b; border: 1px solid rgba(245,158,11,.5); background: rgba(245,158,11,.12); border-radius: 6px; padding: 3px 8px; margin-right: 10px; }
+body.role-viewer #shm-add-tool, body.role-viewer #shm-hv-tool, body.role-viewer #shm-del-tool, body.role-viewer #shm-edit-tool,
+body.role-viewer .ins-add, body.role-viewer #ins-new, body.role-viewer #ins-del, body.role-viewer .ins-x, body.role-viewer .ins-ot,
+body.role-viewer .ins-dmg-cam, body.role-viewer .ins-addform, body.role-viewer #ins-addphoto, body.role-viewer #ins-first,
+body.role-viewer .ins-px, body.role-viewer .instr-add, body.role-viewer .cs-del, body.role-viewer .cs-edit,
+body.role-viewer .cal-manage, body.role-viewer .cal-new, body.role-viewer .cal-import, body.role-viewer .cal-avance,
+body.role-viewer .cal-edit, body.role-viewer .cal-del, body.role-viewer .cal-form, body.role-viewer .venc-acts { display: none !important; }
 /* Comparador de torres (R-39) */
 .cmp-card { max-width: 460px; width: calc(100% - 40px); }
 .cmp-tbl { width: 100%; border-collapse: collapse; font-size: 13px; margin-top: 8px; }

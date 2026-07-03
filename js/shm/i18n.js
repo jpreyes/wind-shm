@@ -48,6 +48,7 @@ const DICT = {
     'cmp.title': 'Comparar torres', 'cmp.need2': 'Se necesitan al menos 2 estructuras.',
     'cmp.base': 'Línea base', 'cmp.dev': 'Desviación f₁', 'cmp.fat': 'Vida de fatiga', 'cmp.insp': 'Score inspección', 'cmp.avance': 'Avance',
     'cmp.note': 'Comparación en vivo. HI = Índice de Salud; f₁ vs línea base del gemelo; RMS instantáneo.',
+    'role.viewer': 'Solo lectura',
     // Menú y panel «Calidad de obra» (Frente 5)
     'menu.quality': 'Calidad',
     'mi.calImport': '⤒ Importar Excel (SACYR o plantilla)', 'mi.calPanel': '📋 Panel de calidad', 'mi.calExport': '⤓ Exportar Excel',
@@ -403,6 +404,7 @@ const DICT = {
     'cmp.title': 'Compare towers', 'cmp.need2': 'At least 2 structures are needed.',
     'cmp.base': 'Baseline', 'cmp.dev': 'f₁ deviation', 'cmp.fat': 'Fatigue life', 'cmp.insp': 'Inspection score', 'cmp.avance': 'Progress',
     'cmp.note': 'Live comparison. HI = Health Index; f₁ vs twin baseline; instantaneous RMS.',
+    'role.viewer': 'Read-only',
     // «Quality of works» menu and panel (Front 5)
     'menu.quality': 'Quality',
     'mi.calImport': '⤒ Import Excel (SACYR or template)', 'mi.calPanel': '📋 Quality panel', 'mi.calExport': '⤓ Export Excel',
