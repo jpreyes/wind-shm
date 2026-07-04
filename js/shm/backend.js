@@ -37,10 +37,11 @@ function tickToRows(tick) {
   return rows;
 }
 
-// ── Mock: pub/sub en memoria (el loop completo sin Supabase) ──────────────────
+// ── Mock: pub/sub + tablas en memoria (el loop y el CRUD completos sin Supabase) ─
 function mockBackend() {
   const subs = new Set();
   const last = {};
+  const tables = {};   // name → filas (upsert por `id` si lo trae)
   return {
     mode: 'mock',
     async ingestTick(tick) {
@@ -49,8 +50,16 @@ function mockBackend() {
     },
     onTick(cb) { subs.add(cb); return () => subs.delete(cb); },
     latest() { return { ...last }; },
-    async insert() { return { ok: true, mock: true }; },
-    async select() { return []; },
+    async insert(table, rows) {
+      const arr = tables[table] ??= [];
+      for (const r of [].concat(rows)) {
+        if (r.id != null) { const i = arr.findIndex((x) => x.id === r.id); if (i >= 0) arr[i] = r; else arr.push(r); }
+        else arr.push({ ...r });
+      }
+      return { ok: true, mock: true, count: [].concat(rows).length };
+    },
+    async select(table) { return (tables[table] || []).slice(); },
+    async remove(table, id) { if (tables[table]) tables[table] = tables[table].filter((x) => x.id !== id); return { ok: true }; },
   };
 }
 
@@ -94,6 +103,10 @@ function supabaseBackend(cfg) {
     async select(table, query = '') {
       const res = await fetch(`${base}/rest/v1/${table}?select=*${query}`, { headers });
       return res.ok ? res.json() : [];
+    },
+    async remove(table, id) {
+      const res = await fetch(`${base}/rest/v1/${table}?id=eq.${encodeURIComponent(id)}`, { method: 'DELETE', headers });
+      return { ok: res.ok };
     },
   };
 }

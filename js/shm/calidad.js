@@ -23,7 +23,8 @@ import { defaultWbs, wbsProgress, partidaForProtocol } from '../../tools/wbs.js'
 import { readXlsx } from '../../lib/xlsx_lite.mjs';
 import { analyzeWorkbook, proposeMapping, distinctValues, readByProfile, guessCanon, BUILTIN_PROFILES, FIELDS as QP_FIELDS, CANON_STATES } from '../../tools/quality_profile.mjs';
 import { FRAMEWORK, STATUS_NORMS, ENSAYO_NORMS, normLabel, normForEnsayo } from '../../tools/norms_catalog.mjs';
-import { t } from './i18n.js?v=305';
+import { backendActive, pushQuality, pullQuality, pushWbs, pushProfile, deleteProtocoloRemote, debouncedPush } from './backend_sync.js?v=306';
+import { t } from './i18n.js?v=306';
 
 const STORE = 'rewind.calidad.v1';
 const XLSX_MIME = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
@@ -42,7 +43,7 @@ function heat(x) {
 // ── Persistencia (best-effort; el modelo completo puede rondar 2–4 MB) ────────
 let derivedCache = null;   // computeDerived memoizado; se invalida en cada persist/import
 
-function persist(data) {
+function persist(data, opts = {}) {
   derivedCache = null;
   try { localStorage.setItem(STORE, JSON.stringify(data)); }
   catch {
@@ -52,6 +53,9 @@ function persist(data) {
   }
   // Avisa a la UI (lista/árbol) que cambió qué estructuras tienen datos de calidad.
   try { window.dispatchEvent(new CustomEvent('calidad-changed')); } catch { /* */ }
+  // Backend (Supabase/mock) como fuente de verdad: empuja debounced (salvo que el
+  // dato VENGA del backend — opts.remote:false — para no re-empujar en el pull).
+  if (opts.remote !== false && backendActive()) debouncedPush('quality', () => pushQuality(data, getOverrides()));
 }
 function load() {
   if (current) return current;
@@ -75,7 +79,7 @@ const WBS_STORE = 'rewind.wbs.v1';
 function loadWbsCfg() { try { return JSON.parse(localStorage.getItem(WBS_STORE)) || {}; } catch { return {}; } }
 function saveWbsCfg(c) { try { localStorage.setItem(WBS_STORE, JSON.stringify(c)); } catch (e) { console.warn('[wbs] no se pudo persistir', e); } }
 export function getWbs(type = 'turbine') { const c = loadWbsCfg(); return (c.wbs && c.wbs[type]) || defaultWbs(type); }
-export function saveWbs(type, list) { const c = loadWbsCfg(); (c.wbs ??= {})[type] = list; saveWbsCfg(c); }
+export function saveWbs(type, list) { const c = loadWbsCfg(); (c.wbs ??= {})[type] = list; saveWbsCfg(c); if (backendActive()) pushWbs(type, list, getOverrides()); }
 export function resetWbs(type) { const c = loadWbsCfg(); if (c.wbs) delete c.wbs[type]; saveWbsCfg(c); }
 export function getOverrides() { return loadWbsCfg().overrides || {}; }
 export function setOverride(protoId, partidaId) {
@@ -181,6 +185,7 @@ function loadProfiles() { try { return JSON.parse(localStorage.getItem(PROFILES_
 function saveProfileCfg(p) {
   const arr = loadProfiles().filter((x) => x.name !== p.name); arr.push(p);
   try { localStorage.setItem(PROFILES_STORE, JSON.stringify(arr)); } catch (e) { console.warn('[profiles]', e); }
+  if (backendActive()) pushProfile(p);
 }
 let wiz = null;   // estado del asistente { wb, sheets, sheet, map, statusMap, elPat, elTpl, name }
 
@@ -410,6 +415,7 @@ export function saveProtocolo(fields, id) {
 export function deleteProtocolo(id) {
   const data = load(); if (!data) return;
   data.protocolos = data.protocolos.filter((p) => p.id !== id);
+  if (backendActive()) deleteProtocoloRemote(id);
   markDirty(data);
 }
 
@@ -551,6 +557,12 @@ export function showPanel() {
 
   addEventListener('keydown', function escFn(e) { if (e.key === 'Escape') { close(); removeEventListener('keydown', escFn); } });
   document.body.appendChild(ov);
+
+  // Backend configurado y sin datos locales → traer del backend y re-pintar.
+  if (backendActive() && !load()) {
+    pullQuality().then((m) => { if (m && !load()) { current = m; persist(m, { remote: false }); paint(); } })
+      .catch((e) => console.warn('[calidad] pull backend falló', e));
+  }
 }
 
 function focusForm(ov) { setTimeout(() => ov.querySelector('.cal-form [name="codigoDocumento"]')?.focus(), 30); }
