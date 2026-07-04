@@ -68,7 +68,8 @@ function supabaseBackend(cfg) {
   const base = cfg.url.replace(/\/$/, '');
   const headers = { apikey: cfg.anonKey, Authorization: `Bearer ${cfg.anonKey}`, 'Content-Type': 'application/json' };
   const subs = new Set();
-  let pollTimer = null, sinceTs = null;
+  let pollTimer = null, sinceTs = null, lastIngest = 0;
+  const INGEST_MS = 60000;   // features 1/min: no golpear Supabase en cada tick del sim
 
   async function poll() {
     try {
@@ -91,6 +92,9 @@ function supabaseBackend(cfg) {
   return {
     mode: 'supabase',
     async ingestTick(tick) {
+      const now = Date.now();
+      if (now - lastIngest < INGEST_MS) return;   // throttle: máx. 1 lote/min (contrato «features 1/min»)
+      lastIngest = now;
       const rows = tickToRows(tick);
       if (rows.length) fetch(`${base}/rest/v1/features`, { method: 'POST', headers, body: JSON.stringify(rows) }).catch(() => {});
     },
