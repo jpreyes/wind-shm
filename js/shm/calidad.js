@@ -21,8 +21,9 @@ import { readQuality, writeTemplate, blankTemplate } from '../../tools/rewind_te
 import { computeDerived } from '../../tools/sacyr_derived.mjs';
 import { defaultWbs, wbsProgress, partidaForProtocol } from '../../tools/wbs.js';
 import { readXlsx } from '../../lib/xlsx_lite.mjs';
-import { analyzeWorkbook, proposeMapping, distinctValues, readByProfile, guessCanon, FIELDS as QP_FIELDS, CANON_STATES } from '../../tools/quality_profile.mjs';
-import { t } from './i18n.js?v=303';
+import { analyzeWorkbook, proposeMapping, distinctValues, readByProfile, guessCanon, BUILTIN_PROFILES, FIELDS as QP_FIELDS, CANON_STATES } from '../../tools/quality_profile.mjs';
+import { FRAMEWORK, STATUS_NORMS, ENSAYO_NORMS, normLabel, normForEnsayo } from '../../tools/norms_catalog.mjs';
+import { t } from './i18n.js?v=304';
 
 const STORE = 'rewind.calidad.v1';
 const XLSX_MIME = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
@@ -190,7 +191,7 @@ export function importWizard() {
     const sheets = analyzeWorkbook(wb);
     if (!sheets.length) { alert(t('cal.wiz.empty')); return; }
     const main = [...sheets].sort((a, b) => b.rows - a.rows)[0];
-    wiz = { wb, sheets, sheet: main.name, map: proposeMapping(main.headers), statusMap: {}, elPat: 'WTG\\s*0*(\\d+)', elTpl: 'T$1', name: main.name };
+    wiz = { wb, bytes, sheets, sheet: main.name, map: proposeMapping(main.headers), statusMap: {}, elPat: 'WTG\\s*0*(\\d+)', elTpl: 'T$1', name: main.name };
     wizInitStatus();
     wizRender();
   });
@@ -218,7 +219,9 @@ function wizRender() {
     statusRows = vals.map((v) => `<tr><td>${esc(v)}</td><td><select class="wiz-in" data-wizstatus="${esc(v)}">${CANON_STATES.map((c) => `<option value="${c}"${wiz.statusMap[v] === c ? ' selected' : ''}>${t('est.' + c)}</option>`).join('')}</select></td></tr>`).join('');
   }
   const profiles = loadProfiles();
-  const profileSel = profiles.length ? `<label class="wiz-fl"><span>${t('cal.wiz.savedProfile')}</span><select class="wiz-loadprofile"><option value="">—</option>${profiles.map((p, i) => `<option value="${i}">${esc(p.name)}</option>`).join('')}</select></label>` : '';
+  const biOpts = BUILTIN_PROFILES.map((p, i) => `<option value="b${i}">${esc(p.name)} — built-in</option>`).join('');
+  const cuOpts = profiles.map((p, i) => `<option value="c${i}">${esc(p.name)}</option>`).join('');
+  const profileSel = `<label class="wiz-fl"><span>${t('cal.wiz.savedProfile')}</span><select class="wiz-loadprofile"><option value="">${t('cal.wiz.custom')}</option>${biOpts}${cuOpts}</select></label>`;
 
   ov.innerHTML = `<div class="mb-about-card cal-card cal-wiz-card" role="dialog" aria-label="${esc(t('cal.wiz.title'))}">
     <button class="mb-about-x" type="button" aria-label="✕">✕</button>
@@ -246,7 +249,12 @@ function wizRender() {
   });
   ov.addEventListener('change', (e) => {
     if (e.target.matches('.wiz-sheet')) { wiz.sheet = e.target.value; wiz.map = proposeMapping(wizSheet().headers); wizInitStatus(); wizRender(); return; }
-    if (e.target.matches('.wiz-loadprofile')) { const p = loadProfiles()[+e.target.value]; if (p) wizApplyProfile(p); return; }
+    if (e.target.matches('.wiz-loadprofile')) {
+      const v = e.target.value; if (!v) return;
+      if (v[0] === 'b') { wizImportBuiltin(BUILTIN_PROFILES[+v.slice(1)].builtin); return; }   // perfil built-in (SACYR / plantilla)
+      const p = loadProfiles()[+v.slice(1)]; if (p) wizApplyProfile(p);
+      return;
+    }
     const col = e.target.dataset?.wizcol;
     if (col) { if (e.target.value) wiz.map[col] = e.target.value; else delete wiz.map[col]; if (col === 'estado') wizInitStatus(); wizRender(); return; }
     const st = e.target.dataset?.wizstatus;
@@ -255,6 +263,19 @@ function wizRender() {
   ov.addEventListener('input', (e) => { if (e.target.matches('.wiz-name')) wiz.name = e.target.value; });
   addEventListener('keydown', function escFn(e) { if (e.key === 'Escape') { ov.remove(); wiz = null; removeEventListener('keydown', escFn); } });
   document.body.appendChild(ov);
+}
+
+// Importa con un perfil BUILT-IN (SACYR / plantilla ReWind): usa el reader
+// especializado (`readQuality` autodetecta), no el mapeo genérico.
+async function wizImportBuiltin(kind) {
+  let data;
+  try { data = await readQuality(wiz.bytes); }
+  catch (e) { alert(t('cal.parseErr') + ' ' + e.message); return; }
+  if (kind === 'sacyr' && data.meta?.formato !== 'sacyr') { if (!confirm(t('cal.wiz.notSacyr'))) return; }
+  data.meta = { ...(data.meta || {}), importado: new Date().toISOString() };
+  current = data; persist(data);
+  document.getElementById('cal-wiz-ov')?.remove(); wiz = null;
+  showApplyChoice();
 }
 
 function wizApplyProfile(p) {
@@ -439,7 +460,7 @@ export function showPanel() {
         <p class="cal-mut" style="margin-top:10px">${t('cal.templateHint')}</p>
       </div>`;
     } else {
-      ov.innerHTML = view === 'wbs' ? wbsHTML(data) : view === 'manage' ? manageHTML(data) : dashboardHTML(data);
+      ov.innerHTML = view === 'norms' ? normsHTML() : view === 'wbs' ? wbsHTML(data) : view === 'manage' ? manageHTML(data) : dashboardHTML(data);
     }
   };
   paint();
@@ -458,6 +479,7 @@ export function showPanel() {
     }
     if (e.target.closest('.cal-manage')) { view = 'manage'; editingId = null; paint(); return; }
     if (e.target.closest('.cal-wbs')) { wbsDraft = { turbine: getWbs('turbine'), hv: getWbs('hv') }; view = 'wbs'; paint(); return; }
+    if (e.target.closest('.cal-norms')) { view = 'norms'; paint(); return; }
     if (e.target.closest('.cal-back')) { view = 'dash'; paint(); return; }
     // ── HUD de partidas (WBS) ──
     if (e.target.closest('.wbs-add')) { wbsDraft[wbsType].push({ id: wbsUid(), nombre: t('cal.wbs.newPartida'), geom: '', peso: 1, match: [] }); paint(); return; }
@@ -589,6 +611,7 @@ function dashboardHTML(data) {
       <div class="cal-actions">
         <button class="cal-btn cal-apply4d ${window.shmCalidadAvance ? 'cal-on' : 'cal-import-alt'}" type="button" title="${esc(t('cal.apply.tip'))}">${t('cal.apply.btn')}</button>
         <button class="cal-btn cal-import-alt cal-wbs" type="button" title="${esc(t('cal.wbs.tip'))}">${t('cal.wbs.btn')}</button>
+        <button class="cal-btn cal-import-alt cal-norms" type="button" title="${esc(t('cal.norms.tip'))}">${t('cal.norms.btn')}</button>
         <button class="cal-btn cal-import-alt cal-manage" type="button">${t('cal.manage')}</button>
         <button class="cal-btn cal-export" type="button" title="${esc(t('cal.exportTip'))}">${t('cal.export')}</button>
         <button class="cal-btn cal-import-alt cal-template" type="button" title="${esc(t('cal.templateHint'))}">${t('cal.template')}</button>
@@ -616,6 +639,32 @@ function dashboardHTML(data) {
 
     <h3>${t('cal.ensayos')} <span class="cal-mut">(${d.ensayosHormigon.total})</span></h3>
     <div class="cal-ensayos">${ensayos || '<div class="cal-mut">—</div>'}</div>
+    <div class="cal-mut" style="margin-top:6px">${t('cal.norms.perEnsayo')} <span class="norm-chip">${esc(normLabel(normForEnsayo('compresión hormigón')))}</span> · <button class="cal-link cal-norms" type="button">${t('cal.norms.see')}</button></div>
+  </div>`;
+}
+
+// ── Referencia «⚖ Normas»: el fundamento normativo del módulo de calidad ──────
+function normsHTML() {
+  const fw = FRAMEWORK.map((f) => `<tr><td>${esc(f.area)}</td><td><b>${esc(f.norma)}</b></td><td class="cal-mut">${esc(f.detalle)}</td></tr>`).join('');
+  const st = STATUS_NORMS.map((s) => `<tr><td><span class="cal-tag ${s.canon === 'aprobado' ? 'cal-tag-ok' : 'cal-tag-warn'}">${esc(t('est.' + s.canon))}</span></td><td>${esc(s.iso)}</td><td class="cal-mut">${esc(s.literals.join(' · '))}</td></tr>`).join('');
+  const en = ENSAYO_NORMS.map((e) => `<tr><td>${esc(e.tipo)}</td><td class="cal-mut">${esc(e.param)}</td><td><span class="norm-chip">${esc(normLabel(e))}</span></td></tr>`).join('');
+  return `<div class="mb-about-card cal-card" role="dialog" aria-label="${esc(t('cal.norms.title'))}">
+    <button class="mb-about-x" type="button" aria-label="✕">✕</button>
+    <div class="cal-head">
+      <h2>${t('cal.norms.title')}</h2>
+      <div class="cal-actions"><button class="cal-btn cal-import-alt cal-back" type="button">${t('cal.back')}</button></div>
+    </div>
+    <p class="cal-mut">${t('cal.norms.desc')}</p>
+
+    <h3>${t('cal.norms.framework')}</h3>
+    <table class="cal-tbl"><thead><tr><th>${t('cal.norms.layer')}</th><th>${t('cal.norms.norm')}</th><th>${t('cal.norms.detail')}</th></tr></thead><tbody>${fw}</tbody></table>
+
+    <h3>${t('cal.norms.states')} <span class="cal-mut">(ISO 19650)</span></h3>
+    <table class="cal-tbl"><thead><tr><th>ReWind</th><th>ISO 19650</th><th>${t('cal.norms.literals')}</th></tr></thead><tbody>${st}</tbody></table>
+
+    <h3>${t('cal.norms.tests')} <span class="cal-mut">(NCh ≈ ASTM ≈ EN)</span></h3>
+    <table class="cal-tbl"><thead><tr><th>${t('cal.norms.test')}</th><th>${t('cal.norms.param')}</th><th>${t('cal.norms.standard')}</th></tr></thead><tbody>${en}</tbody></table>
+    <div class="cal-mut" style="margin-top:8px">${t('cal.norms.foot')}</div>
   </div>`;
 }
 

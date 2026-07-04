@@ -114,6 +114,7 @@ tr.wbs-unmapped td:first-child::before { content: '⚠ '; color: #e69628; }
 .wiz-fl select, .wiz-fl input { flex: 1; background: var(--bg3, #2a3340); color: var(--text); border: 1px solid var(--border2); border-radius: 6px; padding: 5px 8px; font-size: 12.5px; }
 .wiz-in { width: 100%; box-sizing: border-box; background: var(--bg3, #2a3340); color: var(--text); border: 1px solid var(--border2); border-radius: 6px; padding: 4px 7px; font-size: 12.5px; }
 .wiz-req { color: #e69628; font-weight: 700; }
+.norm-chip { display: inline-block; background: rgba(90,140,200,.16); border: 1px solid var(--border2); border-radius: 8px; padding: 1px 8px; font-size: 11px; font-variant-numeric: tabular-nums; }
 .wbs-protos { white-space: nowrap; }
 .wbs-n { display: inline-block; min-width: 18px; text-align: center; font-weight: 600; }
 .wbs-addproto { font-size: 14px; }

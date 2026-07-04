@@ -18,6 +18,15 @@ const norm = (s) => String(s ?? '').toLowerCase().normalize('NFD')
   .replace(/[̀-ͯ]/g, '').replace(/[^a-z0-9]+/g, ' ').trim();
 const clean = (v) => { const t = typeof v === 'string' ? v.trim() : v; return (t == null || t === '') ? null : t; };
 
+// Perfiles built-in: formatos que ReWind ya sabe leer con un reader especializado
+// (SACYR conserva su round-trip sin pérdida; la plantilla ReWind es zero-config).
+// Aparecen como perfiles seleccionables junto a los del asistente → SACYR pasa a
+// ser «un perfil más», no *el* formato. El `builtin` enruta al reader correcto.
+export const BUILTIN_PROFILES = [
+  { name: 'SACYR Camán', builtin: 'sacyr', desc: 'Log de protocolos SACYR (round-trip sin pérdida).' },
+  { name: 'Plantilla ReWind', builtin: 'rewind', desc: 'Plantilla estándar ReWind (ISO 9001/19650).' },
+];
+
 // Campos canónicos que el asistente mapea a una columna del Excel del contratista.
 // `req` = recomendado para que el import sea útil; `syn` = sinónimos ES/EN.
 export const FIELDS = [
