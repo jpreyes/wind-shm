@@ -59,6 +59,7 @@ function mockBackend() {
       return { ok: true, mock: true, count: [].concat(rows).length };
     },
     async select(table) { return (tables[table] || []).slice(); },
+    async count(table) { return (tables[table] || []).length; },
     async remove(table, id) { if (tables[table]) tables[table] = tables[table].filter((x) => x.id !== id); return { ok: true }; },
   };
 }
@@ -111,6 +112,14 @@ function supabaseBackend(cfg) {
     async remove(table, id) {
       const res = await fetch(`${base}/rest/v1/${table}?id=eq.${encodeURIComponent(id)}`, { method: 'DELETE', headers });
       return { ok: res.ok };
+    },
+    async count(table) {
+      // HEAD + Prefer count=exact → total en el header Content-Range («*/N»).
+      try {
+        const res = await fetch(`${base}/rest/v1/${table}?select=*`, { method: 'HEAD', headers: { ...headers, Prefer: 'count=exact', Range: '0-0' } });
+        const cr = res.headers.get('content-range'); const n = cr ? +cr.split('/')[1] : NaN;
+        return Number.isFinite(n) ? n : (res.ok ? 0 : null);
+      } catch { return null; }
     },
   };
 }

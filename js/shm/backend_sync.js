@@ -6,7 +6,7 @@
 // como CACHÉ OFFLINE. Sin backend configurado, todo funciona como antes (no-op).
 // Mapeo modelo↔fila explícito (nombres de columna del esquema en snake_case).
 // ─────────────────────────────────────────────────────────────────────────────
-import { getBackendConfig, createBackend } from './backend.js?v=309';
+import { getBackendConfig, createBackend } from './backend.js?v=310';
 
 let _be = null, _cfgKey = null;
 // Instancia perezosa del backend; se recrea si cambia la config.
@@ -98,8 +98,22 @@ export async function pushInspection(insp, structureId) {
   }]);
 }
 
+// ── Estado / visibilidad (Fase 0: «que se vea que entra») ─────────────────────
+const COUNT_TABLES = ['structures', 'features', 'protocolos', 'ensayos', 'inspections', 'wbs_config', 'import_profiles'];
+export async function tableCounts() {
+  const be = backend(); if (!be || !be.count) return null;
+  const out = {};
+  await Promise.all(COUNT_TABLES.map(async (t) => { try { out[t] = await be.count(t); } catch { out[t] = null; } }));
+  return out;
+}
+
+// Momento de la última escritura efectiva (para el indicador de sync).
+let _lastPush = 0;
+export function lastPushAt() { return _lastPush; }
+function markPush() { _lastPush = Date.now(); }
+
 // Debounce util para no golpear el backend en cada tecla.
 const _timers = {};
 export function debouncedPush(key, fn, ms = 1500) {
-  clearTimeout(_timers[key]); _timers[key] = setTimeout(fn, ms);
+  clearTimeout(_timers[key]); _timers[key] = setTimeout(async () => { await fn(); markPush(); }, ms);
 }

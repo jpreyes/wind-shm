@@ -126,6 +126,11 @@ tr.wbs-unmapped td:first-child::before { content: '⚠ '; color: #e69628; }
 .be-card .wiz-fl input { font-family: ui-monospace, monospace; font-size: 12px; }
 .be-test { min-height: 20px; margin: 4px 0; }
 .be-res.ok { color: #28b46e; } .be-res.bad { color: #f87171; }
+.be-counts { margin: 8px 0 2px; }
+.be-counts-h { font-size: 11px; text-transform: uppercase; letter-spacing: .04em; color: var(--muted, #8b97a3); margin-bottom: 5px; }
+.be-count-row { display: flex; flex-wrap: wrap; gap: 6px; }
+.be-count { background: rgba(128,128,128,.14); border: 1px solid var(--border2); border-radius: 8px; padding: 2px 8px; font-size: 11.5px; color: var(--muted, #9fb0c0); }
+.be-count.has { background: rgba(40,180,110,.16); border-color: rgba(40,180,110,.4); color: var(--text); }
 .wbs-protos { white-space: nowrap; }
 .wbs-n { display: inline-block; min-width: 18px; text-align: center; font-weight: 600; }
 .wbs-addproto { font-size: 14px; }

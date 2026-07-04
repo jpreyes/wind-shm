@@ -6,8 +6,9 @@
 // Sólo la **anon key** (pública, pensada para el navegador). NUNCA la service_role
 // (secreta) — esa vive en el ingestor/servidor, no en el front.
 // ─────────────────────────────────────────────────────────────────────────────
-import { getBackendConfig, setBackendConfig } from './backend.js?v=309';
-import { t } from './i18n.js?v=309';
+import { getBackendConfig, setBackendConfig } from './backend.js?v=310';
+import { tableCounts } from './backend_sync.js?v=310';
+import { t } from './i18n.js?v=310';
 
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 
@@ -36,6 +37,7 @@ export function showBackendConfig() {
     <label class="wiz-fl"><span>${t('be.url')}</span><input class="be-url" placeholder="https://xxxx.supabase.co" value="${esc(cfg.url || '')}"></label>
     <label class="wiz-fl"><span>${t('be.key')}</span><input class="be-key" placeholder="eyJhbGci… (anon)" value="${esc(cfg.anonKey || '')}"></label>
     <div class="be-test"></div>
+    <div class="be-counts"></div>
     <div class="cal-actions" style="margin-top:14px;justify-content:space-between;flex-wrap:wrap">
       <div><button class="cal-btn cal-import-alt be-mock" type="button" title="${esc(t('be.mockTip'))}">${t('be.mock')}</button>
            ${cfg.url || cfg.mock ? `<button class="cal-btn cal-import-alt be-off" type="button">${t('be.disconnect')}</button>` : ''}</div>
@@ -60,11 +62,25 @@ export function showBackendConfig() {
       setBackendConfig({ url, anonKey }); location.reload();
       return;
     }
+    if (e.target.closest('.be-refresh')) { loadCounts($('.be-counts')); return; }
     if (e.target.closest('.be-mock')) { setBackendConfig({ mock: true }); location.href = location.pathname + '?backend=mock'; return; }
     if (e.target.closest('.be-off')) { setBackendConfig(null); location.href = location.pathname; return; }
   });
   addEventListener('keydown', function escFn(ev) { if (ev.key === 'Escape') { close(); removeEventListener('keydown', escFn); } });
   document.body.appendChild(ov);
+
+  // Conteo de filas por tabla → «que se vea que está entrando» (Fase 0).
+  if (cfg.url || cfg.mock) loadCounts($('.be-counts'));
+}
+
+async function loadCounts(box) {
+  if (!box) return;
+  box.innerHTML = `<div class="be-counts-h">${esc(t('be.dataIn'))}</div><div class="cal-mut">…</div>`;
+  const counts = await tableCounts();
+  if (!counts) { box.innerHTML = ''; return; }
+  const chips = Object.entries(counts).map(([tbl, n]) =>
+    `<span class="be-count ${n > 0 ? 'has' : ''}">${esc(tbl)}: <b>${n == null ? '—' : n}</b></span>`).join('');
+  box.innerHTML = `<div class="be-counts-h">${esc(t('be.dataIn'))} <button class="cal-link be-refresh" type="button">↻</button></div><div class="be-count-row">${chips}</div>`;
 }
 
 if (typeof window !== 'undefined') window.shmShowBackendConfig = showBackendConfig;
