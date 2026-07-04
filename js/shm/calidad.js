@@ -23,7 +23,7 @@ import { defaultWbs, wbsProgress, partidaForProtocol } from '../../tools/wbs.js'
 import { readXlsx } from '../../lib/xlsx_lite.mjs';
 import { analyzeWorkbook, proposeMapping, distinctValues, readByProfile, guessCanon, BUILTIN_PROFILES, FIELDS as QP_FIELDS, CANON_STATES } from '../../tools/quality_profile.mjs';
 import { FRAMEWORK, STATUS_NORMS, ENSAYO_NORMS, normLabel, normForEnsayo } from '../../tools/norms_catalog.mjs';
-import { t } from './i18n.js?v=304';
+import { t } from './i18n.js?v=305';
 
 const STORE = 'rewind.calidad.v1';
 const XLSX_MIME = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
