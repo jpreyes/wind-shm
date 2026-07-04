@@ -32,7 +32,7 @@ create table if not exists structures (
 -- inserta filas; el front las lee por Realtime o polling.
 create table if not exists features (
   id            bigint generated always as identity primary key,
-  structure_id  text not null references structures(id) on delete cascade,
+  structure_id  text not null,                 -- Tnn (el ingestor puede adelantarse a la siembra de structures)
   ts            timestamptz not null default now(),
   f1            real,        -- 1ª frecuencia natural (Hz)
   f2            real,
@@ -49,7 +49,7 @@ create index if not exists features_ts on features (ts desc);
 -- Punteros a ventanas crudas archivadas (10/30 min) en Storage → OMA (R-21).
 create table if not exists waves (
   id            bigint generated always as identity primary key,
-  structure_id  text not null references structures(id) on delete cascade,
+  structure_id  text not null,
   sensor        text,
   ts            timestamptz not null default now(),
   fs            integer,          -- frecuencia de muestreo (Hz)
@@ -62,7 +62,7 @@ create index if not exists waves_struct_ts on waves (structure_id, ts desc);
 -- ── 2 · CALIDAD DE OBRA ──────────────────────────────────────────────────────
 create table if not exists protocolos (
   id            text primary key,              -- id canónico del modelo ReWind
-  structure_id  text references structures(id) on delete set null,
+  structure_id  text,                          -- Tnn (texto libre: un Excel puede citar torres aún no sembradas)
   item          integer,
   codigo        text,
   area          text,
@@ -94,7 +94,7 @@ create index if not exists ciclos_proto on ciclos (protocolo_id);
 
 create table if not exists ensayos (
   id            text primary key,
-  structure_id  text references structures(id) on delete set null,
+  structure_id  text,                          -- texto libre (igual que protocolos)
   tipo          text,
   grado         text,
   norma         text,                          -- NCh/ASTM/EN (catálogo normativo)

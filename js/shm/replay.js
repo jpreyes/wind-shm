@@ -7,7 +7,7 @@
 // diferencia»: se le puede pasar el mismo `handleTick`. Valida la arquitectura
 // para el backend en vivo (R-10).
 // ─────────────────────────────────────────────────────────────────────────────
-import * as Hist from './history.js?v=307';
+import * as Hist from './history.js?v=308';
 
 export class ReplaySource {
   /** @param {{onTick, onProgress?, onEnd?, sensorsFor?}} o */

@@ -6,7 +6,7 @@
 // como CACHÉ OFFLINE. Sin backend configurado, todo funciona como antes (no-op).
 // Mapeo modelo↔fila explícito (nombres de columna del esquema en snake_case).
 // ─────────────────────────────────────────────────────────────────────────────
-import { getBackendConfig, createBackend } from './backend.js?v=307';
+import { getBackendConfig, createBackend } from './backend.js?v=308';
 
 let _be = null, _cfgKey = null;
 // Instancia perezosa del backend; se recrea si cambia la config.
@@ -39,6 +39,17 @@ function rowProto(r) {
     estadoActual: r.estado || null, estadoActualRaw: r.estado_raw || null,
     ciclos: [], _origen: { backend: true },
   };
+}
+
+// ── Estructuras (siembra la flota; protocolos/features la referencian) ────────
+export async function pushStructures(fleet) {
+  const be = backend(); if (!be || !fleet?.structures) return;
+  const rows = fleet.structures.map((s) => ({
+    id: s.id, type: s.type || 'turbine', label: s.label || s.id,
+    lat: s.lat ?? null, lon: s.lon ?? null, height: s.height ?? null, built: s.built ?? null,
+  }));
+  if (rows.length) await be.insert('structures', rows);
+  return rows.length;
 }
 
 // ── Calidad ───────────────────────────────────────────────────────────────────

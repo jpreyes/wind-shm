@@ -8,31 +8,32 @@
 //   inspecciones y señal temporal EN VIVO desde un Web Worker (DataSource).
 // Recortes (modelado) los hace shm.css ocultando, no borrando.
 // ─────────────────────────────────────────────────────────────────────────────
-import { FleetView } from './fleet_view.js?v=307';
-import { DataSource } from './data_source.js?v=307';
-import { computeTwin } from './digital_twin.js?v=307';
-import { ParkManager, loadParksStore } from './parks.js?v=307';
-import { MapView } from './map_view.js?v=307';
-import { defaultStages, builtFromStages } from './parks_data_caman.js?v=307';
-import { compassRoseSVG } from './compass.js?v=307';
-import { buildAvanceHUD } from './avance_hud.js?v=307';
-import { renderAvance } from './avance_dashboard.js?v=307';
-import * as Insp from './inspection.js?v=307';
-import * as Fat from './fatigue.js?v=307';
-import * as Instr from './instrumentation.js?v=307';
-import * as Calidad from './calidad.js?v=307';
-import { showBackendConfig } from './backend_ui.js?v=307';
-import * as Hist from './history.js?v=307';
-import * as Health from './health.js?v=307';
-import * as Bench from './benchmark.js?v=307';
-import * as Alarms from './alarms.js?v=307';
-import { METEO_CAMAN } from './meteo_caman.js?v=307';
-import { ReplaySource } from './replay.js?v=307';
-import { esc, safeUrl } from './util.js?v=307';
-import { t, getLang, setLang } from './i18n.js?v=307';
+import { FleetView } from './fleet_view.js?v=308';
+import { DataSource } from './data_source.js?v=308';
+import { computeTwin } from './digital_twin.js?v=308';
+import { ParkManager, loadParksStore } from './parks.js?v=308';
+import { MapView } from './map_view.js?v=308';
+import { defaultStages, builtFromStages } from './parks_data_caman.js?v=308';
+import { compassRoseSVG } from './compass.js?v=308';
+import { buildAvanceHUD } from './avance_hud.js?v=308';
+import { renderAvance } from './avance_dashboard.js?v=308';
+import * as Insp from './inspection.js?v=308';
+import * as Fat from './fatigue.js?v=308';
+import * as Instr from './instrumentation.js?v=308';
+import * as Calidad from './calidad.js?v=308';
+import { showBackendConfig } from './backend_ui.js?v=308';
+import { backendActive, pushStructures } from './backend_sync.js?v=308';
+import * as Hist from './history.js?v=308';
+import * as Health from './health.js?v=308';
+import * as Bench from './benchmark.js?v=308';
+import * as Alarms from './alarms.js?v=308';
+import { METEO_CAMAN } from './meteo_caman.js?v=308';
+import { ReplaySource } from './replay.js?v=308';
+import { esc, safeUrl } from './util.js?v=308';
+import { t, getLang, setLang } from './i18n.js?v=308';
 
 const F1_BASE = { turbine: 0.283, hv: 1.6 };
-const REWIND_VER = 'v307';   // versión visible del build (subir junto al cache-bust)
+const REWIND_VER = 'v308';   // versión visible del build (subir junto al cache-bust)
 const FS = 62.5;   // frecuencia de muestreo de la señal (Hz), igual que shm_worker.js
 // Clasificador ML de daño (0..4)
 const CLS = ['Sin daño', 'Leve', 'Moderado', 'Alto', 'Muy alto'];
@@ -286,6 +287,9 @@ async function boot() {
   pm.bind(); pm.render();
   statusBar.setParque(pm.active.name, fleet.structures.length);
 
+  // Con backend configurado: sembrar la flota (structures) — protocolos/features la referencian.
+  if (backendActive()) pushStructures(fleet).catch((e) => console.warn('[backend] siembra de structures falló', e));
+
   const saveLayout = () => { pm.syncFleetToActive(); pm.save(); };
   fleet.onChange = syncData;        // re-sincroniza telemetría al agregar
   fleet.onLayoutChange = saveLayout; // persiste el orden al mover/agregar
@@ -352,7 +356,7 @@ async function boot() {
   // ── Relieve conceptual del terreno (DEM vendorizado) — encendido por defecto ─
   setLoad(88, 'Cargando relieve…'); await delay(40);
   try {
-    await fleet.loadTerrain('data/caman_dem.json?v=307');
+    await fleet.loadTerrain('data/caman_dem.json?v=308');
     fleet.setTerrainVisible(true);
     document.getElementById('shm-relieve-tool')?.classList.add('active');
   } catch (e) { console.warn('[shm] relieve no disponible', e); }
