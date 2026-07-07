@@ -43,6 +43,7 @@ function atIcon(color) {
 const iconFor = (st) => st.type === 'hv' ? atIcon(colorFor(st)) : turbineIcon(colorFor(st));
 
 const M_PER_DEG_LAT = 111320;
+const GIS_STORE_KEY = 'rewind.gis.features.v1';
 
 // Calendario de parpadeo mes×hora (la gráfica «de facto» del software del rubro):
 // celdas coloreadas por minutos/año de sombra → revela la ventana crítica del receptor.
@@ -103,7 +104,9 @@ export class MapView {
 
     // Doble-click maximiza / restaura (en vez del zoom por doble-click de Leaflet).
     this.map.doubleClickZoom.disable();
-    this.map.on('dblclick', () => this.onToggleFull());
+    this.map.on('dblclick', (e) => { if (this._handleGisDoubleClick(e)) return; this.onToggleFull(); });
+    this._gisKeyHandler = (e) => this._handleGisKeyDown(e);
+    window.addEventListener('keydown', this._gisKeyHandler, true);
 
     // Recalcular tamaño del mapa cuando cambia el contenedor.
     if (window.ResizeObserver) { this._ro = new ResizeObserver(() => this.map && this.map.invalidateSize()); this._ro.observe(this.el); }
@@ -116,8 +119,16 @@ export class MapView {
     }
     this.markersLayer = L.layerGroup().addTo(this.map);
     this.recepLayer = L.layerGroup().addTo(this.map);          // receptores del estudio de sombra
+    this.progressLayer = L.layerGroup().addTo(this.map);
+    this.userGisLayer = L.layerGroup().addTo(this.map);
+    this._gisFeatures = this._loadUserGis();
+    this._gisDraft = null;
+    this._gisTool = '';
+    this._drawUserGis();
+    this._addGisControl();
     // En modo Sol, clic en el mapa coloca un receptor (vivienda) y calcula su flicker.
-    this.map.on('click', (e) => { if (this.sunMode) this.addReceptor(e.latlng); });
+    this.map.on('click', (e) => { if (this._handleGisMapClick(e)) return; if (this.sunMode) this.addReceptor(e.latlng); });
+    this.map.on('mousemove', (e) => this._handleGisMouseMove(e));
   }
 
   // Agrega un receptor (vivienda) y calcula su parpadeo de sombra anual worst-case.
@@ -179,7 +190,7 @@ export class MapView {
   // Mapa de flicker (horas/año) sobre el área — salida estilo software del rubro. Toggle.
   toggleFlickerMap() {
     const L = window.L; if (!L || !this.map) return false;
-    if (this._flickerOverlay) { this.map.removeLayer(this._flickerOverlay); this._flickerOverlay = null; this.fleet.clearFlickerSurface?.(); return false; }
+    if (this._flickerOverlay) { this.map.removeLayer(this._flickerOverlay); this._flickerOverlay = null; this.fleet.clearFlickerSurface?.(); this._syncGisControl(); return false; }
     const lats = [], lons = [];
     for (const t of this.fleet.structures) { if (t.type !== 'hv' && t.lat != null && (t.built ?? 1) >= 0.97) { lats.push(t.lat); lons.push(t.lon); } }
     if (!lats.length) { alert(t('mv.noTurbMap')); return false; }
@@ -201,9 +212,10 @@ export class MapView {
     this._flickerOverlay = L.imageOverlay(cv.toDataURL(), bounds, { opacity: 0.6, interactive: false }).addTo(this.map);
     this.map.fitBounds(bounds);
     this.fleet.setFlickerSurface?.(cv, bbox);     // también drapeado sobre el relieve en 3D
+    this._syncGisControl();
     return true;
   }
-  clearFlickerMap() { if (this._flickerOverlay) { this.map.removeLayer(this._flickerOverlay); this._flickerOverlay = null; } this.fleet.clearFlickerSurface?.(); }
+  clearFlickerMap() { if (this._flickerOverlay) { this.map.removeLayer(this._flickerOverlay); this._flickerOverlay = null; } this.fleet.clearFlickerSurface?.(); this._syncGisControl(); }
 
   // Mapa de iso-sombra del parque (heatmap h/año + turbinas + receptores + N + escala)
   // como PNG dataURL para incrustar en el informe — la lámina típica del rubro.
@@ -453,6 +465,7 @@ export class MapView {
       pts.push([st.lat, st.lon]);
     }
     this._bounds = pts;     // se encuadra al mostrar el mapa (cuando el contenedor ya tiene tamaño)
+    this._drawProgressLayer();
   }
 
   // Refresca el color/estado de los marcadores (avance/alarma) sin recrearlos.
@@ -461,6 +474,385 @@ export class MapView {
       const m = this.markers.get(st.id);
       if (m) m.setIcon(iconFor(st));
     }
+    this._drawProgressLayer();
+  }
+
+  _drawProgressLayer() {
+    const L = window.L; if (!L || !this.progressLayer) return;
+    this.progressLayer.clearLayers();
+    for (const st of this.fleet.structures) {
+      if (st.lat == null || st.lon == null) continue;
+      const built = Math.round(((st.built ?? 1) * 100));
+      const col = colorFor(st);
+      const cm = L.circleMarker([st.lat, st.lon], {
+        radius: st.type === 'hv' ? 7 : 9,
+        color: '#0b1018',
+        weight: 1.2,
+        fillColor: col,
+        fillOpacity: 0.24 + 0.55 * Math.max(0.08, (st.built ?? 1)),
+        interactive: true,
+      }).bindTooltip(`${esc(st.label || st.id)} · avance ${built}%`, { direction: 'top' });
+      cm.on('click', () => this.onPick(st.id));
+      cm.addTo(this.progressLayer);
+    }
+  }
+
+  _loadUserGis() {
+    try {
+      const raw = localStorage.getItem(GIS_STORE_KEY);
+      const data = raw ? JSON.parse(raw) : null;
+      return Array.isArray(data?.features) ? data.features.filter(f => f && f.type && Array.isArray(f.coords)) : [];
+    } catch {
+      return [];
+    }
+  }
+
+  _saveUserGis() {
+    try { localStorage.setItem(GIS_STORE_KEY, JSON.stringify({ features: this._gisFeatures || [] })); } catch {}
+  }
+
+  _featureLabel(type, index) {
+    const names = { road: 'Camino', parcel: 'Predio', home: 'Vivienda' };
+    return `${names[type] || 'Objeto'} ${index}`;
+  }
+
+  _drawUserGis() {
+    const L = window.L; if (!L || !this.userGisLayer) return;
+    this.userGisLayer.clearLayers();
+    const features = this._gisFeatures || [];
+    features.forEach((f, idx) => {
+      if (this._gisDraft?.id === f.id) return;
+      const coords = (f.coords || []).map(p => [p[0], p[1]]);
+      if (!coords.length) return;
+      const name = f.name || this._featureLabel(f.type, idx + 1);
+      let layer = null;
+      if (f.type === 'road' && coords.length >= 2) {
+        layer = L.polyline(coords, { color: '#38bdf8', weight: 4, opacity: 0.92 });
+      } else if (f.type === 'parcel' && coords.length >= 3) {
+        layer = L.polygon(coords, { color: '#a855f7', weight: 2, opacity: 0.95, fillColor: '#a855f7', fillOpacity: 0.16 });
+      } else if (f.type === 'home') {
+        const icon = L.divIcon({ className: 'gis-home-icon', iconSize: [22, 22], iconAnchor: [11, 18],
+          html: `<svg width="22" height="22" viewBox="0 0 22 22"><path d="M4 10.5 11 4l7 6.5" fill="none" stroke="#0f172a" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/><path d="M6.5 9.8v8h9v-8" fill="#f97316" stroke="#0f172a" stroke-width="1.4" stroke-linejoin="round"/></svg>` });
+        layer = L.marker(coords[0], { icon });
+      }
+      if (!layer) return;
+      layer.bindTooltip(esc(name), { direction: 'top' });
+      layer.bindPopup(`<b>${esc(name)}</b><br>${esc(f.type)}<br><a href="#" class="gis-edit" data-gis-id="${esc(f.id)}">Editar</a> · <a href="#" class="gis-del" data-gis-id="${esc(f.id)}">Eliminar</a>`);
+      layer.on('popupopen', (ev) => {
+        const edit = ev.popup.getElement()?.querySelector('.gis-edit');
+        const a = ev.popup.getElement()?.querySelector('.gis-del');
+        edit && edit.addEventListener('click', (x) => { x.preventDefault(); this._editUserFeature(f.id); this.map.closePopup(); });
+        a && a.addEventListener('click', (x) => { x.preventDefault(); this._removeUserFeature(f.id); });
+      });
+      layer.addTo(this.userGisLayer);
+    });
+    this._syncGisControl();
+  }
+
+  _removeUserFeature(id) {
+    if (this._gisDraft?.id === id) this._gisDraft = null;
+    this._gisFeatures = (this._gisFeatures || []).filter(f => f.id !== id);
+    this._saveUserGis();
+    this._drawDraft();
+    this._drawUserGis();
+  }
+
+  _editUserFeature(id) {
+    const f = (this._gisFeatures || []).find(x => x.id === id);
+    if (!f) return;
+    this._gisTool = f.type;
+    this._gisHoverLatLng = null;
+    this._gisDraft = {
+      id: f.id,
+      type: f.type,
+      name: f.name,
+      editing: true,
+      coords: (f.coords || []).map(p => [p[0], p[1]]),
+    };
+    if (this.userGisLayer && this.map && !this.map.hasLayer(this.userGisLayer)) this.userGisLayer.addTo(this.map);
+    this.el.classList.toggle('mv-gis-editing', true);
+    this._drawUserGis();
+    this._drawDraft();
+    this._refreshGisToolState();
+  }
+
+  _setGisTool(tool) {
+    this._gisTool = this._gisTool === tool ? '' : tool;
+    if (this._gisTool && this.userGisLayer && this.map && !this.map.hasLayer(this.userGisLayer)) this.userGisLayer.addTo(this.map);
+    this._gisDraft = null;
+    this._gisHoverLatLng = null;
+    this._drawDraft();
+    this._drawUserGis();
+    this.el.classList.toggle('mv-gis-editing', !!this._gisTool);
+    this._refreshGisToolState();
+  }
+
+  _exitGisTool() {
+    this._gisTool = '';
+    this._gisHoverLatLng = null;
+    this.el.classList.toggle('mv-gis-editing', false);
+    this._refreshGisToolState();
+  }
+
+  _handleGisMapClick(e) {
+    const tool = this._gisTool;
+    if (!tool) return false;
+    const p = [e.latlng.lat, e.latlng.lng];
+    this._gisHoverLatLng = null;
+    if (tool === 'home' && this._gisDraft?.id) {
+      this._gisDraft.coords = [p];
+      this._finishGisDraft();
+      return true;
+    }
+    if (tool === 'home') {
+      const n = (this._gisFeatures || []).filter(f => f.type === 'home').length + 1;
+      this._gisFeatures.push({ id: `home-${Date.now()}`, type: 'home', name: this._featureLabel('home', n), coords: [p] });
+      this._saveUserGis();
+      this._drawUserGis();
+      this._refreshGisToolState();
+      return true;
+    }
+    if (!this._gisDraft || this._gisDraft.type !== tool) this._gisDraft = { type: tool, coords: [] };
+    this._gisDraft.coords.push(p);
+    this._drawDraft();
+    this._refreshGisToolState();
+    return true;
+  }
+
+  _handleGisMouseMove(e) {
+    if (!this._gisTool || !this._gisDraft?.coords?.length) return;
+    if (this._gisTool !== 'road' && this._gisTool !== 'parcel') return;
+    this._gisHoverLatLng = [e.latlng.lat, e.latlng.lng];
+    this._drawDraft();
+  }
+
+  _gisDraftReady() {
+    if (!this._gisDraft?.coords?.length) return false;
+    const min = this._gisDraft.type === 'home' ? 1 : this._gisDraft.type === 'parcel' ? 3 : 2;
+    return this._gisDraft.coords.length >= min;
+  }
+
+  _stopGisEvent(e) {
+    e?.preventDefault?.();
+    e?.stopPropagation?.();
+    e?.stopImmediatePropagation?.();
+    if (e?.originalEvent) {
+      e.originalEvent.preventDefault?.();
+      e.originalEvent.stopPropagation?.();
+      e.originalEvent.stopImmediatePropagation?.();
+    }
+  }
+
+  _handleGisDoubleClick(e) {
+    if (!this._gisTool && !this._gisDraft) return false;
+    this._stopGisEvent(e);
+    if (this._gisDraftReady()) this._finishGisDraft();
+    this._exitGisTool();
+    return true;
+  }
+
+  _handleGisKeyDown(e) {
+    if (!this._gisTool && !this._gisDraft) return false;
+    if (e.key !== 'Escape' && e.key !== 'Enter') return false;
+    this._stopGisEvent(e);
+    if (e.key === 'Enter') {
+      if (this._gisDraftReady()) this._finishGisDraft();
+      this._exitGisTool();
+      return true;
+    }
+    if (this._gisDraft) this._cancelGisDraft();
+    this._exitGisTool();
+    return true;
+  }
+
+  _drawDraft() {
+    const L = window.L; if (!L || !this.map) return;
+    if (!this._gisDraftLayer) this._gisDraftLayer = L.layerGroup().addTo(this.map);
+    this._gisDraftLayer.clearLayers();
+    const d = this._gisDraft;
+    if (!d?.coords?.length) return;
+    const pts = d.coords.map(p => [p[0], p[1]]);
+    const hover = this._gisHoverLatLng;
+    const previewPts = hover && (d.type === 'road' || d.type === 'parcel') ? [...pts, hover] : pts;
+    const vertexIcon = L.divIcon({ className: 'gis-vertex-icon', iconSize: [14, 14], iconAnchor: [7, 7], html: '<span></span>' });
+    pts.forEach((pt, i) => {
+      const mk = L.marker(pt, { icon: vertexIcon, draggable: true, keyboard: false }).bindTooltip(String(i + 1), { permanent: false });
+      mk.on('drag', (ev) => {
+        const ll = ev.latlng || ev.target?.getLatLng?.();
+        if (!ll) return;
+        d.coords[i] = [ll.lat, ll.lng];
+        this._gisHoverLatLng = null;
+        this._drawDraft();
+        this._refreshGisToolState();
+      });
+      mk.on('click', (ev) => {
+        if (ev.originalEvent) L.DomEvent.stop(ev.originalEvent);
+        if (d.coords.length <= (d.type === 'parcel' ? 3 : 2)) return;
+        d.coords.splice(i, 1);
+        this._drawDraft();
+        this._refreshGisToolState();
+      });
+      mk.addTo(this._gisDraftLayer);
+    });
+    if (d.type === 'home') {
+      L.circleMarker(pts[0], { radius: 11, color: '#0f172a', weight: 1.5, fillColor: '#f97316', fillOpacity: 0.28, dashArray: '4 4' }).addTo(this._gisDraftLayer);
+    }
+    if (d.type === 'road' && previewPts.length >= 2) L.polyline(previewPts, { color: '#38bdf8', weight: 4, dashArray: '6 5' }).addTo(this._gisDraftLayer);
+    if (d.type === 'parcel' && previewPts.length >= 2) {
+      const shape = previewPts.length >= 3 ? L.polygon(previewPts, { color: '#a855f7', weight: 2, dashArray: '6 5', fillColor: '#a855f7', fillOpacity: 0.12 })
+        : L.polyline(previewPts, { color: '#a855f7', weight: 3, dashArray: '6 5' });
+      shape.addTo(this._gisDraftLayer);
+    }
+  }
+
+  _finishGisDraft() {
+    const d = this._gisDraft;
+    if (!d?.coords?.length) return;
+    const min = d.type === 'home' ? 1 : d.type === 'parcel' ? 3 : 2;
+    if (d.coords.length < min) { alert(d.type === 'parcel' ? 'El predio necesita al menos 3 puntos.' : 'El camino necesita al menos 2 puntos.'); return; }
+    if (d.id) {
+      const i = (this._gisFeatures || []).findIndex(f => f.id === d.id);
+      if (i >= 0) this._gisFeatures[i] = { ...this._gisFeatures[i], type: d.type, name: d.name || this._gisFeatures[i].name, coords: d.coords };
+    } else {
+      const n = (this._gisFeatures || []).filter(f => f.type === d.type).length + 1;
+      this._gisFeatures.push({ id: `${d.type}-${Date.now()}`, type: d.type, name: this._featureLabel(d.type, n), coords: d.coords });
+    }
+    this._gisDraft = null;
+    this._gisHoverLatLng = null;
+    this._saveUserGis();
+    this._drawDraft();
+    this._drawUserGis();
+    this._refreshGisToolState();
+  }
+
+  _undoGisPoint() {
+    if (!this._gisDraft?.coords?.length) return;
+    if (this._gisDraft.editing && this._gisDraft.coords.length <= (this._gisDraft.type === 'parcel' ? 3 : 2)) return;
+    this._gisDraft.coords.pop();
+    if (!this._gisDraft.coords.length) this._gisDraft = null;
+    this._gisHoverLatLng = null;
+    this._drawDraft();
+    this._drawUserGis();
+    this._refreshGisToolState();
+  }
+
+  _cancelGisDraft() {
+    this._gisDraft = null;
+    this._gisHoverLatLng = null;
+    this._drawDraft();
+    this._drawUserGis();
+    this._refreshGisToolState();
+  }
+
+  _clearUserGis() {
+    if (!confirm('Eliminar caminos, predios y viviendas creados en GIS?')) return;
+    this._gisFeatures = [];
+    this._gisDraft = null;
+    this._gisHoverLatLng = null;
+    this._saveUserGis();
+    this._drawDraft();
+    this._drawUserGis();
+    this._refreshGisToolState();
+  }
+
+  _refreshGisToolState() {
+    if (!this._gisEl) return;
+    this._gisEl.querySelectorAll('[data-gis-tool]').forEach(b => b.classList.toggle('active', b.dataset.gisTool === this._gisTool));
+    const n = this._gisDraft?.coords?.length || 0;
+    const txt = this._gisTool
+      ? (this._gisTool === 'home'
+        ? (this._gisDraft?.editing ? 'Arrastra el punto o click para reubicar.' : 'Click en mapa: agrega vivienda.')
+        : `${this._gisDraft?.editing ? 'Editando' : 'Dibujando'}: ${n} punto${n === 1 ? '' : 's'}; mueve el cursor para previsualizar.`)
+      : 'Elige herramienta para crear objetos.';
+    const hint = this._gisEl.querySelector('.mv-gis-hint'); if (hint) hint.textContent = txt;
+    const finish = this._gisEl.querySelector('[data-gis-action="finish"]');
+    const undo = this._gisEl.querySelector('[data-gis-action="undo"]');
+    const cancel = this._gisEl.querySelector('[data-gis-action="cancel"]');
+    const min = this._gisDraft?.type === 'home' ? 1 : this._gisDraft?.type === 'parcel' ? 3 : 2;
+    if (finish) finish.disabled = !(this._gisDraft && this._gisDraft.coords.length >= min);
+    if (undo) undo.disabled = !this._gisDraft?.coords?.length || (this._gisDraft.editing && this._gisDraft.coords.length <= min);
+    if (cancel) cancel.disabled = !this._gisDraft;
+  }
+
+  _setLayerVisible(layer, on) {
+    if (!layer || !this.map) return;
+    const has = this.map.hasLayer(layer);
+    if (on && !has) layer.addTo(this.map);
+    else if (!on && has) this.map.removeLayer(layer);
+  }
+
+  _addGisControl() {
+    const L = window.L; if (!L || !this.map) return;
+    const self = this;
+    const GisCtl = L.Control.extend({ onAdd() {
+      const d = L.DomUtil.create('div', 'mv-gis');
+      d.innerHTML = `<button class="mv-gis-h" type="button" aria-expanded="false" title="Capas GIS">GIS</button>
+        <div class="mv-gis-body">
+          <div class="mv-gis-tools" aria-label="Herramientas GIS">
+            <button type="button" data-gis-tool="road">Camino</button>
+            <button type="button" data-gis-tool="parcel">Predio</button>
+            <button type="button" data-gis-tool="home">Vivienda</button>
+          </div>
+          <div class="mv-gis-draft">
+            <button type="button" data-gis-action="finish" disabled>Terminar</button>
+            <button type="button" data-gis-action="undo" disabled>Deshacer</button>
+            <button type="button" data-gis-action="cancel" disabled>Cancelar</button>
+            <button type="button" data-gis-action="clear">Limpiar</button>
+          </div>
+          <div class="mv-gis-hint">Elige herramienta para crear objetos.</div>
+          <div class="mv-gis-layers">
+            <label><input type="checkbox" data-gis="structures" checked> Estructuras</label>
+            <label><input type="checkbox" data-gis="progress" checked> Avance</label>
+            <label><input type="checkbox" data-gis="roads" checked> Caminos</label>
+            <label><input type="checkbox" data-gis="receptors" checked> Receptores</label>
+            <label><input type="checkbox" data-gis="user" checked> GIS editable</label>
+            <label><input type="checkbox" data-gis="flicker"> Shadow</label>
+          </div>
+        </div>`;
+      L.DomEvent.disableClickPropagation(d);
+      L.DomEvent.disableScrollPropagation(d);
+      d.addEventListener('click', (e) => {
+        const tool = e.target?.closest?.('[data-gis-tool]')?.dataset?.gisTool;
+        const action = e.target?.closest?.('[data-gis-action]')?.dataset?.gisAction;
+        if (tool) { self._setGisTool(tool); return; }
+        if (action === 'finish') { self._finishGisDraft(); return; }
+        if (action === 'undo') { self._undoGisPoint(); return; }
+        if (action === 'cancel') { self._cancelGisDraft(); return; }
+        if (action === 'clear') { self._clearUserGis(); return; }
+        if (!e.target?.closest?.('.mv-gis-h')) return;
+        const open = d.classList.toggle('is-open');
+        d.querySelector('.mv-gis-h')?.setAttribute('aria-expanded', String(open));
+      });
+      d.addEventListener('change', (e) => {
+        const key = e.target?.dataset?.gis; if (!key) return;
+        const on = !!e.target.checked;
+        if (key === 'structures') self._setLayerVisible(self.markersLayer, on);
+        else if (key === 'progress') self._setLayerVisible(self.progressLayer, on);
+        else if (key === 'roads') self._setLayerVisible(self.roadsLayer, on);
+        else if (key === 'receptors') self._setLayerVisible(self.recepLayer, on);
+        else if (key === 'user') self._setLayerVisible(self.userGisLayer, on);
+        else if (key === 'flicker') {
+          if (on && !self._flickerOverlay) self.toggleFlickerMap();
+          else if (!on && self._flickerOverlay) self.clearFlickerMap();
+        }
+        self._syncGisControl();
+      });
+      self._gisEl = d;
+      self._refreshGisToolState();
+      return d;
+    } });
+    this.map.addControl(new GisCtl({ position: 'topright' }));
+  }
+
+  _syncGisControl() {
+    if (!this._gisEl || !this.map) return;
+    const set = (key, on) => { const i = this._gisEl.querySelector(`[data-gis="${key}"]`); if (i) i.checked = !!on; };
+    set('structures', this.markersLayer && this.map.hasLayer(this.markersLayer));
+    set('progress', this.progressLayer && this.map.hasLayer(this.progressLayer));
+    set('roads', this.roadsLayer && this.map.hasLayer(this.roadsLayer));
+    set('receptors', this.recepLayer && this.map.hasLayer(this.recepLayer));
+    set('user', this.userGisLayer && this.map.hasLayer(this.userGisLayer));
+    set('flicker', !!this._flickerOverlay);
   }
 
   // ── Estudio de sol en 2D: sombra real en planta (Frente 2) ───────────────────
