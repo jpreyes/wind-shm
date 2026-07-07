@@ -16,7 +16,7 @@ import { MapView } from './map_view.js?v=310';
 import { defaultStages, builtFromStages } from './parks_data_caman.js?v=310';
 import { compassRoseSVG } from './compass.js?v=310';
 import { buildAvanceHUD } from './avance_hud.js?v=310';
-import { renderAvance } from './avance_dashboard.js?v=310';
+import { renderAvance, computeParkAvance } from './avance_dashboard.js?v=310';
 import * as Insp from './inspection.js?v=310';
 import * as Fat from './fatigue.js?v=310';
 import * as Instr from './instrumentation.js?v=310';
@@ -115,7 +115,7 @@ async function boot() {
   initPanelResize();   // redimensionar el panel derecho (antes lo cableaba app.js)
 
   document.getElementById('btn-zoomext')?.addEventListener('click', () => fleet.clearSelection());
-  document.title = 'ReWind — SHM de torres eólicas';
+  document.title = 'ReWind Parque Digital';
 
   // ── DataSource: simulación (Web Worker) o nube (?live=wss://…) ─────────────
   const liveUrl = new URLSearchParams(location.search).get('live');
@@ -1012,10 +1012,9 @@ function buildDashboard(panel, fleet, actions) {
   el.innerHTML = `
     <div class="shm-head">
       <div style="flex:1">
-        <div class="shm-title">🌬️ ReWind — SHM</div>
+        <div class="shm-title">ReWind Parque Digital</div>
         <div class="shm-sub">${t('dash.sub')} · <span style="opacity:.7">${REWIND_VER}</span></div>
       </div>
-      <button id="shm-report-btn" title="${t('dash.reportBtn.tip')}">${t('dash.reportBtn')}</button>
     </div>
     <div class="shm-main">
     <div class="shm-toptabs">
@@ -1032,6 +1031,12 @@ function buildDashboard(panel, fleet, actions) {
     <div class="shm-view" id="view-shm" style="display:none"><div class="shm-detail" id="shm-shm"></div></div>
     <div class="shm-view" id="view-shadow" style="display:none"><div class="shm-shadow" id="shm-shadow"></div></div>
     <div class="shm-view" id="view-parque">
+      <div class="shm-park-actions">
+        <button id="park-summary-btn" type="button">Resumen ejecutivo</button>
+        <button id="park-report-btn" type="button">Informe parque</button>
+        <button id="park-csv-btn" type="button">Excel/CSV</button>
+        <button id="park-pdf-btn" type="button">PDF</button>
+      </div>
       <div class="shm-fleet">
         <div class="shm-stat"><div class="k">${t('sb.struct')}</div><div class="v" id="shm-count">0</div></div>
         <div class="shm-stat"><div class="k">${t('sh.sensOk')}</div><div class="v" style="color:var(--success)" id="shm-ok">0</div></div>
@@ -1054,7 +1059,10 @@ function buildDashboard(panel, fleet, actions) {
     </div>`;
   panel.appendChild(el);
   const $ = (s) => el.querySelector(s);
-  el.querySelector('#shm-report-btn').addEventListener('click', () => buildReport(null));   // compilado del parque
+  el.querySelector('#park-summary-btn')?.addEventListener('click', () => showExecutiveSummary());
+  el.querySelector('#park-report-btn')?.addEventListener('click', () => buildReport(null));
+  el.querySelector('#park-csv-btn')?.addEventListener('click', () => downloadExecutiveCSV());
+  el.querySelector('#park-pdf-btn')?.addEventListener('click', () => openExecutivePDF());
 
   // Pestañas de nivel superior: Parque (flota) ⇄ Selección (estructura) ⇄ Shadow flicker.
   function setTopView(v) {
@@ -1564,6 +1572,227 @@ function buildDashboard(panel, fleet, actions) {
   }
 
   // R-23a: editor de umbrales de alarma + eventos recientes (pestaña Estado).
+  function renderExecutive(host = $('#shm-exec'), opts = {}) {
+    if (!host) return;
+    const structs = fleet.structures || [];
+    const av = computeParkAvance(structs);
+    const latest = window.shmData?.latest || {};
+    let sensorsOk = 0, sensorsFault = 0, windSum = 0, windN = 0;
+    for (const id in latest) {
+      const s = latest[id];
+      for (const se of (s.sensors || [])) (se.status === 'fault' ? sensorsFault++ : sensorsOk++);
+      if (s.wind != null) { windSum += s.wind; windN++; }
+    }
+    let qTotal = 0, qApproved = 0, qPending = 0, qStructures = 0;
+    for (const st of structs) {
+      const q = Calidad.structureSummary?.(st.id);
+      if (!q) continue;
+      qStructures++; qTotal += q.total; qApproved += q.aprobado; qPending += q.pendientes;
+    }
+    const allInsp = Insp.getAll();
+    let inspOverdue = 0, inspSoon = 0, woOpen = 0, woOverdue = 0;
+    for (const st of structs) {
+      const insps = allInsp[st.id] || [];
+      if (!insps.length) continue;
+      const latestInsp = insps.slice().sort((a, b) => (b.date || '').localeCompare(a.date || ''))[0];
+      const due = Insp.dueState(latestInsp.nextDate);
+      if (due.overdue) inspOverdue++; else if (due.soon) inspSoon++;
+      for (const ins of insps) for (const w of (ins.workOrders || [])) if (w.status !== 'cerrado') {
+        woOpen++; if (Insp.dueState(w.due).overdue) woOverdue++;
+      }
+    }
+    const healthRows = structs.map(st => {
+      const sum = window.shmData?.get(st.id);
+      const h = Health.computeHealth(healthInputsFor(st, sum));
+      const q = Calidad.structureSummary?.(st.id);
+      return { st, sum, hi: h.hi, q };
+    });
+    const knownHealth = healthRows.filter(r => r.hi != null);
+    const hiAvg = knownHealth.length ? Math.round(knownHealth.reduce((a, r) => a + r.hi, 0) / knownHealth.length) : null;
+    const hiCrit = knownHealth.filter(r => r.hi < 40).length;
+    const hiWarn = knownHealth.filter(r => r.hi >= 40 && r.hi < 70).length;
+    const alarmed = structs.filter(st => st.alarm);
+    const top = healthRows
+      .sort((a, b) => (a.hi ?? 101) - (b.hi ?? 101) || (a.st.built ?? 1) - (b.st.built ?? 1))
+      .slice(0, 6);
+    const pct = (x) => `${Math.round((x || 0) * 100)}%`;
+    const pctNum = (n, d) => d ? `${Math.round(n / d * 100)}%` : '--';
+    const source = window.shmData?.mode || 'sim';
+    const mapLayers = [
+      'Estructuras', window.shmMap?.roadsLayer ? 'Caminos' : null,
+      'Avance', (window.shmMap?._receptors || []).length ? 'Receptores' : null,
+      window.shmMap?._flickerOverlay ? 'Shadow' : null,
+    ].filter(Boolean);
+    const riskRows = top.map(r => {
+      const col = r.hi == null ? 'var(--text-muted)' : Health.healthColor(r.hi);
+      const qtxt = r.q ? pctNum(r.q.aprobado, r.q.total) : '--';
+      const f1 = r.sum && !r.sum.standby && typeof r.sum.f1 === 'number' ? r.sum.f1.toFixed(3) + ' Hz' : '--';
+      return `<button class="exec-risk" data-exec-id="${esc(r.st.id)}">
+        <span class="exec-dot" style="background:${col}"></span>
+        <span class="exec-r-name">${esc(r.st.label || r.st.id)}</span>
+        <span class="exec-r-val" style="color:${col}">${r.hi ?? '--'} HI</span>
+        <span class="exec-r-sub">Avance ${pct(r.st.built ?? 1)} · Calidad ${qtxt} · f1 ${f1}</span>
+      </button>`;
+    }).join('');
+    const actions = opts.modal ? `
+        <button id="exec-go-obra" type="button">Obra</button>
+        <button id="exec-go-map" type="button">Mapa GIS</button>
+        <button id="exec-go-csv" type="button">Excel/CSV</button>
+        <button id="exec-go-pdf" type="button">PDF</button>`
+      : `
+        <button id="exec-go-obra" type="button">Obra</button>
+        <button id="exec-go-calidad" type="button">Calidad</button>
+        <button id="exec-go-map" type="button">Mapa GIS</button>
+        <button id="exec-go-report" type="button">Informe</button>`;
+    host.innerHTML = `
+      <div class="exec-head">
+        <div><div class="exec-kicker">Resumen ejecutivo</div><h3>Camán I</h3></div>
+        <div class="exec-source">Fuente: ${esc(source)} · ${new Date().toLocaleTimeString()}</div>
+      </div>
+      <div class="exec-grid">
+        <div class="exec-card strong"><div class="k">Avance fisico</div><div class="v">${pct(av.realPct)}</div><div class="s">Plan ${pct(av.planPct)} · ${av.nOp}/${av.nTurb} operativas</div></div>
+        <div class="exec-card"><div class="k">Calidad</div><div class="v">${pctNum(qApproved, qTotal)}</div><div class="s">${qApproved}/${qTotal || 0} protocolos · ${qPending} pendientes</div></div>
+        <div class="exec-card"><div class="k">Salud flota</div><div class="v">${hiAvg ?? '--'}</div><div class="s">${hiCrit} criticas · ${hiWarn} en observacion</div></div>
+        <div class="exec-card"><div class="k">Alarmas</div><div class="v ${alarmed.length ? 'bad' : ''}">${alarmed.length}</div><div class="s">${sensorsOk} sensores OK · ${sensorsFault} en falla</div></div>
+      </div>
+      <div class="exec-band">
+        <div><b>${av.nWip}</b><span>torres en obra</span></div>
+        <div><b>${av.nFound}</b><span>en fundacion/inicio</span></div>
+        <div><b>${qStructures}</b><span>con datos de calidad</span></div>
+        <div><b>${inspOverdue}</b><span>inspecciones vencidas</span></div>
+        <div><b>${woOpen}</b><span>OT abiertas</span></div>
+        <div><b>${windN ? (windSum / windN).toFixed(1) : '--'}</b><span>m/s viento medio</span></div>
+      </div>
+      <div class="exec-actions">
+        ${actions}
+      </div>
+      <div class="exec-section">
+        <div class="exec-sec-head"><b>Top estructuras a revisar</b><span>HI · avance · calidad · frecuencia</span></div>
+        <div class="exec-risks">${riskRows || '<div class="exec-empty">Sin estructuras con datos suficientes.</div>'}</div>
+      </div>
+      <div class="exec-section">
+        <div class="exec-sec-head"><b>Capas GIS disponibles</b><span>${mapLayers.join(' · ')}</span></div>
+        <div class="exec-map-hint">Abrir el mapa muestra estructuras, caminos, avance, receptores y shadow flicker como capas activables.</div>
+      </div>`;
+    const closeModal = () => { if (opts.modal) document.getElementById('exec-ov')?.remove(); };
+    host.querySelector('#exec-go-obra')?.addEventListener('click', () => { setTopView('obra'); closeModal(); });
+    host.querySelector('#exec-go-calidad')?.addEventListener('click', () => { Calidad.showPanel?.(); closeModal(); });
+    host.querySelector('#exec-go-map')?.addEventListener('click', () => {
+      document.body.classList.add('map-pip');
+      document.getElementById('shm-map-tool')?.classList.add('active');
+      window.shmMap?.invalidate?.();
+      closeModal();
+    });
+    host.querySelector('#exec-go-report')?.addEventListener('click', () => { buildReport(null); closeModal(); });
+    host.querySelector('#exec-go-csv')?.addEventListener('click', () => downloadExecutiveCSV());
+    host.querySelector('#exec-go-pdf')?.addEventListener('click', () => openExecutivePDF());
+    host.querySelectorAll('[data-exec-id]').forEach(b => b.addEventListener('click', () => { fleet.selectById(b.dataset.execId); closeModal(); }));
+  }
+
+  function showExecutiveSummary() {
+    document.getElementById('exec-ov')?.remove();
+    const ov = document.createElement('div');
+    ov.id = 'exec-ov';
+    ov.className = 'mb-about exec-ov';
+    ov.innerHTML = `<div class="mb-about-card exec-modal" role="dialog" aria-modal="true" aria-label="Resumen ejecutivo">
+      <button class="mb-about-x" type="button" aria-label="Cerrar">×</button>
+      <div id="exec-modal-body" class="exec-dash"></div>
+    </div>`;
+    const close = () => { ov.remove(); removeEventListener('keydown', onKey); };
+    const onKey = (e) => { if (e.key === 'Escape') close(); };
+    ov.addEventListener('click', (e) => { if (e.target === ov || e.target.closest('.mb-about-x')) close(); });
+    addEventListener('keydown', onKey);
+    document.body.appendChild(ov);
+    renderExecutive(ov.querySelector('#exec-modal-body'), { modal: true });
+  }
+
+  function executiveExportRows() {
+    const structs = fleet.structures || [];
+    const av = computeParkAvance(structs);
+    const latest = window.shmData?.latest || {};
+    let sensorsOk = 0, sensorsFault = 0, windSum = 0, windN = 0;
+    for (const id in latest) {
+      const s = latest[id];
+      for (const se of (s.sensors || [])) (se.status === 'fault' ? sensorsFault++ : sensorsOk++);
+      if (s.wind != null) { windSum += s.wind; windN++; }
+    }
+    let qTotal = 0, qApproved = 0, qPending = 0, qStructures = 0;
+    const top = structs.map(st => {
+      const sum = window.shmData?.get(st.id);
+      const h = Health.computeHealth(healthInputsFor(st, sum));
+      const q = Calidad.structureSummary?.(st.id);
+      if (q) { qStructures++; qTotal += q.total; qApproved += q.aprobado; qPending += q.pendientes; }
+      return { st, sum, hi: h.hi, q };
+    }).sort((a, b) => (a.hi ?? 101) - (b.hi ?? 101) || (a.st.built ?? 1) - (b.st.built ?? 1)).slice(0, 8);
+    const allInsp = Insp.getAll();
+    let inspOverdue = 0, woOpen = 0;
+    for (const st of structs) {
+      const insps = allInsp[st.id] || [];
+      if (insps.length) {
+        const latestInsp = insps.slice().sort((a, b) => (b.date || '').localeCompare(a.date || ''))[0];
+        if (Insp.dueState(latestInsp.nextDate).overdue) inspOverdue++;
+      }
+      for (const ins of insps) for (const w of (ins.workOrders || [])) if (w.status !== 'cerrado') woOpen++;
+    }
+    const pct = (x) => `${Math.round((x || 0) * 100)}%`;
+    const pctNum = (n, d) => d ? `${Math.round(n / d * 100)}%` : '--';
+    const rows = [
+      ['Indicador', 'Valor', 'Detalle'],
+      ['Avance fisico', pct(av.realPct), `Plan ${pct(av.planPct)}; ${av.nOp}/${av.nTurb} operativas`],
+      ['Calidad', pctNum(qApproved, qTotal), `${qApproved}/${qTotal || 0} protocolos; ${qPending} pendientes`],
+      ['Sensores OK', sensorsOk, `${sensorsFault} en falla`],
+      ['Alarmas activas', structs.filter(st => st.alarm).length, ''],
+      ['Torres en obra', av.nWip, `${av.nFound} en fundacion/inicio`],
+      ['Estructuras con calidad', qStructures, ''],
+      ['Inspecciones vencidas', inspOverdue, ''],
+      ['OT abiertas', woOpen, ''],
+      ['Viento medio', windN ? (windSum / windN).toFixed(1) + ' m/s' : '--', ''],
+      [],
+      ['Estructura', 'HI', 'Avance', 'Calidad', 'f1'],
+      ...top.map(r => [
+        r.st.label || r.st.id,
+        r.hi ?? '--',
+        pct(r.st.built ?? 1),
+        r.q ? pctNum(r.q.aprobado, r.q.total) : '--',
+        r.sum && !r.sum.standby && typeof r.sum.f1 === 'number' ? r.sum.f1.toFixed(3) + ' Hz' : '--',
+      ]),
+    ];
+    return rows;
+  }
+
+  function downloadExecutiveCSV() {
+    const cell = (v) => `"${String(v ?? '').replace(/"/g, '""')}"`;
+    const csv = '\ufeff' + executiveExportRows().map(row => row.map(cell).join(';')).join('\r\n');
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8' }));
+    a.download = `rewind_resumen_ejecutivo_${new Date().toISOString().slice(0, 10)}.csv`;
+    a.style.display = 'none';
+    document.body.appendChild(a);
+    a.click();
+    setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 2000);
+  }
+
+  function openExecutivePDF() {
+    const holder = document.createElement('div');
+    holder.className = 'exec-dash';
+    renderExecutive(holder, { modal: true });
+    const html = `<!doctype html><html lang="${getLang()}"><meta charset="utf-8"><title>Resumen ejecutivo ReWind</title>
+      <style>
+        body{font:13px/1.45 system-ui,-apple-system,Segoe UI,sans-serif;margin:24px;color:#1b2533;background:#fff}
+        .exec-dash{display:flex;flex-direction:column;gap:10px;max-width:820px;margin:0 auto}
+        .exec-head{display:flex;justify-content:space-between;gap:16px;border-bottom:2px solid #cbd5e1;padding-bottom:10px}
+        .exec-kicker{font-size:11px;text-transform:uppercase;letter-spacing:.08em;color:#64748b}.exec-head h3{margin:2px 0 0;font-size:22px}
+        .exec-source,.exec-sec-head span,.exec-map-hint{color:#64748b;font-size:11px}.exec-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:8px}
+        .exec-card,.exec-band div,.exec-section{border:1px solid #cbd5e1;border-radius:6px;padding:10px;background:#f8fafc}.exec-card .k{font-size:10px;text-transform:uppercase;color:#64748b}.exec-card .v{font-size:24px;font-weight:800}.exec-card .s{font-size:11px;color:#64748b}
+        .exec-band{display:grid;grid-template-columns:repeat(6,1fr);gap:6px}.exec-band b{display:block;font-size:17px}.exec-band span{display:block;font-size:10px;color:#64748b}
+        .exec-actions{display:none}.exec-risk{display:grid;grid-template-columns:14px 1fr auto;gap:2px 8px;border:1px solid #e2e8f0;border-radius:6px;padding:7px;background:#fff;margin:4px 0}.exec-dot{width:9px;height:9px;border-radius:50%;margin-top:4px}.exec-r-name{font-weight:700}.exec-r-sub{grid-column:2/4;color:#64748b;font-size:11px}
+        @media print{body{margin:12mm}.exec-section,.exec-card{break-inside:avoid}}
+      </style><body>${holder.innerHTML}<script>setTimeout(()=>print(),250)</script></body></html>`;
+    const w = window.open('', '_blank');
+    if (w) { w.document.open(); w.document.write(html); w.document.close(); }
+    else alert('El navegador bloqueó la ventana de PDF/impresión.');
+  }
+
   function alarmsEditorHTML() {
     const th = Alarms.getThresholds();
     const num = (id, v) => `<input type="number" id="${id}" value="${v}" min="0" step="1">`;
