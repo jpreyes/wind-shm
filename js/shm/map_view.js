@@ -104,7 +104,9 @@ export class MapView {
 
     // Doble-click maximiza / restaura (en vez del zoom por doble-click de Leaflet).
     this.map.doubleClickZoom.disable();
-    this.map.on('dblclick', () => this.onToggleFull());
+    this.map.on('dblclick', (e) => { if (this._handleGisDoubleClick(e)) return; this.onToggleFull(); });
+    this._gisKeyHandler = (e) => this._handleGisKeyDown(e);
+    window.addEventListener('keydown', this._gisKeyHandler, true);
 
     // Recalcular tamaño del mapa cuando cambia el contenedor.
     if (window.ResizeObserver) { this._ro = new ResizeObserver(() => this.map && this.map.invalidateSize()); this._ro.observe(this.el); }
@@ -585,6 +587,13 @@ export class MapView {
     this._refreshGisToolState();
   }
 
+  _exitGisTool() {
+    this._gisTool = '';
+    this._gisHoverLatLng = null;
+    this.el.classList.toggle('mv-gis-editing', false);
+    this._refreshGisToolState();
+  }
+
   _handleGisMapClick(e) {
     const tool = this._gisTool;
     if (!tool) return false;
@@ -615,6 +624,45 @@ export class MapView {
     if (this._gisTool !== 'road' && this._gisTool !== 'parcel') return;
     this._gisHoverLatLng = [e.latlng.lat, e.latlng.lng];
     this._drawDraft();
+  }
+
+  _gisDraftReady() {
+    if (!this._gisDraft?.coords?.length) return false;
+    const min = this._gisDraft.type === 'home' ? 1 : this._gisDraft.type === 'parcel' ? 3 : 2;
+    return this._gisDraft.coords.length >= min;
+  }
+
+  _stopGisEvent(e) {
+    e?.preventDefault?.();
+    e?.stopPropagation?.();
+    e?.stopImmediatePropagation?.();
+    if (e?.originalEvent) {
+      e.originalEvent.preventDefault?.();
+      e.originalEvent.stopPropagation?.();
+      e.originalEvent.stopImmediatePropagation?.();
+    }
+  }
+
+  _handleGisDoubleClick(e) {
+    if (!this._gisTool && !this._gisDraft) return false;
+    this._stopGisEvent(e);
+    if (this._gisDraftReady()) this._finishGisDraft();
+    this._exitGisTool();
+    return true;
+  }
+
+  _handleGisKeyDown(e) {
+    if (!this._gisTool && !this._gisDraft) return false;
+    if (e.key !== 'Escape' && e.key !== 'Enter') return false;
+    this._stopGisEvent(e);
+    if (e.key === 'Enter') {
+      if (this._gisDraftReady()) this._finishGisDraft();
+      this._exitGisTool();
+      return true;
+    }
+    if (this._gisDraft) this._cancelGisDraft();
+    this._exitGisTool();
+    return true;
   }
 
   _drawDraft() {

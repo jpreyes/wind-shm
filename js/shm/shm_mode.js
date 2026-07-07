@@ -12,7 +12,7 @@ import { FleetView } from './fleet_view.js?v=310';
 import { DataSource } from './data_source.js?v=310';
 import { computeTwin } from './digital_twin.js?v=310';
 import { ParkManager, loadParksStore } from './parks.js?v=310';
-import { MapView } from './map_view.js?v=311';
+import { MapView } from './map_view.js?v=312';
 import { defaultStages, builtFromStages } from './parks_data_caman.js?v=310';
 import { compassRoseSVG } from './compass.js?v=310';
 import { buildAvanceHUD } from './avance_hud.js?v=310';
@@ -33,7 +33,7 @@ import { esc, safeUrl } from './util.js?v=310';
 import { t, getLang, setLang } from './i18n.js?v=310';
 
 const F1_BASE = { turbine: 0.283, hv: 1.6 };
-const REWIND_VER = 'v311';   // versión visible del build (subir junto al cache-bust)
+const REWIND_VER = 'v312';   // versión visible del build (subir junto al cache-bust)
 const FS = 62.5;   // frecuencia de muestreo de la señal (Hz), igual que shm_worker.js
 // Clasificador ML de daño (0..4)
 const CLS = ['Sin daño', 'Leve', 'Moderado', 'Alto', 'Muy alto'];
