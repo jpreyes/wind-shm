@@ -10,7 +10,7 @@
 // Las coordenadas lon/lat se conservan en cada estructura para el futuro mapa 2D.
 // ─────────────────────────────────────────────────────────────────────────────
 
-import { CAMAN_ROADS } from './caman_roads.js?v=318';
+import { CAMAN_ROADS } from './caman_roads.js?v=319';
 
 export const CAMAN_CENTER = { lon: -72.972458, lat: -39.963302 };
 export const LAYOUT_SCALE = 0.35;            // 1 m real → 0.35 u de escena
@@ -94,6 +94,8 @@ const STAGE_NAMES = {
   turbine: ['Fundación', 'Montaje de fuste', 'Góndola', 'Rotor', 'Puesta en marcha'],
   hv: ['Fundación', 'Montaje de celosía', 'Tendido de conductores', 'Energización'],
   camino: ['Despeje y limpieza', 'Movimiento de tierras', 'Sub-base granular', 'Base granular', 'Carpeta de rodado'],
+  zanja: ['Excavación de zanja', 'Cama de arena', 'Ductos / cable MT', 'Relleno y compactado', 'Malla y señalización'],
+  plataforma: ['Despeje y escarpe', 'Mejoramiento de suelo', 'Base granular', 'Compactación y nivel'],
 };
 const isoDaysAgo = (d) => new Date(Date.now() - d * 864e5).toISOString().slice(0, 10);
 
@@ -180,22 +182,56 @@ export function buildCamanPark(makeId) {
     const p = toScene(t.lon, t.lat); const stages = defaultStages('hv', builtFor(t.name, [0.05, 0.4]));
     return { id: t.name, label: t.name, x: p.x, z: p.z, yaw: 0, zone: zoneId['Oriente'], lat: t.lat, lon: t.lon, built: builtFromStages(stages), stages };
   });
-  return { id: makeId('p'), name: 'Camán I', zones, turbines, hv, caminos: camanCaminos(zones[0].id) };
+  return { id: makeId('p'), name: 'Camán I', zones, turbines, hv, caminos: camanObraLineal(zones[0].id) };
 }
 
-// Caminos interiores (estructura LINEAL): reusa la geometría real del KMZ
-// (CAMAN_ROADS). Cada polilínea = un camino, con su WBS de capas y avance por
-// tramos. Se siembran parcialmente construidos para exhibir el 4D lineal.
-// Exportada para poder MIGRAR parques ya persistidos que aún no tienen caminos.
+// ── Obra civil LINEAL / de área (reusa geometría real del KMZ) ────────────────
+// Estructuras que se «construyen» a lo largo de un path: caminos (vialidad),
+// zanjas (colectora de MT) y plataformas (pads de grúa). Cada una con su WBS de
+// capas y avance parcial para exhibir el 4D lineal. Exportadas para MIGRAR
+// parques ya persistidos. RDS-PP (IEC 81346) por estructura para la trazabilidad.
 export function camanCaminos(zoneId) {
   return CAMAN_ROADS.map((seg, i) => {
     const path = seg.map(([lo, la]) => toScene(lo, la));
     const stages = defaultStages('camino', i === 0 ? 0.6 : 0.35);
     const [lon0, lat0] = seg[0] || [CAMAN_CENTER.lon, CAMAN_CENTER.lat];
     return {
-      id: `CAM-${String(i + 1).padStart(2, '0')}`, label: `Camino interior ${i + 1}`,
-      path, width: 7, zone: zoneId || null, lat: lat0, lon: lon0,
-      built: builtFromStages(stages), stages,
+      id: `CAM-${String(i + 1).padStart(2, '0')}`, type: 'camino', label: `Camino interior ${i + 1}`,
+      rdspp: `=CAM.${String(i + 1).padStart(2, '0')}`, path, width: 7, zone: zoneId || null,
+      lat: lat0, lon: lon0, built: builtFromStages(stages), stages,
     };
   });
+}
+// Zanja de la colectora: corre a lo largo del mismo trazado vial (cable de MT).
+export function camanZanjas(zoneId) {
+  return CAMAN_ROADS.map((seg, i) => {
+    const path = seg.map(([lo, la]) => toScene(lo, la));
+    const stages = defaultStages('zanja', 0.45);
+    const [lon0, lat0] = seg[0] || [CAMAN_CENTER.lon, CAMAN_CENTER.lat];
+    return {
+      id: `ZAN-${String(i + 1).padStart(2, '0')}`, type: 'zanja', label: `Colectora — zanja ${i + 1}`,
+      rdspp: `=ZAN.${String(i + 1).padStart(2, '0')}`, path, width: 3, zone: zoneId || null,
+      lat: lat0, lon: lon0, built: builtFromStages(stages), stages,
+    };
+  });
+}
+// Plataformas de grúa/montaje: un pad corto y ancho junto a torres representativas.
+export function camanPlataformas(zoneId) {
+  const picks = ['T03', 'T15', 'T31'], byName = Object.fromEntries(CAMAN_AG.map(t => [t.name, t]));
+  return picks.map((name, i) => {
+    const t = byName[name]; if (!t) return null;
+    const p = toScene(t.lon, t.lat), half = 17, n = 8;
+    // Pad al costado de la torre: path subdividido para que el 4D lo «vierta» gradual.
+    const path = Array.from({ length: n + 1 }, (_, k) => ({ x: p.x - half + (2 * half) * k / n, z: p.z + 30 }));
+    const stages = defaultStages('plataforma', [0.9, 0.5, 0.2][i] ?? 0.5);
+    return {
+      id: `PLT-${name}`, type: 'plataforma', label: `Plataforma ${name}`,
+      rdspp: `=PLT.${name}`, path, width: 34, zone: zoneId || null,
+      lat: t.lat, lon: t.lon, built: builtFromStages(stages), stages,
+    };
+  }).filter(Boolean);
+}
+// Toda la obra civil lineal del parque (para siembra y migración).
+export function camanObraLineal(zoneId) {
+  return [...camanCaminos(zoneId), ...camanZanjas(zoneId), ...camanPlataformas(zoneId)];
 }

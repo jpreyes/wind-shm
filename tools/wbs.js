@@ -44,6 +44,21 @@ export const DEFAULT_WBS = {
     { id: 'base',     nombre: 'Base granular',          geom: 'base',     peso: 1 },
     { id: 'carpeta',  nombre: 'Carpeta de rodado',      geom: 'carpeta',  peso: 1 },
   ],
+  // Zanja de la colectora (cable de MT enterrado): también LINEAL, por tramos.
+  zanja: [
+    { id: 'excavacion', nombre: 'Excavación de zanja',  geom: 'excavacion', peso: 1 },
+    { id: 'cama',       nombre: 'Cama de arena',        geom: 'cama',       peso: 1 },
+    { id: 'ducto',      nombre: 'Ductos / cable MT',    geom: 'ducto',      peso: 1 },
+    { id: 'relleno',    nombre: 'Relleno y compactado', geom: 'relleno',    peso: 1 },
+    { id: 'senal',      nombre: 'Malla y señalización', geom: 'senal',      peso: 1 },
+  ],
+  // Plataforma de grúa / montaje (área): se «arma» por capas como un pad corto.
+  plataforma: [
+    { id: 'despeje',      nombre: 'Despeje y escarpe',   geom: 'despeje',      peso: 1 },
+    { id: 'mejoramiento', nombre: 'Mejoramiento de suelo', geom: 'mejoramiento', peso: 1 },
+    { id: 'granular',     nombre: 'Base granular',       geom: 'granular',     peso: 1 },
+    { id: 'compactacion', nombre: 'Compactación y nivel', geom: 'compactacion', peso: 1 },
+  ],
 };
 
 // Clona la lista de partidas por defecto de un tipo (para editarla sin mutar la base).
@@ -72,6 +87,14 @@ export const SYNONYMS = {
   subbase:      ['sub base', 'subbase', 'sub-base', 'subrasante'],
   base:         ['base granular', 'base', 'estabilizado'],
   carpeta:      ['carpeta', 'rodado', 'sello', 'asfalto', 'imprimacion', 'capa de rodadura', 'pavimento'],
+  excavacion:   ['excavacion', 'zanja', 'excavacion de zanja', 'trench'],
+  cama:         ['cama de arena', 'cama', 'lecho de arena', 'bedding'],
+  ducto:        ['ducto', 'ductos', 'cable', 'cable mt', 'tendido de cable', 'conduit'],
+  relleno:      ['relleno', 'compactado', 'relleno y compactado', 'backfill'],
+  senal:        ['malla', 'senalizacion', 'cinta', 'malla de advertencia', 'warning mesh'],
+  mejoramiento: ['mejoramiento', 'mejoramiento de suelo', 'reemplazo', 'soil improvement'],
+  granular:     ['base granular', 'granular', 'gravilla', 'ripio'],
+  compactacion: ['compactacion', 'nivelacion', 'nivel', 'compactado y nivel'],
 };
 
 // Literales que hacen «match» a una partida: sus `match` explícitos (editados en el

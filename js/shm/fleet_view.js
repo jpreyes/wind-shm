@@ -7,14 +7,25 @@
 // ─────────────────────────────────────────────────────────────────────────────
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
-import { createTurbine, TOWER_H } from './turbine_mesh.js?v=318';
-import { createSubstationTower, groundCable, overheadLine } from './structures.js?v=318';
-import { toScene, CAMAN_CENTER, LAYOUT_SCALE, defaultStages, builtFromStages } from './parks_data_caman.js?v=318';
-import { CAMAN_ROADS } from './caman_roads.js?v=318';
-import { solarPosition, dateFromLocal, sunSceneDir } from './solar.js?v=318';
+import { createTurbine, TOWER_H } from './turbine_mesh.js?v=319';
+import { createSubstationTower, groundCable, overheadLine } from './structures.js?v=319';
+import { toScene, CAMAN_CENTER, LAYOUT_SCALE, defaultStages, builtFromStages } from './parks_data_caman.js?v=319';
+import { CAMAN_ROADS } from './caman_roads.js?v=319';
+import { solarPosition, dateFromLocal, sunSceneDir } from './solar.js?v=319';
 
 const SPACING = 235;
 const TOWER_SCALE = 2.2;   // agranda las torres (vista esquemática) para que destaquen sobre el relieve
+
+// Estructuras LINEALES / de área (obra civil): misma cinta 3D que sigue el terreno,
+// difieren en ancho, color y WBS. camino = vialidad; zanja = colectora (cable);
+// plataforma = pad de grúa/montaje (tramo corto y ancho). El 4D las «construye» a
+// lo largo del path (drawRange), no bottom-up.
+const LINEAR_TYPES = new Set(['camino', 'zanja', 'plataforma']);
+const LINEAR_STYLE = {
+  camino:     { width: 7,  color: 0x8b8f96 },
+  zanja:      { width: 3,  color: 0x6b4f3a },
+  plataforma: { width: 34, color: 0xa89a7c },
+};
 
 // Dispersión pseudo-aleatoria pero determinista (estable entre re-layouts).
 function jitter(n, seed) { const v = Math.sin(n * seed) * 43758.5453; return (v - Math.floor(v) - 0.5); }
@@ -270,7 +281,7 @@ export class FleetView {
   // ── Relieve conceptual (capa de terreno) ─────────────────────────────────────
   // Carga el DEM vendorizado y añade la malla (oculta hasta activarla).
   async loadTerrain(url) {
-    const { Terrain } = await import('./terrain.js?v=318');
+    const { Terrain } = await import('./terrain.js?v=319');
     this._TerrainClass = Terrain;                     // para reconstruir al cambiar de escala
     const dem = await (await fetch(url)).json();
     this.terrain = new Terrain(dem, { vex: 1.5 });   // relieve exagerado (esquemático)
@@ -285,7 +296,7 @@ export class FleetView {
   // Se llama una vez al cargar el relieve; la elevación NO depende de su visibilidad.
   applyElevation() {
     for (const st of this.structures) {
-      if (st.type === 'camino') { this._buildRoadMeshes(st); continue; }   // el camino sigue el terreno por vértice
+      if (LINEAR_TYPES.has(st.type)) { this._buildRoadMeshes(st); continue; }   // la obra lineal sigue el terreno por vértice
       st.group.position.y = this.groundY(st.group.position.x, st.group.position.z);
       this.setProgress(st.id, st.built);     // los planos de corte dependen de la cota base
     }
@@ -467,11 +478,13 @@ export class FleetView {
   // escena). El 4D la «construye» a lo largo del tramo (drawRange), no bottom-up.
   addRoad(opts = {}) {
     const path = (opts.path || []).filter(Boolean).map(p => ({ x: p.x, z: p.z }));
+    const type = LINEAR_TYPES.has(opts.type) ? opts.type : 'camino';
+    const style = LINEAR_STYLE[type];
     const st = {
-      id: opts.id, type: 'camino', label: opts.label || opts.id,
-      group: new THREE.Group(), path, width: opts.width || 7,
+      id: opts.id, type, label: opts.label || opts.id, rdspp: opts.rdspp || null,
+      group: new THREE.Group(), path, width: opts.width || style.width,
       sensors: [], dim: 0,
-      mat: new THREE.MeshStandardMaterial({ color: 0x8b8f96, roughness: 0.98, metalness: 0, side: THREE.DoubleSide }),
+      mat: new THREE.MeshStandardMaterial({ color: opts.color != null ? opts.color : style.color, roughness: 0.98, metalness: 0, side: THREE.DoubleSide }),
       built: opts.built != null ? opts.built : 1, stages: opts.stages || null,
       zone: opts.zone || null, lat: opts.lat, lon: opts.lon,
       cumLen: [], totalLen: 1, segCount: Math.max(0, path.length - 1),
@@ -562,7 +575,7 @@ export class FleetView {
   // Agranda la estructura (vista esquemática) sin agrandar su etiqueta flotante.
   // Idempotente: la etiqueta se compensa desde su escala base (no acumula al re-escalar).
   _applyScale(st, k = TOWER_SCALE) {
-    if (st.type === 'camino') return;   // el camino va a escala real (1:1), no esquemática
+    if (LINEAR_TYPES.has(st.type)) return;   // obra civil lineal va a escala real (1:1), no esquemática
     st.group.scale.setScalar(k);
     if (st._label) { if (st._labelBase) st._label.scale.copy(st._labelBase).multiplyScalar(1 / k); st._label.position.set(0, 2 / k, 14 / k); }
   }
@@ -622,8 +635,9 @@ export class FleetView {
     const st = this.getStructure(structId); if (!st) return;
     built = Math.max(0, Math.min(1, built ?? st.built ?? 1));
     st.built = built;
-    // Camino (lineal) → se «construye» a lo largo del tramo, no bottom-up.
-    if (st.type === 'camino') { this._setRoadProgress4D(st, built); return; }
+    // Estructura lineal (camino/zanja/plataforma) → se «construye» a lo largo del
+    // tramo, no bottom-up.
+    if (LINEAR_TYPES.has(st.type)) { this._setRoadProgress4D(st, built); return; }
     // Turbinas con partidas por componente → llenado 4D por componente (Frente 1).
     if (st.type === 'turbine' && st.c4d && st.stages && st.stages.length >= 4) { this._setTurbineProgress4D(st); return; }
     // «Operativa»: turbina con rotor instalado (gira); torre AT cuando está completa.
@@ -703,6 +717,8 @@ export class FleetView {
       turbine: ['fundacion', 'fuste', 'gondola', 'rotor', 'cableado'],
       hv: ['fundacion', 'celosia', 'conductores', 'energizacion'],
       camino: ['despeje', 'tierras', 'subbase', 'base', 'carpeta'],
+      zanja: ['excavacion', 'cama', 'ducto', 'relleno', 'senal'],
+      plataforma: ['despeje', 'mejoramiento', 'granular', 'compactacion'],
     };
     let touched = 0, applied = 0;
     for (const st of this.structures) {
@@ -876,7 +892,7 @@ export class FleetView {
       this.rebuildCables();
     }
     for (const r of (p?.caminos || [])) {
-      const rd = this.addRoad({ id: r.id, label: r.label, path: r.path, width: r.width, built: r.built, stages: r.stages, lat: r.lat, lon: r.lon });
+      const rd = this.addRoad({ id: r.id, type: r.type, label: r.label, path: r.path, width: r.width, built: r.built, stages: r.stages, lat: r.lat, lon: r.lon, rdspp: r.rdspp });
       rd.zone = r.zone || null;
     }
     this.onChange = oc; this.onLayoutChange = ol;
@@ -1052,7 +1068,7 @@ export class FleetView {
         if (mat.emissive) mat.emissive.setRGB(rp, selGlow * 0.45, selGlow);
       }
       // Oscilación leve de la punta por el viento (sway sobre la base, ejes X/Z)
-      if (!this.paused && st.type !== 'camino') {   // el camino no se mece
+      if (!this.paused && !LINEAR_TYPES.has(st.type)) {   // la obra civil lineal no se mece
         if (st._sw === undefined) st._sw = Math.random() * 6.28;
         const amp = st.type === 'hv' ? 0.0025 : 0.006;
         st.group.rotation.z = amp * Math.sin(tt * 0.9 + st._sw);

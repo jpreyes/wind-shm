@@ -8,35 +8,35 @@
 //   inspecciones y señal temporal EN VIVO desde un Web Worker (DataSource).
 // Recortes (modelado) los hace shm.css ocultando, no borrando.
 // ─────────────────────────────────────────────────────────────────────────────
-import { FleetView } from './fleet_view.js?v=318';
-import { DataSource } from './data_source.js?v=318';
-import { computeTwin } from './digital_twin.js?v=318';
-import { ParkManager, loadParksStore } from './parks.js?v=318';
-import { MapView } from './map_view.js?v=318';
-import { defaultStages, builtFromStages } from './parks_data_caman.js?v=318';
-import { fftMag } from './dsp.js?v=318';
-import { buildSunControl, buildCompass, buildNameplate, buildBanner, initPanelResize } from './viewport_chrome.js?v=318';
-import { buildAvanceHUD } from './avance_hud.js?v=318';
-import { renderAvance, computeParkAvance } from './avance_dashboard.js?v=318';
-import * as Insp from './inspection.js?v=318';
-import * as Fat from './fatigue.js?v=318';
-import * as Instr from './instrumentation.js?v=318';
-import * as Calidad from './calidad.js?v=318';
-import { showBackendConfig } from './backend_ui.js?v=318';
-import { backendActive, pushStructures } from './backend_sync.js?v=318';
-import { authRequired, loggedIn, isEditor } from './auth.js?v=318';
-import { requireLogin, userChipHTML, wireUserChip } from './auth_ui.js?v=318';
-import * as Hist from './history.js?v=318';
-import * as Health from './health.js?v=318';
-import * as Bench from './benchmark.js?v=318';
-import * as Alarms from './alarms.js?v=318';
-import { METEO_CAMAN } from './meteo_caman.js?v=318';
-import { ReplaySource } from './replay.js?v=318';
-import { esc, safeUrl } from './util.js?v=318';
-import { t, getLang, setLang } from './i18n.js?v=318';
+import { FleetView } from './fleet_view.js?v=319';
+import { DataSource } from './data_source.js?v=319';
+import { computeTwin } from './digital_twin.js?v=319';
+import { ParkManager, loadParksStore } from './parks.js?v=319';
+import { MapView } from './map_view.js?v=319';
+import { defaultStages, builtFromStages } from './parks_data_caman.js?v=319';
+import { fftMag } from './dsp.js?v=319';
+import { buildSunControl, buildCompass, buildNameplate, buildBanner, initPanelResize } from './viewport_chrome.js?v=319';
+import { buildAvanceHUD } from './avance_hud.js?v=319';
+import { renderAvance, computeParkAvance } from './avance_dashboard.js?v=319';
+import * as Insp from './inspection.js?v=319';
+import * as Fat from './fatigue.js?v=319';
+import * as Instr from './instrumentation.js?v=319';
+import * as Calidad from './calidad.js?v=319';
+import { showBackendConfig } from './backend_ui.js?v=319';
+import { backendActive, pushStructures } from './backend_sync.js?v=319';
+import { authRequired, loggedIn, isEditor } from './auth.js?v=319';
+import { requireLogin, userChipHTML, wireUserChip } from './auth_ui.js?v=319';
+import * as Hist from './history.js?v=319';
+import * as Health from './health.js?v=319';
+import * as Bench from './benchmark.js?v=319';
+import * as Alarms from './alarms.js?v=319';
+import { METEO_CAMAN } from './meteo_caman.js?v=319';
+import { ReplaySource } from './replay.js?v=319';
+import { esc, safeUrl } from './util.js?v=319';
+import { t, getLang, setLang } from './i18n.js?v=319';
 
 const F1_BASE = { turbine: 0.283, hv: 1.6 };
-const REWIND_VER = 'v318';   // versión visible del build (subir junto al cache-bust)
+const REWIND_VER = 'v319';   // versión visible del build (subir junto al cache-bust)
 const FS = 62.5;   // frecuencia de muestreo de la señal (Hz), igual que shm_worker.js
 // Clasificador ML de daño (0..4)
 const CLS = ['Sin daño', 'Leve', 'Moderado', 'Alto', 'Muy alto'];
@@ -341,7 +341,7 @@ async function boot() {
   // ── Relieve conceptual del terreno (DEM vendorizado) — encendido por defecto ─
   setLoad(88, 'Cargando relieve…'); await delay(40);
   try {
-    await fleet.loadTerrain('data/caman_dem.json?v=318');
+    await fleet.loadTerrain('data/caman_dem.json?v=319');
     fleet.setTerrainVisible(true);
     document.getElementById('shm-relieve-tool')?.classList.add('active');
   } catch (e) { console.warn('[shm] relieve no disponible', e); }

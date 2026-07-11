@@ -23,8 +23,8 @@ import { defaultWbs, wbsProgress, partidaForProtocol } from '../../tools/wbs.js'
 import { readXlsx } from '../../lib/xlsx_lite.mjs';
 import { analyzeWorkbook, proposeMapping, distinctValues, readByProfile, guessCanon, BUILTIN_PROFILES, FIELDS as QP_FIELDS, CANON_STATES } from '../../tools/quality_profile.mjs';
 import { FRAMEWORK, STATUS_NORMS, ENSAYO_NORMS, normLabel, normForEnsayo } from '../../tools/norms_catalog.mjs';
-import { backendActive, pushQuality, pullQuality, pushWbs, pushProfile, deleteProtocoloRemote, debouncedPush } from './backend_sync.js?v=318';
-import { t } from './i18n.js?v=318';
+import { backendActive, pushQuality, pullQuality, pushWbs, pushProfile, deleteProtocoloRemote, debouncedPush } from './backend_sync.js?v=319';
+import { t } from './i18n.js?v=319';
 
 const STORE = 'rewind.calidad.v1';
 const XLSX_MIME = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
@@ -94,6 +94,8 @@ const GEOMS = {
   turbine: [['fundacion', 'Fundación'], ['fuste', 'Fuste'], ['gondola', 'Góndola'], ['rotor', 'Rotor'], ['cableado', 'Cableado / P.M.']],
   hv: [['fundacion', 'Fundación'], ['celosia', 'Celosía'], ['conductores', 'Conductores'], ['energizacion', 'Energización']],
   camino: [['despeje', 'Despeje'], ['tierras', 'Mov. tierras'], ['subbase', 'Sub-base'], ['base', 'Base'], ['carpeta', 'Carpeta']],
+  zanja: [['excavacion', 'Excavación'], ['cama', 'Cama arena'], ['ducto', 'Ductos/cable'], ['relleno', 'Relleno'], ['senal', 'Señalización']],
+  plataforma: [['despeje', 'Despeje'], ['mejoramiento', 'Mejoramiento'], ['granular', 'Granular'], ['compactacion', 'Compactación']],
 };
 
 // Áreas/hitos distintos hallados en los datos + a qué partida mapea cada uno hoy

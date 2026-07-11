@@ -8,7 +8,7 @@
 // El ParkManager mantiene el store, sincroniza con el FleetView y pinta el árbol.
 // ─────────────────────────────────────────────────────────────────────────────
 
-import { buildCamanPark, camanCaminos } from './parks_data_caman.js?v=318';
+import { buildCamanPark, camanObraLineal } from './parks_data_caman.js?v=319';
 
 const KEY = 'rewind-parks';
 const SEED = 'caman-i-v6';      // sello de siembra; al cambiarlo se re-siembra el store (v6: etapas con % de avance)
@@ -21,9 +21,14 @@ export function loadParksStore() {
   let s = null;
   try { s = JSON.parse(localStorage.getItem(KEY)); } catch {}
   if (s && s.seed === SEED && Array.isArray(s.parks) && s.parks.length) {
-    // Migración no destructiva: el parque Camán ya persistido puede no tener
-    // caminos (tipo agregado en Fase 3) → se los inyectamos sin borrar ediciones.
-    for (const p of s.parks) if (p.name === 'Camán I' && !p.caminos) p.caminos = camanCaminos(p.zones?.[0]?.id);
+    // Migración no destructiva: el parque Camán ya persistido puede no tener toda
+    // la obra civil lineal (caminos/zanjas/plataformas — Fase 3) → la (re)inyectamos
+    // sin tocar torres/AT ni ediciones. Detecta si faltan los subtipos nuevos.
+    for (const p of s.parks) {
+      if (p.name !== 'Camán I') continue;
+      const hasSub = (t) => (p.caminos || []).some(c => (c.type || 'camino') === t);
+      if (!p.caminos || !hasSub('zanja') || !hasSub('plataforma')) p.caminos = camanObraLineal(p.zones?.[0]?.id);
+    }
     return s;
   }
   const park = buildCamanPark(uid);
