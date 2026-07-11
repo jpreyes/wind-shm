@@ -1,7 +1,7 @@
 # ReWind — Estado actual / Handoff de sesión
 
 > Documento vivo para **retomar el trabajo en otra sesión** sin perder contexto.
-> Última actualización: **2026-07-11** · versión desplegada: **v310** (GitHub Pages).
+> Última actualización: **2026-07-11** · versión desplegada: **v313** (GitHub Pages).
 > **Plan activo:** [`docs/roadmap-maestro.md`](roadmap-maestro.md) (ordenado por prioridad:
 > auth → GUI → estructuras/fases → sensor real; integra la auditoría externa).
 > Detalle de módulos por fase: [`docs/planes/frente-6-gestion-ciclo-vida.md`](planes/frente-6-gestion-ciclo-vida.md).
@@ -19,7 +19,16 @@ contratista-agnóstico**, **catálogo normativo**, y un **backend Supabase Sprin
 (mock-first) que JP está **conectando a su proyecto real ahora**. Se abrió el
 **Frente 6** (reorganizar la app por fases del ciclo de vida).
 
-**Versión:** v310 · REWIND_VER `v310` · `sw.js` CACHE `v267`.
+**Versión:** v313 · REWIND_VER `v313` · `sw.js` CACHE `v268`.
+
+> **Fase 1 (Auth) — código listo (v313).** Login Supabase correo+clave
+> (`js/shm/auth.js` + `auth_ui.js`), token del usuario en los headers de
+> `backend.js`, gate que bloquea el boot con Supabase real sin sesión, rol
+> `viewer`→solo-lectura, chip de usuario en la barra. Sin backend real
+> (sim/mock) **no** pide login. **Falta el cierre operativo que hace JP en
+> Supabase:** desactivar signup público, crear usuarios + fila en `members`,
+> correr `backend/supabase/rls_close.sql`, fijar duración de sesión. Detalle en
+> [`roadmap-maestro.md`](roadmap-maestro.md) Fase 1.
 
 ---
 

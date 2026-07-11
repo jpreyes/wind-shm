@@ -34,17 +34,25 @@
   y `--check` de ESM en cada push (responde al "sin CI/sin tests" del audit; los tests
   YA existen, solo faltaba correrlos en CI).
 
-## FASE 1 — Backend Auth + cierre de seguridad · 3–5 días  *(prioridad #1 de JP)*
+## FASE 1 — Backend Auth + cierre de seguridad · 3–5 días  *(prioridad #1 de JP)* — **✅ código listo (v313); falta el cierre operativo en Supabase)**
 Cierra el gap "sin auth / RLS abierto" y el "sin backend" que el audit marca como crítico.
-- [ ] **Supabase Auth**: login por **correo + clave** (y magic-link opcional), signup,
-  logout, sesión persistente. UI de login en `js/shm/` (no manejar claves en claro
-  fuera de Supabase Auth).
-- [ ] Pasar el token de sesión al cliente `backend.js` (Authorization: Bearer del usuario,
-  no la anon key sola) → los requests corren como `authenticated`.
-- [ ] **Roles** `members(role)` viewer/editor/admin; **revertir `rls_pilot.sql`** a las
-  políticas `to authenticated` de `schema.sql` (escritura solo editor/admin).
-- [ ] Conectar los roles reales con el gating de UI que ya existe (`?role=viewer`, R-38).
-- [ ] Indicador de usuario/rol/estado de sync en la barra.
+Modelo elegido con JP: **"provisioning cerrado"** — JP crea los usuarios y reparte las
+claves (sin signup público); duración de sesión **configurable por JP** (Supabase Auth →
+token expiry). Sesión en localStorage; token firmado con expiración → caduca solo.
+- [x] **Supabase Auth**: login por **correo + clave**, logout, sesión persistente con
+  refresh proactivo — `js/shm/auth.js` (sin supabase-js, fetch a `/auth/v1/token`).
+- [x] Pasar el token de sesión a `backend.js` (Authorization: Bearer del usuario, no la
+  anon key sola) → los requests corren como `authenticated`. Headers dinámicos.
+- [x] **Gate de login** que bloquea el boot con Supabase real sin sesión; chip de
+  usuario (correo·rol) en la barra → cerrar sesión — `js/shm/auth_ui.js`.
+- [x] **Roles** `members(role)`: rol `viewer` de la sesión activa el modo solo-lectura
+  (además del `?role=viewer` manual, R-38). `rls_close.sql` restaura `read_auth` /
+  `write_editor`.
+- [ ] **(operativo, lo hace JP en Supabase):** desactivar signup público (Auth → Email
+  → *Allow new users to sign up* OFF), crear usuarios + su fila en `members(role)`,
+  correr [`backend/supabase/rls_close.sql`](../backend/supabase/rls_close.sql) para
+  cerrar el RLS piloto. Fijar la duración de sesión (Access/Refresh token expiry).
+- [ ] (opcional) indicador de estado de sync en la barra (usar `lastPushAt()`).
 - **Cierre:** dos usuarios con roles distintos; el viewer no puede escribir; RLS cerrado.
 
 ## FASE 2 — GUI / UX · 1–2 semanas  *(prioridad #2 de JP; = Frente 6 UX + audit a11y)*
