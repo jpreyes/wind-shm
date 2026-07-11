@@ -188,6 +188,8 @@ const DICT = {
     // Selección (detalle)
     'det.structure': 'Estructura', 'det.type': 'Tipo',
     'det.typeHV': 'Torre de alta tensión', 'det.typeTurbine': 'Aerogenerador',
+    'det.typeCamino': 'Camino interior', 'det.typeZanja': 'Zanja (colectora)', 'det.typePlataforma': 'Plataforma de montaje',
+    'det.rdspp': 'Designación (RDS-PP)', 'det.length': 'Longitud', 'det.progress': 'Avance de obra',
     'det.height': 'Altura', 'det.power': 'Potencia', 'det.sensors': 'Sensores',
     'det.f1twin': 'f₁ gemelo digital', 'det.f1now': 'f₁ actual', 'det.calc': '… calculando',
     'det.wind': 'Velocidad del viento', 'det.temp': 'Temperatura', 'det.orient': 'Orientación',
@@ -597,6 +599,8 @@ const DICT = {
     'units.years': 'yr',
     'det.structure': 'Structure', 'det.type': 'Type',
     'det.typeHV': 'High-voltage tower', 'det.typeTurbine': 'Wind turbine',
+    'det.typeCamino': 'Access road', 'det.typeZanja': 'Trench (collector)', 'det.typePlataforma': 'Assembly platform',
+    'det.rdspp': 'Designation (RDS-PP)', 'det.length': 'Length', 'det.progress': 'Construction progress',
     'det.height': 'Height', 'det.power': 'Power', 'det.sensors': 'Sensors',
     'det.f1twin': 'f₁ digital twin', 'det.f1now': 'f₁ current', 'det.calc': '… computing',
     'det.wind': 'Wind speed', 'det.temp': 'Temperature', 'det.orient': 'Orientation',

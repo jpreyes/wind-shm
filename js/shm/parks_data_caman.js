@@ -10,7 +10,7 @@
 // Las coordenadas lon/lat se conservan en cada estructura para el futuro mapa 2D.
 // ─────────────────────────────────────────────────────────────────────────────
 
-import { CAMAN_ROADS } from './caman_roads.js?v=319';
+import { CAMAN_ROADS } from './caman_roads.js?v=320';
 
 export const CAMAN_CENTER = { lon: -72.972458, lat: -39.963302 };
 export const LAYOUT_SCALE = 0.35;            // 1 m real → 0.35 u de escena
@@ -176,11 +176,11 @@ export function buildCamanPark(makeId) {
   const zoneId = Object.fromEntries(zones.map(z => [z.name, z.id]));
   const turbines = CAMAN_AG.map(t => {
     const p = toScene(t.lon, t.lat); const stages = defaultStages('turbine', builtFor(t.name, ZONE_BUILT[t.zone]));
-    return { id: t.name, label: t.name, x: p.x, z: p.z, yaw: 0, zone: zoneId[t.zone], lat: t.lat, lon: t.lon, built: builtFromStages(stages), stages };
+    return { id: t.name, label: t.name, rdspp: `=WTG.${t.name.replace(/\D/g, '')}`, x: p.x, z: p.z, yaw: 0, zone: zoneId[t.zone], lat: t.lat, lon: t.lon, built: builtFromStages(stages), stages };
   });
   const hv = CAMAN_HV.map(t => {
     const p = toScene(t.lon, t.lat); const stages = defaultStages('hv', builtFor(t.name, [0.05, 0.4]));
-    return { id: t.name, label: t.name, x: p.x, z: p.z, yaw: 0, zone: zoneId['Oriente'], lat: t.lat, lon: t.lon, built: builtFromStages(stages), stages };
+    return { id: t.name, label: t.name, rdspp: `=LAT.${t.name.replace(/\D/g, '')}`, x: p.x, z: p.z, yaw: 0, zone: zoneId['Oriente'], lat: t.lat, lon: t.lon, built: builtFromStages(stages), stages };
   });
   return { id: makeId('p'), name: 'Camán I', zones, turbines, hv, caminos: camanObraLineal(zones[0].id) };
 }

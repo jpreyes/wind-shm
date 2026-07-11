@@ -8,35 +8,35 @@
 //   inspecciones y señal temporal EN VIVO desde un Web Worker (DataSource).
 // Recortes (modelado) los hace shm.css ocultando, no borrando.
 // ─────────────────────────────────────────────────────────────────────────────
-import { FleetView } from './fleet_view.js?v=319';
-import { DataSource } from './data_source.js?v=319';
-import { computeTwin } from './digital_twin.js?v=319';
-import { ParkManager, loadParksStore } from './parks.js?v=319';
-import { MapView } from './map_view.js?v=319';
-import { defaultStages, builtFromStages } from './parks_data_caman.js?v=319';
-import { fftMag } from './dsp.js?v=319';
-import { buildSunControl, buildCompass, buildNameplate, buildBanner, initPanelResize } from './viewport_chrome.js?v=319';
-import { buildAvanceHUD } from './avance_hud.js?v=319';
-import { renderAvance, computeParkAvance } from './avance_dashboard.js?v=319';
-import * as Insp from './inspection.js?v=319';
-import * as Fat from './fatigue.js?v=319';
-import * as Instr from './instrumentation.js?v=319';
-import * as Calidad from './calidad.js?v=319';
-import { showBackendConfig } from './backend_ui.js?v=319';
-import { backendActive, pushStructures } from './backend_sync.js?v=319';
-import { authRequired, loggedIn, isEditor } from './auth.js?v=319';
-import { requireLogin, userChipHTML, wireUserChip } from './auth_ui.js?v=319';
-import * as Hist from './history.js?v=319';
-import * as Health from './health.js?v=319';
-import * as Bench from './benchmark.js?v=319';
-import * as Alarms from './alarms.js?v=319';
-import { METEO_CAMAN } from './meteo_caman.js?v=319';
-import { ReplaySource } from './replay.js?v=319';
-import { esc, safeUrl } from './util.js?v=319';
-import { t, getLang, setLang } from './i18n.js?v=319';
+import { FleetView } from './fleet_view.js?v=320';
+import { DataSource } from './data_source.js?v=320';
+import { computeTwin } from './digital_twin.js?v=320';
+import { ParkManager, loadParksStore } from './parks.js?v=320';
+import { MapView } from './map_view.js?v=320';
+import { defaultStages, builtFromStages, LAYOUT_SCALE } from './parks_data_caman.js?v=320';
+import { fftMag } from './dsp.js?v=320';
+import { buildSunControl, buildCompass, buildNameplate, buildBanner, initPanelResize } from './viewport_chrome.js?v=320';
+import { buildAvanceHUD } from './avance_hud.js?v=320';
+import { renderAvance, computeParkAvance } from './avance_dashboard.js?v=320';
+import * as Insp from './inspection.js?v=320';
+import * as Fat from './fatigue.js?v=320';
+import * as Instr from './instrumentation.js?v=320';
+import * as Calidad from './calidad.js?v=320';
+import { showBackendConfig } from './backend_ui.js?v=320';
+import { backendActive, pushStructures } from './backend_sync.js?v=320';
+import { authRequired, loggedIn, isEditor } from './auth.js?v=320';
+import { requireLogin, userChipHTML, wireUserChip } from './auth_ui.js?v=320';
+import * as Hist from './history.js?v=320';
+import * as Health from './health.js?v=320';
+import * as Bench from './benchmark.js?v=320';
+import * as Alarms from './alarms.js?v=320';
+import { METEO_CAMAN } from './meteo_caman.js?v=320';
+import { ReplaySource } from './replay.js?v=320';
+import { esc, safeUrl } from './util.js?v=320';
+import { t, getLang, setLang } from './i18n.js?v=320';
 
 const F1_BASE = { turbine: 0.283, hv: 1.6 };
-const REWIND_VER = 'v319';   // versión visible del build (subir junto al cache-bust)
+const REWIND_VER = 'v320';   // versión visible del build (subir junto al cache-bust)
 const FS = 62.5;   // frecuencia de muestreo de la señal (Hz), igual que shm_worker.js
 // Clasificador ML de daño (0..4)
 const CLS = ['Sin daño', 'Leve', 'Moderado', 'Alto', 'Muy alto'];
@@ -341,7 +341,7 @@ async function boot() {
   // ── Relieve conceptual del terreno (DEM vendorizado) — encendido por defecto ─
   setLoad(88, 'Cargando relieve…'); await delay(40);
   try {
-    await fleet.loadTerrain('data/caman_dem.json?v=319');
+    await fleet.loadTerrain('data/caman_dem.json?v=320');
     fleet.setTerrainVisible(true);
     document.getElementById('shm-relieve-tool')?.classList.add('active');
   } catch (e) { console.warn('[shm] relieve no disponible', e); }
@@ -1242,6 +1242,23 @@ function buildDashboard(panel, fleet, actions) {
   // (Estado por sensores → SHM · evaluación/inspección → Inspección · avance → Obra.)
   function renderDetail() {
     const o = current; if (!o) return;
+    const TYPE_LABEL = { hv: t('det.typeHV'), turbine: t('det.typeTurbine'), camino: t('det.typeCamino'), zanja: t('det.typeZanja'), plataforma: t('det.typePlataforma') };
+    const rdsRow = o.rdspp ? `<div class="row"><span>${t('det.rdspp')}</span><b>${esc(o.rdspp)}</b></div>` : '';
+    // Ficha compacta para obra civil LINEAL (camino/zanja/plataforma): sin altura/
+    // potencia/f1/yaw (son de torre), con longitud y avance.
+    if (['camino', 'zanja', 'plataforma'].includes(o.type)) {
+      const lenM = o.totalLen ? Math.round(o.totalLen / (LAYOUT_SCALE || 0.35)) : null;
+      $('#shm-detail').innerHTML = `
+        <div class="shm-body">
+          <div class="row"><span>${t('det.structure')}</span><b>${esc(o.label)}</b></div>
+          <div class="row"><span>${t('det.type')}</span><b>${TYPE_LABEL[o.type]}</b></div>
+          ${rdsRow}
+          ${lenM ? `<div class="row"><span>${t('det.length')}</span><b>${lenM.toLocaleString()} m</b></div>` : ''}
+          <div class="row"><span>${t('det.progress')}</span><b>${Math.round((o.built || 0) * 100)}%</b></div>
+        </div>
+        ${calidadHitosBlock(o)}`;
+      return;
+    }
     const sum = (window.shmData && window.shmData.get(o.id)) || null;
     const twin = window.shmTwin?.[o.type];
     $('#shm-detail').innerHTML = `
@@ -1249,6 +1266,7 @@ function buildDashboard(panel, fleet, actions) {
       <div class="shm-body">
         <div class="row"><span>${t('det.structure')}</span><b>${esc(o.label)}</b></div>
         <div class="row"><span>${t('det.type')}</span><b>${o.type === 'hv' ? t('det.typeHV') : t('det.typeTurbine')}</b></div>
+        ${rdsRow}
         <div class="row"><span>${t('det.height')}</span><b>${o.height} m</b></div>
         ${o.type === 'turbine' ? `<div class="row"><span>${t('det.power')}</span><b>~3 MW</b></div>` : ''}
         <div class="row"><span>${t('det.sensors')}</span><b id="d-ns">—</b></div>

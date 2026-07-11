@@ -7,11 +7,11 @@
 // ─────────────────────────────────────────────────────────────────────────────
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
-import { createTurbine, TOWER_H } from './turbine_mesh.js?v=319';
-import { createSubstationTower, groundCable, overheadLine } from './structures.js?v=319';
-import { toScene, CAMAN_CENTER, LAYOUT_SCALE, defaultStages, builtFromStages } from './parks_data_caman.js?v=319';
-import { CAMAN_ROADS } from './caman_roads.js?v=319';
-import { solarPosition, dateFromLocal, sunSceneDir } from './solar.js?v=319';
+import { createTurbine, TOWER_H } from './turbine_mesh.js?v=320';
+import { createSubstationTower, groundCable, overheadLine } from './structures.js?v=320';
+import { toScene, CAMAN_CENTER, LAYOUT_SCALE, defaultStages, builtFromStages } from './parks_data_caman.js?v=320';
+import { CAMAN_ROADS } from './caman_roads.js?v=320';
+import { solarPosition, dateFromLocal, sunSceneDir } from './solar.js?v=320';
 
 const SPACING = 235;
 const TOWER_SCALE = 2.2;   // agranda las torres (vista esquemática) para que destaquen sobre el relieve
@@ -281,7 +281,7 @@ export class FleetView {
   // ── Relieve conceptual (capa de terreno) ─────────────────────────────────────
   // Carga el DEM vendorizado y añade la malla (oculta hasta activarla).
   async loadTerrain(url) {
-    const { Terrain } = await import('./terrain.js?v=319');
+    const { Terrain } = await import('./terrain.js?v=320');
     this._TerrainClass = Terrain;                     // para reconstruir al cambiar de escala
     const dem = await (await fetch(url)).json();
     this.terrain = new Terrain(dem, { vex: 1.5 });   // relieve exagerado (esquemático)
@@ -463,6 +463,7 @@ export class FleetView {
     if (opts.lon != null) t.lon = opts.lon;
     if (opts.built != null) t.built = opts.built;   // avance de obra 4D (0..1)
     if (opts.stages) t.stages = opts.stages;         // etapas de obra (editables)
+    if (opts.rdspp) t.rdspp = opts.rdspp;            // designación RDS-PP (IEC 81346)
     t.group.position.copy(opts.pos ? new THREE.Vector3(opts.pos.x, 0, opts.pos.z) : this._slot(this.turbines.length));
     this.turbines.push(t);
     this.structures.push(t);
@@ -866,7 +867,7 @@ export class FleetView {
     this.onChange = null; this.onLayoutChange = null;
     this.clearAll();
     for (const t of (p?.turbines || [])) {
-      const o = this.addTurbine({ pos: { x: t.x, z: t.z }, id: t.id, label: t.label, lat: t.lat, lon: t.lon, built: t.built, stages: t.stages });
+      const o = this.addTurbine({ pos: { x: t.x, z: t.z }, id: t.id, label: t.label, lat: t.lat, lon: t.lon, built: t.built, stages: t.stages, rdspp: t.rdspp });
       if (t.yaw != null) this.setYaw(o.id, t.yaw);
       o.zone = t.zone || null;
       this._applyScale(o);
@@ -882,6 +883,7 @@ export class FleetView {
         if (h.lon != null) hv.lon = h.lon;
         if (h.built != null) hv.built = h.built;
         if (h.stages) hv.stages = h.stages;
+        if (h.rdspp) hv.rdspp = h.rdspp;
         hv.zone = h.zone || null;
         this.scene.add(hv.group);
         this.substation.towers.push(hv); this.substation.sensors.push(...hv.sensors);

@@ -23,8 +23,8 @@ import { defaultWbs, wbsProgress, partidaForProtocol } from '../../tools/wbs.js'
 import { readXlsx } from '../../lib/xlsx_lite.mjs';
 import { analyzeWorkbook, proposeMapping, distinctValues, readByProfile, guessCanon, BUILTIN_PROFILES, FIELDS as QP_FIELDS, CANON_STATES } from '../../tools/quality_profile.mjs';
 import { FRAMEWORK, STATUS_NORMS, ENSAYO_NORMS, normLabel, normForEnsayo } from '../../tools/norms_catalog.mjs';
-import { backendActive, pushQuality, pullQuality, pushWbs, pushProfile, deleteProtocoloRemote, debouncedPush } from './backend_sync.js?v=319';
-import { t } from './i18n.js?v=319';
+import { backendActive, pushQuality, pullQuality, pushWbs, pushProfile, deleteProtocoloRemote, debouncedPush } from './backend_sync.js?v=320';
+import { t } from './i18n.js?v=320';
 
 const STORE = 'rewind.calidad.v1';
 const XLSX_MIME = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
@@ -443,6 +443,9 @@ let view = 'dash';        // 'dash' | 'manage' | 'wbs' | 'norms' | 'partida'
 let editingId = null;     // id del protocolo en edición (o null = nuevo)
 let partidaId = null;     // partida abierta en el drill-down (view === 'partida')
 let wbsType = 'turbine';  // tipo de estructura en edición en el HUD de partidas
+// Tipos con WBS editable (torres + obra civil de la Fase 3).
+const WBS_TYPES = ['turbine', 'hv', 'camino', 'zanja', 'plataforma'];
+const WBS_TYPE_LABEL = { turbine: 'Torre eólica', hv: 'Torre AT', camino: 'Camino', zanja: 'Zanja (colectora)', plataforma: 'Plataforma' };
 let wbsDraft = null;      // copia de trabajo del WBS ({turbine:[], hv:[]}) mientras se edita
 let presetPartida = null; // partida preseleccionada al crear un protocolo desde el HUD
 
@@ -488,7 +491,7 @@ export function showPanel() {
       return;
     }
     if (e.target.closest('.cal-manage')) { view = 'manage'; editingId = null; paint(); return; }
-    if (e.target.closest('.cal-wbs')) { wbsDraft = { turbine: getWbs('turbine'), hv: getWbs('hv') }; view = 'wbs'; paint(); return; }
+    if (e.target.closest('.cal-wbs')) { wbsDraft = Object.fromEntries(WBS_TYPES.map(ty => [ty, getWbs(ty)])); view = 'wbs'; paint(); return; }
     if (e.target.closest('.cal-norms')) { view = 'norms'; paint(); return; }
     if (e.target.closest('.cal-back')) { view = 'dash'; partidaId = null; paint(); return; }
     // ── Drill-down: clic en una partida → su detalle (protocolos/fechas/ensayos) ──
@@ -506,7 +509,7 @@ export function showPanel() {
       return;
     }
     if (e.target.closest('.wbs-save')) {
-      saveWbs('turbine', wbsDraft.turbine); saveWbs('hv', wbsDraft.hv);
+      for (const ty of WBS_TYPES) saveWbs(ty, wbsDraft[ty]);
       const applied = window.shmCalidadAvance ? applyToFleet('update') : 0;   // refleja si el 4D ya estaba cargado
       alert(t('cal.wbs.saved') + (applied ? ' ' + t('cal.wbs.reapplied', applied) : ''));
       view = 'dash'; paint(); window.dispatchEvent(new CustomEvent('calidad-changed'));
@@ -518,7 +521,7 @@ export function showPanel() {
     }
     const addProto = e.target.closest('.wbs-addproto');
     if (addProto) {   // crear un protocolo YA asignado a esta partida (sin Excel)
-      saveWbs('turbine', wbsDraft.turbine); saveWbs('hv', wbsDraft.hv);   // persistir el WBS antes de saltar
+      for (const ty of WBS_TYPES) saveWbs(ty, wbsDraft[ty]);   // persistir el WBS antes de saltar
       presetPartida = addProto.dataset.pid; editingId = null; view = 'manage'; paint(); focusForm(ov);
       return;
     }
@@ -795,8 +798,7 @@ function wbsHTML(data) {
     <p class="cal-mut">${t('cal.wbs.desc')}</p>
     <label class="wbs-typesel">${t('cal.wbs.type')}
       <select class="wbs-type">
-        <option value="turbine"${wbsType === 'turbine' ? ' selected' : ''}>${t('cal.wbs.turbine')}</option>
-        <option value="hv"${wbsType === 'hv' ? ' selected' : ''}>${t('cal.wbs.hv')}</option>
+        ${WBS_TYPES.map(ty => `<option value="${ty}"${wbsType === ty ? ' selected' : ''}>${esc(WBS_TYPE_LABEL[ty])}</option>`).join('')}
       </select>
     </label>
 

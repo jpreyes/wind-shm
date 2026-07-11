@@ -6,10 +6,10 @@ import {
   transformMatrix, globalStiffness,
   applyReleases, fixedEndForces, condenseFEF,
   elemLocalK, elemLocalM
-} from './timoshenko.js?v=319';
-import { applyDiaphragmConstraints, applyDiaphragmMass } from './diaphragm.js?v=319';
-import { applyLinkConstraints } from './links.js?v=319';
-import { assembleAreasInto, assembleAreasMassInto, areaThermalContribs } from './membrane.js?v=319';
+} from './timoshenko.js?v=320';
+import { applyDiaphragmConstraints, applyDiaphragmMass } from './diaphragm.js?v=320';
+import { applyLinkConstraints } from './links.js?v=320';
+import { assembleAreasInto, assembleAreasMassInto, areaThermalContribs } from './membrane.js?v=320';
 
 // ── Node index (contiguous 0-based numbering) ─────────────────────────────
 export function buildNodeIndex(model) {
