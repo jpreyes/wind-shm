@@ -9,7 +9,7 @@
 // Al subir la versión de la app, suba también CACHE_VERSION para forzar una
 // limpieza completa de la caché antigua en la próxima visita en línea.
 // ──────────────────────────────────────────────────────────────────────────────
-const CACHE_VERSION = 'v275';
+const CACHE_VERSION = 'v276';
 const CACHE = `rewind-${CACHE_VERSION}`;
 
 // Núcleo mínimo para que la app arranque aunque sea la primera vez sin red.
@@ -21,13 +21,13 @@ const SHELL = [
   './index.html',
   './app.html',
   './manifest.webmanifest',
-  './style.css?v=320',
-  './ui-v2.css?v=320',
-  './shm.css?v=320',
-  './js/shm/shm_mode.js?v=320',
+  './style.css?v=321',
+  './ui-v2.css?v=321',
+  './shm.css?v=321',
+  './js/shm/shm_mode.js?v=321',
   './lib/numeric.js',
-  './lib/leaflet/leaflet.js?v=320',
-  './lib/leaflet/leaflet.css?v=320',
+  './lib/leaflet/leaflet.js?v=321',
+  './lib/leaflet/leaflet.css?v=321',
   './icons/icon.svg',
   './icons/icon-192.png',
   './icons/icon-512.png',

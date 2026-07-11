@@ -1,12 +1,12 @@
 // ─────────────────────────────────────────────────────────────────────────────
 // auth_ui.js — pantalla de login (gate) + chip de usuario en la barra de estado.
 //
-// Cuando el backend Supabase real está configurado y no hay sesión vigente, la
-// app NO arranca: se muestra el gate a pantalla completa. Login OK → recarga y
-// bootea normal. Botón "demo" → cae a backend mock (sin login) para presentar.
+// Candado duro (auth.js `authRequired`): sin sesión vigente la app NO arranca; se
+// muestra el gate a pantalla completa. Login OK → recarga y bootea normal. Botón
+// "demo" → `?demo` (modo abierto, simulación, sin login) para presentar sin claves.
 // ─────────────────────────────────────────────────────────────────────────────
-import { signIn, signOut, currentUser, currentRole, authRequired, loggedIn } from './auth.js?v=320';
-import { setBackendConfig } from './backend.js?v=320';
+import { signIn, signOut, currentUser, currentRole, authRequired, loggedIn } from './auth.js?v=321';
+import { setBackendConfig } from './backend.js?v=321';
 
 // ¿Hay que frenar el boot para pedir login? true = se mostró el gate; el caller aborta.
 export function requireLogin() {
@@ -58,10 +58,10 @@ export function showLoginGate() {
     }
   });
 
-  // Demo: sin login, backend mock (útil para presentar sin credenciales).
+  // Demo: sin login (modo abierto, simulación). Útil para presentar sin credenciales.
   ov.querySelector('#auth-mock').addEventListener('click', () => {
-    setBackendConfig({ mock: true });
-    location.href = location.pathname + '?backend=mock';
+    setBackendConfig(null);   // sin backend real → telemetría simulada
+    location.href = location.pathname + '?demo';
   });
 }
 

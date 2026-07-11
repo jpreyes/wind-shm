@@ -12,16 +12,36 @@
 // localStorage (`SESSION_KEY`) al armar los headers. Aquí solo importamos la
 // config del backend (URL + anon/publishable key) para pegarle a `/auth/v1/*`.
 // ─────────────────────────────────────────────────────────────────────────────
-import { getBackendConfig } from './backend.js?v=320';
+import { getBackendConfig } from './backend.js?v=321';
 
 export const SESSION_KEY = 'rewind.auth.v1';
 const SKEW_MS = 30000;   // refresca 30 s antes del vencimiento (margen de reloj/red)
 
-// Config del endpoint de Auth: base + apikey pública. null si no hay Supabase real.
+// Proyecto Supabase por defecto para AUTENTICACIÓN. La publishable key es PÚBLICA
+// (va en el navegador) → seguro embeberla. Es INDEPENDIENTE del backend de
+// telemetría: con esto la app exige login SIEMPRE (candado duro), aunque la
+// telemetría siga en modo simulación. Completar la key para activar el candado en
+// el deploy; sin key completada, cae al backend configurado (o queda abierto).
+const AUTH_SUPABASE = {
+  url: 'https://xenujkmogaxxkrnpgbmg.supabase.co',
+  key: 'PEGAR_SB_PUBLISHABLE_KEY',   // ← pegar la publishable key (sb_publishable_…)
+};
+const KEY_SET = AUTH_SUPABASE.key && AUTH_SUPABASE.key !== 'PEGAR_SB_PUBLISHABLE_KEY';
+
+// ¿Modo demo? (abre sin login: ?demo o backend mock). Para mostrar sin claves.
+function isDemo() {
+  try { if (new URLSearchParams(location.search).get('demo') !== null) return true; } catch { /* */ }
+  const c = getBackendConfig();
+  return !!(c && c.mock);
+}
+
+// Config del endpoint de Auth: base + apikey pública. Prioriza el backend REAL
+// configurado (panel «Fuente»); si no, usa AUTH_SUPABASE por defecto. null = no hay.
 function authCfg() {
   const c = getBackendConfig();
-  if (!c || !c.url || c.mock) return null;
-  return { base: c.url.replace(/\/$/, ''), key: c.anonKey || '' };
+  if (c && c.url && !c.mock) return { base: c.url.replace(/\/$/, ''), key: c.anonKey || '' };
+  if (KEY_SET) return { base: AUTH_SUPABASE.url.replace(/\/$/, ''), key: AUTH_SUPABASE.key };
+  return null;
 }
 
 export function getSession() {
@@ -34,8 +54,9 @@ function clearSession() {
   try { localStorage.removeItem(SESSION_KEY); } catch { /* */ }
 }
 
-// ¿La app requiere login? Solo con Supabase real configurado (mock/sim no).
-export function authRequired() { return !!authCfg(); }
+// ¿La app requiere login? CANDADO DURO: siempre, salvo modo demo (?demo) — mientras
+// haya un backend de auth disponible (config real o AUTH_SUPABASE por defecto).
+export function authRequired() { return !isDemo() && !!authCfg(); }
 
 // ¿Hay una sesión con access token aún vigente (no vencido)?
 export function sessionValid() {
