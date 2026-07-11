@@ -74,18 +74,25 @@ token expiry). Sesión en localStorage; token firmado con expiración → caduca
 - [ ] Terminar la visibilidad de datos del backend (pull ampliado: WBS/perfiles/estructuras
   se recuperan en otro navegador) — Fase 6.0 restante.
 
-## FASE 3 — Estructuras y fases constructivas · 1–2 semanas  *(prioridad #3 de JP)*
-- [ ] **Gestión de tipos de estructura** editable (hoy solo turbine/hv) — Frente 6.3.
+## FASE 3 — Estructuras y fases constructivas · **✅ COMPLETA** (v318–v320)  *(prioridad #3 de JP)*
+- [x] **Gestión de tipos** editable (v320): el editor de WBS (Calidad) ofrece los 5
+  tipos (torre·AT·camino·zanja·plataforma); las partidas de cada uno son editables
+  (`WBS_TYPES`/`WBS_TYPE_LABEL`). Frente 6.3 en su forma concreta (WBS por tipo).
 - [x] **Nuevo tipo «camino»** (estructura **lineal**) (v318): cinta 3D que sigue el
   terreno (reusa la geometría real del KMZ, `CAMAN_ROADS`) + su **WBS** de capas
   (despeje · mov. tierras · sub-base · base · carpeta) + avance 4D que "construye" el
   camino **por tramos a lo largo de la longitud** (drawRange), no bottom-up. Seleccionable;
   migración no destructiva al parque Camán. `fleet_view.addRoad`/`_setRoadProgress4D`.
-- [ ] Otros tipos: **plataformas**, **zanjas/cableado (colectora)**, **subestación**, **LAT**.
-  Cada uno con su WBS y su geom.
-- [ ] **RDS-PP** (identificador transversal, IEC 81346): campo de designación por
-  estructura/partida/componente → unifica Obra ↔ Operación ↔ Administración (Frente 6.5/6.7).
-- **Cierre:** poblar Camán con caminos + plataformas y verlos avanzar en el 4D.
+- [x] **Zanja (colectora)** y **plataforma** (v319): mismo motor lineal, distinto
+  ancho/color/WBS (`LINEAR_TYPES`). Zanja de MT por el trazado vial; plataforma = pad
+  corto y ancho subdividido para 4D gradual. *(Subestación como tipo propio y LAT
+  dedicada: la LAT ya existe como torres AT + `overheadLine`; la subestación queda
+  para cuando se necesite como recinto — no bloquea.)*
+- [x] **RDS-PP** (identificador transversal, IEC 81346) (v320): designación por
+  estructura (=WTG.NN · =LAT.NN · =CAM.NN · =ZAN.NN · =PLT.Tnn), mostrada en la ficha
+  de Selección. Unifica Obra ↔ Operación ↔ Administración (Frente 6.5/6.7).
+- **Cierre:** ✅ Camán poblado con camino + zanja + 3 plataformas avanzando en el 4D
+  lineal; los 5 tipos con WBS editable y RDS-PP.
 
 ## FASE 4 — Sensor real y arquitectura de ingesta · 1–2 semanas  *(prioridad #4 de JP)*
 El sensor está en **otro repo**; acá se cierra el loop de datos reales sin hardware final.

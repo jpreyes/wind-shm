@@ -1,7 +1,7 @@
 # ReWind — Estado actual / Handoff de sesión
 
 > Documento vivo para **retomar el trabajo en otra sesión** sin perder contexto.
-> Última actualización: **2026-07-11** · versión desplegada: **v318** (GitHub Pages).
+> Última actualización: **2026-07-11** · versión desplegada: **v320** (GitHub Pages).
 > **Plan activo:** [`docs/roadmap-maestro.md`](roadmap-maestro.md) (ordenado por prioridad:
 > auth → GUI → estructuras/fases → sensor real; integra la auditoría externa).
 > Detalle de módulos por fase: [`docs/planes/frente-6-gestion-ciclo-vida.md`](planes/frente-6-gestion-ciclo-vida.md).
@@ -19,7 +19,7 @@ contratista-agnóstico**, **catálogo normativo**, y un **backend Supabase Sprin
 (mock-first) que JP está **conectando a su proyecto real ahora**. Se abrió el
 **Frente 6** (reorganizar la app por fases del ciclo de vida).
 
-**Versión:** v318 · REWIND_VER `v318` · `sw.js` CACHE `v273`.
+**Versión:** v320 · REWIND_VER `v320` · `sw.js` CACHE `v275`.
 
 > **Fase 1 (Auth) — código listo (v313).** Login Supabase correo+clave
 > (`js/shm/auth.js` + `auth_ui.js`), token del usuario en los headers de
