@@ -67,7 +67,19 @@ function mockBackend() {
 // ── Supabase: PostgREST (fetch) + polling de `features` ───────────────────────
 function supabaseBackend(cfg) {
   const base = cfg.url.replace(/\/$/, '');
-  const headers = { apikey: cfg.anonKey, Authorization: `Bearer ${cfg.anonKey}`, 'Content-Type': 'application/json' };
+  // Headers dinámicos: si hay sesión de usuario vigente (auth.js escribe
+  // `rewind.auth.v1`), el Bearer es su access token → los requests corren como
+  // `authenticated` y el RLS de producción los gobierna. Sin sesión, cae a la
+  // anon/publishable key (piloto con RLS abierto). No importamos auth.js: leemos
+  // el token directo de localStorage para evitar dependencia circular.
+  function headers() {
+    let token = cfg.anonKey;
+    try {
+      const s = JSON.parse(localStorage.getItem('rewind.auth.v1'));
+      if (s && s.access_token && (s.expires_at * 1000) > Date.now()) token = s.access_token;
+    } catch { /* */ }
+    return { apikey: cfg.anonKey, Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' };
+  }
   const subs = new Set();
   let pollTimer = null, sinceTs = null, lastIngest = 0;
   const INGEST_MS = 60000;   // features 1/min: no golpear Supabase en cada tick del sim
@@ -75,7 +87,7 @@ function supabaseBackend(cfg) {
   async function poll() {
     try {
       const since = sinceTs ? `&ts=gt.${encodeURIComponent(sinceTs)}` : '&limit=200';
-      const res = await fetch(`${base}/rest/v1/features?select=*&order=ts.asc${since}`, { headers });
+      const res = await fetch(`${base}/rest/v1/features?select=*&order=ts.asc${since}`, { headers: headers() });
       if (res.ok) {
         const rows = await res.json();
         if (rows.length) {
@@ -97,26 +109,26 @@ function supabaseBackend(cfg) {
       if (now - lastIngest < INGEST_MS) return;   // throttle: máx. 1 lote/min (contrato «features 1/min»)
       lastIngest = now;
       const rows = tickToRows(tick);
-      if (rows.length) fetch(`${base}/rest/v1/features`, { method: 'POST', headers, body: JSON.stringify(rows) }).catch(() => {});
+      if (rows.length) fetch(`${base}/rest/v1/features`, { method: 'POST', headers: headers(), body: JSON.stringify(rows) }).catch(() => {});
     },
     onTick(cb) { subs.add(cb); if (!pollTimer) poll(); return () => { subs.delete(cb); if (!subs.size && pollTimer) { clearTimeout(pollTimer); pollTimer = null; } }; },
     latest() { return {}; },
     async insert(table, rows) {
-      const res = await fetch(`${base}/rest/v1/${table}`, { method: 'POST', headers: { ...headers, Prefer: 'resolution=merge-duplicates' }, body: JSON.stringify(rows) });
+      const res = await fetch(`${base}/rest/v1/${table}`, { method: 'POST', headers: { ...headers(), Prefer: 'resolution=merge-duplicates' }, body: JSON.stringify(rows) });
       return { ok: res.ok, status: res.status };
     },
     async select(table, query = '') {
-      const res = await fetch(`${base}/rest/v1/${table}?select=*${query}`, { headers });
+      const res = await fetch(`${base}/rest/v1/${table}?select=*${query}`, { headers: headers() });
       return res.ok ? res.json() : [];
     },
     async remove(table, id) {
-      const res = await fetch(`${base}/rest/v1/${table}?id=eq.${encodeURIComponent(id)}`, { method: 'DELETE', headers });
+      const res = await fetch(`${base}/rest/v1/${table}?id=eq.${encodeURIComponent(id)}`, { method: 'DELETE', headers: headers() });
       return { ok: res.ok };
     },
     async count(table) {
       // HEAD + Prefer count=exact → total en el header Content-Range («*/N»).
       try {
-        const res = await fetch(`${base}/rest/v1/${table}?select=*`, { method: 'HEAD', headers: { ...headers, Prefer: 'count=exact', Range: '0-0' } });
+        const res = await fetch(`${base}/rest/v1/${table}?select=*`, { method: 'HEAD', headers: { ...headers(), Prefer: 'count=exact', Range: '0-0' } });
         const cr = res.headers.get('content-range'); const n = cr ? +cr.split('/')[1] : NaN;
         return Number.isFinite(n) ? n : (res.ok ? 0 : null);
       } catch { return null; }

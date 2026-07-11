@@ -6,7 +6,7 @@
 // como CACHÉ OFFLINE. Sin backend configurado, todo funciona como antes (no-op).
 // Mapeo modelo↔fila explícito (nombres de columna del esquema en snake_case).
 // ─────────────────────────────────────────────────────────────────────────────
-import { getBackendConfig, createBackend } from './backend.js?v=310';
+import { getBackendConfig, createBackend } from './backend.js?v=313';
 
 let _be = null, _cfgKey = null;
 // Instancia perezosa del backend; se recrea si cambia la config.

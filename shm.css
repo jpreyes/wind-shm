@@ -1061,3 +1061,26 @@ body.shm #shm-banner.show { display: flex; animation: shm-blink 0.8s steps(1) in
 .cmp-s { fill: var(--text-muted); opacity: .7; }
 .cmp-hub { fill: var(--text); }
 .cmp-nl { fill: var(--accent); font: 600 15px var(--font, system-ui, sans-serif); text-anchor: middle; dominant-baseline: central; }
+
+/* ── Fase 1 · Login gate + chip de usuario ─────────────────────────────────── */
+.auth-gate { position: fixed; inset: 0; z-index: 12000; display: flex; align-items: center; justify-content: center;
+  background: radial-gradient(120% 120% at 50% 0%, var(--bg2, #141b24) 0%, var(--bg, #0b1017) 70%); padding: 24px; }
+.auth-card { width: 100%; max-width: 360px; background: var(--bg2, #141b24); border: 1px solid var(--border2, #2a3340);
+  border-radius: 16px; padding: 28px 26px; box-shadow: 0 24px 70px rgba(0,0,0,.5); display: flex; flex-direction: column; gap: 12px; }
+.auth-logo { font-size: 26px; font-weight: 800; letter-spacing: -.02em; color: var(--text); text-align: center; }
+.auth-logo span { color: var(--accent); }
+.auth-sub { margin: 0 0 6px; text-align: center; color: var(--text-muted); font-size: 12.5px; }
+.auth-field { display: flex; flex-direction: column; gap: 5px; font-size: 12px; color: var(--text-muted); font-weight: 600; }
+.auth-field input { background: var(--bg1, rgba(255,255,255,.04)); border: 1px solid var(--border2, #2a3340); border-radius: 9px;
+  padding: 10px 12px; font-size: 14px; color: var(--text); font-weight: 400; }
+.auth-field input:focus { outline: none; border-color: var(--accent); }
+.auth-err { background: rgba(248,113,113,.12); border: 1px solid rgba(248,113,113,.45); color: var(--text);
+  border-radius: 8px; padding: 8px 10px; font-size: 12px; }
+.auth-go { background: var(--accent); color: #fff; border: 0; border-radius: 9px; padding: 11px; font-size: 14px;
+  font-weight: 700; cursor: pointer; margin-top: 4px; }
+.auth-go:hover { filter: brightness(1.08); }
+.auth-go:disabled { opacity: .6; cursor: default; }
+.auth-alt { background: none; border: 0; color: var(--text-muted); font-size: 11.5px; cursor: pointer; text-decoration: underline; padding: 4px; }
+.auth-alt:hover { color: var(--text); }
+body.shm #statusbar #sb-user { cursor: pointer; }
+body.shm #statusbar #sb-user:hover { color: var(--text); }

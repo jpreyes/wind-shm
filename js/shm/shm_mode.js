@@ -8,32 +8,34 @@
 //   inspecciones y señal temporal EN VIVO desde un Web Worker (DataSource).
 // Recortes (modelado) los hace shm.css ocultando, no borrando.
 // ─────────────────────────────────────────────────────────────────────────────
-import { FleetView } from './fleet_view.js?v=310';
-import { DataSource } from './data_source.js?v=310';
-import { computeTwin } from './digital_twin.js?v=310';
-import { ParkManager, loadParksStore } from './parks.js?v=310';
-import { MapView } from './map_view.js?v=312';
-import { defaultStages, builtFromStages } from './parks_data_caman.js?v=310';
-import { compassRoseSVG } from './compass.js?v=310';
-import { buildAvanceHUD } from './avance_hud.js?v=310';
-import { renderAvance, computeParkAvance } from './avance_dashboard.js?v=310';
-import * as Insp from './inspection.js?v=310';
-import * as Fat from './fatigue.js?v=310';
-import * as Instr from './instrumentation.js?v=310';
-import * as Calidad from './calidad.js?v=310';
-import { showBackendConfig } from './backend_ui.js?v=310';
-import { backendActive, pushStructures } from './backend_sync.js?v=310';
-import * as Hist from './history.js?v=310';
-import * as Health from './health.js?v=310';
-import * as Bench from './benchmark.js?v=310';
-import * as Alarms from './alarms.js?v=310';
-import { METEO_CAMAN } from './meteo_caman.js?v=310';
-import { ReplaySource } from './replay.js?v=310';
-import { esc, safeUrl } from './util.js?v=310';
-import { t, getLang, setLang } from './i18n.js?v=310';
+import { FleetView } from './fleet_view.js?v=313';
+import { DataSource } from './data_source.js?v=313';
+import { computeTwin } from './digital_twin.js?v=313';
+import { ParkManager, loadParksStore } from './parks.js?v=313';
+import { MapView } from './map_view.js?v=313';
+import { defaultStages, builtFromStages } from './parks_data_caman.js?v=313';
+import { compassRoseSVG } from './compass.js?v=313';
+import { buildAvanceHUD } from './avance_hud.js?v=313';
+import { renderAvance, computeParkAvance } from './avance_dashboard.js?v=313';
+import * as Insp from './inspection.js?v=313';
+import * as Fat from './fatigue.js?v=313';
+import * as Instr from './instrumentation.js?v=313';
+import * as Calidad from './calidad.js?v=313';
+import { showBackendConfig } from './backend_ui.js?v=313';
+import { backendActive, pushStructures } from './backend_sync.js?v=313';
+import { authRequired, loggedIn, isEditor } from './auth.js?v=313';
+import { requireLogin, userChipHTML, wireUserChip } from './auth_ui.js?v=313';
+import * as Hist from './history.js?v=313';
+import * as Health from './health.js?v=313';
+import * as Bench from './benchmark.js?v=313';
+import * as Alarms from './alarms.js?v=313';
+import { METEO_CAMAN } from './meteo_caman.js?v=313';
+import { ReplaySource } from './replay.js?v=313';
+import { esc, safeUrl } from './util.js?v=313';
+import { t, getLang, setLang } from './i18n.js?v=313';
 
 const F1_BASE = { turbine: 0.283, hv: 1.6 };
-const REWIND_VER = 'v312';   // versión visible del build (subir junto al cache-bust)
+const REWIND_VER = 'v313';   // versión visible del build (subir junto al cache-bust)
 const FS = 62.5;   // frecuencia de muestreo de la señal (Hz), igual que shm_worker.js
 // Clasificador ML de daño (0..4)
 const CLS = ['Sin daño', 'Leve', 'Moderado', 'Alto', 'Muy alto'];
@@ -74,6 +76,10 @@ async function boot() {
   const vpwrap = document.getElementById('viewport-wrap');
   if (!container || !panel) { console.warn('[shm] shell de ReWind no encontrado'); window.__rewindCloseLanding?.(); return; }
 
+  // Fase 1 · Auth: con backend Supabase real y sin sesión vigente, frena el boot
+  // y pide login. Login OK → recarga y bootea normal. (Sim/mock no requiere login.)
+  if (requireLogin()) { window.__rewindCloseLanding?.(); return; }
+
   document.body.classList.add('shm');
   try { document.documentElement.lang = getLang(); } catch {}
   // Portada (textos estáticos del app.html) traducidos según idioma.
@@ -86,9 +92,11 @@ async function boot() {
   window.shmFleet = fleet;
   window.shmHist = Hist;
   window.shmCalidad = Calidad;   // el árbol (parks.js) marca las torres con datos de calidad
-  // R-38: rol solo-lectura vía ?role=viewer → oculta crear/editar/borrar (CSS) y
-  // desactiva los atajos de teclado destructivos. La auth real llega con R-10.
-  window.shmViewer = new URLSearchParams(location.search).get('role') === 'viewer';
+  // R-38 + Fase 1: rol solo-lectura. Vía sesión (rol 'viewer' de la tabla members)
+  // o vía ?role=viewer (override manual). Oculta crear/editar/borrar (CSS) y
+  // desactiva los atajos de teclado destructivos.
+  window.shmViewer = new URLSearchParams(location.search).get('role') === 'viewer'
+    || (authRequired() && loggedIn() && !isEditor());
   if (window.shmViewer) document.body.classList.add('role-viewer');
   Hist.purge();   // R-34: retención rodante — descarta el histórico más viejo que 60 días
 
@@ -356,7 +364,7 @@ async function boot() {
   // ── Relieve conceptual del terreno (DEM vendorizado) — encendido por defecto ─
   setLoad(88, 'Cargando relieve…'); await delay(40);
   try {
-    await fleet.loadTerrain('data/caman_dem.json?v=310');
+    await fleet.loadTerrain('data/caman_dem.json?v=313');
     fleet.setTerrainVisible(true);
     document.getElementById('shm-relieve-tool')?.classList.add('active');
   } catch (e) { console.warn('[shm] relieve no disponible', e); }
@@ -875,11 +883,13 @@ function buildStatusBar(fleet, o = {}) {
     <span class="shm-sb" id="sb-alarm">${t('sb.alarm')}: 0</span>
     <span class="shm-sb" id="sb-wind">${t('sb.wind')}: —</span>
     <span class="shm-sb shm-sb-click" id="sb-source" title="${esc(t('be.title'))}">${t('sb.source')}: ${o.source || '—'}</span>
+    ${userChipHTML()}
     <span class="shm-sb shm-sb-grow" id="sb-selstruct">${t('sb.nosel')}</span>
     <span class="shm-sb" id="sb-clock">--:--:--</span>`;
   bar.appendChild(wrap);
   const $ = (id) => wrap.querySelector('#' + id);
   $('sb-source')?.addEventListener('click', () => showBackendConfig());   // panel de conexión al backend
+  wireUserChip(wrap);   // Fase 1: chip de usuario → cerrar sesión
   const locale = getLang() === 'en' ? 'en-GB' : 'es-CL';
   const clock = () => { $('sb-clock').textContent = new Date().toLocaleTimeString(locale); };
   clock(); setInterval(clock, 1000);
