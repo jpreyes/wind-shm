@@ -8,34 +8,34 @@
 //   inspecciones y señal temporal EN VIVO desde un Web Worker (DataSource).
 // Recortes (modelado) los hace shm.css ocultando, no borrando.
 // ─────────────────────────────────────────────────────────────────────────────
-import { FleetView } from './fleet_view.js?v=315';
-import { DataSource } from './data_source.js?v=315';
-import { computeTwin } from './digital_twin.js?v=315';
-import { ParkManager, loadParksStore } from './parks.js?v=315';
-import { MapView } from './map_view.js?v=315';
-import { defaultStages, builtFromStages } from './parks_data_caman.js?v=315';
-import { compassRoseSVG } from './compass.js?v=315';
-import { buildAvanceHUD } from './avance_hud.js?v=315';
-import { renderAvance, computeParkAvance } from './avance_dashboard.js?v=315';
-import * as Insp from './inspection.js?v=315';
-import * as Fat from './fatigue.js?v=315';
-import * as Instr from './instrumentation.js?v=315';
-import * as Calidad from './calidad.js?v=315';
-import { showBackendConfig } from './backend_ui.js?v=315';
-import { backendActive, pushStructures } from './backend_sync.js?v=315';
-import { authRequired, loggedIn, isEditor } from './auth.js?v=315';
-import { requireLogin, userChipHTML, wireUserChip } from './auth_ui.js?v=315';
-import * as Hist from './history.js?v=315';
-import * as Health from './health.js?v=315';
-import * as Bench from './benchmark.js?v=315';
-import * as Alarms from './alarms.js?v=315';
-import { METEO_CAMAN } from './meteo_caman.js?v=315';
-import { ReplaySource } from './replay.js?v=315';
-import { esc, safeUrl } from './util.js?v=315';
-import { t, getLang, setLang } from './i18n.js?v=315';
+import { FleetView } from './fleet_view.js?v=316';
+import { DataSource } from './data_source.js?v=316';
+import { computeTwin } from './digital_twin.js?v=316';
+import { ParkManager, loadParksStore } from './parks.js?v=316';
+import { MapView } from './map_view.js?v=316';
+import { defaultStages, builtFromStages } from './parks_data_caman.js?v=316';
+import { compassRoseSVG } from './compass.js?v=316';
+import { buildAvanceHUD } from './avance_hud.js?v=316';
+import { renderAvance, computeParkAvance } from './avance_dashboard.js?v=316';
+import * as Insp from './inspection.js?v=316';
+import * as Fat from './fatigue.js?v=316';
+import * as Instr from './instrumentation.js?v=316';
+import * as Calidad from './calidad.js?v=316';
+import { showBackendConfig } from './backend_ui.js?v=316';
+import { backendActive, pushStructures } from './backend_sync.js?v=316';
+import { authRequired, loggedIn, isEditor } from './auth.js?v=316';
+import { requireLogin, userChipHTML, wireUserChip } from './auth_ui.js?v=316';
+import * as Hist from './history.js?v=316';
+import * as Health from './health.js?v=316';
+import * as Bench from './benchmark.js?v=316';
+import * as Alarms from './alarms.js?v=316';
+import { METEO_CAMAN } from './meteo_caman.js?v=316';
+import { ReplaySource } from './replay.js?v=316';
+import { esc, safeUrl } from './util.js?v=316';
+import { t, getLang, setLang } from './i18n.js?v=316';
 
 const F1_BASE = { turbine: 0.283, hv: 1.6 };
-const REWIND_VER = 'v315';   // versión visible del build (subir junto al cache-bust)
+const REWIND_VER = 'v316';   // versión visible del build (subir junto al cache-bust)
 const FS = 62.5;   // frecuencia de muestreo de la señal (Hz), igual que shm_worker.js
 // Clasificador ML de daño (0..4)
 const CLS = ['Sin daño', 'Leve', 'Moderado', 'Alto', 'Muy alto'];
@@ -364,7 +364,7 @@ async function boot() {
   // ── Relieve conceptual del terreno (DEM vendorizado) — encendido por defecto ─
   setLoad(88, 'Cargando relieve…'); await delay(40);
   try {
-    await fleet.loadTerrain('data/caman_dem.json?v=315');
+    await fleet.loadTerrain('data/caman_dem.json?v=316');
     fleet.setTerrainVisible(true);
     document.getElementById('shm-relieve-tool')?.classList.add('active');
   } catch (e) { console.warn('[shm] relieve no disponible', e); }
@@ -1022,7 +1022,7 @@ function buildDashboard(panel, fleet, actions) {
   el.innerHTML = `
     <div class="shm-head">
       <div style="flex:1">
-        <div class="shm-title">ReWind Parque Digital</div>
+        <h2 class="shm-title">ReWind Parque Digital</h2>
         <div class="shm-sub">${t('dash.sub')} · <span style="opacity:.7">${REWIND_VER}</span></div>
       </div>
     </div>
@@ -1033,13 +1033,13 @@ function buildDashboard(panel, fleet, actions) {
       <button class="shm-phase" type="button" role="tab" data-ph="operacion">${t('phase.operacion')}</button>
     </div>
     <div class="shm-main">
-    <div class="shm-toptabs">
-      <button class="shm-toptab active" data-v="parque">${t('tab.parque')}</button>
-      <button class="shm-toptab" data-v="seleccion">${t('tab.seleccion')}</button>
-      <button class="shm-toptab" data-v="obra">${t('tab.obra')}</button>
-      <button class="shm-toptab" data-v="insp">${t('tab.insp')}</button>
-      <button class="shm-toptab" data-v="shm">${t('tab.shm')}</button>
-      <button class="shm-toptab" data-v="shadow">${t('tab.shadow')}</button>
+    <div class="shm-toptabs" role="tablist" aria-orientation="vertical" aria-label="${esc(t('tab.parque'))}">
+      <button class="shm-toptab active" role="tab" aria-selected="true" data-v="parque">${t('tab.parque')}</button>
+      <button class="shm-toptab" role="tab" aria-selected="false" data-v="seleccion">${t('tab.seleccion')}</button>
+      <button class="shm-toptab" role="tab" aria-selected="false" data-v="obra">${t('tab.obra')}</button>
+      <button class="shm-toptab" role="tab" aria-selected="false" data-v="insp">${t('tab.insp')}</button>
+      <button class="shm-toptab" role="tab" aria-selected="false" data-v="shm">${t('tab.shm')}</button>
+      <button class="shm-toptab" role="tab" aria-selected="false" data-v="shadow">${t('tab.shadow')}</button>
     </div>
     <div class="shm-views">
     <div class="shm-view" id="view-obra" style="display:none"><div class="shm-avance" id="shm-avance"></div></div>
@@ -1083,7 +1083,7 @@ function buildDashboard(panel, fleet, actions) {
   // Pestañas de nivel superior: Parque (flota) ⇄ Selección (estructura) ⇄ Shadow flicker.
   function setTopView(v) {
     for (const w of ['parque', 'seleccion', 'obra', 'insp', 'shm', 'shadow']) $('#view-' + w).style.display = v === w ? '' : 'none';
-    el.querySelectorAll('.shm-toptab').forEach(t => t.classList.toggle('active', t.dataset.v === v));
+    el.querySelectorAll('.shm-toptab').forEach(t => { const on = t.dataset.v === v; t.classList.toggle('active', on); t.setAttribute('aria-selected', on ? 'true' : 'false'); });
     // Sincroniza el estado activo de los accesos del toolbar a las pestañas del panel.
     const PANEL_TOOLS = { insp: 'shm-pinsp-tool', shm: 'shm-pshm-tool' };
     for (const [view, id] of Object.entries(PANEL_TOOLS)) document.getElementById(id)?.classList.toggle('active', v === view);

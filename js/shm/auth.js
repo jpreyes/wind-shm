@@ -12,7 +12,7 @@
 // localStorage (`SESSION_KEY`) al armar los headers. Aquí solo importamos la
 // config del backend (URL + anon/publishable key) para pegarle a `/auth/v1/*`.
 // ─────────────────────────────────────────────────────────────────────────────
-import { getBackendConfig } from './backend.js?v=315';
+import { getBackendConfig } from './backend.js?v=316';
 
 export const SESSION_KEY = 'rewind.auth.v1';
 const SKEW_MS = 30000;   // refresca 30 s antes del vencimiento (margen de reloj/red)

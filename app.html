@@ -29,10 +29,10 @@
       window.dispatchEvent(new Event('pwa-installed'));
     });
   </script>
-  <link rel="stylesheet" href="lib/leaflet/leaflet.css?v=315">
-  <link rel="stylesheet" href="style.css?v=315">
-  <link rel="stylesheet" href="ui-v2.css?v=315">
-  <link rel="stylesheet" href="shm.css?v=315">
+  <link rel="stylesheet" href="lib/leaflet/leaflet.css?v=316">
+  <link rel="stylesheet" href="style.css?v=316">
+  <link rel="stylesheet" href="ui-v2.css?v=316">
+  <link rel="stylesheet" href="shm.css?v=316">
   <script type="importmap">
   {
     "imports": {
@@ -43,7 +43,11 @@
   </script>
 </head>
 <body>
+<!-- a11y: salto directo al contenido (visible sólo con foco de teclado) -->
+<a href="#main" class="skip-link">Saltar al contenido</a>
 <div id="app">
+  <!-- a11y: título de página persistente (la portada se elimina tras cargar) -->
+  <h1 class="sr-only">ReWind — Monitoreo de salud estructural, parque Camán</h1>
 
   <!-- �?�? MENUBAR �?�? -->
   <header id="menubar">
@@ -68,7 +72,7 @@
   </header>
 
   <!-- �?�? MAIN CONTENT �?�? -->
-  <div id="main">
+  <div id="main" role="main" tabindex="-1">
 
     <!-- ReWind: árbol lateral Parque ▸ Zona ▸ Torre (1.ª columna; sólo en body.shm) -->
     <aside id="park-tree" aria-label="Parques y zonas"></aside>
@@ -112,7 +116,7 @@
   <button id="landing-theme" type="button" title="Cambiar tema claro/oscuro"
     style="position:fixed;top:14px;right:16px;z-index:9100;background:var(--bg4,#e2e8f1);border:1px solid var(--border2,#bcc8d8);color:var(--text,#1b2533);border-radius:8px;cursor:pointer;font-size:17px;line-height:1;padding:6px 10px">🌙</button>
   <div class="landing-card">
-  <main class="landing-hero">
+  <div class="landing-hero" role="presentation">
     <svg id="hero-frame" viewBox="0 0 360 240" aria-hidden="true">
       <!-- terreno -->
       <line x1="30" y1="212" x2="330" y2="212" stroke="var(--border2)" stroke-width="1.5"/>
@@ -153,13 +157,13 @@
     </svg>
 
     <div class="hero-park">Camán</div>
-    <h1 class="hero-title">ReWind</h1>
+    <div class="hero-title">ReWind</div>
     <p class="hero-tag">Monitoreo de salud estructural de torres eólicas</p>
     <div id="load-wrap">
       <div id="load-bar-bg"><div id="load-bar"></div></div>
       <div id="load-row"><span id="load-status">Iniciando…</span><span id="load-pct">0%</span></div>
     </div>
-  </main>
+  </div>
 
   <footer class="landing-credit">
     ReWind · Plataforma de monitoreo de salud estructural (SHM) para aerogeneradores.
@@ -187,7 +191,7 @@ setTimeout(function () { window.__rewindCloseLanding(); }, 25000);   // fallback
 <!-- numeric.js para el gemelo digital (solver modal/estático) -->
 <script src="lib/numeric.js"></script>
 <!-- Leaflet (vista 2D del parque en ReWind) — global window.L, antes de los módulos -->
-<script src="lib/leaflet/leaflet.js?v=315"></script>
+<script src="lib/leaflet/leaflet.js?v=316"></script>
 <!-- Toggle de tema (claro/oscuro). ReWind lo cablea aquí. -->
 <script>
   (function () {
@@ -218,7 +222,7 @@ setTimeout(function () { window.__rewindCloseLanding(); }, 25000);   // fallback
   })();
 </script>
 <!-- ReWind: SHM de torres eólicas (se auto-bootea sobre el shell) -->
-<script type="module" src="js/shm/shm_mode.js?v=315"></script>
+<script type="module" src="js/shm/shm_mode.js?v=316"></script>
 
 <!-- PWA: registrar el service worker (offline). Solo en contexto seguro
      (https o localhost); el navegador deja navigator.serviceWorker undefined
