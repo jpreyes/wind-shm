@@ -8,7 +8,7 @@
 // (en la app se toma de ?live=wss://…). Si la conexión live falla, cae a simulación.
 // El dashboard y la vista no saben cuál fuente está activa.
 // ─────────────────────────────────────────────────────────────────────────────
-import { getBackendConfig, createBackend } from './backend.js?v=316';
+import { getBackendConfig, createBackend } from './backend.js?v=317';
 
 export class DataSource {
   constructor(opts = {}) {
@@ -32,7 +32,7 @@ export class DataSource {
     this.backend = backend;
     this._mode = 'backend:' + backend.mode;
     this._unsub = backend.onTick((tick) => this._handleTick(tick));
-    this.worker = new Worker(new URL('./shm_worker.js?v=316', import.meta.url));
+    this.worker = new Worker(new URL('./shm_worker.js?v=317', import.meta.url));
     this.worker.onmessage = (e) => { const m = e.data; if (m && m.type === 'tick') backend.ingestTick(m); };
     if (this._initMsg) this.worker.postMessage(this._initMsg);
     if (this._focusId) this.worker.postMessage({ type: 'focus', id: this._focusId });
@@ -42,7 +42,7 @@ export class DataSource {
 
   _startSim() {
     this._mode = 'sim';
-    this.worker = new Worker(new URL('./shm_worker.js?v=316', import.meta.url));
+    this.worker = new Worker(new URL('./shm_worker.js?v=317', import.meta.url));
     this.worker.onmessage = (e) => this._handleTick(e.data);
     if (this._initMsg) this.worker.postMessage(this._initMsg);
     if (this._focusId) this.worker.postMessage({ type: 'focus', id: this._focusId });

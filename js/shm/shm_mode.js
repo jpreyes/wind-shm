@@ -8,66 +8,43 @@
 //   inspecciones y señal temporal EN VIVO desde un Web Worker (DataSource).
 // Recortes (modelado) los hace shm.css ocultando, no borrando.
 // ─────────────────────────────────────────────────────────────────────────────
-import { FleetView } from './fleet_view.js?v=316';
-import { DataSource } from './data_source.js?v=316';
-import { computeTwin } from './digital_twin.js?v=316';
-import { ParkManager, loadParksStore } from './parks.js?v=316';
-import { MapView } from './map_view.js?v=316';
-import { defaultStages, builtFromStages } from './parks_data_caman.js?v=316';
-import { compassRoseSVG } from './compass.js?v=316';
-import { buildAvanceHUD } from './avance_hud.js?v=316';
-import { renderAvance, computeParkAvance } from './avance_dashboard.js?v=316';
-import * as Insp from './inspection.js?v=316';
-import * as Fat from './fatigue.js?v=316';
-import * as Instr from './instrumentation.js?v=316';
-import * as Calidad from './calidad.js?v=316';
-import { showBackendConfig } from './backend_ui.js?v=316';
-import { backendActive, pushStructures } from './backend_sync.js?v=316';
-import { authRequired, loggedIn, isEditor } from './auth.js?v=316';
-import { requireLogin, userChipHTML, wireUserChip } from './auth_ui.js?v=316';
-import * as Hist from './history.js?v=316';
-import * as Health from './health.js?v=316';
-import * as Bench from './benchmark.js?v=316';
-import * as Alarms from './alarms.js?v=316';
-import { METEO_CAMAN } from './meteo_caman.js?v=316';
-import { ReplaySource } from './replay.js?v=316';
-import { esc, safeUrl } from './util.js?v=316';
-import { t, getLang, setLang } from './i18n.js?v=316';
+import { FleetView } from './fleet_view.js?v=317';
+import { DataSource } from './data_source.js?v=317';
+import { computeTwin } from './digital_twin.js?v=317';
+import { ParkManager, loadParksStore } from './parks.js?v=317';
+import { MapView } from './map_view.js?v=317';
+import { defaultStages, builtFromStages } from './parks_data_caman.js?v=317';
+import { fftMag } from './dsp.js?v=317';
+import { buildSunControl, buildCompass, buildNameplate, buildBanner, initPanelResize } from './viewport_chrome.js?v=317';
+import { buildAvanceHUD } from './avance_hud.js?v=317';
+import { renderAvance, computeParkAvance } from './avance_dashboard.js?v=317';
+import * as Insp from './inspection.js?v=317';
+import * as Fat from './fatigue.js?v=317';
+import * as Instr from './instrumentation.js?v=317';
+import * as Calidad from './calidad.js?v=317';
+import { showBackendConfig } from './backend_ui.js?v=317';
+import { backendActive, pushStructures } from './backend_sync.js?v=317';
+import { authRequired, loggedIn, isEditor } from './auth.js?v=317';
+import { requireLogin, userChipHTML, wireUserChip } from './auth_ui.js?v=317';
+import * as Hist from './history.js?v=317';
+import * as Health from './health.js?v=317';
+import * as Bench from './benchmark.js?v=317';
+import * as Alarms from './alarms.js?v=317';
+import { METEO_CAMAN } from './meteo_caman.js?v=317';
+import { ReplaySource } from './replay.js?v=317';
+import { esc, safeUrl } from './util.js?v=317';
+import { t, getLang, setLang } from './i18n.js?v=317';
 
 const F1_BASE = { turbine: 0.283, hv: 1.6 };
-const REWIND_VER = 'v316';   // versión visible del build (subir junto al cache-bust)
+const REWIND_VER = 'v317';   // versión visible del build (subir junto al cache-bust)
 const FS = 62.5;   // frecuencia de muestreo de la señal (Hz), igual que shm_worker.js
 // Clasificador ML de daño (0..4)
 const CLS = ['Sin daño', 'Leve', 'Moderado', 'Alto', 'Muy alto'];
 const CLS_COL = ['var(--success)', '#9bbb3a', 'var(--warn)', '#fb7185', 'var(--danger)'];
 const CLS_HEX = ['#4ade80', '#9bbb3a', '#fbbf24', '#fb7185', '#f87171'];   // para canvas (sin var())
 
-// FFT radix-2 (Cooley-Tukey) de la mayor potencia de 2 ≤ buffer; ventana de Hann.
-// Devuelve { mag: amplitud por bin, df: Hz por bin }.
-function fftMag(buf) {
-  let n = 1; while (n * 2 <= buf.length) n *= 2;
-  if (n < 8) return { mag: [], df: FS / Math.max(n, 1) };
-  const re = buf.slice(buf.length - n);
-  const mean = re.reduce((a, b) => a + b, 0) / n;
-  for (let i = 0; i < n; i++) re[i] = (re[i] - mean) * (0.5 - 0.5 * Math.cos((2 * Math.PI * i) / (n - 1)));
-  const im = new Array(n).fill(0);
-  for (let i = 1, j = 0; i < n; i++) { let bit = n >> 1; for (; j & bit; bit >>= 1) j ^= bit; j ^= bit; if (i < j) { [re[i], re[j]] = [re[j], re[i]]; } }
-  for (let len = 2; len <= n; len <<= 1) {
-    const ang = -2 * Math.PI / len, wr = Math.cos(ang), wi = Math.sin(ang);
-    for (let i = 0; i < n; i += len) {
-      let cr = 1, ci = 0;
-      for (let k = 0; k < len / 2; k++) {
-        const a = i + k, b = i + k + len / 2;
-        const vr = re[b] * cr - im[b] * ci, vi = re[b] * ci + im[b] * cr;
-        re[b] = re[a] - vr; im[b] = im[a] - vi; re[a] += vr; im[a] += vi;
-        const ncr = cr * wr - ci * wi; ci = cr * wi + ci * wr; cr = ncr;
-      }
-    }
-  }
-  const mag = new Array(n / 2);
-  for (let i = 0; i < n / 2; i++) mag[i] = Math.hypot(re[i], im[i]) / n;
-  return { mag, df: FS / n };
-}
+// FFT radix-2 → fftMag(buf, fs) vive en dsp.js (importado arriba). Se llama con FS
+// por defecto (62.5 Hz), por eso los call-sites `fftMag(buf)` no cambian.
 
 async function boot() {
   const container = document.getElementById('viewport-container');
@@ -364,7 +341,7 @@ async function boot() {
   // ── Relieve conceptual del terreno (DEM vendorizado) — encendido por defecto ─
   setLoad(88, 'Cargando relieve…'); await delay(40);
   try {
-    await fleet.loadTerrain('data/caman_dem.json?v=316');
+    await fleet.loadTerrain('data/caman_dem.json?v=317');
     fleet.setTerrainVisible(true);
     document.getElementById('shm-relieve-tool')?.classList.add('active');
   } catch (e) { console.warn('[shm] relieve no disponible', e); }
@@ -755,120 +732,8 @@ function showAbout() {
   document.body.appendChild(ov);
 }
 
-// ── Control de Sol/sombras (hora + día + animación) ──────────────────────────
-function buildSunControl(fleet) {
-  const wrap = document.getElementById('viewport-wrap') || document.body;
-  const el = document.createElement('div');
-  el.id = 'shm-sun'; el.className = 'shm-sun';
-  const isoToday = new Date().toISOString().slice(0, 10);
-  el.innerHTML = `
-    <div class="sun-head"><span class="sun-title">Shadow · estudio de sombra</span><span class="sun-read" id="sun-read">—</span></div>
-    <label class="sun-ctl"><span>Hora</span><input type="range" id="sun-hour" min="0" max="24" step="0.25" value="13"><b id="sun-hh">13:00</b></label>
-    <label class="sun-ctl"><span>Fecha</span><input type="date" id="sun-date" value="${isoToday}" min="2015-01-01" max="2040-12-31"></label>
-    <label class="sun-real"><input type="checkbox" id="sun-realscale" checked> Escala real <span class="sun-hint">(sombra fiel)</span></label>
-    <div class="sun-foot"><button id="sun-play" class="sun-btn" type="button">▶ Animar el día</button></div>
-    <div class="sun-foot"><button id="sun-fmap" class="sun-btn js-fmap" type="button">🗺️ Mapa de flicker</button></div>
-    <div class="sun-legend"><span><i style="background:#bee678"></i>1–5</span><span><i style="background:#fde047"></i>5–15</span><span><i style="background:#fb923c"></i>15–30</span><span><i style="background:#ef4444"></i>≥30 ✗</span></div>
-    <div class="sun-hint" style="margin:7px 0 0">Informes y receptores → pestaña <b>Shadow flicker</b> (panel derecho).</div>`;
-  wrap.appendChild(el);
-  const hourEl = el.querySelector('#sun-hour'), dateEl = el.querySelector('#sun-date'), realEl = el.querySelector('#sun-realscale');
-  const hh = el.querySelector('#sun-hh'), read = el.querySelector('#sun-read'), playBtn = el.querySelector('#sun-play');
-  el.querySelector('#sun-fmap').addEventListener('click', () => { window.shmMap?.toggleFlickerMap(); window.shmSyncFlickerBtns?.(); });
-  const fmtH = (h) => `${String(Math.floor(h)).padStart(2, '0')}:${String(Math.round((h % 1) * 60) % 60).padStart(2, '0')}`;
-  const apply = () => {
-    const hour = +hourEl.value;
-    const [Y, M, D] = (dateEl.value || isoToday).split('-').map(Number);
-    fleet.setSunTime({ year: Y, month0: M - 1, day: D, hour });
-    hh.textContent = fmtH(hour);
-    const sp = fleet.getSunInfo();
-    read.textContent = sp ? (sp.elevation > 0 ? `alt ${sp.elevation.toFixed(0)}° · az ${sp.azimuth.toFixed(0)}°` : '☾ noche') : '';
-    window.shmMap?.setSunShadows(true, sp);   // sincroniza la sombra del mapa 2D
-  };
-  hourEl.addEventListener('input', apply);
-  dateEl.addEventListener('change', apply);
-  realEl.addEventListener('change', () => fleet.setRealScale(realEl.checked));
-  // Animación del día con setInterval + paso de 0.25 h (alineado al step del slider,
-  // así no lo «encaja» de vuelta; el rAF con pasos < step quedaba estancado).
-  let timer = null;
-  const stop = () => { if (timer) { clearInterval(timer); timer = null; } playBtn.textContent = '▶ Animar el día'; };
-  playBtn.addEventListener('click', () => {
-    if (timer) { stop(); return; }
-    playBtn.textContent = '⏸ Pausar';
-    timer = setInterval(() => { let h = +hourEl.value + 0.25; if (h >= 24) h -= 24; hourEl.value = h.toFixed(2); apply(); }, 90);   // ~día completo en 9 s
-  });
-  return { setOpen(on) { el.classList.toggle('show', on); if (on) { realEl.checked = fleet.realScale; apply(); } else stop(); } };
-}
-
-// ── Rosa de los vientos (3D): gira con la cámara para indicar el Norte ────────
-function buildCompass(vpwrap, fleet) {
-  const el = document.createElement('div');
-  el.id = 'shm-compass'; el.title = 'Rosa de los vientos · Norte';
-  el.innerHTML = compassRoseSVG();
-  (vpwrap || document.body).appendChild(el);
-  const rose = el.querySelector('.cmp-rose'), nlbl = el.querySelector('.cmp-nl');
-  return { update() {
-    if (!rose) return;
-    const rot = fleet.northScreenAngle();
-    rose.setAttribute('transform', `rotate(${rot.toFixed(1)})`);
-    if (nlbl) nlbl.setAttribute('transform', `rotate(${(-rot).toFixed(1)} 0 -39)`);   // la «N» se mantiene legible
-  } };
-}
-
-// ── Nameplate (cuadro con el nombre sobre la vista) ──────────────────────────
-function buildNameplate(vpwrap) {
-  const el = document.createElement('div');
-  el.id = 'shm-nameplate';
-  el.innerHTML = `<span class="np-dot"></span><span class="np-name">—</span><span class="np-type">—</span><span class="np-alarm">${t('np.anom')}</span>`;
-  (vpwrap || document.body).appendChild(el);
-  return {
-    show(obj) {
-      if (!obj) { el.classList.remove('show'); return; }
-      el.querySelector('.np-name').textContent = obj.label;
-      el.querySelector('.np-type').textContent = obj.type === 'hv' ? t('det.typeHV') : `${t('det.typeTurbine')} · ${obj.power || ''}`;
-      el.classList.add('show');
-    },
-    alarm(on) { el.classList.toggle('alarm', !!on); },
-  };
-}
-
-// ── Banner de emergencia (titilante) sobre la vista ──────────────────────────
-function buildBanner(vpwrap) {
-  const el = document.createElement('div');
-  el.id = 'shm-banner';
-  el.innerHTML = `<span class="b-ico">⚠</span><span class="b-txt"></span>`;
-  (vpwrap || document.body).appendChild(el);
-  return {
-    update(labels) {
-      if (!labels.length) { el.classList.remove('show'); return; }
-      const n = labels.length;
-      el.querySelector('.b-txt').textContent =
-        `${t('banner.anom')} — ${labels.slice(0, 3).join(', ')}${n > 3 ? t('banner.more', n - 3) : ''}`;
-      el.classList.add('show');
-    },
-  };
-}
-
-// Redimensiona el panel derecho arrastrando el divisor (#panel-resize-handle).
-// Ajusta la variable CSS --panel-w del grid (#main); antes lo hacía app.js.
-function initPanelResize() {
-  const handle = document.getElementById('panel-resize-handle');
-  const main = document.getElementById('main');
-  if (!handle || !main) return;
-  let drag = null;
-  handle.addEventListener('pointerdown', (e) => {
-    const w = parseInt(getComputedStyle(main).getPropertyValue('--panel-w')) || document.getElementById('panel')?.offsetWidth || 300;
-    drag = { x: e.clientX, w }; handle.classList.add('dragging');
-    handle.setPointerCapture?.(e.pointerId); e.preventDefault();
-  });
-  handle.addEventListener('pointermove', (e) => {
-    if (!drag) return;
-    const nw = Math.max(240, Math.min(640, drag.w + (drag.x - e.clientX)));   // el panel está a la derecha → arrastrar a la izq agranda
-    main.style.setProperty('--panel-w', nw + 'px');
-  });
-  const end = () => { if (drag) { drag = null; handle.classList.remove('dragging'); } };
-  handle.addEventListener('pointerup', end);
-  handle.addEventListener('pointercancel', end);
-}
+// Overlays del visor (buildSunControl/Compass/Nameplate/Banner + initPanelResize)
+// viven en viewport_chrome.js (importados arriba).
 
 // Barra de estado inferior propia de ReWind (reemplaza la de modelado FEM).
 function buildStatusBar(fleet, o = {}) {
