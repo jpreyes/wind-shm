@@ -5,8 +5,8 @@
 // app NO arranca: se muestra el gate a pantalla completa. Login OK → recarga y
 // bootea normal. Botón "demo" → cae a backend mock (sin login) para presentar.
 // ─────────────────────────────────────────────────────────────────────────────
-import { signIn, signOut, currentUser, currentRole, authRequired, loggedIn } from './auth.js?v=314';
-import { setBackendConfig } from './backend.js?v=314';
+import { signIn, signOut, currentUser, currentRole, authRequired, loggedIn } from './auth.js?v=315';
+import { setBackendConfig } from './backend.js?v=315';
 
 // ¿Hay que frenar el boot para pedir login? true = se mostró el gate; el caller aborta.
 export function requireLogin() {

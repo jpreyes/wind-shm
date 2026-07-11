@@ -8,34 +8,34 @@
 //   inspecciones y señal temporal EN VIVO desde un Web Worker (DataSource).
 // Recortes (modelado) los hace shm.css ocultando, no borrando.
 // ─────────────────────────────────────────────────────────────────────────────
-import { FleetView } from './fleet_view.js?v=314';
-import { DataSource } from './data_source.js?v=314';
-import { computeTwin } from './digital_twin.js?v=314';
-import { ParkManager, loadParksStore } from './parks.js?v=314';
-import { MapView } from './map_view.js?v=314';
-import { defaultStages, builtFromStages } from './parks_data_caman.js?v=314';
-import { compassRoseSVG } from './compass.js?v=314';
-import { buildAvanceHUD } from './avance_hud.js?v=314';
-import { renderAvance, computeParkAvance } from './avance_dashboard.js?v=314';
-import * as Insp from './inspection.js?v=314';
-import * as Fat from './fatigue.js?v=314';
-import * as Instr from './instrumentation.js?v=314';
-import * as Calidad from './calidad.js?v=314';
-import { showBackendConfig } from './backend_ui.js?v=314';
-import { backendActive, pushStructures } from './backend_sync.js?v=314';
-import { authRequired, loggedIn, isEditor } from './auth.js?v=314';
-import { requireLogin, userChipHTML, wireUserChip } from './auth_ui.js?v=314';
-import * as Hist from './history.js?v=314';
-import * as Health from './health.js?v=314';
-import * as Bench from './benchmark.js?v=314';
-import * as Alarms from './alarms.js?v=314';
-import { METEO_CAMAN } from './meteo_caman.js?v=314';
-import { ReplaySource } from './replay.js?v=314';
-import { esc, safeUrl } from './util.js?v=314';
-import { t, getLang, setLang } from './i18n.js?v=314';
+import { FleetView } from './fleet_view.js?v=315';
+import { DataSource } from './data_source.js?v=315';
+import { computeTwin } from './digital_twin.js?v=315';
+import { ParkManager, loadParksStore } from './parks.js?v=315';
+import { MapView } from './map_view.js?v=315';
+import { defaultStages, builtFromStages } from './parks_data_caman.js?v=315';
+import { compassRoseSVG } from './compass.js?v=315';
+import { buildAvanceHUD } from './avance_hud.js?v=315';
+import { renderAvance, computeParkAvance } from './avance_dashboard.js?v=315';
+import * as Insp from './inspection.js?v=315';
+import * as Fat from './fatigue.js?v=315';
+import * as Instr from './instrumentation.js?v=315';
+import * as Calidad from './calidad.js?v=315';
+import { showBackendConfig } from './backend_ui.js?v=315';
+import { backendActive, pushStructures } from './backend_sync.js?v=315';
+import { authRequired, loggedIn, isEditor } from './auth.js?v=315';
+import { requireLogin, userChipHTML, wireUserChip } from './auth_ui.js?v=315';
+import * as Hist from './history.js?v=315';
+import * as Health from './health.js?v=315';
+import * as Bench from './benchmark.js?v=315';
+import * as Alarms from './alarms.js?v=315';
+import { METEO_CAMAN } from './meteo_caman.js?v=315';
+import { ReplaySource } from './replay.js?v=315';
+import { esc, safeUrl } from './util.js?v=315';
+import { t, getLang, setLang } from './i18n.js?v=315';
 
 const F1_BASE = { turbine: 0.283, hv: 1.6 };
-const REWIND_VER = 'v314';   // versión visible del build (subir junto al cache-bust)
+const REWIND_VER = 'v315';   // versión visible del build (subir junto al cache-bust)
 const FS = 62.5;   // frecuencia de muestreo de la señal (Hz), igual que shm_worker.js
 // Clasificador ML de daño (0..4)
 const CLS = ['Sin daño', 'Leve', 'Moderado', 'Alto', 'Muy alto'];
@@ -364,7 +364,7 @@ async function boot() {
   // ── Relieve conceptual del terreno (DEM vendorizado) — encendido por defecto ─
   setLoad(88, 'Cargando relieve…'); await delay(40);
   try {
-    await fleet.loadTerrain('data/caman_dem.json?v=314');
+    await fleet.loadTerrain('data/caman_dem.json?v=315');
     fleet.setTerrainVisible(true);
     document.getElementById('shm-relieve-tool')?.classList.add('active');
   } catch (e) { console.warn('[shm] relieve no disponible', e); }
@@ -1026,6 +1026,12 @@ function buildDashboard(panel, fleet, actions) {
         <div class="shm-sub">${t('dash.sub')} · <span style="opacity:.7">${REWIND_VER}</span></div>
       </div>
     </div>
+    <div class="shm-phasebar" role="tablist" aria-label="${esc(t('phase.aria'))}">
+      <span class="shm-phase-lbl">${t('phase.label')}</span>
+      <button class="shm-phase" type="button" role="tab" data-ph="proyecto">${t('phase.proyecto')}</button>
+      <button class="shm-phase" type="button" role="tab" data-ph="obra">${t('phase.obra')}</button>
+      <button class="shm-phase" type="button" role="tab" data-ph="operacion">${t('phase.operacion')}</button>
+    </div>
     <div class="shm-main">
     <div class="shm-toptabs">
       <button class="shm-toptab active" data-v="parque">${t('tab.parque')}</button>
@@ -1104,6 +1110,31 @@ function buildDashboard(panel, fleet, actions) {
     }
   }
   el.querySelectorAll('.shm-toptab').forEach(t => t.addEventListener('click', () => setTopView(t.dataset.v)));
+
+  // ── Selector de FASE (ciclo de vida) — filtra qué pestañas se ven ────────────
+  // Cada pestaña pertenece a una fase; Parque y Selección son universales (sin
+  // fase → siempre visibles). Al elegir una fase se ocultan las pestañas de las
+  // otras y se navega a la vista principal de esa fase. Reduce la saturación (6→3-4).
+  const TAB_PHASE = { obra: 'obra', shadow: 'proyecto', shm: 'operacion', insp: 'operacion' };
+  const PHASE_PRIMARY = { proyecto: 'shadow', obra: 'obra', operacion: 'shm' };
+  const PHASE_KEY = 'rewind.phase.v1';
+  function setPhase(ph, { navigate = false } = {}) {
+    if (!PHASE_PRIMARY[ph]) ph = 'obra';
+    try { localStorage.setItem(PHASE_KEY, ph); } catch { /* */ }
+    el.querySelectorAll('.shm-phase').forEach(b => { const on = b.dataset.ph === ph; b.classList.toggle('active', on); b.setAttribute('aria-selected', on ? 'true' : 'false'); });
+    el.querySelectorAll('.shm-toptab').forEach(tb => {
+      const tabPh = TAB_PHASE[tb.dataset.v];              // undefined = universal
+      tb.style.display = (!tabPh || tabPh === ph) ? '' : 'none';
+    });
+    if (navigate) setTopView(PHASE_PRIMARY[ph]);
+    else {
+      const active = el.querySelector('.shm-toptab.active');
+      if (active && active.style.display === 'none') setTopView('parque');   // la activa quedó oculta
+    }
+  }
+  el.querySelectorAll('.shm-phase').forEach(b => b.addEventListener('click', () => setPhase(b.dataset.ph, { navigate: true })));
+  let savedPhase = 'obra'; try { savedPhase = localStorage.getItem(PHASE_KEY) || 'obra'; } catch { /* */ }
+  setPhase(savedPhase, { navigate: false });   // en el boot: filtra pero NO navega (deja Parque activo)
 
   // ── Pestaña «Shadow flicker»: análisis de sombras en el panel derecho ────────
   // Los controles de hora/fecha viven en el HUD flotante (sobre el visor); aquí van
