@@ -76,9 +76,11 @@ token expiry). Sesión en localStorage; token firmado con expiración → caduca
 
 ## FASE 3 — Estructuras y fases constructivas · 1–2 semanas  *(prioridad #3 de JP)*
 - [ ] **Gestión de tipos de estructura** editable (hoy solo turbine/hv) — Frente 6.3.
-- [ ] **Nuevo tipo «camino»** (estructura **lineal**): geometría 3D por tramos + su **WBS**
-  (despeje · movimiento de tierras · sub-base · base · carpeta/sello) + avance 4D que
-  "construye" el camino por tramos (no bottom-up como una torre).
+- [x] **Nuevo tipo «camino»** (estructura **lineal**) (v318): cinta 3D que sigue el
+  terreno (reusa la geometría real del KMZ, `CAMAN_ROADS`) + su **WBS** de capas
+  (despeje · mov. tierras · sub-base · base · carpeta) + avance 4D que "construye" el
+  camino **por tramos a lo largo de la longitud** (drawRange), no bottom-up. Seleccionable;
+  migración no destructiva al parque Camán. `fleet_view.addRoad`/`_setRoadProgress4D`.
 - [ ] Otros tipos: **plataformas**, **zanjas/cableado (colectora)**, **subestación**, **LAT**.
   Cada uno con su WBS y su geom.
 - [ ] **RDS-PP** (identificador transversal, IEC 81346): campo de designación por
