@@ -1,8 +1,10 @@
 # ReWind — Estado actual / Handoff de sesión
 
 > Documento vivo para **retomar el trabajo en otra sesión** sin perder contexto.
-> Última actualización: **2026-07-04** · versión desplegada: **v310** (GitHub Pages).
-> Para el plan grande en curso ver [`docs/planes/frente-6-gestion-ciclo-vida.md`](planes/frente-6-gestion-ciclo-vida.md).
+> Última actualización: **2026-07-11** · versión desplegada: **v310** (GitHub Pages).
+> **Plan activo:** [`docs/roadmap-maestro.md`](roadmap-maestro.md) (ordenado por prioridad:
+> auth → GUI → estructuras/fases → sensor real; integra la auditoría externa).
+> Detalle de módulos por fase: [`docs/planes/frente-6-gestion-ciclo-vida.md`](planes/frente-6-gestion-ciclo-vida.md).
 
 ---
 
