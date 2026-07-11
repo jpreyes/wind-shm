@@ -96,19 +96,22 @@ token expiry). Sesión en localStorage; token firmado con expiración → caduca
 
 ## FASE 4 — Sensor real y arquitectura de ingesta · 1–2 semanas  *(prioridad #4 de JP)*
 El sensor está en **otro repo**; acá se cierra el loop de datos reales sin hardware final.
-- [ ] **Contrato de ingesta (congelar):**
-  - Trama de aceleración → ya definida en `bridge/accel_frame.mjs` (binaria) para el path
-    hardware; para el "sensor Python de prueba" basta **JSON** con el esquema de `features`.
-  - **Endpoint**: `POST` a una **Supabase Edge Function** `/ingest` (o REST directo a la
-    tabla `features` con una key de servicio) que valida y escribe una fila 1/min por
-    estructura: `{structure_id, ts, f1, f2, rms, wind, temp, tilt, cls}`.
-- [ ] **Sensor Python (repo aparte)**: script que genera/lee una señal y hace `POST` al
-  endpoint cada N segundos. Documentar el contrato para que el repo del sensor lo consuma.
-- [ ] **La web ya consume `features`** (modo `backend:supabase`) → el dato del sensor
-  aparece en el dashboard. Primero por **polling** (ya está), luego:
+- [x] **Contrato de ingesta CONGELADO** → [`frente-4-contrato-ingesta.md`](planes/frente-4-contrato-ingesta.md).
+  Transporte = **Supabase directo** (REST `features` + Storage `waves`), sin MQTT/Influx.
+  **Red: solo salida (outbound)** → sin `cloudflared`, sin IP pública; el on-demand se
+  resuelve por *command-polling* (`sensor_commands`), no por webhooks entrantes.
+- [x] **Esquema**: `features`/`waves` (ya en `schema.sql`) + `sensor_commands` + bucket
+  `waves` → `backend/supabase/ingest.sql`.
+- [x] **Sensor Python (carpeta `sensor/`, para el repo aparte)**: ring buffer **150 Hz**
+  + ventana de **5 min** por 3 disparadores (programado c/60min · anomalía RMS · on-demand
+  pull). features → `features`; serie cruda `.npz` → Storage `waves/` + puntero. Probado
+  contra mock (esquema OK). Corre 24/7 en el VPS (systemd) — el VPS es solo host, no endpoint.
+- [ ] **La web ya consume `features`** (modo `backend:supabase`, polling 5 s). Falta: botón
+  «pedir captura» que inserte en `sensor_commands`, y leer/mostrar las ventanas `waves`.
 - [ ] **Realtime nativo** de Supabase (suscripción a INSERT de `features`) reemplazando el
-  polling; **reconexión** en el cliente; **retención/limpieza** de `features` (cron).
-- **Cierre:** corro el sensor Python → una torre se actualiza en la web en vivo, end-to-end.
+  polling; **reconexión** en el cliente; **retención/limpieza** (cron 90 días).
+- **Cierre:** corro el sensor Python en el VPS → una torre se actualiza en la web en vivo,
+  end-to-end. *(Falta conectarlo al Supabase real de JP + los dos pendientes de front.)*
 
 ## FASE 5 — Operación & Administración (largo plazo) · según piloto
 *Frente 6.4/6.5 + Fase 4/5 del ROADMAP original. Requiere Fases 1–4.*
