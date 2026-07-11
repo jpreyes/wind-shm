@@ -35,6 +35,15 @@ export const DEFAULT_WBS = {
     { id: 'conductores',  nombre: 'Tendido de conductores', geom: 'conductores',  peso: 1 },
     { id: 'energizacion', nombre: 'Energización',           geom: 'energizacion', peso: 1 },
   ],
+  // Camino (estructura LINEAL): las partidas son capas del paquete estructural,
+  // en orden constructivo. `geom` = capa que se «construye» a lo largo del tramo.
+  camino: [
+    { id: 'despeje',  nombre: 'Despeje y limpieza',     geom: 'despeje',  peso: 1 },
+    { id: 'tierras',  nombre: 'Movimiento de tierras',  geom: 'tierras',  peso: 1 },
+    { id: 'subbase',  nombre: 'Sub-base granular',      geom: 'subbase',  peso: 1 },
+    { id: 'base',     nombre: 'Base granular',          geom: 'base',     peso: 1 },
+    { id: 'carpeta',  nombre: 'Carpeta de rodado',      geom: 'carpeta',  peso: 1 },
+  ],
 };
 
 // Clona la lista de partidas por defecto de un tipo (para editarla sin mutar la base).
@@ -58,6 +67,11 @@ export const SYNONYMS = {
   crucetas:     ['cruceta', 'crucetas', 'aislador', 'aisladores'],
   conductores:  ['conductor', 'conductores', 'tendido', 'cable'],
   energizacion: ['energizacion', 'puesta en tension', 'energizado'],
+  despeje:      ['despeje', 'limpieza', 'roce', 'escarpe', 'destronque', 'clearing'],
+  tierras:      ['movimiento de tierras', 'terraplen', 'corte', 'relleno', 'excavacion', 'earthworks'],
+  subbase:      ['sub base', 'subbase', 'sub-base', 'subrasante'],
+  base:         ['base granular', 'base', 'estabilizado'],
+  carpeta:      ['carpeta', 'rodado', 'sello', 'asfalto', 'imprimacion', 'capa de rodadura', 'pavimento'],
 };
 
 // Literales que hacen «match» a una partida: sus `match` explícitos (editados en el

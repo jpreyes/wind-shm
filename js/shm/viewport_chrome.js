@@ -4,8 +4,8 @@
 // devuelve una pequeña API. Sin estado del boot: reciben `fleet`/`vpwrap` y usan
 // i18n + globals de window (shmMap). Aligera el módulo principal.
 // ─────────────────────────────────────────────────────────────────────────────
-import { compassRoseSVG } from './compass.js?v=317';
-import { t } from './i18n.js?v=317';
+import { compassRoseSVG } from './compass.js?v=318';
+import { t } from './i18n.js?v=318';
 
 // Control de sombra (Shadow flicker): hora/fecha/escala + animación del día.
 export function buildSunControl(fleet) {

@@ -10,6 +10,8 @@
 // Las coordenadas lon/lat se conservan en cada estructura para el futuro mapa 2D.
 // ─────────────────────────────────────────────────────────────────────────────
 
+import { CAMAN_ROADS } from './caman_roads.js?v=318';
+
 export const CAMAN_CENTER = { lon: -72.972458, lat: -39.963302 };
 export const LAYOUT_SCALE = 0.35;            // 1 m real → 0.35 u de escena
 
@@ -91,6 +93,7 @@ const builtFor = (name, range) => { const [a, b] = range; return +Math.min(1, Ma
 const STAGE_NAMES = {
   turbine: ['Fundación', 'Montaje de fuste', 'Góndola', 'Rotor', 'Puesta en marcha'],
   hv: ['Fundación', 'Montaje de celosía', 'Tendido de conductores', 'Energización'],
+  camino: ['Despeje y limpieza', 'Movimiento de tierras', 'Sub-base granular', 'Base granular', 'Carpeta de rodado'],
 };
 const isoDaysAgo = (d) => new Date(Date.now() - d * 864e5).toISOString().slice(0, 10);
 
@@ -177,5 +180,22 @@ export function buildCamanPark(makeId) {
     const p = toScene(t.lon, t.lat); const stages = defaultStages('hv', builtFor(t.name, [0.05, 0.4]));
     return { id: t.name, label: t.name, x: p.x, z: p.z, yaw: 0, zone: zoneId['Oriente'], lat: t.lat, lon: t.lon, built: builtFromStages(stages), stages };
   });
-  return { id: makeId('p'), name: 'Camán I', zones, turbines, hv };
+  return { id: makeId('p'), name: 'Camán I', zones, turbines, hv, caminos: camanCaminos(zones[0].id) };
+}
+
+// Caminos interiores (estructura LINEAL): reusa la geometría real del KMZ
+// (CAMAN_ROADS). Cada polilínea = un camino, con su WBS de capas y avance por
+// tramos. Se siembran parcialmente construidos para exhibir el 4D lineal.
+// Exportada para poder MIGRAR parques ya persistidos que aún no tienen caminos.
+export function camanCaminos(zoneId) {
+  return CAMAN_ROADS.map((seg, i) => {
+    const path = seg.map(([lo, la]) => toScene(lo, la));
+    const stages = defaultStages('camino', i === 0 ? 0.6 : 0.35);
+    const [lon0, lat0] = seg[0] || [CAMAN_CENTER.lon, CAMAN_CENTER.lat];
+    return {
+      id: `CAM-${String(i + 1).padStart(2, '0')}`, label: `Camino interior ${i + 1}`,
+      path, width: 7, zone: zoneId || null, lat: lat0, lon: lon0,
+      built: builtFromStages(stages), stages,
+    };
+  });
 }

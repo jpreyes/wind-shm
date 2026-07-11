@@ -8,7 +8,7 @@
 // El ParkManager mantiene el store, sincroniza con el FleetView y pinta el árbol.
 // ─────────────────────────────────────────────────────────────────────────────
 
-import { buildCamanPark } from './parks_data_caman.js?v=317';
+import { buildCamanPark, camanCaminos } from './parks_data_caman.js?v=318';
 
 const KEY = 'rewind-parks';
 const SEED = 'caman-i-v6';      // sello de siembra; al cambiarlo se re-siembra el store (v6: etapas con % de avance)
@@ -20,7 +20,12 @@ const uid = (p) => p + Date.now().toString(36) + (++_seq).toString(36);
 export function loadParksStore() {
   let s = null;
   try { s = JSON.parse(localStorage.getItem(KEY)); } catch {}
-  if (s && s.seed === SEED && Array.isArray(s.parks) && s.parks.length) return s;
+  if (s && s.seed === SEED && Array.isArray(s.parks) && s.parks.length) {
+    // Migración no destructiva: el parque Camán ya persistido puede no tener
+    // caminos (tipo agregado en Fase 3) → se los inyectamos sin borrar ediciones.
+    for (const p of s.parks) if (p.name === 'Camán I' && !p.caminos) p.caminos = camanCaminos(p.zones?.[0]?.id);
+    return s;
+  }
   const park = buildCamanPark(uid);
   return { activeId: park.id, parks: [park], seed: SEED };
 }

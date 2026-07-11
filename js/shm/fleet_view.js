@@ -7,11 +7,11 @@
 // ─────────────────────────────────────────────────────────────────────────────
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
-import { createTurbine, TOWER_H } from './turbine_mesh.js?v=317';
-import { createSubstationTower, groundCable, overheadLine } from './structures.js?v=317';
-import { toScene, CAMAN_CENTER, LAYOUT_SCALE, defaultStages, builtFromStages } from './parks_data_caman.js?v=317';
-import { CAMAN_ROADS } from './caman_roads.js?v=317';
-import { solarPosition, dateFromLocal, sunSceneDir } from './solar.js?v=317';
+import { createTurbine, TOWER_H } from './turbine_mesh.js?v=318';
+import { createSubstationTower, groundCable, overheadLine } from './structures.js?v=318';
+import { toScene, CAMAN_CENTER, LAYOUT_SCALE, defaultStages, builtFromStages } from './parks_data_caman.js?v=318';
+import { CAMAN_ROADS } from './caman_roads.js?v=318';
+import { solarPosition, dateFromLocal, sunSceneDir } from './solar.js?v=318';
 
 const SPACING = 235;
 const TOWER_SCALE = 2.2;   // agranda las torres (vista esquemática) para que destaquen sobre el relieve
@@ -270,7 +270,7 @@ export class FleetView {
   // ── Relieve conceptual (capa de terreno) ─────────────────────────────────────
   // Carga el DEM vendorizado y añade la malla (oculta hasta activarla).
   async loadTerrain(url) {
-    const { Terrain } = await import('./terrain.js?v=317');
+    const { Terrain } = await import('./terrain.js?v=318');
     this._TerrainClass = Terrain;                     // para reconstruir al cambiar de escala
     const dem = await (await fetch(url)).json();
     this.terrain = new Terrain(dem, { vex: 1.5 });   // relieve exagerado (esquemático)
@@ -285,6 +285,7 @@ export class FleetView {
   // Se llama una vez al cargar el relieve; la elevación NO depende de su visibilidad.
   applyElevation() {
     for (const st of this.structures) {
+      if (st.type === 'camino') { this._buildRoadMeshes(st); continue; }   // el camino sigue el terreno por vértice
       st.group.position.y = this.groundY(st.group.position.x, st.group.position.z);
       this.setProgress(st.id, st.built);     // los planos de corte dependen de la cota base
     }
@@ -461,6 +462,71 @@ export class FleetView {
     return t;
   }
 
+  // ── Caminos (estructura LINEAL) ──────────────────────────────────────────────
+  // Cinta 3D que sigue el terreno a lo largo de un `path` (polilínea en coords de
+  // escena). El 4D la «construye» a lo largo del tramo (drawRange), no bottom-up.
+  addRoad(opts = {}) {
+    const path = (opts.path || []).filter(Boolean).map(p => ({ x: p.x, z: p.z }));
+    const st = {
+      id: opts.id, type: 'camino', label: opts.label || opts.id,
+      group: new THREE.Group(), path, width: opts.width || 7,
+      sensors: [], dim: 0,
+      mat: new THREE.MeshStandardMaterial({ color: 0x8b8f96, roughness: 0.98, metalness: 0, side: THREE.DoubleSide }),
+      built: opts.built != null ? opts.built : 1, stages: opts.stages || null,
+      zone: opts.zone || null, lat: opts.lat, lon: opts.lon,
+      cumLen: [], totalLen: 1, segCount: Math.max(0, path.length - 1),
+    };
+    st.dimMats = [st.mat];
+    st.group.userData.turbineId = st.id;
+    let acc = 0;
+    for (let i = 0; i < path.length - 1; i++) { st.cumLen.push(acc); acc += Math.hypot(path[i + 1].x - path[i].x, path[i + 1].z - path[i].z); }
+    st.totalLen = acc || 1;
+    this._buildRoadMeshes(st);
+    this.scene.add(st.group);
+    this.structures.push(st);
+    // etiqueta en el punto medio del camino (coords absolutas: el grupo va en el origen)
+    const mid = path[Math.floor(path.length / 2)] || { x: 0, z: 0 };
+    const sp = makeLabelSprite(st.label); sp.position.set(mid.x, this.groundY(mid.x, mid.z) + 7, mid.z);
+    st.group.add(sp); st._label = sp; st._labelBase = sp.scale.clone();
+    this.onLayoutChange?.();
+    this.setProgress(st.id, st.built);
+    return st;
+  }
+
+  // (Re)construye la cinta: un único mesh con triángulos en orden a lo largo del
+  // path (para revelar por drawRange en el 4D). Sigue la cota del terreno.
+  _buildRoadMeshes(st) {
+    if (st._road) { st.group.remove(st._road); st._road.geometry.dispose(); st._road = null; }
+    const path = st.path; if (!path || path.length < 2) return;
+    const hw = st.width / 2, yOff = 0.35, verts = [];
+    for (let i = 0; i < path.length - 1; i++) {
+      const a = path[i], b = path[i + 1];
+      const dx = b.x - a.x, dz = b.z - a.z, len = Math.hypot(dx, dz) || 1e-6;
+      const nx = -dz / len * hw, nz = dx / len * hw;                 // normal en planta
+      const ay = this.groundY(a.x, a.z) + yOff, by = this.groundY(b.x, b.z) + yOff;
+      verts.push(a.x + nx, ay, a.z + nz, a.x - nx, ay, a.z - nz, b.x - nx, by, b.z - nz);
+      verts.push(a.x + nx, ay, a.z + nz, b.x - nx, by, b.z - nz, b.x + nx, by, b.z + nz);
+    }
+    const geo = new THREE.BufferGeometry();
+    geo.setAttribute('position', new THREE.Float32BufferAttribute(verts, 3));
+    geo.computeVertexNormals();
+    const mesh = new THREE.Mesh(geo, st.mat);
+    mesh.userData.turbineId = st.id; mesh.renderOrder = 1;
+    st.group.add(mesh); st._road = mesh;
+    this._setRoadProgress4D(st, st.built);
+  }
+
+  // 4D: revela la fracción `built` del camino a lo largo de su longitud (drawRange).
+  _setRoadProgress4D(st, built) {
+    st.built = Math.max(0, Math.min(1, built ?? st.built ?? 1));
+    st.operational = false;
+    if (!st._road) return;
+    if (!this.constructionMode) { st._road.geometry.setDrawRange(0, Infinity); return; }
+    const target = st.built * st.totalLen;
+    let shown = 0; for (let i = 0; i < st.segCount; i++) { if (st.cumLen[i] < target) shown = i + 1; }
+    st._road.geometry.setDrawRange(0, shown * 6);   // 6 vértices por segmento
+  }
+
   // Re-centra la grilla al cambiar el número de torres.
   _relayout() {
     this.turbines.forEach((t, i) => {
@@ -496,6 +562,7 @@ export class FleetView {
   // Agranda la estructura (vista esquemática) sin agrandar su etiqueta flotante.
   // Idempotente: la etiqueta se compensa desde su escala base (no acumula al re-escalar).
   _applyScale(st, k = TOWER_SCALE) {
+    if (st.type === 'camino') return;   // el camino va a escala real (1:1), no esquemática
     st.group.scale.setScalar(k);
     if (st._label) { if (st._labelBase) st._label.scale.copy(st._labelBase).multiplyScalar(1 / k); st._label.position.set(0, 2 / k, 14 / k); }
   }
@@ -555,6 +622,8 @@ export class FleetView {
     const st = this.getStructure(structId); if (!st) return;
     built = Math.max(0, Math.min(1, built ?? st.built ?? 1));
     st.built = built;
+    // Camino (lineal) → se «construye» a lo largo del tramo, no bottom-up.
+    if (st.type === 'camino') { this._setRoadProgress4D(st, built); return; }
     // Turbinas con partidas por componente → llenado 4D por componente (Frente 1).
     if (st.type === 'turbine' && st.c4d && st.stages && st.stages.length >= 4) { this._setTurbineProgress4D(st); return; }
     // «Operativa»: turbina con rotor instalado (gira); torre AT cuando está completa.
@@ -633,6 +702,7 @@ export class FleetView {
     const GEOM_BY_TYPE = {
       turbine: ['fundacion', 'fuste', 'gondola', 'rotor', 'cableado'],
       hv: ['fundacion', 'celosia', 'conductores', 'energizacion'],
+      camino: ['despeje', 'tierras', 'subbase', 'base', 'carpeta'],
     };
     let touched = 0, applied = 0;
     for (const st of this.structures) {
@@ -740,6 +810,7 @@ export class FleetView {
     if (st._beacon?.mat) mats.push(st._beacon.mat);
     if (st.ghost?.mats) mats.push(...st.ghost.mats);
     for (const m of mats) m?.dispose?.();
+    if (st._road) st._road.geometry.dispose();   // geometría de la cinta del camino
     if (st._label) { st._label.material.map?.dispose?.(); st._label.material.dispose?.(); }
   }
 
@@ -803,6 +874,10 @@ export class FleetView {
         this.setProgress(hv.id, h.built);       // aplica el llenado 4D
       }
       this.rebuildCables();
+    }
+    for (const r of (p?.caminos || [])) {
+      const rd = this.addRoad({ id: r.id, label: r.label, path: r.path, width: r.width, built: r.built, stages: r.stages, lat: r.lat, lon: r.lon });
+      rd.zone = r.zone || null;
     }
     this.onChange = oc; this.onLayoutChange = ol;
     this.onChange?.(this.turbines.length);
@@ -977,7 +1052,7 @@ export class FleetView {
         if (mat.emissive) mat.emissive.setRGB(rp, selGlow * 0.45, selGlow);
       }
       // Oscilación leve de la punta por el viento (sway sobre la base, ejes X/Z)
-      if (!this.paused) {
+      if (!this.paused && st.type !== 'camino') {   // el camino no se mece
         if (st._sw === undefined) st._sw = Math.random() * 6.28;
         const amp = st.type === 'hv' ? 0.0025 : 0.006;
         st.group.rotation.z = amp * Math.sin(tt * 0.9 + st._sw);
