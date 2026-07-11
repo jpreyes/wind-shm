@@ -58,8 +58,9 @@ token expiry). Sesión en localStorage; token firmado con expiración → caduca
 ## FASE 2 — GUI / UX · 1–2 semanas  *(prioridad #2 de JP; = Frente 6 UX + audit a11y)*
 - [ ] **Selector de FASE** arriba (Proyecto·Obra·Operación·Administración) que **filtra**
   el panel → menos saturación (Frente 6.1). Rename **Calidad → Obra**.
-- [ ] **WBS drill-down**: click en partida (p.ej. «Fundación») → su vista
-  (protocolos/avance/fechas/fotos/ensayos) + «‹ Volver» (Frente 6.2). *(Hoy no hace nada.)*
+- [x] **WBS drill-down** (v314): click en partida (p.ej. «Fundación») → su vista
+  (protocolos · estructura · estado · ciclo · última fecha · ensayos) + «‹ Volver».
+  Fila clickeable con teclado (role=button). *(Frente 6.2 — era la queja «no hace nada».)*
 - [ ] **Accesibilidad (audit)**: encabezados `h1–h6` semánticos, `label` en los ~50 inputs,
   skip-link. Sube varias notas del informe.
 - [ ] **Partir `shm_mode.js`** (god module 2.633 líneas) en módulos por responsabilidad
