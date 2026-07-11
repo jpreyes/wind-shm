@@ -23,8 +23,8 @@ import { defaultWbs, wbsProgress, partidaForProtocol } from '../../tools/wbs.js'
 import { readXlsx } from '../../lib/xlsx_lite.mjs';
 import { analyzeWorkbook, proposeMapping, distinctValues, readByProfile, guessCanon, BUILTIN_PROFILES, FIELDS as QP_FIELDS, CANON_STATES } from '../../tools/quality_profile.mjs';
 import { FRAMEWORK, STATUS_NORMS, ENSAYO_NORMS, normLabel, normForEnsayo } from '../../tools/norms_catalog.mjs';
-import { backendActive, pushQuality, pullQuality, pushWbs, pushProfile, deleteProtocoloRemote, debouncedPush } from './backend_sync.js?v=313';
-import { t } from './i18n.js?v=313';
+import { backendActive, pushQuality, pullQuality, pushWbs, pushProfile, deleteProtocoloRemote, debouncedPush } from './backend_sync.js?v=314';
+import { t } from './i18n.js?v=314';
 
 const STORE = 'rewind.calidad.v1';
 const XLSX_MIME = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
@@ -436,8 +436,9 @@ export function addCiclo(id, { estadoRaw, fechaEnvio, fechaRetorno, comentarios,
 }
 
 // ── Overlay (dashboard ↔ gestión ↔ WBS) ──────────────────────────────────────
-let view = 'dash';        // 'dash' | 'manage' | 'wbs'
+let view = 'dash';        // 'dash' | 'manage' | 'wbs' | 'norms' | 'partida'
 let editingId = null;     // id del protocolo en edición (o null = nuevo)
+let partidaId = null;     // partida abierta en el drill-down (view === 'partida')
 let wbsType = 'turbine';  // tipo de estructura en edición en el HUD de partidas
 let wbsDraft = null;      // copia de trabajo del WBS ({turbine:[], hv:[]}) mientras se edita
 let presetPartida = null; // partida preseleccionada al crear un protocolo desde el HUD
@@ -466,7 +467,7 @@ export function showPanel() {
         <p class="cal-mut" style="margin-top:10px">${t('cal.templateHint')}</p>
       </div>`;
     } else {
-      ov.innerHTML = view === 'norms' ? normsHTML() : view === 'wbs' ? wbsHTML(data) : view === 'manage' ? manageHTML(data) : dashboardHTML(data);
+      ov.innerHTML = view === 'norms' ? normsHTML() : view === 'wbs' ? wbsHTML(data) : view === 'manage' ? manageHTML(data) : view === 'partida' ? partidaHTML(data, partidaId) : dashboardHTML(data);
     }
   };
   paint();
@@ -486,7 +487,10 @@ export function showPanel() {
     if (e.target.closest('.cal-manage')) { view = 'manage'; editingId = null; paint(); return; }
     if (e.target.closest('.cal-wbs')) { wbsDraft = { turbine: getWbs('turbine'), hv: getWbs('hv') }; view = 'wbs'; paint(); return; }
     if (e.target.closest('.cal-norms')) { view = 'norms'; paint(); return; }
-    if (e.target.closest('.cal-back')) { view = 'dash'; paint(); return; }
+    if (e.target.closest('.cal-back')) { view = 'dash'; partidaId = null; paint(); return; }
+    // ── Drill-down: clic en una partida → su detalle (protocolos/fechas/ensayos) ──
+    const prow = e.target.closest('.cal-partida-row');
+    if (prow) { partidaId = prow.dataset.pid; view = 'partida'; paint(); ov.querySelector('.cal-card')?.scrollTo(0, 0); return; }
     // ── HUD de partidas (WBS) ──
     if (e.target.closest('.wbs-add')) { wbsDraft[wbsType].push({ id: wbsUid(), nombre: t('cal.wbs.newPartida'), geom: '', peso: 1, match: [] }); paint(); return; }
     const wDel = e.target.closest('.wbs-del');
@@ -555,6 +559,12 @@ export function showPanel() {
     }
   });
 
+  // Teclado en las filas de partida (role=button): Enter/Espacio abre el detalle.
+  ov.addEventListener('keydown', (e) => {
+    if (e.key !== 'Enter' && e.key !== ' ') return;
+    const prow = e.target.closest?.('.cal-partida-row'); if (!prow) return;
+    e.preventDefault(); partidaId = prow.dataset.pid; view = 'partida'; paint();
+  });
   addEventListener('keydown', function escFn(e) { if (e.key === 'Escape') { close(); removeEventListener('keydown', escFn); } });
   document.body.appendChild(ov);
 
@@ -609,7 +619,7 @@ function dashboardHTML(data) {
   // Por PARTIDA (hito) — mapeo protocolo→partida sobre el WBS de torre (fase A).
   const wp = wbsProgress(data.protocolos, getWbs('turbine'), getOverrides());
   const partidaRows = Object.values(wp.porPartida).map((b) =>
-    `<tr><td>${esc(b.nombre)}</td><td>${b.total}</td><td>${b.aprobado}</td>
+    `<tr class="cal-partida-row" data-pid="${esc(b.id)}" tabindex="0" role="button" title="${esc(b.nombre)} — ver detalle"><td>${esc(b.nombre)} <span class="cal-drill">›</span></td><td>${b.total}</td><td>${b.aprobado}</td>
      <td><div class="cal-bar"><span style="width:${pct(b.pct)};background:${heat(b.pct)}"></span></div>${pct(b.pct)}</td></tr>`).join('');
   const sinAsignar = wp.sinAsignar.length
     ? `<div class="cal-mut" style="margin-top:6px">${t('cal.wbs.unassigned', wp.sinAsignar.length)}</div>` : '';
@@ -635,8 +645,8 @@ function dashboardHTML(data) {
     ${reimport}
     <div class="cal-kpis">${kpis}</div>
 
-    <h3>${t('cal.wbs.byPartida')} <span class="cal-mut">${t('cal.wbs.hint')}</span></h3>
-    <table class="cal-tbl"><thead><tr><th>${t('cal.wbs.partida')}</th><th>${t('cal.col.total')}</th><th>${t('cal.col.approved')}</th><th>${t('cal.col.progress')}</th></tr></thead><tbody>${partidaRows}</tbody></table>
+    <h3>${t('cal.wbs.byPartida')} <span class="cal-mut">${t('cal.pd.hint')}</span></h3>
+    <table class="cal-tbl cal-partida-tbl"><thead><tr><th>${t('cal.wbs.partida')}</th><th>${t('cal.col.total')}</th><th>${t('cal.col.approved')}</th><th>${t('cal.col.progress')}</th></tr></thead><tbody>${partidaRows}</tbody></table>
     ${sinAsignar}
 
     <h3>${t('cal.byArea')}</h3>
@@ -677,6 +687,62 @@ function normsHTML() {
     <h3>${t('cal.norms.tests')} <span class="cal-mut">(NCh ≈ ASTM ≈ EN)</span></h3>
     <table class="cal-tbl"><thead><tr><th>${t('cal.norms.test')}</th><th>${t('cal.norms.param')}</th><th>${t('cal.norms.standard')}</th></tr></thead><tbody>${en}</tbody></table>
     <div class="cal-mut" style="margin-top:8px">${t('cal.norms.foot')}</div>
+  </div>`;
+}
+
+// ── Drill-down de partida: detalle de UN hito (protocolos, fechas, ensayos) ───
+function partidaHTML(data, pid) {
+  const wbs = getWbs('turbine');
+  const part = wbs.find((p) => p.id === pid);
+  const wp = wbsProgress(data.protocolos, wbs, getOverrides());
+  const b = part && wp.porPartida[pid];
+  if (!part || !b) return dashboardHTML(data);   // partida inexistente → volver al panel
+
+  const byId = new Map((data.protocolos || []).map((p) => [p.id, p]));
+  const protos = b.protocolos.map((id) => byId.get(id)).filter(Boolean);
+  const lastDate = (p) => { const c = p.ciclos || []; const last = c[c.length - 1]; return (last && (last.fechaRetorno || last.fechaEnvio)) || p.fechaDocumento || null; };
+
+  const rows = protos.map((p) => `<tr>
+    <td>${esc(p.estructuraId || '—')}</td>
+    <td>${esc(p.codigoDocumento || p.documento || '—')}</td>
+    <td>${esc(p.elemento || '')}</td>
+    <td><span class="cal-tag ${p.estadoActual === 'aprobado' ? 'cal-tag-ok' : 'cal-tag-warn'}">${esc(t('est.' + p.estadoActual) || p.estadoActual || '—')}</span></td>
+    <td>${(p.ciclos || []).length || '—'}</td>
+    <td>${esc(lastDate(p) || '—')}</td>
+  </tr>`).join('');
+
+  // Ensayos de hormigón: sólo bajo la partida de FUNDACIÓN (las probetas son de fundación).
+  let ensayosSec = '';
+  const ensayos = data.ensayosHormigon || [];
+  if (part.geom === 'fundacion' && ensayos.length) {
+    const erows = ensayos.map((e) => `<tr>
+      <td>${esc(e.estructuraId || e.elemento || '—')}</td>
+      <td>${esc(e.grado || '—')}</td>
+      <td>${esc(e.fechaEnsayo || '—')}</td>
+      <td><span class="cal-tag ${e.estadoActual === 'aprobado' ? 'cal-tag-ok' : 'cal-tag-warn'}">${esc(t('est.' + e.estadoActual) || e.estadoActual || '—')}</span></td>
+    </tr>`).join('');
+    ensayosSec = `<h3>${t('cal.pd.ensayos')} <span class="cal-mut">(${ensayos.length})</span>
+        <span class="norm-chip">${esc(normLabel(normForEnsayo('compresión hormigón')))}</span></h3>
+      <table class="cal-tbl"><thead><tr><th>${t('cal.col.struct')}</th><th>${t('cal.pd.grade')}</th><th>${t('cal.pd.date')}</th><th>${t('cal.col.state')}</th></tr></thead><tbody>${erows}</tbody></table>`;
+  }
+
+  const geomLabel = (GEOMS.turbine.find(([v]) => v === part.geom) || [])[1] || part.geom || '—';
+  return `<div class="mb-about-card cal-card" role="dialog" aria-label="${esc(part.nombre)}">
+    <button class="mb-about-x" type="button" aria-label="✕">✕</button>
+    <div class="cal-head">
+      <h2>${esc(part.nombre)}</h2>
+      <div class="cal-actions"><button class="cal-btn cal-import-alt cal-back" type="button">${t('cal.pd.back')}</button></div>
+    </div>
+    <div class="cal-pd-head">
+      <div class="cal-bar cal-pd-bar"><span style="width:${pct(b.pct)};background:${heat(b.pct)}"></span></div>
+      <div class="cal-pd-meta"><b>${pct(b.pct)}</b> · ${t('cal.pd.progress', b.aprobado, b.total)}
+        · ${t('cal.pd.geom')}: ${esc(geomLabel)} · ${t('cal.pd.weight')}: ${part.peso ?? 1}</div>
+    </div>
+    <h3>${t('cal.pd.protocols')} <span class="cal-mut">(${protos.length})</span></h3>
+    ${protos.length
+      ? `<table class="cal-tbl"><thead><tr><th>${t('cal.col.struct')}</th><th>${t('cal.col.doc')}</th><th>${t('cal.f.element')}</th><th>${t('cal.col.state')}</th><th>${t('cal.pd.cycle')}</th><th>${t('cal.pd.date')}</th></tr></thead><tbody>${rows}</tbody></table>`
+      : `<div class="cal-mut">${t('cal.pd.noProtos')}</div>`}
+    ${ensayosSec}
   </div>`;
 }
 

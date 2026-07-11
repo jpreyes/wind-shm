@@ -69,6 +69,17 @@ body.shm #menubar { min-width: 0; overflow-x: auto; }
 .cal-tbl td { padding: 4px 8px; border-bottom: 1px solid rgba(255,255,255,.05); color: var(--text); vertical-align: middle; }
 .cal-bar { display: inline-block; width: 70px; height: 7px; background: rgba(255,255,255,.09); border-radius: 4px; overflow: hidden; vertical-align: middle; margin-right: 6px; }
 .cal-bar span { display: block; height: 100%; }
+/* Fase 2 · WBS drill-down: filas de partida clickeables + vista de detalle */
+.cal-partida-tbl tbody tr.cal-partida-row { cursor: pointer; }
+.cal-partida-row:hover td, .cal-partida-row:focus-visible td { background: var(--accent); color: #fff; }
+.cal-partida-row:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+.cal-partida-row:hover .cal-tag, .cal-partida-row:focus-visible .cal-tag { color: #fff; }
+.cal-drill { color: var(--text-muted); font-weight: 700; margin-left: 3px; }
+.cal-partida-row:hover .cal-drill, .cal-partida-row:focus-visible .cal-drill { color: #fff; }
+.cal-pd-head { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin: 8px 0 4px; }
+.cal-pd-bar { width: 160px; height: 10px; }
+.cal-pd-meta { font-size: 12.5px; color: var(--text-muted); }
+.cal-pd-meta b { color: var(--text); font-size: 15px; }
 .cal-chips { display: flex; flex-wrap: wrap; gap: 6px; }
 .cal-chip { display: flex; align-items: center; gap: 5px; border: 1px solid var(--border2); border-left-width: 3px; border-radius: 7px; padding: 4px 8px; font-size: 11.5px; background: var(--bg1, rgba(255,255,255,.03)); }
 .cal-chip b { color: var(--text); }
