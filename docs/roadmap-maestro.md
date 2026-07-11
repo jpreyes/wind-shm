@@ -56,15 +56,21 @@ token expiry). Sesión en localStorage; token firmado con expiración → caduca
 - **Cierre:** dos usuarios con roles distintos; el viewer no puede escribir; RLS cerrado.
 
 ## FASE 2 — GUI / UX · 1–2 semanas  *(prioridad #2 de JP; = Frente 6 UX + audit a11y)*
-- [ ] **Selector de FASE** arriba (Proyecto·Obra·Operación·Administración) que **filtra**
-  el panel → menos saturación (Frente 6.1). Rename **Calidad → Obra**.
+- [x] **Selector de FASE** (v315): barra Proyecto·Obra·Operación que **filtra** las
+  pestañas (Parque y Selección universales); navega a la vista principal de la fase
+  y persiste la elección. Reduce la saturación 6→3-4 (Frente 6.1). *(Admin queda para
+  cuando exista su módulo, Fase 5.)*
 - [x] **WBS drill-down** (v314): click en partida (p.ej. «Fundación») → su vista
   (protocolos · estructura · estado · ciclo · última fecha · ensayos) + «‹ Volver».
   Fila clickeable con teclado (role=button). *(Frente 6.2 — era la queja «no hace nada».)*
-- [ ] **Accesibilidad (audit)**: encabezados `h1–h6` semánticos, `label` en los ~50 inputs,
-  skip-link. Sube varias notas del informe.
-- [ ] **Partir `shm_mode.js`** (god module 2.633 líneas) en módulos por responsabilidad
-  (toolbar, statusbar, tower-card, reportes…) — deuda del audit + habilita lo demás.
+- [x] **Accesibilidad (audit)** (v316): skip-link «Saltar al contenido», `<h1>` accesible
+  persistente, `role="main"` (un solo landmark), pestañas `role=tab`/`tablist` +
+  `aria-selected`, título de panel `<h2>`. *(Pendiente menor: `label`/`aria-label` en el
+  resto de inputs dinámicos — se completa junto con el split.)*
+- [~] **Partir `shm_mode.js`** (god module): **iniciado** (v317) — extraídos `dsp.js`
+  (FFT) y `viewport_chrome.js` (5 overlays del visor); 2903→2768 líneas. **Falta el
+  grueso:** `buildDashboard` (~1880 líneas, acoplado a boot vía closures) → refactor
+  mayor, hacer aparte e incremental (toolbar/statusbar/tower-card/reportes/render-panel).
 - [ ] Terminar la visibilidad de datos del backend (pull ampliado: WBS/perfiles/estructuras
   se recuperan en otro navegador) — Fase 6.0 restante.
 
