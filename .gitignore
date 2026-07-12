@@ -30,3 +30,6 @@ referencias/*.docx
 
 # Auditorías internas (notas de trabajo, no se publican)
 auditoria/
+
+# Seed de usuarios de prueba: trae credenciales (solo piloto), no se versiona
+backend/supabase/seed_test_users.sql
