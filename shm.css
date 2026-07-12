@@ -169,14 +169,25 @@ tr.wbs-unmapped td:first-child::before { content: '⚠ '; color: #e69628; }
 .shm-sensor.editing { outline: 1px solid var(--accent); border-radius: 6px; }
 .cs-edit { color: var(--text-muted); }
 .cs-edit:hover { color: var(--accent); }
-/* Rol solo-lectura (R-38): oculta toda la UI de mutación */
+/* Gating fino por ROL/capacidad. El body lleva cap-gestion/cap-quality/cap-inspect/
+   cap-operate según el rol (todas en demo/sim abierto); se oculta cada control de
+   ESCRITURA cuando falta su capacidad. El RLS del server es la autoridad — esto es UX. */
 .mb-viewer { display: inline-flex; align-items: center; font-size: 11px; font-weight: 700; color: #f59e0b; border: 1px solid rgba(245,158,11,.5); background: rgba(245,158,11,.12); border-radius: 6px; padding: 3px 8px; margin-right: 10px; }
-body.role-viewer #shm-add-tool, body.role-viewer #shm-hv-tool, body.role-viewer #shm-del-tool, body.role-viewer #shm-edit-tool,
-body.role-viewer .ins-add, body.role-viewer #ins-new, body.role-viewer #ins-del, body.role-viewer .ins-x, body.role-viewer .ins-ot,
-body.role-viewer .ins-dmg-cam, body.role-viewer .ins-addform, body.role-viewer #ins-addphoto, body.role-viewer #ins-first,
-body.role-viewer .ins-px, body.role-viewer .instr-add, body.role-viewer .cs-del, body.role-viewer .cs-edit,
-body.role-viewer .cal-manage, body.role-viewer .cal-new, body.role-viewer .cal-import, body.role-viewer .cal-avance,
-body.role-viewer .cal-edit, body.role-viewer .cal-del, body.role-viewer .cal-form, body.role-viewer .venc-acts { display: none !important; }
+/* cap-gestion: estructuras, WBS, avance 4D, etapas constructivas, instrumentación */
+body:not(.cap-gestion) #shm-add-tool, body:not(.cap-gestion) #shm-hv-tool,
+body:not(.cap-gestion) #shm-del-tool, body:not(.cap-gestion) #shm-edit-tool,
+body:not(.cap-gestion) .cs-del, body:not(.cap-gestion) .cs-edit, body:not(.cap-gestion) .instr-add,
+body:not(.cap-gestion) .cal-wbs, body:not(.cap-gestion) .cal-apply4d, body:not(.cap-gestion) .cal-avance { display: none !important; }
+/* cap-quality: protocolos/ensayos, import, formularios de calidad */
+body:not(.cap-quality) .cal-manage, body:not(.cap-quality) .cal-new, body:not(.cap-quality) .cal-import,
+body:not(.cap-quality) .cal-wizard, body:not(.cap-quality) .cal-edit, body:not(.cap-quality) .cal-del,
+body:not(.cap-quality) .cal-form, body:not(.cap-quality) .cal-add, body:not(.cap-quality) .cal-reimport,
+body:not(.cap-quality) .wbs-addproto { display: none !important; }
+/* cap-inspect: inspección estructural (CMMS), hallazgos, fotos de estado */
+body:not(.cap-inspect) .ins-add, body:not(.cap-inspect) #ins-new, body:not(.cap-inspect) #ins-del,
+body:not(.cap-inspect) .ins-x, body:not(.cap-inspect) .ins-ot, body:not(.cap-inspect) .ins-dmg-cam,
+body:not(.cap-inspect) .ins-addform, body:not(.cap-inspect) #ins-addphoto, body:not(.cap-inspect) #ins-first,
+body:not(.cap-inspect) .ins-px, body:not(.cap-inspect) .venc-acts { display: none !important; }
 /* Comparador de torres (R-39) */
 .cmp-card { max-width: 460px; width: calc(100% - 40px); }
 .cmp-tbl { width: 100%; border-collapse: collapse; font-size: 13px; margin-top: 8px; }

@@ -8,35 +8,35 @@
 //   inspecciones y señal temporal EN VIVO desde un Web Worker (DataSource).
 // Recortes (modelado) los hace shm.css ocultando, no borrando.
 // ─────────────────────────────────────────────────────────────────────────────
-import { FleetView } from './fleet_view.js?v=325';
-import { DataSource } from './data_source.js?v=325';
-import { computeTwin } from './digital_twin.js?v=325';
-import { ParkManager, loadParksStore } from './parks.js?v=325';
-import { MapView } from './map_view.js?v=325';
-import { defaultStages, builtFromStages, LAYOUT_SCALE } from './parks_data_caman.js?v=325';
-import { fftMag } from './dsp.js?v=325';
-import { buildSunControl, buildCompass, buildNameplate, buildBanner, initPanelResize } from './viewport_chrome.js?v=325';
-import { buildAvanceHUD } from './avance_hud.js?v=325';
-import { renderAvance, computeParkAvance } from './avance_dashboard.js?v=325';
-import * as Insp from './inspection.js?v=325';
-import * as Fat from './fatigue.js?v=325';
-import * as Instr from './instrumentation.js?v=325';
-import * as Calidad from './calidad.js?v=325';
-import { showBackendConfig } from './backend_ui.js?v=325';
-import { backendActive, pushStructures, requestCapture } from './backend_sync.js?v=325';
-import { authRequired, loggedIn, isEditor, canOperate } from './auth.js?v=325';
-import { requireLogin, userChipHTML, wireUserChip } from './auth_ui.js?v=325';
-import * as Hist from './history.js?v=325';
-import * as Health from './health.js?v=325';
-import * as Bench from './benchmark.js?v=325';
-import * as Alarms from './alarms.js?v=325';
-import { METEO_CAMAN } from './meteo_caman.js?v=325';
-import { ReplaySource } from './replay.js?v=325';
-import { esc, safeUrl } from './util.js?v=325';
-import { t, getLang, setLang } from './i18n.js?v=325';
+import { FleetView } from './fleet_view.js?v=326';
+import { DataSource } from './data_source.js?v=326';
+import { computeTwin } from './digital_twin.js?v=326';
+import { ParkManager, loadParksStore } from './parks.js?v=326';
+import { MapView } from './map_view.js?v=326';
+import { defaultStages, builtFromStages, LAYOUT_SCALE } from './parks_data_caman.js?v=326';
+import { fftMag } from './dsp.js?v=326';
+import { buildSunControl, buildCompass, buildNameplate, buildBanner, initPanelResize } from './viewport_chrome.js?v=326';
+import { buildAvanceHUD } from './avance_hud.js?v=326';
+import { renderAvance, computeParkAvance } from './avance_dashboard.js?v=326';
+import * as Insp from './inspection.js?v=326';
+import * as Fat from './fatigue.js?v=326';
+import * as Instr from './instrumentation.js?v=326';
+import * as Calidad from './calidad.js?v=326';
+import { showBackendConfig } from './backend_ui.js?v=326';
+import { backendActive, pushStructures, requestCapture } from './backend_sync.js?v=326';
+import { authRequired, loggedIn, isEditor, canOperate, canGestion, canQualityEdit, canQualityApprove, canInspect, currentRole } from './auth.js?v=326';
+import { requireLogin, userChipHTML, wireUserChip } from './auth_ui.js?v=326';
+import * as Hist from './history.js?v=326';
+import * as Health from './health.js?v=326';
+import * as Bench from './benchmark.js?v=326';
+import * as Alarms from './alarms.js?v=326';
+import { METEO_CAMAN } from './meteo_caman.js?v=326';
+import { ReplaySource } from './replay.js?v=326';
+import { esc, safeUrl } from './util.js?v=326';
+import { t, getLang, setLang } from './i18n.js?v=326';
 
 const F1_BASE = { turbine: 0.283, hv: 1.6 };
-const REWIND_VER = 'v325';   // versión visible del build (subir junto al cache-bust)
+const REWIND_VER = 'v326';   // versión visible del build (subir junto al cache-bust)
 const FS = 62.5;   // frecuencia de muestreo de la señal (Hz), igual que shm_worker.js
 // Clasificador ML de daño (0..4)
 const CLS = ['Sin daño', 'Leve', 'Moderado', 'Alto', 'Muy alto'];
@@ -72,8 +72,18 @@ async function boot() {
   // R-38 + Fase 1: rol solo-lectura. Vía sesión (rol 'viewer' de la tabla members)
   // o vía ?role=viewer (override manual). Oculta crear/editar/borrar (CSS) y
   // desactiva los atajos de teclado destructivos.
-  window.shmViewer = new URLSearchParams(location.search).get('role') === 'viewer'
-    || (authRequired() && loggedIn() && !isEditor());
+  // Gating fino de UI por CAPACIDAD (el RLS del server es la autoridad). Cada
+  // dominio de escritura se muestra solo si el rol lo permite: cap-gestion (WBS/
+  // estructuras/avance), cap-quality (protocolos), cap-quality-approve (aprobar),
+  // cap-inspect (inspección), cap-operate (SHM). En demo/sim ABIERTO (sin auth
+  // requerido) se otorgan todas; ?role=viewer fuerza solo-lectura.
+  const forceViewer = new URLSearchParams(location.search).get('role') === 'viewer';
+  const openMode = !authRequired();                       // demo/sim → acceso completo
+  const cap = (fn) => !forceViewer && (openMode || fn());
+  const CAPS = { 'cap-gestion': canGestion, 'cap-quality': canQualityEdit,
+    'cap-quality-approve': canQualityApprove, 'cap-inspect': canInspect, 'cap-operate': canOperate };
+  for (const [cls, fn] of Object.entries(CAPS)) document.body.classList.toggle(cls, cap(fn));
+  window.shmViewer = forceViewer || (!openMode && currentRole() === 'visualizador');
   if (window.shmViewer) document.body.classList.add('role-viewer');
   Hist.purge();   // R-34: retención rodante — descarta el histórico más viejo que 60 días
 
@@ -341,7 +351,7 @@ async function boot() {
   // ── Relieve conceptual del terreno (DEM vendorizado) — encendido por defecto ─
   setLoad(88, 'Cargando relieve…'); await delay(40);
   try {
-    await fleet.loadTerrain('data/caman_dem.json?v=325');
+    await fleet.loadTerrain('data/caman_dem.json?v=326');
     fleet.setTerrainVisible(true);
     document.getElementById('shm-relieve-tool')?.classList.add('active');
   } catch (e) { console.warn('[shm] relieve no disponible', e); }
@@ -1322,7 +1332,7 @@ function buildDashboard(panel, fleet, actions) {
         <div class="row"><span>${t('sh.sensOk')}</span><b id="sh-ns">—</b></div>
         <div class="row"><span>${t('sh.f1now')}</span><b id="sh-f1">—</b></div>
         <div class="note" style="font-size:10px">${t('sh.note')}</div>`
-        + (backendActive() && canOperate()
+        + (backendActive() && document.body.classList.contains('cap-operate')
           ? `<button class="cal-btn shm-capture" id="shm-capture" type="button" title="${esc(t('sh.captureTip'))}">${t('sh.capture')}</button><div class="cal-mut" id="shm-capture-st" style="margin-top:4px"></div>`
           : '')
         + alarmsEditorHTML();
