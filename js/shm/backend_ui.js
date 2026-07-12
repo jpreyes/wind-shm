@@ -6,9 +6,9 @@
 // Sólo la **anon key** (pública, pensada para el navegador). NUNCA la service_role
 // (secreta) — esa vive en el ingestor/servidor, no en el front.
 // ─────────────────────────────────────────────────────────────────────────────
-import { getBackendConfig, setBackendConfig } from './backend.js?v=327';
-import { tableCounts } from './backend_sync.js?v=327';
-import { t } from './i18n.js?v=327';
+import { getBackendConfig, setBackendConfig } from './backend.js?v=328';
+import { tableCounts } from './backend_sync.js?v=328';
+import { t } from './i18n.js?v=328';
 
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 
@@ -64,7 +64,7 @@ export function showBackendConfig() {
     }
     if (e.target.closest('.be-refresh')) { loadCounts($('.be-counts')); return; }
     if (e.target.closest('.be-mock')) { setBackendConfig({ mock: true }); location.href = location.pathname + '?backend=mock'; return; }
-    if (e.target.closest('.be-off')) { setBackendConfig(null); location.href = location.pathname; return; }
+    if (e.target.closest('.be-off')) { setBackendConfig({ sim: true }); location.href = location.pathname; return; }
   });
   addEventListener('keydown', function escFn(ev) { if (ev.key === 'Escape') { close(); removeEventListener('keydown', escFn); } });
   document.body.appendChild(ov);

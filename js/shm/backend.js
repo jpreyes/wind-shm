@@ -11,18 +11,38 @@
 // ─────────────────────────────────────────────────────────────────────────────
 const CFG_KEY = 'rewind.backend.v1';
 
+// Proyecto Supabase por defecto para TELEMETRÍA. Es el MISMO proyecto que auth.js
+// usa para el login (publishable key, pública → seguro embeber). Al estar logueado,
+// la app adopta este backend sin configurar «Fuente» a mano → cierra el loop:
+// login → lee `features`/`waves` reales del sensor. Mantener sincronizado con
+// AUTH_SUPABASE en auth.js.
+const DEFAULT_SUPABASE = {
+  url: 'https://xenujkmogaxxkrnpgbmg.supabase.co',
+  anonKey: 'sb_publishable_OxaslmxBAioPxaZ_SzHENg_d0aMJS-w',
+};
+// ¿Hay sesión de usuario vigente? (auth.js guarda `rewind.auth.v1`). Sin sesión
+// (demo/anon) NO auto-conectamos: el RLS de `features` es `to authenticated` →
+// devolvería vacío y la app se vería «muerta». En ese caso queda en simulación.
+function hasSession() {
+  try { const s = JSON.parse(localStorage.getItem('rewind.auth.v1')); return !!(s && s.access_token && (s.expires_at * 1000) > Date.now()); } catch { return false; }
+}
+
 export function getBackendConfig() {
   try {
     const q = new URLSearchParams(location.search).get('backend');
     if (q === 'mock') return { mock: true };                       // fuerza el backend mock (prueba el loop)
     if (q && q.includes('|')) { const [url, anonKey] = q.split('|'); return { url, anonKey }; }
   } catch { /* */ }
-  try { const c = JSON.parse(localStorage.getItem(CFG_KEY)); if (c && (c.url || c.mock)) return c; } catch { /* */ }
+  try { const c = JSON.parse(localStorage.getItem(CFG_KEY)); if (c) { if (c.sim) return null; if (c.url || c.mock) return c; } } catch { /* */ }
+  // Sin config explícita: si el usuario está logueado, adopta el proyecto de auth
+  // como fuente de telemetría (mismo Supabase). Sin sesión → null (queda en sim).
+  if (DEFAULT_SUPABASE.url && hasSession()) return { ...DEFAULT_SUPABASE };
   return null;
 }
 export function setBackendConfig(cfg) {
   try {
     if (cfg && cfg.url) localStorage.setItem(CFG_KEY, JSON.stringify({ url: cfg.url, anonKey: cfg.anonKey || '' }));
+    else if (cfg && cfg.sim) localStorage.setItem(CFG_KEY, JSON.stringify({ sim: true }));   // «Desconectar» = sim explícito (frena el auto-connect)
     else localStorage.removeItem(CFG_KEY);
   } catch { /* */ }
 }
@@ -99,9 +119,16 @@ function supabaseBackend(cfg) {
 
   async function poll() {
     try {
-      const since = sinceTs ? `&ts=gt.${encodeURIComponent(sinceTs)}` : '&limit=200';
-      const res = await fetch(`${base}/rest/v1/features?select=*&order=ts.asc${since}`, { headers: headers() });
-      if (res.ok) deliver(await res.json());
+      // Arranque (sin sinceTs): trae lo MÁS RECIENTE (desc+limit) para mostrar el
+      // último estado por estructura de inmediato — no replayear historial viejo.
+      // Luego incremental por ts creciente. `deliver` es idempotente.
+      const q = sinceTs ? `&order=ts.asc&ts=gt.${encodeURIComponent(sinceTs)}` : '&order=ts.desc&limit=100';
+      const res = await fetch(`${base}/rest/v1/features?select=*${q}`, { headers: headers() });
+      if (res.ok) {
+        let rows = await res.json();
+        if (!sinceTs && Array.isArray(rows)) rows = rows.reverse();   // desc→asc: deliver deja sinceTs en la más nueva
+        deliver(rows);
+      }
     } catch { /* red intermitente → reintenta */ }
     pollTimer = setTimeout(poll, rtConnected ? POLL_SLOW : POLL_FAST);
   }
@@ -146,6 +173,11 @@ function supabaseBackend(cfg) {
   return {
     mode: 'supabase',
     async ingestTick(tick) {
+      // El SENSOR real (service_role) es la única fuente de `features`. El navegador
+      // NO escribe telemetría sintética a la BD real (ensuciaría la tabla y dispararía
+      // alarmas falsas). Se puede reactivar como ingestor de demo con
+      // `window.shmBrowserIngest = true` (sin sensor conectado).
+      if (!window.shmBrowserIngest) return;
       const now = Date.now();
       if (now - lastIngest < INGEST_MS) return;   // throttle: máx. 1 lote/min (contrato «features 1/min»)
       lastIngest = now;
