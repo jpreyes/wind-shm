@@ -38,7 +38,11 @@ alter table sensor_commands add column if not exists wave_id    bigint;
 alter table sensor_commands add column if not exists note       text;
 alter table sensor_commands add column if not exists created_at timestamptz default now();
 alter table sensor_commands add column if not exists done_at    timestamptz;
+-- Multitenancy (default_tenant() lo define schema.sql, que corre antes).
+alter table sensor_commands add column if not exists tenant_id  uuid default default_tenant() references tenants(id);
+update sensor_commands set tenant_id = default_tenant() where tenant_id is null;
 create index if not exists sensor_cmd_pending on sensor_commands (structure_id, status, created_at);
+create index if not exists sensor_cmd_tenant on sensor_commands (tenant_id);
 
 -- ── RLS: autenticados crean/leen comandos; el sensor usa service_role ─────────
 -- (limpia también políticas del piloto por si `rls_pilot` las hubiera dejado).

@@ -66,6 +66,44 @@ create table if not exists members (
   role text not null default 'viewer', created_at timestamptz default now()
 );
 
+-- ── 1b · MULTITENANCY (id de tenant; HOY un solo tenant «default») ───────────
+-- Andamiaje para separar por organización/cliente aunque no se use todavía: cada
+-- fila cuelga de un `tenant_id`; el tenant «default» cubre todo lo actual. Para
+-- activar el AISLAMIENTO por tenant, ver el bloque comentado en la sección RLS.
+create extension if not exists pgcrypto;   -- gen_random_uuid()
+
+create table if not exists tenants (
+  id   uuid primary key default gen_random_uuid(),
+  slug text unique not null,
+  name text,
+  created_at timestamptz default now()
+);
+insert into tenants (slug, name) values ('default', 'ReWind (default)')
+on conflict (slug) do nothing;
+
+create or replace function default_tenant() returns uuid language sql stable as $$
+  select id from tenants where slug = 'default' limit 1;
+$$;
+
+-- `tenant_id` en cada tabla de dominio (default = tenant «default»); backfill de
+-- las filas viejas + índice por tenant.
+do $$
+declare tbl text;
+begin
+  foreach tbl in array array['structures','features','waves','protocolos','ciclos',
+                             'ensayos','wbs_config','import_profiles','inspections','members']
+  loop
+    execute format('alter table %I add column if not exists tenant_id uuid default default_tenant() references tenants(id);', tbl);
+    execute format('update %I set tenant_id = default_tenant() where tenant_id is null;', tbl);
+    execute format('create index if not exists %I on %I (tenant_id);', tbl || '_tenant', tbl);
+  end loop;
+end $$;
+
+-- Tenant del usuario (de su fila en members; default si no tiene).
+create or replace function tenant_of(uid uuid) returns uuid language sql stable as $$
+  select coalesce((select tenant_id from members where user_id = uid), default_tenant());
+$$;
+
 -- ── 2 · MIGRACIÓN: agrega columnas que falten en tablas ya existentes ────────
 alter table structures     add column if not exists park text;
 alter table structures     add column if not exists zone text;
@@ -142,6 +180,13 @@ begin
     execute format('create policy write_editor on %I for all to authenticated using (is_editor()) with check (is_editor());', tbl);
   end loop;
 end $$;
+
+-- ▸ MULTITENANT (cuando se use): reemplazar las políticas de arriba por versiones
+--   que además filtren por tenant, p.ej.:
+--     using (tenant_id = tenant_of(auth.uid()))
+--     with check (tenant_id = tenant_of(auth.uid()) and is_editor())
+--   así cada usuario solo ve/edita las filas de SU tenant. Hoy deshabilitado
+--   (un solo tenant «default»), por eso las políticas activas no filtran por tenant.
 
 -- ── 7 · Realtime: publicar `features` (guardado para no duplicar) ────────────
 do $$
