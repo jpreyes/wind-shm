@@ -824,6 +824,13 @@ body.shm #shm-banner.show { display: flex; animation: shm-blink 0.8s steps(1) in
 
 #shm-panel .empty { color: var(--text-muted); font-size: 13px; text-align: center; margin-top: 30px; line-height: 1.6; }
 #shm-panel canvas.sig { width: 100%; height: 90px; background: var(--bg); border: 1px solid var(--border); border-radius: var(--radius-sm); display: block; margin-bottom: 6px; }
+.sig-cap { margin-top: 12px; padding-top: 10px; border-top: 1px dashed var(--border); }
+.sig-cap-h { display: flex; align-items: center; gap: 8px; font-weight: 600; font-size: 12px; margin-bottom: 6px; }
+.sig-cap-h .sig-load { font-size: 11px; }
+.sig-cap-h .sig-cap-req { padding: 3px 8px; font-size: 11px; }
+.sig-cap-meta { font-size: 11px; margin-bottom: 6px; }
+#shm-panel canvas.sig-cap-wave, #shm-panel canvas.sig-cap-fft { width: 100%; height: 90px; background: var(--bg); border: 1px solid var(--border); border-radius: var(--radius-sm); display: block; }
+#shm-panel canvas.sig-cap-fft { height: 80px; }
 #shm-panel .note { font-size: 11px; color: var(--text-muted); margin-top: 10px; line-height: 1.5; }
 
 /* ── Control de Sol / sombras (Frente 2) ─────────────────────────────────── */

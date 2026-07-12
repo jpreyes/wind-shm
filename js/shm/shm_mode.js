@@ -8,35 +8,35 @@
 //   inspecciones y señal temporal EN VIVO desde un Web Worker (DataSource).
 // Recortes (modelado) los hace shm.css ocultando, no borrando.
 // ─────────────────────────────────────────────────────────────────────────────
-import { FleetView } from './fleet_view.js?v=328';
-import { DataSource } from './data_source.js?v=328';
-import { computeTwin } from './digital_twin.js?v=328';
-import { ParkManager, loadParksStore } from './parks.js?v=328';
-import { MapView } from './map_view.js?v=328';
-import { defaultStages, builtFromStages, LAYOUT_SCALE } from './parks_data_caman.js?v=328';
-import { fftMag } from './dsp.js?v=328';
-import { buildSunControl, buildCompass, buildNameplate, buildBanner, initPanelResize } from './viewport_chrome.js?v=328';
-import { buildAvanceHUD } from './avance_hud.js?v=328';
-import { renderAvance, computeParkAvance } from './avance_dashboard.js?v=328';
-import * as Insp from './inspection.js?v=328';
-import * as Fat from './fatigue.js?v=328';
-import * as Instr from './instrumentation.js?v=328';
-import * as Calidad from './calidad.js?v=328';
-import { showBackendConfig } from './backend_ui.js?v=328';
-import { backendActive, pushStructures, requestCapture } from './backend_sync.js?v=328';
-import { authRequired, loggedIn, isEditor, canOperate, canGestion, canQualityEdit, canQualityApprove, canInspect, currentRole } from './auth.js?v=328';
-import { requireLogin, userChipHTML, wireUserChip } from './auth_ui.js?v=328';
-import * as Hist from './history.js?v=328';
-import * as Health from './health.js?v=328';
-import * as Bench from './benchmark.js?v=328';
-import * as Alarms from './alarms.js?v=328';
-import { METEO_CAMAN } from './meteo_caman.js?v=328';
-import { ReplaySource } from './replay.js?v=328';
-import { esc, safeUrl } from './util.js?v=328';
-import { t, getLang, setLang } from './i18n.js?v=328';
+import { FleetView } from './fleet_view.js?v=329';
+import { DataSource } from './data_source.js?v=329';
+import { computeTwin } from './digital_twin.js?v=329';
+import { ParkManager, loadParksStore } from './parks.js?v=329';
+import { MapView } from './map_view.js?v=329';
+import { defaultStages, builtFromStages, LAYOUT_SCALE } from './parks_data_caman.js?v=329';
+import { fftMag } from './dsp.js?v=329';
+import { buildSunControl, buildCompass, buildNameplate, buildBanner, initPanelResize } from './viewport_chrome.js?v=329';
+import { buildAvanceHUD } from './avance_hud.js?v=329';
+import { renderAvance, computeParkAvance } from './avance_dashboard.js?v=329';
+import * as Insp from './inspection.js?v=329';
+import * as Fat from './fatigue.js?v=329';
+import * as Instr from './instrumentation.js?v=329';
+import * as Calidad from './calidad.js?v=329';
+import { showBackendConfig } from './backend_ui.js?v=329';
+import { backendActive, pushStructures, requestCapture, latestWave } from './backend_sync.js?v=329';
+import { authRequired, loggedIn, isEditor, canOperate, canGestion, canQualityEdit, canQualityApprove, canInspect, currentRole } from './auth.js?v=329';
+import { requireLogin, userChipHTML, wireUserChip } from './auth_ui.js?v=329';
+import * as Hist from './history.js?v=329';
+import * as Health from './health.js?v=329';
+import * as Bench from './benchmark.js?v=329';
+import * as Alarms from './alarms.js?v=329';
+import { METEO_CAMAN } from './meteo_caman.js?v=329';
+import { ReplaySource } from './replay.js?v=329';
+import { esc, safeUrl } from './util.js?v=329';
+import { t, getLang, setLang } from './i18n.js?v=329';
 
 const F1_BASE = { turbine: 0.283, hv: 1.6 };
-const REWIND_VER = 'v328';   // versión visible del build (subir junto al cache-bust)
+const REWIND_VER = 'v329';   // versión visible del build (subir junto al cache-bust)
 const FS = 62.5;   // frecuencia de muestreo de la señal (Hz), igual que shm_worker.js
 // Clasificador ML de daño (0..4)
 const CLS = ['Sin daño', 'Leve', 'Moderado', 'Alto', 'Muy alto'];
@@ -351,7 +351,7 @@ async function boot() {
   // ── Relieve conceptual del terreno (DEM vendorizado) — encendido por defecto ─
   setLoad(88, 'Cargando relieve…'); await delay(40);
   try {
-    await fleet.loadTerrain('data/caman_dem.json?v=328');
+    await fleet.loadTerrain('data/caman_dem.json?v=329');
     fleet.setTerrainVisible(true);
     document.getElementById('shm-relieve-tool')?.classList.add('active');
   } catch (e) { console.warn('[shm] relieve no disponible', e); }
@@ -1354,6 +1354,7 @@ function buildDashboard(panel, fleet, actions) {
         wrap.append(lab, cv);
       }
       startSig();
+      if (backendActive()) buildCapturedWave(body, o);   // señal REAL del sensor (Storage)
     } else if (pane === 'tendencia') {
       // R-34: tendencia de f₁ desde el histórico persistente (IndexedDB).
       body.innerHTML = `<div class="ins-mut" style="padding:12px">${t('trend.loading')}</div>`;
@@ -2241,6 +2242,98 @@ function buildDashboard(panel, fleet, actions) {
     draw();
   }
   function stopSig() { if (sigRAF) { cancelAnimationFrame(sigRAF); sigRAF = null; } }
+
+  // ── Ventana capturada del SENSOR REAL (on-demand) ─────────────────────────────
+  // Baja el .npz de Storage, lo decodifica y pinta la serie temporal + su FFT.
+  // Es la señal REAL del sensor (no la simulada del worker) — cierra el on-demand.
+  function buildCapturedWave(host, o) {
+    const box = document.createElement('div'); box.className = 'sig-cap';
+    const canOp = document.body.classList.contains('cap-operate');
+    box.innerHTML = `<div class="sig-cap-h">${t('sig.capTitle')}
+        <span style="flex:1"></span>
+        <button class="cal-link sig-load" type="button">${t('sig.load')}</button>
+        ${canOp ? `<button class="cal-btn sig-cap-req" type="button">${t('sh.capture')}</button>` : ''}</div>
+      <div class="sig-cap-meta cal-mut">${t('sig.none')}</div>
+      <canvas class="sig-cap-wave"></canvas>
+      <div class="sig-cap-fftlab cal-mut" style="margin-top:6px"></div>
+      <canvas class="sig-cap-fft"></canvas>`;
+    host.appendChild(box);
+    const meta = box.querySelector('.sig-cap-meta');
+    const waveC = box.querySelector('.sig-cap-wave'), fftC = box.querySelector('.sig-cap-fft');
+    const fftLab = box.querySelector('.sig-cap-fftlab');
+
+    const draw = (res) => {
+      const a = res?.arrays; if (!a || !a.ax || !a.ax.length) { meta.textContent = res?.meta ? t('sig.noRaw') : t('sig.none'); return; }
+      const fs = a.fs || 150, ax = a.ax, n = ax.length;
+      const w = res.meta || {};
+      const when = w.ts ? new Date(w.ts).toLocaleString(getLang() === 'en' ? 'en-GB' : 'es-CL', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit', second: '2-digit' }) : '—';
+      const trig = w.meta?.trigger || w.extra?.trigger || '—';
+      meta.innerHTML = `${when} · ${(n / fs).toFixed(0)}s @ ${fs}Hz · <b>${esc(trig)}</b> · ${(n / 1000).toFixed(0)}k pts`;
+      // Serie temporal: envolvente min/max decimada al ancho del canvas.
+      drawWaveEnvelope(waveC, ax);
+      // FFT de la ventana completa (fs real del sensor).
+      const { mag, df } = fftMag(ax, fs);
+      const peak = drawCapFFT(fftC, mag, df);
+      fftLab.innerHTML = `${t('avz.fftPeak')}: f₁ ≈ <b>${peak ? peak.toFixed(3) : '—'} Hz</b>`;
+    };
+
+    const load = async (after) => {
+      meta.textContent = t('sig.loading');
+      try { const res = await latestWave(o.id, after); return res; }
+      catch { meta.textContent = t('sh.captureErr'); return null; }
+    };
+    box.querySelector('.sig-load').addEventListener('click', async () => { const r = await load(null); if (current?.id === o.id) draw(r); });
+
+    const reqBtn = box.querySelector('.sig-cap-req');
+    if (reqBtn) reqBtn.addEventListener('click', async () => {
+      reqBtn.disabled = true; const prev = (await latestWave(o.id, null).catch(() => null))?.meta?.id ?? null;
+      meta.textContent = t('sig.wait');
+      try {
+        await requestCapture(o.id);
+        // Sondea la aparición de una ventana NUEVA (el sim responde en ~5-10 s).
+        let got = null;
+        for (let i = 0; i < 12 && current?.id === o.id; i++) {
+          await new Promise((r) => setTimeout(r, 3000));
+          const res = await latestWave(o.id, prev).catch(() => null);
+          if (res && res.arrays) { got = res; break; }
+        }
+        if (current?.id === o.id) got ? draw(got) : (meta.textContent = t('sig.timeout'));
+      } catch { meta.textContent = t('sh.captureErr'); }
+      finally { reqBtn.disabled = false; }
+    });
+
+    // Carga automática de la última ventana existente al abrir la pestaña.
+    load(null).then((r) => { if (current?.id === o.id) draw(r); });
+  }
+
+  function drawWaveEnvelope(cv, ax) {
+    const dpr = Math.min(devicePixelRatio, 2), w = cv.clientWidth || 300, h = cv.clientHeight || 90;
+    cv.width = w * dpr; cv.height = h * dpr; const g = cv.getContext('2d'); g.scale(dpr, dpr);
+    g.clearRect(0, 0, w, h);
+    let mx = 1e-9; for (let i = 0; i < ax.length; i++) { const v = Math.abs(ax[i]); if (v > mx) mx = v; }
+    g.strokeStyle = 'rgba(120,130,140,.35)'; g.beginPath(); g.moveTo(0, h / 2); g.lineTo(w, h / 2); g.stroke();
+    g.strokeStyle = '#2bff77'; g.lineWidth = 1; g.beginPath();
+    const buckets = Math.min(w, ax.length), per = ax.length / buckets;
+    for (let b = 0; b < buckets; b++) {
+      let lo = Infinity, hi = -Infinity; const s = Math.floor(b * per), e = Math.floor((b + 1) * per);
+      for (let i = s; i < e; i++) { if (ax[i] < lo) lo = ax[i]; if (ax[i] > hi) hi = ax[i]; }
+      const x = b, yLo = h / 2 - (lo / mx) * h * 0.45, yHi = h / 2 - (hi / mx) * h * 0.45;
+      g.moveTo(x, yLo); g.lineTo(x, yHi);
+    }
+    g.stroke();
+  }
+
+  function drawCapFFT(cv, mag, df) {
+    const dpr = Math.min(devicePixelRatio, 2), w = cv.clientWidth || 300, h = cv.clientHeight || 90;
+    cv.width = w * dpr; cv.height = h * dpr; const g = cv.getContext('2d'); g.scale(dpr, dpr);
+    g.clearRect(0, 0, w, h);
+    const fMax = 6, bins = Math.max(1, Math.min(mag.length, Math.floor(fMax / (df || 1))));
+    let mxv = 1e-9, peak = 0; for (let i = 1; i < bins; i++) if (mag[i] > mxv) { mxv = mag[i]; peak = i; }
+    g.fillStyle = '#38bdf8';
+    for (let i = 1; i < bins; i++) { const x = (i / bins) * w, bh = (mag[i] / mxv) * (h - 12); g.fillRect(x, h - bh, Math.max(1, w / bins - 1), bh); }
+    g.fillStyle = '#2dd4bf'; g.fillRect((peak / bins) * w - 1, 0, 2, h);
+    return peak * df;
+  }
 
   // Pestaña Avanzado: espectro FFT + seguimiento de f₁.
   function startAvz() {

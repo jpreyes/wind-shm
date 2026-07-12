@@ -6,7 +6,8 @@
 // como CACHÉ OFFLINE. Sin backend configurado, todo funciona como antes (no-op).
 // Mapeo modelo↔fila explícito (nombres de columna del esquema en snake_case).
 // ─────────────────────────────────────────────────────────────────────────────
-import { getBackendConfig, createBackend } from './backend.js?v=328';
+import { getBackendConfig, createBackend } from './backend.js?v=329';
+import { decodeNpz } from './npz.js?v=329';
 
 let _be = null, _cfgKey = null;
 // Instancia perezosa del backend; se recrea si cambia la config.
@@ -96,6 +97,27 @@ export async function requestCapture(structureId, kind = 'window') {
   await be.insert('sensor_commands', [{ structure_id: structureId, kind, status: 'pending' }]);
   markPush();
   return { ok: true };
+}
+
+// ── Ventanas crudas (serie temporal del sensor real) ──────────────────────────
+// Lee el puntero más reciente de `waves` para la estructura, baja el `.npz` de
+// Storage y lo decodifica → { meta, arrays:{ax,ay,az,fs} } o null si no hay/permiso.
+// `after` (id o ts) permite esperar una ventana NUEVA (on-demand) e ignorar la vieja.
+export async function latestWave(structureId, after = null) {
+  const be = backend(); if (!be || !be.storageGet) return null;
+  const rows = await be.select('waves', `&structure_id=eq.${encodeURIComponent(structureId)}&order=ts.desc&limit=1`);
+  if (!rows || !rows.length) return null;
+  const w = rows[0];
+  if (after != null && (w.id === after || (w.ts && String(w.ts) <= String(after)))) return { meta: w, arrays: null, stale: true };
+  if (!w.storage_path) return { meta: w, arrays: null };
+  const buf = await be.storageGet('waves', w.storage_path);
+  if (!buf) return { meta: w, arrays: null };
+  try {
+    const npz = await decodeNpz(buf);
+    const pick = (k) => (npz[k]?.data ? Array.from(npz[k].data) : null);
+    const fsArr = npz.fs?.data;
+    return { meta: w, arrays: { ax: pick('ax'), ay: pick('ay'), az: pick('az'), fs: (fsArr && fsArr[0]) || w.fs || 150 } };
+  } catch { return { meta: w, arrays: null }; }
 }
 
 // ── Inspecciones (CMMS) ───────────────────────────────────────────────────────
