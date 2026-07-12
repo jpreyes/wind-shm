@@ -213,6 +213,7 @@ const DICT = {
     'sig.loading': 'Descargando ventana…', 'sig.none': 'Sin ventanas aún — pedí una captura.',
     'sig.noRaw': 'Puntero sin serie cruda (Storage vacío o sin permiso).',
     'sig.wait': 'Captura pedida — esperando que el sensor la suba…', 'sig.timeout': 'Sin respuesta del sensor (¿está corriendo?). Reintentá.',
+    'sig.play': '▶ Reproducir', 'sig.pause': '⏸ Pausar', 'sig.realWin': 'ventana real',
     'sens.note': 'Verde = operativo · Rojo = en falla. Estado y RMS en vivo desde el gateway (sim).',
     // Instrumentación editable (R-33)
     'instr.custom': 'Sensores agregados', 'instr.add': '＋ Sensor', 'instr.addBtn': 'Agregar', 'instr.cancel': 'Cancelar',
@@ -630,6 +631,7 @@ const DICT = {
     'sig.loading': 'Downloading window…', 'sig.none': 'No windows yet — request a capture.',
     'sig.noRaw': 'Pointer without raw series (empty Storage or no permission).',
     'sig.wait': 'Capture requested — waiting for the sensor to upload…', 'sig.timeout': 'No response from the sensor (is it running?). Retry.',
+    'sig.play': '▶ Play', 'sig.pause': '⏸ Pause', 'sig.realWin': 'real window',
     'sens.note': 'Green = operational · Red = fault. Live status and RMS from the gateway (sim).',
     'instr.custom': 'Added sensors', 'instr.add': '＋ Sensor', 'instr.addBtn': 'Add', 'instr.cancel': 'Cancel',
     'instr.type': 'Type', 'instr.label': 'Label', 'instr.height': 'Height', 'instr.labelPh': 'name (optional)', 'instr.remove': 'Remove sensor',

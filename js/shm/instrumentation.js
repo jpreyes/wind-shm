@@ -9,7 +9,7 @@
 // El valor en vivo es SINTÉTICO y determinista por sensor/tipo hasta conectar el
 // hardware real (DataSource/`R-10`). Módulo de datos puro (sin DOM/Three.js).
 // ─────────────────────────────────────────────────────────────────────────────
-import { t } from './i18n.js?v=329';
+import { t } from './i18n.js?v=330';
 
 const KEY = 'rewind.instrumentation.v1';
 let _seq = 0;
