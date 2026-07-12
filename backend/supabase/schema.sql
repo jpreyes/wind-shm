@@ -142,8 +142,7 @@ alter table inspections    add column if not exists meta jsonb default '{}'::jso
 alter table structures  drop constraint if exists structures_type_check;
 -- FK de inspecciones a structures relajada (un Excel/insp. puede citar ids no sembrados).
 alter table inspections drop constraint if exists inspections_structure_id_fkey;
--- El rol de members se valida en la app; sin CHECK rígido para no romper migraciones.
-alter table members     drop constraint if exists members_role_check;
+-- (El CHECK de members.role lo maneja la sección 5, tras migrar los roles viejos.)
 
 -- ── 4 · Índices ──────────────────────────────────────────────────────────────
 create index if not exists features_struct_ts on features (structure_id, ts desc);
@@ -153,40 +152,103 @@ create index if not exists protocolos_struct on protocolos (structure_id);
 create index if not exists ciclos_proto on ciclos (protocolo_id);
 create index if not exists inspections_struct on inspections (structure_id, date desc);
 
--- ── 5 · Funciones de rol ─────────────────────────────────────────────────────
-create or replace function role_of(uid uuid) returns text language sql stable as $$
-  select coalesce((select role from members where user_id = uid), 'viewer');
-$$;
-create or replace function is_editor() returns boolean language sql stable as $$
-  select role_of(auth.uid()) in ('editor','admin');
-$$;
+-- ── 5 · ROLES (7, con segregación de funciones) ──────────────────────────────
+-- admin · gestor · calidad_inspector · calidad_aprobador · inspector · operador ·
+-- visualizador.  (ISO/IEC 27001 A.5.15/A.5.3 · ISO 9001 §8.6 · IEC 61400-28.)
+-- Migra los roles viejos (viewer/editor) al vocabulario nuevo y fija el CHECK.
+update members set role = 'visualizador' where role in ('viewer', 'lectura');
+update members set role = 'gestor'       where role = 'editor';
+alter table members drop constraint if exists members_role_check;
+alter table members add constraint members_role_check check (role in
+  ('admin','gestor','calidad_inspector','calidad_aprobador','inspector','operador','visualizador'));
 
--- ── 6 · RLS: CANDADO DURO (solo autenticados) + limpieza del piloto ──────────
--- Lectura = cualquier autenticado; escritura = editor/admin. Se BORRAN las
--- políticas abiertas del piloto (pilot_read/pilot_write de rls_pilot.sql) para
--- que anon NO pueda leer/escribir. El ingestor usa service_role (bypassa RLS).
+create or replace function role_of(uid uuid) returns text language sql stable as $$
+  select coalesce((select role from members where user_id = uid), 'visualizador');
+$$;
+create or replace function my_role() returns text language sql stable as $$ select role_of(auth.uid()); $$;
+create or replace function is_admin()            returns boolean language sql stable as $$ select my_role() = 'admin'; $$;
+create or replace function can_gestion()         returns boolean language sql stable as $$ select my_role() in ('admin','gestor'); $$;
+create or replace function can_quality_edit()    returns boolean language sql stable as $$ select my_role() in ('admin','calidad_inspector','calidad_aprobador'); $$;
+create or replace function can_quality_approve() returns boolean language sql stable as $$ select my_role() in ('admin','calidad_aprobador'); $$;
+create or replace function can_inspect()         returns boolean language sql stable as $$ select my_role() in ('admin','inspector'); $$;
+create or replace function can_operate()         returns boolean language sql stable as $$ select my_role() in ('admin','operador'); $$;
+create or replace function is_editor()           returns boolean language sql stable as $$ select my_role() <> 'visualizador'; $$;  -- legacy: cualquier rol que escribe
+
+-- ── 5b · AUDITORÍA: quién creó/actualizó cada fila (ISO 27001 A.8.15) ─────────
+-- Columnas actor + trigger que las llena solas con auth.uid() (el front no las manda).
+-- Las tablas ya traen su timestamp. Para historial inmutable completo → audit_log (futuro).
 do $$
 declare tbl text;
 begin
-  foreach tbl in array array['structures','features','waves','protocolos','ciclos',
-                             'ensayos','wbs_config','import_profiles','inspections','members']
-  loop
-    execute format('alter table %I enable row level security;', tbl);
-    execute format('drop policy if exists pilot_read  on %I;', tbl);   -- limpia el piloto (anon)
-    execute format('drop policy if exists pilot_write on %I;', tbl);
-    execute format('drop policy if exists read_auth on %I;', tbl);
-    execute format('create policy read_auth on %I for select to authenticated using (true);', tbl);
-    execute format('drop policy if exists write_editor on %I;', tbl);
-    execute format('create policy write_editor on %I for all to authenticated using (is_editor()) with check (is_editor());', tbl);
+  foreach tbl in array array['structures','protocolos','ciclos','ensayos',
+                             'wbs_config','import_profiles','inspections','members'] loop
+    execute format('alter table %I add column if not exists created_by uuid;', tbl);
+    execute format('alter table %I add column if not exists updated_by uuid;', tbl);
+  end loop;
+end $$;
+create or replace function set_audit() returns trigger language plpgsql as $$
+begin
+  if (tg_op = 'INSERT') then new.created_by := coalesce(new.created_by, auth.uid()); end if;
+  new.updated_by := auth.uid();
+  return new;
+end $$;
+do $$
+declare tbl text;
+begin
+  foreach tbl in array array['structures','protocolos','ciclos','ensayos',
+                             'wbs_config','import_profiles','inspections','members'] loop
+    execute format('drop trigger if exists trg_audit on %I;', tbl);
+    execute format('create trigger trg_audit before insert or update on %I for each row execute function set_audit();', tbl);
   end loop;
 end $$;
 
--- ▸ MULTITENANT (cuando se use): reemplazar las políticas de arriba por versiones
---   que además filtren por tenant, p.ej.:
---     using (tenant_id = tenant_of(auth.uid()))
---     with check (tenant_id = tenant_of(auth.uid()) and is_editor())
---   así cada usuario solo ve/edita las filas de SU tenant. Hoy deshabilitado
---   (un solo tenant «default»), por eso las políticas activas no filtran por tenant.
+-- ── 5c · MAKER-CHECKER: solo calidad_aprobador/admin APRUEBA (SoD ISO 9001 §8.6)
+-- Bloquea que quien llena el protocolo se lo auto-apruebe.
+create or replace function guard_quality_approval() returns trigger language plpgsql as $$
+begin
+  if new.estado = 'aprobado' and (tg_op = 'INSERT' or old.estado is distinct from 'aprobado')
+     and not can_quality_approve() then
+    raise exception 'Segregación de funciones: solo calidad_aprobador/admin puede aprobar.';
+  end if;
+  return new;
+end $$;
+drop trigger if exists trg_approve_protocolos on protocolos;
+create trigger trg_approve_protocolos before insert or update on protocolos for each row execute function guard_quality_approval();
+drop trigger if exists trg_approve_ensayos on ensayos;
+create trigger trg_approve_ensayos before insert or update on ensayos for each row execute function guard_quality_approval();
+
+-- ── 6 · RLS: candado duro + MATRIZ de permisos por rol (mínimo privilegio) ────
+-- Lectura = cualquier autenticado. Escritura = por dominio. Limpia el piloto (anon).
+-- El ingestor de telemetría (sensor) usa service_role → bypassa RLS.
+do $$
+declare tbl text; pol text;
+begin
+  foreach tbl in array array['structures','features','waves','protocolos','ciclos',
+                             'ensayos','wbs_config','import_profiles','inspections','members'] loop
+    execute format('alter table %I enable row level security;', tbl);
+    foreach pol in array array['pilot_read','pilot_write','read_auth','write_editor',
+                               'write_gestion','write_quality','write_inspect','write_admin'] loop
+      execute format('drop policy if exists %I on %I;', pol, tbl);
+    end loop;
+    execute format('create policy read_auth on %I for select to authenticated using (true);', tbl);
+  end loop;
+end $$;
+-- Escritura por dominio:
+create policy write_gestion on structures     for all to authenticated using (can_gestion())      with check (can_gestion());
+create policy write_gestion on wbs_config      for all to authenticated using (can_gestion())      with check (can_gestion());
+create policy write_quality on protocolos      for all to authenticated using (can_quality_edit()) with check (can_quality_edit());
+create policy write_quality on ciclos          for all to authenticated using (can_quality_edit()) with check (can_quality_edit());
+create policy write_quality on ensayos         for all to authenticated using (can_quality_edit()) with check (can_quality_edit());
+create policy write_quality on import_profiles for all to authenticated using (can_quality_edit() or can_gestion()) with check (can_quality_edit() or can_gestion());
+create policy write_inspect on inspections     for all to authenticated using (can_inspect())      with check (can_inspect());
+create policy write_admin   on members         for all to authenticated using (is_admin())         with check (is_admin());
+-- features/waves: desde el navegador solo admin (el sensor real escribe con service_role).
+create policy write_admin   on features        for all to authenticated using (is_admin())         with check (is_admin());
+create policy write_admin   on waves           for all to authenticated using (is_admin())         with check (is_admin());
+
+-- ▸ MULTITENANT (cuando se use): sumar a cada policy el filtro por tenant, p.ej.
+--   using (tenant_id = tenant_of(auth.uid())) with check (tenant_id = tenant_of(auth.uid()) and can_...()).
+--   Hoy deshabilitado (un solo tenant «default»).
 
 -- ── 7 · Realtime: publicar `features` (guardado para no duplicar) ────────────
 do $$

@@ -44,15 +44,27 @@ update sensor_commands set tenant_id = default_tenant() where tenant_id is null;
 create index if not exists sensor_cmd_pending on sensor_commands (structure_id, status, created_at);
 create index if not exists sensor_cmd_tenant on sensor_commands (tenant_id);
 
--- ── RLS: autenticados crean/leen comandos; el sensor usa service_role ─────────
--- (limpia también políticas del piloto por si `rls_pilot` las hubiera dejado).
+-- ── RLS: operador/admin CREA comandos; todos los autenticados los leen ────────
+-- (el rol lo gobiernan las funciones can_operate()/… definidas en schema.sql).
 alter table sensor_commands enable row level security;
-drop policy if exists pilot_read   on sensor_commands;
-drop policy if exists pilot_write  on sensor_commands;
-drop policy if exists read_auth    on sensor_commands;
-drop policy if exists write_editor on sensor_commands;
-create policy read_auth    on sensor_commands for select to authenticated using (true);
-create policy write_editor on sensor_commands for all    to authenticated using (true) with check (true);
+drop policy if exists pilot_read    on sensor_commands;
+drop policy if exists pilot_write   on sensor_commands;
+drop policy if exists read_auth     on sensor_commands;
+drop policy if exists write_editor  on sensor_commands;
+drop policy if exists write_operate on sensor_commands;
+create policy read_auth     on sensor_commands for select to authenticated using (true);
+create policy write_operate on sensor_commands for all    to authenticated using (can_operate()) with check (can_operate());
+
+-- ── Bucket de FOTOS de obra / inspección (autor+fecha nativos de Storage) ─────
+-- Storage guarda `owner` (uid del que sube) y `created_at` por objeto → trazable.
+insert into storage.buckets (id, name, public) values ('photos', 'photos', false)
+on conflict (id) do update set public = false;
+drop policy if exists photos_read   on storage.objects;
+drop policy if exists photos_write  on storage.objects;
+create policy photos_read  on storage.objects for select to authenticated using (bucket_id = 'photos');
+-- Suben fotos: calidad (proceso constructivo) e inspector (estado de la estructura).
+create policy photos_write on storage.objects for insert to authenticated
+  with check (bucket_id = 'photos' and (can_quality_edit() or can_inspect()));
 
 -- Realtime opcional para el sensor (en vez de sondear). Guardado para no duplicar:
 -- do $$ begin if not exists (select 1 from pg_publication_tables where pubname='supabase_realtime'
