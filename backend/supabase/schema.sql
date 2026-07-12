@@ -1,148 +1,121 @@
 -- ═════════════════════════════════════════════════════════════════════════════
--- ReWind · Backend Supabase — esquema Sprint 0 (telemetría + calidad + auth)
+-- ReWind · Backend Supabase — esquema (telemetría + calidad + CMMS + auth)
 --
--- Pegar en el SQL Editor de Supabase (o `supabase db push`). Es idempotente en lo
--- posible (IF NOT EXISTS). Cubre las tres áreas pedidas:
+-- IDEMPOTENTE y MIGRATORIO: se puede correr sobre una base NUEVA o sobre una que
+-- ya tenía un esquema viejo (o `rls_pilot`). Crea lo que falte, agrega columnas
+-- nuevas a tablas existentes, relaja constraints obsoletas y limpia las políticas
+-- del piloto (anon) para dejar el CANDADO DURO (solo autenticados). No borra datos.
+--
 --   1) Telemetría SHM   → structures, features (serie 1/min), waves (ventanas)
---   2) Calidad de obra  → protocolos, ciclos, ensayos, wbs, import_profiles
+--   2) Calidad de obra  → protocolos, ciclos, ensayos, wbs_config, import_profiles
 --   3) CMMS             → inspections
---   4) Auth / roles     → members (viewer/editor/admin) sobre auth.users + RLS
---
--- Supabase = PostgreSQL. No hay InfluxDB: la serie temporal va en `features`
--- (indexada por structure_id, ts). Las ventanas crudas del ADXL355 NO van en la
--- BD — van a Storage (bucket `waves`); `waves` guarda sólo el puntero + metadatos.
+--   4) Auth / roles     → members (viewer/editor/admin) + RLS
 -- ═════════════════════════════════════════════════════════════════════════════
 
--- ── 1 · TELEMETRÍA ───────────────────────────────────────────────────────────
+-- ── 1 · TABLAS (crea si faltan) ──────────────────────────────────────────────
 create table if not exists structures (
-  id          text primary key,              -- 'T01', 'AT-03', …
-  park        text,
-  zone        text,
-  type        text check (type in ('turbine','hv')) default 'turbine',
-  label       text,
-  lat         double precision,
-  lon         double precision,
-  height      real,
-  built       real,                            -- avance 4D [0..1]
-  meta        jsonb default '{}'::jsonb,
-  updated_at  timestamptz default now()
+  id          text primary key,
+  park        text, zone text, type text default 'turbine', label text,
+  lat double precision, lon double precision, height real, built real,
+  meta jsonb default '{}'::jsonb, updated_at timestamptz default now()
 );
-
--- Serie de features (1 punto/min por estructura). El ingestor (Pi/EdgeFn/sim)
--- inserta filas; el front las lee por Realtime o polling.
 create table if not exists features (
   id            bigint generated always as identity primary key,
-  structure_id  text not null,                 -- Tnn (el ingestor puede adelantarse a la siembra de structures)
-  ts            timestamptz not null default now(),
-  f1            real,        -- 1ª frecuencia natural (Hz)
-  f2            real,
-  rms           real,        -- RMS de aceleración (g)
-  wind          real,        -- viento (m/s)
-  temp          real,        -- temperatura (°C)
-  tilt          real,        -- inclinación (°)
-  cls           smallint,    -- clase ML de daño (0..4)
-  extra         jsonb default '{}'::jsonb
+  structure_id  text not null, ts timestamptz not null default now(),
+  f1 real, f2 real, rms real, wind real, temp real, tilt real, cls smallint,
+  extra jsonb default '{}'::jsonb
 );
-create index if not exists features_struct_ts on features (structure_id, ts desc);
-create index if not exists features_ts on features (ts desc);
-
--- Punteros a ventanas crudas archivadas (10/30 min) en Storage → OMA (R-21).
 create table if not exists waves (
   id            bigint generated always as identity primary key,
-  structure_id  text not null,
-  sensor        text,
-  ts            timestamptz not null default now(),
-  fs            integer,          -- frecuencia de muestreo (Hz)
-  n             integer,          -- nº de muestras
-  storage_path  text not null,    -- objeto en el bucket `waves`
-  meta          jsonb default '{}'::jsonb
+  structure_id  text not null, sensor text, ts timestamptz not null default now(),
+  fs integer, n integer, storage_path text, meta jsonb default '{}'::jsonb
 );
-create index if not exists waves_struct_ts on waves (structure_id, ts desc);
-
--- ── 2 · CALIDAD DE OBRA ──────────────────────────────────────────────────────
 create table if not exists protocolos (
-  id            text primary key,              -- id canónico del modelo ReWind
-  structure_id  text,                          -- Tnn (texto libre: un Excel puede citar torres aún no sembradas)
-  item          integer,
-  codigo        text,
-  area          text,
-  elemento      text,
-  hito_pago     text,
-  especialidad  text,
-  descripcion   text,
-  documento     text,
-  estado        text,                          -- canónico: aprobado/conComentarios/…
-  estado_raw    text,
-  partida_id    text,                          -- override manual protocolo→partida (WBS)
-  meta          jsonb default '{}'::jsonb,
-  updated_at    timestamptz default now()
+  id            text primary key, structure_id text, item integer, codigo text,
+  area text, elemento text, hito_pago text, especialidad text, descripcion text,
+  documento text, estado text, estado_raw text, partida_id text,
+  meta jsonb default '{}'::jsonb, updated_at timestamptz default now()
 );
-create index if not exists protocolos_struct on protocolos (structure_id);
-
 create table if not exists ciclos (
   id            bigint generated always as identity primary key,
   protocolo_id  text not null references protocolos(id) on delete cascade,
-  n             integer,
-  estado        text,
-  estado_raw    text,
-  fecha_envio   date,
-  fecha_retorno date,
-  dias_habiles  integer,
-  comentarios   text
+  n integer, estado text, estado_raw text, fecha_envio date, fecha_retorno date,
+  dias_habiles integer, comentarios text
 );
-create index if not exists ciclos_proto on ciclos (protocolo_id);
-
 create table if not exists ensayos (
-  id            text primary key,
-  structure_id  text,                          -- texto libre (igual que protocolos)
-  tipo          text,
-  grado         text,
-  norma         text,                          -- NCh/ASTM/EN (catálogo normativo)
-  fecha         date,
-  estado        text,
-  meta          jsonb default '{}'::jsonb
+  id text primary key, structure_id text, tipo text, grado text, norma text,
+  fecha date, estado text, meta jsonb default '{}'::jsonb
 );
-
--- WBS (partidas/hitos) por parque+tipo y perfiles de importación: config JSON.
 create table if not exists wbs_config (
-  id          bigint generated always as identity primary key,
-  park        text,
-  type        text,
-  partidas    jsonb not null default '[]'::jsonb,
-  overrides   jsonb not null default '{}'::jsonb,
-  updated_at  timestamptz default now(),
-  unique (park, type)
+  id bigint generated always as identity primary key, park text, type text,
+  partidas jsonb not null default '[]'::jsonb, overrides jsonb not null default '{}'::jsonb,
+  updated_at timestamptz default now(), unique (park, type)
 );
-
 create table if not exists import_profiles (
-  id          bigint generated always as identity primary key,
-  name        text not null,
-  config      jsonb not null,
-  owner       uuid references auth.users(id) on delete set null,
-  created_at  timestamptz default now()
+  id bigint generated always as identity primary key, name text not null,
+  config jsonb not null, owner uuid references auth.users(id) on delete set null,
+  created_at timestamptz default now()
+);
+create table if not exists inspections (
+  id text primary key, structure_id text not null, inspector text, date date,
+  score real, damages jsonb default '[]'::jsonb, meta jsonb default '{}'::jsonb,
+  created_at timestamptz default now()
+);
+create table if not exists members (
+  user_id uuid primary key references auth.users(id) on delete cascade,
+  role text not null default 'viewer', created_at timestamptz default now()
 );
 
--- ── 3 · CMMS (inspecciones) ──────────────────────────────────────────────────
-create table if not exists inspections (
-  id            text primary key,
-  structure_id  text not null references structures(id) on delete cascade,
-  inspector     text,
-  date          date,
-  score         real,
-  damages       jsonb default '[]'::jsonb,     -- hallazgos (con refs a fotos en Storage)
-  meta          jsonb default '{}'::jsonb,
-  created_at    timestamptz default now()
-);
+-- ── 2 · MIGRACIÓN: agrega columnas que falten en tablas ya existentes ────────
+alter table structures     add column if not exists park text;
+alter table structures     add column if not exists zone text;
+alter table structures     add column if not exists type text default 'turbine';
+alter table structures     add column if not exists label text;
+alter table structures     add column if not exists lat double precision;
+alter table structures     add column if not exists lon double precision;
+alter table structures     add column if not exists height real;
+alter table structures     add column if not exists built real;
+alter table structures     add column if not exists meta jsonb default '{}'::jsonb;
+alter table structures     add column if not exists updated_at timestamptz default now();
+alter table features       add column if not exists f1 real;
+alter table features       add column if not exists f2 real;
+alter table features       add column if not exists rms real;
+alter table features       add column if not exists wind real;
+alter table features       add column if not exists temp real;
+alter table features       add column if not exists tilt real;
+alter table features       add column if not exists cls smallint;
+alter table features       add column if not exists extra jsonb default '{}'::jsonb;
+alter table waves          add column if not exists sensor text;
+alter table waves          add column if not exists fs integer;
+alter table waves          add column if not exists n integer;
+alter table waves          add column if not exists storage_path text;
+alter table waves          add column if not exists meta jsonb default '{}'::jsonb;
+alter table protocolos     add column if not exists partida_id text;
+alter table protocolos     add column if not exists estado_raw text;
+alter table protocolos     add column if not exists meta jsonb default '{}'::jsonb;
+alter table protocolos     add column if not exists updated_at timestamptz default now();
+alter table ensayos        add column if not exists norma text;
+alter table ensayos        add column if not exists meta jsonb default '{}'::jsonb;
+alter table inspections    add column if not exists damages jsonb default '[]'::jsonb;
+alter table inspections    add column if not exists meta jsonb default '{}'::jsonb;
+
+-- ── 3 · RELAJAR constraints obsoletas ────────────────────────────────────────
+-- `structures.type` ya NO se limita a turbine/hv (Fase 3: camino, zanja, plataforma…).
+alter table structures  drop constraint if exists structures_type_check;
+-- FK de inspecciones a structures relajada (un Excel/insp. puede citar ids no sembrados).
+alter table inspections drop constraint if exists inspections_structure_id_fkey;
+-- El rol de members se valida en la app; sin CHECK rígido para no romper migraciones.
+alter table members     drop constraint if exists members_role_check;
+
+-- ── 4 · Índices ──────────────────────────────────────────────────────────────
+create index if not exists features_struct_ts on features (structure_id, ts desc);
+create index if not exists features_ts on features (ts desc);
+create index if not exists waves_struct_ts on waves (structure_id, ts desc);
+create index if not exists protocolos_struct on protocolos (structure_id);
+create index if not exists ciclos_proto on ciclos (protocolo_id);
 create index if not exists inspections_struct on inspections (structure_id, date desc);
 
--- ── 4 · AUTH / ROLES ─────────────────────────────────────────────────────────
--- Roles sobre auth.users. viewer = solo lectura; editor = CMMS/calidad; admin = todo.
-create table if not exists members (
-  user_id     uuid primary key references auth.users(id) on delete cascade,
-  role        text not null check (role in ('viewer','editor','admin')) default 'viewer',
-  created_at  timestamptz default now()
-);
-
+-- ── 5 · Funciones de rol ─────────────────────────────────────────────────────
 create or replace function role_of(uid uuid) returns text language sql stable as $$
   select coalesce((select role from members where user_id = uid), 'viewer');
 $$;
@@ -150,7 +123,10 @@ create or replace function is_editor() returns boolean language sql stable as $$
   select role_of(auth.uid()) in ('editor','admin');
 $$;
 
--- ── RLS: lectura para autenticados; escritura para editor/admin ──────────────
+-- ── 6 · RLS: CANDADO DURO (solo autenticados) + limpieza del piloto ──────────
+-- Lectura = cualquier autenticado; escritura = editor/admin. Se BORRAN las
+-- políticas abiertas del piloto (pilot_read/pilot_write de rls_pilot.sql) para
+-- que anon NO pueda leer/escribir. El ingestor usa service_role (bypassa RLS).
 do $$
 declare tbl text;
 begin
@@ -158,6 +134,8 @@ begin
                              'ensayos','wbs_config','import_profiles','inspections','members']
   loop
     execute format('alter table %I enable row level security;', tbl);
+    execute format('drop policy if exists pilot_read  on %I;', tbl);   -- limpia el piloto (anon)
+    execute format('drop policy if exists pilot_write on %I;', tbl);
     execute format('drop policy if exists read_auth on %I;', tbl);
     execute format('create policy read_auth on %I for select to authenticated using (true);', tbl);
     execute format('drop policy if exists write_editor on %I;', tbl);
@@ -165,8 +143,14 @@ begin
   end loop;
 end $$;
 
--- Realtime: publicar `features` (el front se suscribe a los INSERT).
-alter publication supabase_realtime add table features;
+-- ── 7 · Realtime: publicar `features` (guardado para no duplicar) ────────────
+do $$
+begin
+  if not exists (select 1 from pg_publication_tables
+                 where pubname = 'supabase_realtime' and schemaname = 'public' and tablename = 'features') then
+    alter publication supabase_realtime add table features;
+  end if;
+end $$;
 
--- Nota: el ingestor (Pi/EdgeFn/sim) inserta con la service_role key (bypassa RLS)
--- o con un usuario 'editor'. El front usa la anon key + sesión de usuario.
+-- Listo. Siguiente: correr `ingest.sql` (bucket waves + sensor_commands), crear tu
+-- usuario (Auth → Users) y darte rol admin en `members`.
