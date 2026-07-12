@@ -10,7 +10,7 @@
 // Las coordenadas lon/lat se conservan en cada estructura para el futuro mapa 2D.
 // ─────────────────────────────────────────────────────────────────────────────
 
-import { CAMAN_ROADS } from './caman_roads.js?v=324';
+import { CAMAN_ROADS } from './caman_roads.js?v=325';
 
 export const CAMAN_CENTER = { lon: -72.972458, lat: -39.963302 };
 export const LAYOUT_SCALE = 0.35;            // 1 m real → 0.35 u de escena

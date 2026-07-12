@@ -5,8 +5,8 @@
 // muestra el gate a pantalla completa. Login OK → recarga y bootea normal. Botón
 // "demo" → `?demo` (modo abierto, simulación, sin login) para presentar sin claves.
 // ─────────────────────────────────────────────────────────────────────────────
-import { signIn, signOut, currentUser, currentRole, authRequired, loggedIn } from './auth.js?v=324';
-import { setBackendConfig } from './backend.js?v=324';
+import { signIn, signOut, currentUser, currentRole, authRequired, loggedIn } from './auth.js?v=325';
+import { setBackendConfig } from './backend.js?v=325';
 
 // ¿Hay que frenar el boot para pedir login? true = se mostró el gate; el caller aborta.
 export function requireLogin() {
@@ -66,7 +66,11 @@ export function showLoginGate() {
 }
 
 // ── Chip de usuario para la barra de estado ───────────────────────────────────
-const ROLE_LABEL = { viewer: 'lectura', editor: 'editor', admin: 'admin' };
+const ROLE_LABEL = {
+  admin: 'admin', gestor: 'gestor', calidad_inspector: 'calidad', calidad_aprobador: 'calidad·aprob',
+  inspector: 'inspector', operador: 'operador', visualizador: 'lectura',
+  viewer: 'lectura', editor: 'gestor',   // compat con sesiones viejas
+};
 
 export function userChipHTML() {
   if (!authRequired() || !loggedIn()) return '';

@@ -12,7 +12,7 @@
 // localStorage (`SESSION_KEY`) al armar los headers. Aquí solo importamos la
 // config del backend (URL + anon/publishable key) para pegarle a `/auth/v1/*`.
 // ─────────────────────────────────────────────────────────────────────────────
-import { getBackendConfig } from './backend.js?v=324';
+import { getBackendConfig } from './backend.js?v=325';
 
 export const SESSION_KEY = 'rewind.auth.v1';
 const SKEW_MS = 30000;   // refresca 30 s antes del vencimiento (margen de reloj/red)
@@ -73,8 +73,19 @@ export function loggedIn() {
 }
 
 export function currentUser() { const s = getSession(); return s ? s.user : null; }
-export function currentRole() { const s = getSession(); return (s && s.role) || 'viewer'; }
-export function isEditor() { return ['editor', 'admin'].includes(currentRole()); }
+export function currentRole() { const s = getSession(); return (s && s.role) || 'visualizador'; }
+
+// Modelo de 7 roles (espejo de las funciones de capacidad de schema.sql). El RLS
+// del servidor es la autoridad; esto solo gobierna el gating de UI (mostrar/ocultar).
+export const ROLES = ['admin', 'gestor', 'calidad_inspector', 'calidad_aprobador', 'inspector', 'operador', 'visualizador'];
+const has = (...roles) => roles.includes(currentRole());
+export function isAdmin() { return has('admin'); }
+export function canGestion() { return has('admin', 'gestor'); }                                    // WBS/partidas · avance 4D
+export function canQualityEdit() { return has('admin', 'calidad_inspector', 'calidad_aprobador'); } // protocolos/ensayos · fotos obra
+export function canQualityApprove() { return has('admin', 'calidad_aprobador'); }                   // aprobar (maker-checker)
+export function canInspect() { return has('admin', 'inspector'); }                                  // inspección estructural · fotos estado
+export function canOperate() { return has('admin', 'operador'); }                                   // alarmas · pedir captura SHM
+export function isEditor() { return currentRole() !== 'visualizador'; }                             // legacy: cualquier rol que escribe
 
 // Guarda la respuesta de token de Supabase como sesión. `expires_at` viene en
 // segundos epoch; si no, lo derivamos de `expires_in`.
@@ -134,7 +145,7 @@ export async function signOut() {
 // ── Rol del usuario (tabla members) ───────────────────────────────────────────
 export async function fetchRole() {
   const c = authCfg(); const s = getSession();
-  if (!c || !s || !s.user) return 'viewer';
+  if (!c || !s || !s.user) return 'visualizador';
   const res = await fetch(`${c.base}/rest/v1/members?select=role&user_id=eq.${encodeURIComponent(s.user.id)}`, {
     headers: { apikey: c.key, Authorization: `Bearer ${s.access_token}` },
   });
