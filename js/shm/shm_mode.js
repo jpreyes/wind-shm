@@ -8,35 +8,36 @@
 //   inspecciones y señal temporal EN VIVO desde un Web Worker (DataSource).
 // Recortes (modelado) los hace shm.css ocultando, no borrando.
 // ─────────────────────────────────────────────────────────────────────────────
-import { FleetView } from './fleet_view.js?v=330';
-import { DataSource } from './data_source.js?v=330';
-import { computeTwin } from './digital_twin.js?v=330';
-import { ParkManager, loadParksStore } from './parks.js?v=330';
-import { MapView } from './map_view.js?v=330';
-import { defaultStages, builtFromStages, LAYOUT_SCALE } from './parks_data_caman.js?v=330';
-import { fftMag } from './dsp.js?v=330';
-import { buildSunControl, buildCompass, buildNameplate, buildBanner, initPanelResize } from './viewport_chrome.js?v=330';
-import { buildAvanceHUD } from './avance_hud.js?v=330';
-import { renderAvance, computeParkAvance } from './avance_dashboard.js?v=330';
-import * as Insp from './inspection.js?v=330';
-import * as Fat from './fatigue.js?v=330';
-import * as Instr from './instrumentation.js?v=330';
-import * as Calidad from './calidad.js?v=330';
-import { showBackendConfig } from './backend_ui.js?v=330';
-import { backendActive, pushStructures, requestCapture, latestWave } from './backend_sync.js?v=330';
-import { authRequired, loggedIn, isEditor, canOperate, canGestion, canQualityEdit, canQualityApprove, canInspect, currentRole } from './auth.js?v=330';
-import { requireLogin, userChipHTML, wireUserChip } from './auth_ui.js?v=330';
-import * as Hist from './history.js?v=330';
-import * as Health from './health.js?v=330';
-import * as Bench from './benchmark.js?v=330';
-import * as Alarms from './alarms.js?v=330';
-import { METEO_CAMAN } from './meteo_caman.js?v=330';
-import { ReplaySource } from './replay.js?v=330';
-import { esc, safeUrl } from './util.js?v=330';
-import { t, getLang, setLang } from './i18n.js?v=330';
+import { FleetView } from './fleet_view.js?v=331';
+import { DataSource } from './data_source.js?v=331';
+import { computeTwin } from './digital_twin.js?v=331';
+import { ParkManager, loadParksStore } from './parks.js?v=331';
+import { MapView } from './map_view.js?v=331';
+import { defaultStages, builtFromStages, LAYOUT_SCALE } from './parks_data_caman.js?v=331';
+import { fftMag } from './dsp.js?v=331';
+import { buildSunControl, buildCompass, buildNameplate, buildBanner, initPanelResize } from './viewport_chrome.js?v=331';
+import { buildAvanceHUD } from './avance_hud.js?v=331';
+import { renderAvance, computeParkAvance } from './avance_dashboard.js?v=331';
+import * as Insp from './inspection.js?v=331';
+import * as Fat from './fatigue.js?v=331';
+import * as Instr from './instrumentation.js?v=331';
+import * as Calidad from './calidad.js?v=331';
+import { showBackendConfig } from './backend_ui.js?v=331';
+import { backendActive, pushStructures, requestCapture, latestWave } from './backend_sync.js?v=331';
+import { openLive } from './live_stream.js?v=331';
+import { authRequired, loggedIn, isEditor, canOperate, canGestion, canQualityEdit, canQualityApprove, canInspect, currentRole } from './auth.js?v=331';
+import { requireLogin, userChipHTML, wireUserChip } from './auth_ui.js?v=331';
+import * as Hist from './history.js?v=331';
+import * as Health from './health.js?v=331';
+import * as Bench from './benchmark.js?v=331';
+import * as Alarms from './alarms.js?v=331';
+import { METEO_CAMAN } from './meteo_caman.js?v=331';
+import { ReplaySource } from './replay.js?v=331';
+import { esc, safeUrl } from './util.js?v=331';
+import { t, getLang, setLang } from './i18n.js?v=331';
 
 const F1_BASE = { turbine: 0.283, hv: 1.6 };
-const REWIND_VER = 'v330';   // versión visible del build (subir junto al cache-bust)
+const REWIND_VER = 'v331';   // versión visible del build (subir junto al cache-bust)
 const FS = 62.5;   // frecuencia de muestreo de la señal (Hz), igual que shm_worker.js
 // Clasificador ML de daño (0..4)
 const CLS = ['Sin daño', 'Leve', 'Moderado', 'Alto', 'Muy alto'];
@@ -351,7 +352,7 @@ async function boot() {
   // ── Relieve conceptual del terreno (DEM vendorizado) — encendido por defecto ─
   setLoad(88, 'Cargando relieve…'); await delay(40);
   try {
-    await fleet.loadTerrain('data/caman_dem.json?v=330');
+    await fleet.loadTerrain('data/caman_dem.json?v=331');
     fleet.setTerrainVisible(true);
     document.getElementById('shm-relieve-tool')?.classList.add('active');
   } catch (e) { console.warn('[shm] relieve no disponible', e); }
@@ -1089,7 +1090,7 @@ function buildDashboard(panel, fleet, actions) {
   }
   function showShadow() { setTopView('shadow'); }
 
-  let list = [], current = null, pane = 'datos', sigBuf = {}, sigRAF = null, freqHist = {}, wavePlay = null;
+  let list = [], current = null, pane = 'datos', sigBuf = {}, sigRAF = null, freqHist = {}, wavePlay = null, liveStop = null;
   let editSensorId = null;   // R-36f: id del sensor de instrumentación en edición (o null)
   let inspSel = null;   // id de la inspección abierta en la pestaña Inspección
   let specOff = null, specLast = 0;                 // espectrograma (offscreen + scroll)
@@ -2241,7 +2242,8 @@ function buildDashboard(panel, fleet, actions) {
     };
     draw();
   }
-  function stopSig() { if (sigRAF) { cancelAnimationFrame(sigRAF); sigRAF = null; } stopWavePlay(); }
+  function stopSig() { if (sigRAF) { cancelAnimationFrame(sigRAF); sigRAF = null; } stopWavePlay(); stopLive(); }
+  function stopLive() { if (liveStop) { try { liveStop(); } catch { /* */ } liveStop = null; } }
 
   // Reproduce una ventana cruda (real) como osciloscopio en las canvas «en vivo»:
   // recorre las muestras alimentando sigBuf → la traza se mueve. `sid` = sensor que
@@ -2274,10 +2276,11 @@ function buildDashboard(panel, fleet, actions) {
     const canOp = document.body.classList.contains('cap-operate');
     let lastWave = null;
     box.innerHTML = `<div class="sig-cap-h">${t('sig.capTitle')}
+        <span class="sig-live" title="${esc(t('sig.liveTip'))}">○ ${t('sig.liveOff')}</span>
         <span style="flex:1"></span>
         <button class="cal-link sig-play" type="button" disabled>${t('sig.play')}</button>
         <button class="cal-link sig-load" type="button">${t('sig.load')}</button>
-        ${canOp ? `<button class="cal-btn sig-cap-req" type="button">${t('sh.capture')}</button>` : ''}</div>
+        ${canOp ? `<button class="cal-btn sig-cap-req" type="button">${t('sig.reqLive')}</button>` : ''}</div>
       <div class="sig-cap-meta cal-mut">${t('sig.none')}</div>
       <canvas class="sig-cap-wave"></canvas>
       <div class="sig-cap-fftlab cal-mut" style="margin-top:6px"></div>
@@ -2287,6 +2290,7 @@ function buildDashboard(panel, fleet, actions) {
     const waveC = box.querySelector('.sig-cap-wave'), fftC = box.querySelector('.sig-cap-fft');
     const fftLab = box.querySelector('.sig-cap-fftlab');
     const playBtn = box.querySelector('.sig-play');
+    const liveEl = box.querySelector('.sig-live');
 
     const draw = (res) => {
       const a = res?.arrays; if (!a || !a.ax || !a.ax.length) { meta.textContent = res?.meta ? t('sig.noRaw') : t('sig.none'); return; }
@@ -2319,26 +2323,43 @@ function buildDashboard(panel, fleet, actions) {
     };
     box.querySelector('.sig-load').addEventListener('click', async () => { const r = await load(null); if (current?.id === o.id) draw(r); });
 
+    // On-demand EN VIVO: pide al sensor que TRANSMITA en tiempo real (kind 'live').
+    // El sensor abre su WS de salida y emite chunks → llegan por el canal de abajo.
     const reqBtn = box.querySelector('.sig-cap-req');
     if (reqBtn) reqBtn.addEventListener('click', async () => {
-      reqBtn.disabled = true; const prev = (await latestWave(o.id, null).catch(() => null))?.meta?.id ?? null;
-      meta.textContent = t('sig.wait');
-      try {
-        await requestCapture(o.id);
-        // Sondea la aparición de una ventana NUEVA (el sim responde en ~5-10 s).
-        let got = null;
-        for (let i = 0; i < 12 && current?.id === o.id; i++) {
-          await new Promise((r) => setTimeout(r, 3000));
-          const res = await latestWave(o.id, prev).catch(() => null);
-          if (res && res.arrays) { got = res; break; }
-        }
-        if (current?.id === o.id) got ? draw(got) : (meta.textContent = t('sig.timeout'));
-      } catch { meta.textContent = t('sh.captureErr'); }
-      finally { reqBtn.disabled = false; }
+      reqBtn.disabled = true; meta.textContent = t('sig.reqSent');
+      try { await requestCapture(o.id, 'live'); } catch { meta.textContent = t('sh.captureErr'); }
+      finally { setTimeout(() => { reqBtn.disabled = false; }, 2000); }
     });
 
-    // Carga automática de la última ventana existente al abrir la pestaña.
-    load(null).then((r) => { if (current?.id === o.id) draw(r); });
+    // ── Canal EN VIVO (Realtime Broadcast) — tiempo real de verdad ───────────────
+    // Suscrito mientras la pestaña Señal esté abierta. Cuando el sensor transmite
+    // (on-demand o anomalía), los chunks alimentan la traza de arriba → aceleración
+    // REAL en vivo (<1 s). Si no hay flujo, cae al replay de la última ventana.
+    let liveNorm = 0.02, liveActive = false;
+    stopLive();
+    liveStop = openLive(o.id, (chunk) => {
+      const ax = chunk?.ax; if (!ax || !ax.length) return;
+      const sid = (o.sensors.find(s => s.id === chunk.sensor) || o.sensors[0])?.id; if (!sid) return;
+      if (!liveActive) { liveActive = true; stopWavePlay(); playBtn.textContent = t('sig.play'); }   // el vivo manda sobre el replay
+      for (let i = 0; i < ax.length; i++) { const a = Math.abs(ax[i]); if (a > liveNorm) liveNorm = a; }
+      liveNorm *= 0.9995;   // el pico decae lento → autoescala
+      const buf = sigBuf[sid] || (sigBuf[sid] = []);
+      for (let i = 0; i < ax.length; i++) buf.push(ax[i] / liveNorm);
+      if (buf.length > 700) buf.splice(0, buf.length - 700);
+      meta.innerHTML = `<b style="color:var(--danger)">● ${t('sig.liveOn')}</b> · ${chunk.fs || 150}Hz · ${esc(chunk.trigger || 'live')} · ${esc(sid)}`;
+      const st = [...el.querySelectorAll('#sig-wrap .row')].find(r => r.firstChild.textContent === sid)?.querySelector('.sig-st');
+      if (st) { st.textContent = '● ' + t('sig.liveOn'); st.style.color = 'var(--danger)'; }
+    }, (state) => {
+      const on = state === 'live';
+      liveEl.textContent = (on ? '● ' : '○ ') + (on ? t('sig.liveOn') : t('sig.liveOff'));
+      liveEl.classList.toggle('on', on);
+      if (state === 'idle' && liveActive) liveActive = false;   // se cortó el flujo → habilita replay de nuevo
+    });
+
+    // Carga automática de la última ventana existente al abrir la pestaña (fallback
+    // cuando no hay transmisión en vivo).
+    load(null).then((r) => { if (current?.id === o.id && !liveActive) draw(r); });
   }
 
   function drawWaveEnvelope(cv, ax) {
