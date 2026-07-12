@@ -12,7 +12,7 @@
 // localStorage (`SESSION_KEY`) al armar los headers. Aquí solo importamos la
 // config del backend (URL + anon/publishable key) para pegarle a `/auth/v1/*`.
 // ─────────────────────────────────────────────────────────────────────────────
-import { getBackendConfig } from './backend.js?v=323';
+import { getBackendConfig } from './backend.js?v=324';
 
 export const SESSION_KEY = 'rewind.auth.v1';
 const SKEW_MS = 30000;   // refresca 30 s antes del vencimiento (margen de reloj/red)
@@ -24,7 +24,7 @@ const SKEW_MS = 30000;   // refresca 30 s antes del vencimiento (margen de reloj
 // el deploy; sin key completada, cae al backend configurado (o queda abierto).
 const AUTH_SUPABASE = {
   url: 'https://xenujkmogaxxkrnpgbmg.supabase.co',
-  key: 'PEGAR_SB_PUBLISHABLE_KEY',   // ← pegar la publishable key (sb_publishable_…)
+  key: 'sb_publishable_OxaslmxBAioPxaZ_SzHENg_d0aMJS-w',   // publishable (pública)
 };
 const KEY_SET = AUTH_SUPABASE.key && AUTH_SUPABASE.key !== 'PEGAR_SB_PUBLISHABLE_KEY';
 
