@@ -6,9 +6,9 @@
 // Sólo la **anon key** (pública, pensada para el navegador). NUNCA la service_role
 // (secreta) — esa vive en el ingestor/servidor, no en el front.
 // ─────────────────────────────────────────────────────────────────────────────
-import { getBackendConfig, setBackendConfig } from './backend.js?v=326';
-import { tableCounts } from './backend_sync.js?v=326';
-import { t } from './i18n.js?v=326';
+import { getBackendConfig, setBackendConfig } from './backend.js?v=327';
+import { tableCounts } from './backend_sync.js?v=327';
+import { t } from './i18n.js?v=327';
 
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 

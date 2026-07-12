@@ -188,6 +188,10 @@ body:not(.cap-inspect) .ins-add, body:not(.cap-inspect) #ins-new, body:not(.cap-
 body:not(.cap-inspect) .ins-x, body:not(.cap-inspect) .ins-ot, body:not(.cap-inspect) .ins-dmg-cam,
 body:not(.cap-inspect) .ins-addform, body:not(.cap-inspect) #ins-addphoto, body:not(.cap-inspect) #ins-first,
 body:not(.cap-inspect) .ins-px, body:not(.cap-inspect) .venc-acts { display: none !important; }
+/* cap-gestion (cont.): el % de avance 4D se ve pero no se edita sin la capacidad */
+body:not(.cap-gestion) .avt-pp { pointer-events: none; opacity: .55; }
+/* cap-operate: guardar umbrales de alarma y descartar/reactivar alarmas */
+body:not(.cap-operate) #alm-save, body:not(.cap-operate) .ab-dismiss { display: none !important; }
 /* Comparador de torres (R-39) */
 .cmp-card { max-width: 460px; width: calc(100% - 40px); }
 .cmp-tbl { width: 100%; border-collapse: collapse; font-size: 13px; margin-top: 8px; }

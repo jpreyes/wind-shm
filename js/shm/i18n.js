@@ -82,6 +82,7 @@ const DICT = {
     'cal.f.code': 'Código documento', 'cal.f.doc': 'Documento', 'cal.f.area': 'Área',
     'cal.f.element': 'Elemento (WTG NN)', 'cal.f.spec': 'Especialidad', 'cal.f.milestone': 'Hito de pago',
     'cal.f.state': 'Estado', 'cal.f.desc': 'Descripción',
+    'cal.approveOnly': 'Aprobar requiere rol «calidad_aprobador».',
     'cal.f.create': '＋ Crear', 'cal.f.saveEdit': '✓ Guardar', 'cal.f.cancel': 'Cancelar',
     // Integración con Obra (4D + ficha)
     'cal.avanceLoad': '▣ Cargar parque completo', 'cal.avanceUpdate': '▣ Actualizar parque',
@@ -502,6 +503,7 @@ const DICT = {
     'cal.f.code': 'Document code', 'cal.f.doc': 'Document', 'cal.f.area': 'Area',
     'cal.f.element': 'Element (WTG NN)', 'cal.f.spec': 'Specialty', 'cal.f.milestone': 'Payment milestone',
     'cal.f.state': 'State', 'cal.f.desc': 'Description',
+    'cal.approveOnly': 'Approving requires the «calidad_aprobador» role.',
     'cal.f.create': '＋ Create', 'cal.f.saveEdit': '✓ Save', 'cal.f.cancel': 'Cancel',
     // Works integration (4D + card)
     'cal.avanceLoad': '▣ Load full park', 'cal.avanceUpdate': '▣ Update park',

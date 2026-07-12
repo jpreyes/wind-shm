@@ -20,7 +20,7 @@
 // Valores por defecto ≈ torre onshore de ~3 MW (parametrizables). El usuario sólo
 // selecciona el NODO BASE; el expand construye toda la torre hacia arriba.
 // ─────────────────────────────────────────────────────────────────────────────
-import { registerMacro } from '../macro_registry.js?v=326';
+import { registerMacro } from '../macro_registry.js?v=327';
 
 /**
  * Propiedades de una sección tubular circular hueca (acero del fuste).

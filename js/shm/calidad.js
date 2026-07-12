@@ -23,8 +23,9 @@ import { defaultWbs, wbsProgress, partidaForProtocol } from '../../tools/wbs.js'
 import { readXlsx } from '../../lib/xlsx_lite.mjs';
 import { analyzeWorkbook, proposeMapping, distinctValues, readByProfile, guessCanon, BUILTIN_PROFILES, FIELDS as QP_FIELDS, CANON_STATES } from '../../tools/quality_profile.mjs';
 import { FRAMEWORK, STATUS_NORMS, ENSAYO_NORMS, normLabel, normForEnsayo } from '../../tools/norms_catalog.mjs';
-import { backendActive, pushQuality, pullQuality, pushWbs, pushProfile, deleteProtocoloRemote, debouncedPush } from './backend_sync.js?v=326';
-import { t } from './i18n.js?v=326';
+import { backendActive, pushQuality, pullQuality, pushWbs, pushProfile, deleteProtocoloRemote, debouncedPush } from './backend_sync.js?v=327';
+import { canQualityApprove } from './auth.js?v=327';
+import { t } from './i18n.js?v=327';
 
 const STORE = 'rewind.calidad.v1';
 const XLSX_MIME = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
@@ -823,6 +824,10 @@ function manageHTML(data) {
   const v = (x) => esc(x ?? '');
 
   const opts = (arr, sel) => arr.map((o) => `<option value="${esc(o)}"${(sel || '') === o ? ' selected' : ''}>${esc(o)}</option>`).join('');
+  // Maker-checker (ISO 9001 §8.6): si el rol NO puede aprobar, se quitan del selector
+  // los estados que aprueban (normEstado→'aprobado'); se conserva el valor ya guardado.
+  const canApprove = canQualityApprove();
+  const estadosSel = canApprove ? estados : estados.filter((o) => normEstado(o) !== 'aprobado' || o === editing?.estadoActualRaw);
   const field = (name, label, val, extra = '') => `<label class="cal-fl"><span>${esc(label)}</span><input name="${name}" value="${v(val)}" ${extra}></label>`;
   const form = `<form class="cal-form">
     <div class="cal-form-grid">
@@ -832,7 +837,7 @@ function manageHTML(data) {
       ${field('elemento', t('cal.f.element'), editing?.elemento, 'placeholder="WTG 05"')}
       <label class="cal-fl"><span>${t('cal.f.spec')}</span><select name="especialidad"><option value=""></option>${opts(DEFAULT_ESPEC, editing?.especialidad)}</select></label>
       ${field('hitoPago', t('cal.f.milestone'), editing?.hitoPago, 'placeholder="1er"')}
-      <label class="cal-fl"><span>${t('cal.f.state')}</span><select name="estadoActualRaw"><option value=""></option>${opts(estados, editing?.estadoActualRaw)}</select></label>
+      <label class="cal-fl"><span>${t('cal.f.state')}</span><select name="estadoActualRaw"><option value=""></option>${opts(estadosSel, editing?.estadoActualRaw)}</select>${canApprove ? '' : `<span class="cal-mut" style="font-size:10.5px">${t('cal.approveOnly')}</span>`}</label>
       ${field('descripcion', t('cal.f.desc'), editing?.descripcion)}
       <label class="cal-fl"><span>${t('cal.wbs.assign')}</span><select name="partidaOverride"><option value="">${editing ? '— auto —' : t('cal.wbs.assignAuto')}</option>${getWbs('turbine').map((wp) => { const sel = editing ? getOverrides()[editing.id] === wp.id : presetPartida === wp.id; return `<option value="${esc(wp.id)}"${sel ? ' selected' : ''}>${esc(wp.nombre)}</option>`; }).join('')}</select></label>
     </div>
