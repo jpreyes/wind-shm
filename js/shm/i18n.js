@@ -205,6 +205,8 @@ const DICT = {
     'hi.title': 'Salud', 'hi.allGood': 'Sin penalizaciones', 'hi.name': 'Índice de Salud',
     'hi.band.operativa': 'Operativa', 'hi.band.observacion': 'Observación', 'hi.band.critica': 'Crítica', 'hi.band.unknown': '—',
     'sh.note': 'Estado/clasificación EN VIVO del servicio ML que vigila los sensores. Es distinto de la <b>evaluación de inspección</b> (pestaña Inspección).',
+    'sh.capture': '📡 Pedir captura ahora', 'sh.captureTip': 'Pide al sensor subir una ventana cruda (5 min) de esta estructura ya',
+    'sh.captureSent': 'Captura pedida — el sensor la subirá en unos segundos.', 'sh.captureErr': 'No se pudo pedir la captura.', 'sh.captureWait': 'Pidiendo…',
     'sig.note': 'Señal de aceleración en vivo (se mueve en tiempo real):',
     'sens.note': 'Verde = operativo · Rojo = en falla. Estado y RMS en vivo desde el gateway (sim).',
     // Instrumentación editable (R-33)
@@ -615,6 +617,8 @@ const DICT = {
     'hi.title': 'Health', 'hi.allGood': 'No penalties', 'hi.name': 'Health Index',
     'hi.band.operativa': 'Operational', 'hi.band.observacion': 'Watch', 'hi.band.critica': 'Critical', 'hi.band.unknown': '—',
     'sh.note': 'LIVE status/classification from the ML service watching the sensors. Different from the <b>inspection assessment</b> (Inspection tab).',
+    'sh.capture': '📡 Request capture now', 'sh.captureTip': 'Ask the sensor to upload a raw window (5 min) of this structure now',
+    'sh.captureSent': 'Capture requested — the sensor will upload it shortly.', 'sh.captureErr': 'Could not request the capture.', 'sh.captureWait': 'Requesting…',
     'sig.note': 'Live acceleration signal (updates in real time):',
     'sens.note': 'Green = operational · Red = fault. Live status and RMS from the gateway (sim).',
     'instr.custom': 'Added sensors', 'instr.add': '＋ Sensor', 'instr.addBtn': 'Add', 'instr.cancel': 'Cancel',

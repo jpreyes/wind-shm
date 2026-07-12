@@ -23,8 +23,8 @@ import { defaultWbs, wbsProgress, partidaForProtocol } from '../../tools/wbs.js'
 import { readXlsx } from '../../lib/xlsx_lite.mjs';
 import { analyzeWorkbook, proposeMapping, distinctValues, readByProfile, guessCanon, BUILTIN_PROFILES, FIELDS as QP_FIELDS, CANON_STATES } from '../../tools/quality_profile.mjs';
 import { FRAMEWORK, STATUS_NORMS, ENSAYO_NORMS, normLabel, normForEnsayo } from '../../tools/norms_catalog.mjs';
-import { backendActive, pushQuality, pullQuality, pushWbs, pushProfile, deleteProtocoloRemote, debouncedPush } from './backend_sync.js?v=321';
-import { t } from './i18n.js?v=321';
+import { backendActive, pushQuality, pullQuality, pushWbs, pushProfile, deleteProtocoloRemote, debouncedPush } from './backend_sync.js?v=322';
+import { t } from './i18n.js?v=322';
 
 const STORE = 'rewind.calidad.v1';
 const XLSX_MIME = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';

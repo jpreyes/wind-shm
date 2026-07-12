@@ -6,7 +6,7 @@
 // como CACHÉ OFFLINE. Sin backend configurado, todo funciona como antes (no-op).
 // Mapeo modelo↔fila explícito (nombres de columna del esquema en snake_case).
 // ─────────────────────────────────────────────────────────────────────────────
-import { getBackendConfig, createBackend } from './backend.js?v=321';
+import { getBackendConfig, createBackend } from './backend.js?v=322';
 
 let _be = null, _cfgKey = null;
 // Instancia perezosa del backend; se recrea si cambia la config.
@@ -87,6 +87,15 @@ export async function pushWbs(type, partidas, overrides = {}, park = 'default') 
 }
 export async function pushProfile(profile) {
   const be = backend(); if (!be) return; await be.insert('import_profiles', [{ id: `prof:${profile.name}`, name: profile.name, config: profile }]);
+}
+
+// ── On-demand: pedir una ventana cruda AHORA (Frente 4, command-polling) ───────
+// Inserta un comando `pending`; el sensor lo sondea y sube la ventana. Sin puertos.
+export async function requestCapture(structureId, kind = 'window') {
+  const be = backend(); if (!be) return { ok: false, skipped: true };
+  await be.insert('sensor_commands', [{ structure_id: structureId, kind, status: 'pending' }]);
+  markPush();
+  return { ok: true };
 }
 
 // ── Inspecciones (CMMS) ───────────────────────────────────────────────────────
