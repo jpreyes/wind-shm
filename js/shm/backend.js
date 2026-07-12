@@ -83,23 +83,64 @@ function supabaseBackend(cfg) {
   const subs = new Set();
   let pollTimer = null, sinceTs = null, lastIngest = 0;
   const INGEST_MS = 60000;   // features 1/min: no golpear Supabase en cada tick del sim
+  const POLL_FAST = 5000, POLL_SLOW = 30000;   // polling: rápido; lento cuando Realtime está vivo
+
+  // Convierte filas de `features` en un tick y lo entrega a los suscriptores. Los
+  // updates son idempotentes (fija el último estado por estructura) → da igual que
+  // una fila llegue por Realtime y por polling.
+  function deliver(rows) {
+    if (!rows || !rows.length) return;
+    sinceTs = rows[rows.length - 1].ts || sinceTs;
+    const summaries = {};
+    for (const r of rows) summaries[r.structure_id] = { f1: r.f1, f2: r.f2, rms: r.rms, wind: r.wind, temp: r.temp, tilt: r.tilt, cls: r.cls, sensors: [] };
+    const tick = { type: 'tick', t: Date.now(), summaries, waves: {} };
+    for (const cb of subs) cb(tick);
+  }
 
   async function poll() {
     try {
       const since = sinceTs ? `&ts=gt.${encodeURIComponent(sinceTs)}` : '&limit=200';
       const res = await fetch(`${base}/rest/v1/features?select=*&order=ts.asc${since}`, { headers: headers() });
-      if (res.ok) {
-        const rows = await res.json();
-        if (rows.length) {
-          sinceTs = rows[rows.length - 1].ts;
-          const summaries = {};
-          for (const r of rows) summaries[r.structure_id] = { f1: r.f1, f2: r.f2, rms: r.rms, wind: r.wind, temp: r.temp, tilt: r.tilt, cls: r.cls, sensors: [] };
-          const tick = { type: 'tick', t: Date.now(), summaries, waves: {} };
-          for (const cb of subs) cb(tick);
-        }
-      }
+      if (res.ok) deliver(await res.json());
     } catch { /* red intermitente → reintenta */ }
-    pollTimer = setTimeout(poll, 5000);
+    pollTimer = setTimeout(poll, rtConnected ? POLL_SLOW : POLL_FAST);
+  }
+
+  // ── Realtime nativo (WebSocket Phoenix) para INSERT en `features` ─────────────
+  // Baja latencia sin supabase-js. El polling queda de red de seguridad (a 30 s
+  // mientras RT esté vivo). Reconexión con backoff. RLS: manda el token de sesión.
+  let ws = null, hbTimer = null, rtRef = 0, rtRetry = 0, rtConnected = false;
+  const RT_TOPIC = 'realtime:rewind-features';
+  function rtToken() {
+    try { const s = JSON.parse(localStorage.getItem('rewind.auth.v1')); if (s && s.access_token && (s.expires_at * 1000) > Date.now()) return s.access_token; } catch { /* */ }
+    return cfg.anonKey;
+  }
+  function startRealtime() {
+    if (typeof WebSocket === 'undefined') return;
+    let sock; try { sock = new WebSocket(base.replace(/^http/, 'ws') + `/realtime/v1/websocket?apikey=${encodeURIComponent(cfg.anonKey)}&vsn=1.0.0`); } catch { return; }
+    ws = sock;
+    sock.onopen = () => {
+      rtRetry = 0;
+      sock.send(JSON.stringify({ topic: RT_TOPIC, event: 'phx_join', ref: String(++rtRef),
+        payload: { access_token: rtToken(), config: { postgres_changes: [{ event: 'INSERT', schema: 'public', table: 'features' }] } } }));
+      clearInterval(hbTimer);
+      hbTimer = setInterval(() => { if (sock.readyState === 1) sock.send(JSON.stringify({ topic: 'phoenix', event: 'heartbeat', payload: {}, ref: String(++rtRef) })); }, 25000);
+    };
+    sock.onmessage = (ev) => {
+      let m; try { m = JSON.parse(ev.data); } catch { return; }
+      if (m.event === 'phx_reply' && m.topic === RT_TOPIC && m.payload?.status === 'ok') { rtConnected = true; return; }
+      if (m.event === 'postgres_changes') { const rec = m.payload?.data?.record; if (rec) deliver([rec]); }
+    };
+    const down = () => {
+      if (ws !== sock) return;               // ya reemplazado
+      rtConnected = false; clearInterval(hbTimer); hbTimer = null; ws = null;
+      if (subs.size) setTimeout(startRealtime, Math.min(30000, 2000 * (2 ** Math.min(rtRetry++, 4))));   // backoff
+    };
+    sock.onerror = down; sock.onclose = down;
+  }
+  function stopRealtime() {
+    rtConnected = false; clearInterval(hbTimer); hbTimer = null;
+    if (ws) { const s = ws; ws = null; try { s.onclose = null; s.close(); } catch { /* */ } }
   }
 
   return {
@@ -111,7 +152,15 @@ function supabaseBackend(cfg) {
       const rows = tickToRows(tick);
       if (rows.length) fetch(`${base}/rest/v1/features`, { method: 'POST', headers: headers(), body: JSON.stringify(rows) }).catch(() => {});
     },
-    onTick(cb) { subs.add(cb); if (!pollTimer) poll(); return () => { subs.delete(cb); if (!subs.size && pollTimer) { clearTimeout(pollTimer); pollTimer = null; } }; },
+    onTick(cb) {
+      subs.add(cb);
+      if (!pollTimer) poll();          // red de seguridad
+      if (!ws) startRealtime();        // baja latencia
+      return () => {
+        subs.delete(cb);
+        if (!subs.size) { if (pollTimer) { clearTimeout(pollTimer); pollTimer = null; } stopRealtime(); }
+      };
+    },
     latest() { return {}; },
     async insert(table, rows) {
       const res = await fetch(`${base}/rest/v1/${table}`, { method: 'POST', headers: { ...headers(), Prefer: 'resolution=merge-duplicates' }, body: JSON.stringify(rows) });
