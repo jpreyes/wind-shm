@@ -106,12 +106,17 @@ El sensor está en **otro repo**; acá se cierra el loop de datos reales sin har
   + ventana de **5 min** por 3 disparadores (programado c/60min · anomalía RMS · on-demand
   pull). features → `features`; serie cruda `.npz` → Storage `waves/` + puntero. Probado
   contra mock (esquema OK). Corre 24/7 en el VPS (systemd) — el VPS es solo host, no endpoint.
-- [ ] **La web ya consume `features`** (modo `backend:supabase`, polling 5 s). Falta: botón
-  «pedir captura» que inserte en `sensor_commands`, y leer/mostrar las ventanas `waves`.
-- [ ] **Realtime nativo** de Supabase (suscripción a INSERT de `features`) reemplazando el
-  polling; **reconexión** en el cliente; **retención/limpieza** (cron 90 días).
+- [x] **Botón «pedir captura» on-demand** (v322): la vista SHM inserta en
+  `sensor_commands` (`requestCapture`) → el sensor lo sondea y sube la ventana.
+- [x] **Realtime nativo** (v323): cliente WS Phoenix que escucha INSERT en `features`
+  (baja latencia, sin supabase-js); **polling de respaldo** (30 s con RT vivo, 5 s si
+  cae); **reconexión con backoff**; token de sesión en el join (RLS). *(Verificado sin
+  crash contra Supabase falso; falta validar la CONEXIÓN real + que el poll baje a 30 s
+  → requiere el Supabase de JP con la key + un flujo de `features`.)*
+- [ ] Pendiente: leer/mostrar las ventanas `waves` (insumo OMA R-21); **retención/limpieza**
+  (cron 90 días); indicador «Realtime/polling» en la barra.
 - **Cierre:** corro el sensor Python en el VPS → una torre se actualiza en la web en vivo,
-  end-to-end. *(Falta conectarlo al Supabase real de JP + los dos pendientes de front.)*
+  end-to-end. *(Falta: pegar la publishable key, correr `ingest.sql`, conectar el sim.)*
 
 ## FASE 5 — Operación & Administración (largo plazo) · según piloto
 *Frente 6.4/6.5 + Fase 4/5 del ROADMAP original. Requiere Fases 1–4.*
