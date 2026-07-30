@@ -9,8 +9,29 @@
 // ---------------------------------------------------------------------------
 import * as Insp from '../shm/inspection.js?v=332';
 import * as Selection from '../core/selection.js?v=332';
+import { Shm } from '../core/shm_state.js?v=332';
 import { t, getLang } from '../shm/i18n.js?v=332';
 import { esc, safeUrl } from '../shm/util.js?v=332';
+
+// ── Alimentación del estado SHM en vivo (paso 2 de B2: partir onTick) ──────────
+// Por cada tick, actualiza los buffers de señal + el histórico de f₁ de la torre
+// seleccionada (Shm.sigBuf / Shm.freqHist). Lo llama el onTick del shell; cuando
+// renderSHM se mude acá, dibujará desde el MISMO Shm. (El histórico ML y la
+// persistencia Hist quedan por ahora en el shell.)
+export function feedSHM(msg) {
+  const current = Selection.getCurrent();
+  if (!current) return;
+  if (msg.waves && msg.waves[current.id]) {
+    for (const w of msg.waves[current.id]) {
+      (Shm.sigBuf[w.id] || (Shm.sigBuf[w.id] = [])).push(...w.samples);
+      const buf = Shm.sigBuf[w.id]; if (buf.length > 700) buf.splice(0, buf.length - 700);
+    }
+  }
+  if (msg.summaries && msg.summaries[current.id]) {
+    const h = (Shm.freqHist[current.id] || (Shm.freqHist[current.id] = []));
+    h.push(msg.summaries[current.id].f1); if (h.length > 160) h.shift();
+  }
+}
 
 const ihash = (s) => { let h = 0; for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) >>> 0; return h; };
 let inspSel = null;                       // inspeccion abierta (estado local del sub-modulo)

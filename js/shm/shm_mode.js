@@ -28,7 +28,7 @@ import { openLive } from './live_stream.js?v=332';
 import { renderProyecto } from '../workspaces/proyecto.js?v=332';
 import { renderObra } from '../workspaces/obra.js?v=332';
 import * as Selection from '../core/selection.js?v=332';
-import { renderInsp, initInspection } from '../workspaces/operacion.js?v=332';
+import { renderInsp, initInspection, feedSHM } from '../workspaces/operacion.js?v=332';
 import { Shm } from '../core/shm_state.js?v=332';
 import { authRequired, loggedIn, isEditor, canOperate, canGestion, canQualityEdit, canQualityApprove, canInspect, currentRole, allowedWorkspaces } from './auth.js?v=332';
 import { requireLogin, userChipHTML, wireUserChip } from './auth_ui.js?v=332';
@@ -1819,18 +1819,8 @@ function buildDashboard(panel, fleet, actions) {
       if (row.classList.contains('alarm')) { dot.style.background = ''; dot.style.boxShadow = ''; }  // CSS maneja el rojo titilante
       else { dot.style.background = c; dot.style.boxShadow = `0 0 6px ${c}`; }
     }
-    // buffers de señal de la estructura enfocada
-    if (current && msg.waves[current.id]) {
-      for (const w of msg.waves[current.id]) {
-        (Shm.sigBuf[w.id] || (Shm.sigBuf[w.id] = [])).push(...w.samples);
-        const buf = Shm.sigBuf[w.id]; if (buf.length > 700) buf.splice(0, buf.length - 700);
-      }
-    }
-    // historial de f₁ para el seguimiento (pestaña Avanzado)
-    if (current && msg.summaries[current.id]) {
-      const h = (Shm.freqHist[current.id] || (Shm.freqHist[current.id] = []));
-      h.push(msg.summaries[current.id].f1); if (h.length > 160) h.shift();
-    }
+    // Estado SHM en vivo (señal + histórico de f₁) → workspaces/operacion.js (B2 paso 2)
+    feedSHM(msg);
     // Histórico de clasificación ML (muestreo ~1 s, todas las estructuras)
     const now = Date.now();
     if (now - Shm.lastHistT > 1000) {
