@@ -29,6 +29,7 @@ import { renderProyecto } from '../workspaces/proyecto.js?v=332';
 import { renderObra } from '../workspaces/obra.js?v=332';
 import * as Selection from '../core/selection.js?v=332';
 import { renderInsp, initInspection } from '../workspaces/operacion.js?v=332';
+import { Shm } from '../core/shm_state.js?v=332';
 import { authRequired, loggedIn, isEditor, canOperate, canGestion, canQualityEdit, canQualityApprove, canInspect, currentRole, allowedWorkspaces } from './auth.js?v=332';
 import { requireLogin, userChipHTML, wireUserChip } from './auth_ui.js?v=332';
 import * as Hist from './history.js?v=332';
@@ -1029,12 +1030,9 @@ function buildDashboard(panel, fleet, actions) {
   function renderShadow() { renderProyecto($('#shm-shadow'), fleet); }
   function showShadow() { setTopView('shadow'); }
 
-  let list = [], current = null, pane = 'datos', sigBuf = {}, sigRAF = null, freqHist = {}, wavePlay = null, liveStop = null;
-  let editSensorId = null;   // R-36f: id del sensor de instrumentación en edición (o null)
-  let specOff = null, specLast = 0;                 // espectrograma (offscreen + scroll)
-  const clsHist = {}, clsEvents = {}; let lastHistT = 0;   // histórico de clasificación ML
-  let lastAnomT = 0;   // R-26: throttle del benchmarking de flota
-  const SPEC_W = 170, SPEC_BINS = 48, SPEC_FMAX = 6;
+  let list = [], current = null;   // list=estructuras · current=selección (espeja a Selection store)
+  let lastAnomT = 0;   // R-26: throttle del benchmarking de flota (Parque)
+  // El estado SHM vive ahora en core/shm_state.js (objeto mutable `Shm`).
   const heat = (t) => {
     t = Math.max(0, Math.min(1, t));
     const s = [[12, 16, 32], [22, 90, 190], [30, 200, 200], [240, 220, 60], [232, 50, 40]];
@@ -1162,7 +1160,7 @@ function buildDashboard(panel, fleet, actions) {
 
   function select(obj) {
     current = obj; Selection.setCurrent(obj); highlight();   // store compartido (workspaces extraídos)
-    sigBuf = {}; freqHist = {}; specOff = null;
+    Shm.sigBuf = {}; Shm.freqHist = {}; Shm.specOff = null;
     if (!obj) {
       stopSig();
       $('#shm-detail').innerHTML = `<div class="empty">${t('empty.select')}</div>`;
@@ -1243,7 +1241,7 @@ function buildDashboard(panel, fleet, actions) {
   // ── Pestaña SHM: estado por sensores + señal + sensores + avanzado ───────────
   function renderSHM() {
     const o = current; if (!o) { const h = $('#shm-shm'); if (h) h.innerHTML = `<div class="empty">${t('empty.select')}</div>`; return; }
-    if (!['estado', 'senal', 'tendencia', 'sensores', 'avz', 'fatiga'].includes(pane)) pane = 'estado';
+    if (!['estado', 'senal', 'tendencia', 'sensores', 'avz', 'fatiga'].includes(Shm.pane)) Shm.pane = 'estado';
     $('#shm-shm').innerHTML = `
       <div class="shm-tabs">
         <button class="shm-tab" data-p="estado">${t('tab.estado')}</button>
@@ -1254,16 +1252,16 @@ function buildDashboard(panel, fleet, actions) {
         <button class="shm-tab" data-p="avz">${t('tab.avz')}</button>
       </div>
       <div class="shm-body" id="shm-pane"></div>`;
-    el.querySelectorAll('#shm-shm .shm-tab').forEach(t => t.addEventListener('click', () => { pane = t.dataset.p; renderSHMPane(); }));
+    el.querySelectorAll('#shm-shm .shm-tab').forEach(t => t.addEventListener('click', () => { Shm.pane = t.dataset.p; renderSHMPane(); }));
     renderSHMPane();
   }
 
   function renderSHMPane() {
     stopSig();
-    el.querySelectorAll('#shm-shm .shm-tab').forEach(t => t.classList.toggle('active', t.dataset.p === pane));
+    el.querySelectorAll('#shm-shm .shm-tab').forEach(t => t.classList.toggle('active', t.dataset.p === Shm.pane));
     const o = current, body = el.querySelector('#shm-shm #shm-pane'); if (!o || !body) return;
     const sum = (window.shmData && window.shmData.get(o.id)) || null;
-    if (pane === 'estado') {
+    if (Shm.pane === 'estado') {
       const dmg = sum ? Math.round((sum.dmg || 0) * 100) : 0;
       body.innerHTML = healthGaugeHTML(o, sum) + `
         <div class="row"><span>${t('sh.cls')}</span><b id="sh-cls">…</b></div>
@@ -1283,7 +1281,7 @@ function buildDashboard(panel, fleet, actions) {
         catch { st.textContent = t('sh.captureErr'); }
         finally { capBtn.disabled = false; capBtn.textContent = t('sh.capture'); }
       });
-    } else if (pane === 'senal') {
+    } else if (Shm.pane === 'senal') {
       body.innerHTML = `<div class="note" style="margin-top:0">${t('sig.note')}</div><div id="sig-wrap"></div>`;
       const wrap = body.querySelector('#sig-wrap');
       for (const se of o.sensors) {
@@ -1294,23 +1292,23 @@ function buildDashboard(panel, fleet, actions) {
       }
       startSig();
       if (backendActive()) buildCapturedWave(body, o);   // señal REAL del sensor (Storage)
-    } else if (pane === 'tendencia') {
+    } else if (Shm.pane === 'tendencia') {
       // R-34: tendencia de f₁ desde el histórico persistente (IndexedDB).
       body.innerHTML = `<div class="ins-mut" style="padding:12px">${t('trend.loading')}</div>`;
       const oid = o.id, days = 30;
       Hist.range(oid, Date.now() - days * 864e5).then((rows) => {
-        if (pane !== 'tendencia' || current?.id !== oid) return;   // cambió de pestaña/torre
+        if (Shm.pane !== 'tendencia' || current?.id !== oid) return;   // cambió de pestaña/torre
         body.innerHTML = trendHTML(rows, o, days);
       });
-    } else if (pane === 'sensores') {
+    } else if (Shm.pane === 'sensores') {
       const gwRow = o.gateway?.mesh
         ? `<div class="shm-sensor"><span class="dot ok"></span><span style="flex:1">📶 ${t('ahud.gateway')} <span class="ins-mut" style="font-size:10px">(${t('ahud.gwRoleV')})</span></span><b style="color:var(--success)">${t('ahud.gwOnline')}</b></div>`
         : '';
       const custom = Instr.getSensors(o.id);
-      if (editSensorId && !custom.some(c => c.id === editSensorId)) editSensorId = null;   // el sensor pudo borrarse
-      const editing = editSensorId ? custom.find(c => c.id === editSensorId) : null;
+      if (Shm.editSensorId && !custom.some(c => c.id === Shm.editSensorId)) Shm.editSensorId = null;   // el sensor pudo borrarse
+      const editing = Shm.editSensorId ? custom.find(c => c.id === Shm.editSensorId) : null;
       const customRows = custom.map(cs =>
-        `<div class="shm-sensor ${cs.id === editSensorId ? 'editing' : ''}"><span class="dot ok"></span><span style="flex:1">${Instr.typeIcon(cs.type)} ${esc(cs.label || Instr.typeLabel(cs.type))} <span class="ins-mut" style="font-size:10px">· ${Math.round((cs.yFrac || 0) * 100)}%</span></span><b class="s-custom" data-cs-id="${esc(cs.id)}" data-cs-type="${esc(cs.type)}">—</b><button class="ins-x cs-edit" data-cse="${esc(cs.id)}" title="${t('instr.edit')}">✎</button><button class="ins-x cs-del" data-csd="${esc(cs.id)}" title="${t('instr.remove')}">✕</button></div>`
+        `<div class="shm-sensor ${cs.id === Shm.editSensorId ? 'editing' : ''}"><span class="dot ok"></span><span style="flex:1">${Instr.typeIcon(cs.type)} ${esc(cs.label || Instr.typeLabel(cs.type))} <span class="ins-mut" style="font-size:10px">· ${Math.round((cs.yFrac || 0) * 100)}%</span></span><b class="s-custom" data-cs-id="${esc(cs.id)}" data-cs-type="${esc(cs.type)}">—</b><button class="ins-x cs-edit" data-cse="${esc(cs.id)}" title="${t('instr.edit')}">✎</button><button class="ins-x cs-del" data-csd="${esc(cs.id)}" title="${t('instr.remove')}">✕</button></div>`
       ).join('');
       const typeOpts = Instr.SENSOR_TYPES.map(ty => `<option value="${ty.key}"${editing && editing.type === ty.key ? ' selected' : ''}>${Instr.typeLabel(ty.key)}</option>`).join('');
       body.innerHTML = o.sensors.map(se =>
@@ -1330,18 +1328,18 @@ function buildDashboard(panel, fleet, actions) {
       const refreshHud = () => { if (window.shmAvanceHUD && current === o) window.shmAvanceHUD.show(o, 'shm'); };
       body.querySelector('#cs-add')?.addEventListener('click', () => {
         const patch = { type: body.querySelector('#cs-type').value, label: body.querySelector('#cs-label').value, yFrac: (+yf.value || 0) / 100 };
-        if (editSensorId) { Instr.updateSensor(o.id, editSensorId, patch); editSensorId = null; }   // R-36f: editar sin recrear
+        if (Shm.editSensorId) { Instr.updateSensor(o.id, Shm.editSensorId, patch); Shm.editSensorId = null; }   // R-36f: editar sin recrear
         else Instr.addSensor(o.id, patch);
         refreshHud(); renderSHMPane();
       });
-      body.querySelector('#cs-cancel')?.addEventListener('click', () => { editSensorId = null; renderSHMPane(); });
-      body.querySelectorAll('.cs-edit').forEach(b => b.addEventListener('click', () => { editSensorId = b.dataset.cse; renderSHMPane(); }));
+      body.querySelector('#cs-cancel')?.addEventListener('click', () => { Shm.editSensorId = null; renderSHMPane(); });
+      body.querySelectorAll('.cs-edit').forEach(b => b.addEventListener('click', () => { Shm.editSensorId = b.dataset.cse; renderSHMPane(); }));
       body.querySelectorAll('.cs-del').forEach(b => b.addEventListener('click', () => {
         Instr.removeSensor(o.id, b.dataset.csd);
-        if (editSensorId === b.dataset.csd) editSensorId = null;
+        if (Shm.editSensorId === b.dataset.csd) Shm.editSensorId = null;
         refreshHud(); renderSHMPane();
       }));
-    } else if (pane === 'fatiga') {
+    } else if (Shm.pane === 'fatiga') {
       if ((o.built ?? 1) < 0.97) {   // R-40e: torre en montaje → sin fatiga «consumida»
         body.innerHTML = `<div class="ins-mut" style="padding:16px 12px;line-height:1.5">${t('phys.montaje')}</div>`;
       } else {
@@ -1365,7 +1363,7 @@ function buildDashboard(panel, fleet, actions) {
           ${fatigueSpectrumSVG(a)}
           <div class="note" style="font-size:10px">${t('fat.note')}</div>`;
       }
-    } else if (pane === 'avz') {
+    } else if (Shm.pane === 'avz') {
       const nvm = o.type === 'turbine'
         ? `<div class="note">${t('avz.nvmNote')}</div>
            <div id="nvm-wrap" style="display:flex;gap:6px">
@@ -1824,28 +1822,28 @@ function buildDashboard(panel, fleet, actions) {
     // buffers de señal de la estructura enfocada
     if (current && msg.waves[current.id]) {
       for (const w of msg.waves[current.id]) {
-        (sigBuf[w.id] || (sigBuf[w.id] = [])).push(...w.samples);
-        const buf = sigBuf[w.id]; if (buf.length > 700) buf.splice(0, buf.length - 700);
+        (Shm.sigBuf[w.id] || (Shm.sigBuf[w.id] = [])).push(...w.samples);
+        const buf = Shm.sigBuf[w.id]; if (buf.length > 700) buf.splice(0, buf.length - 700);
       }
     }
     // historial de f₁ para el seguimiento (pestaña Avanzado)
     if (current && msg.summaries[current.id]) {
-      const h = (freqHist[current.id] || (freqHist[current.id] = []));
+      const h = (Shm.freqHist[current.id] || (Shm.freqHist[current.id] = []));
       h.push(msg.summaries[current.id].f1); if (h.length > 160) h.shift();
     }
     // Histórico de clasificación ML (muestreo ~1 s, todas las estructuras)
     const now = Date.now();
-    if (now - lastHistT > 1000) {
-      lastHistT = now;
+    if (now - Shm.lastHistT > 1000) {
+      Shm.lastHistT = now;
       for (const id in msg.summaries) {
         const s = msg.summaries[id];
         if (!window.shmReplaying) Hist.record(id, { t: now, f1: s.f1, rms: s.rms, wind: s.wind, tilt: s.tilt });   // R-34 (no grabar en replay)
         const cls = msg.summaries[id].cls || 0;
-        const h = (clsHist[id] || (clsHist[id] = []));
+        const h = (Shm.clsHist[id] || (Shm.clsHist[id] = []));
         const prev = h.length ? h[h.length - 1].cls : null;
         h.push({ t: now, cls }); if (h.length > 240) h.shift();
         if (prev !== null && prev !== cls) {
-          const ev = (clsEvents[id] || (clsEvents[id] = []));
+          const ev = (Shm.clsEvents[id] || (Shm.clsEvents[id] = []));
           ev.push({ t: now, from: prev, to: cls }); if (ev.length > 40) ev.shift();
         }
       }
@@ -1912,7 +1910,7 @@ function buildDashboard(panel, fleet, actions) {
     const draw = () => {
       const cvs = el.querySelectorAll('#sig-wrap canvas.sig');
       cvs.forEach(cv => {
-        const sid = cv.dataset.sid, buf = sigBuf[sid] || [];
+        const sid = cv.dataset.sid, buf = Shm.sigBuf[sid] || [];
         const dpr = Math.min(devicePixelRatio, 2), w = cv.clientWidth, h = cv.clientHeight || 80;
         cv.width = w * dpr; cv.height = h * dpr; const g = cv.getContext('2d'); g.scale(dpr, dpr);
         g.clearRect(0, 0, w, h);
@@ -1925,17 +1923,17 @@ function buildDashboard(panel, fleet, actions) {
         }
         g.stroke();
       });
-      sigRAF = requestAnimationFrame(draw);
+      Shm.sigRAF = requestAnimationFrame(draw);
     };
     draw();
   }
-  function stopSig() { if (sigRAF) { cancelAnimationFrame(sigRAF); sigRAF = null; } stopWavePlay(); stopLive(); }
-  function stopLive() { if (liveStop) { try { liveStop(); } catch { /* */ } liveStop = null; } }
+  function stopSig() { if (Shm.sigRAF) { cancelAnimationFrame(Shm.sigRAF); Shm.sigRAF = null; } stopWavePlay(); stopLive(); }
+  function stopLive() { if (Shm.liveStop) { try { Shm.liveStop(); } catch { /* */ } Shm.liveStop = null; } }
 
   // Reproduce una ventana cruda (real) como osciloscopio en las canvas «en vivo»:
-  // recorre las muestras alimentando sigBuf → la traza se mueve. `sid` = sensor que
+  // recorre las muestras alimentando Shm.sigBuf → la traza se mueve. `sid` = sensor que
   // capturó. Loopea; ~10× tiempo real para que se vea andando.
-  function stopWavePlay() { if (wavePlay) { cancelAnimationFrame(wavePlay.raf); wavePlay = null; } }
+  function stopWavePlay() { if (Shm.wavePlay) { cancelAnimationFrame(Shm.wavePlay.raf); Shm.wavePlay = null; } }
   function playWave(ax, sid, fs) {
     stopWavePlay();
     if (!ax || !ax.length) return;
@@ -1947,10 +1945,10 @@ function buildDashboard(panel, fleet, actions) {
     let cur = 0;
     const tick = () => {
       cur += step; if (cur >= sc.length) cur = 0;
-      sigBuf[sid] = Array.from(sc.subarray(Math.max(0, cur - winN), cur));
-      wavePlay.raf = requestAnimationFrame(tick);
+      Shm.sigBuf[sid] = Array.from(sc.subarray(Math.max(0, cur - winN), cur));
+      Shm.wavePlay.raf = requestAnimationFrame(tick);
     };
-    wavePlay = { sid, raf: requestAnimationFrame(tick) };
+    Shm.wavePlay = { sid, raf: requestAnimationFrame(tick) };
     const st = [...el.querySelectorAll('#sig-wrap .row')].find(r => r.firstChild.textContent === sid)?.querySelector('.sig-st');
     if (st) { st.textContent = '▶ ' + t('sig.realWin'); st.style.color = 'var(--accent)'; }
   }
@@ -1999,7 +1997,7 @@ function buildDashboard(panel, fleet, actions) {
       if (sid) { playWave(ax, sid, fs); playBtn.textContent = t('sig.pause'); }
     };
     playBtn.addEventListener('click', () => {
-      if (wavePlay) { stopWavePlay(); playBtn.textContent = t('sig.play'); }
+      if (Shm.wavePlay) { stopWavePlay(); playBtn.textContent = t('sig.play'); }
       else if (lastWave?.sid) { playWave(lastWave.ax, lastWave.sid, lastWave.fs); playBtn.textContent = t('sig.pause'); }
     });
 
@@ -2025,13 +2023,13 @@ function buildDashboard(panel, fleet, actions) {
     // REAL en vivo (<1 s). Si no hay flujo, cae al replay de la última ventana.
     let liveNorm = 0.02, liveActive = false;
     stopLive();
-    liveStop = openLive(o.id, (chunk) => {
+    Shm.liveStop = openLive(o.id, (chunk) => {
       const ax = chunk?.ax; if (!ax || !ax.length) return;
       const sid = (o.sensors.find(s => s.id === chunk.sensor) || o.sensors[0])?.id; if (!sid) return;
       if (!liveActive) { liveActive = true; stopWavePlay(); playBtn.textContent = t('sig.play'); }   // el vivo manda sobre el replay
       for (let i = 0; i < ax.length; i++) { const a = Math.abs(ax[i]); if (a > liveNorm) liveNorm = a; }
       liveNorm *= 0.9995;   // el pico decae lento → autoescala
-      const buf = sigBuf[sid] || (sigBuf[sid] = []);
+      const buf = Shm.sigBuf[sid] || (Shm.sigBuf[sid] = []);
       for (let i = 0; i < ax.length; i++) buf.push(ax[i] / liveNorm);
       if (buf.length > 700) buf.splice(0, buf.length - 700);
       meta.innerHTML = `<b style="color:var(--danger)">● ${t('sig.liveOn')}</b> · ${chunk.fs || 150}Hz · ${esc(chunk.trigger || 'live')} · ${esc(sid)}`;
@@ -2086,7 +2084,7 @@ function buildDashboard(panel, fleet, actions) {
       if (o && fc) {
         // FFT del acelerómetro superior (o el primero disponible)
         const sid = (o.sensors.find(s => /top|s1/.test(s.id)) || o.sensors[0])?.id;
-        const { mag, df } = fftMag(sigBuf[sid] || []);
+        const { mag, df } = fftMag(Shm.sigBuf[sid] || []);
         const dpr = Math.min(devicePixelRatio, 2), w = fc.clientWidth, h = fc.clientHeight || 110;
         fc.width = w * dpr; fc.height = h * dpr; const g = fc.getContext('2d'); g.scale(dpr, dpr);
         g.clearRect(0, 0, w, h);
@@ -2104,7 +2102,7 @@ function buildDashboard(panel, fleet, actions) {
         const pk = el.querySelector('#fft-peak'); if (pk) pk.textContent = `${(peak * df).toFixed(3)} Hz`;
       }
       if (o && qc) {
-        const hist = freqHist[o.id] || [], base = window.shmTwin?.[o.type];
+        const hist = Shm.freqHist[o.id] || [], base = window.shmTwin?.[o.type];
         const dpr = Math.min(devicePixelRatio, 2), w = qc.clientWidth, h = qc.clientHeight || 80;
         qc.width = w * dpr; qc.height = h * dpr; const g = qc.getContext('2d'); g.scale(dpr, dpr);
         g.clearRect(0, 0, w, h);
@@ -2121,24 +2119,24 @@ function buildDashboard(panel, fleet, actions) {
       // Espectrograma (frecuencia–tiempo) del acelerómetro superior
       const sc = el.querySelector('#spec-canvas');
       if (o && sc) {
-        if (!specOff) { specOff = document.createElement('canvas'); specOff.width = SPEC_W; specOff.height = SPEC_BINS; specOff.getContext('2d').fillRect(0, 0, SPEC_W, SPEC_BINS); }
+        if (!Shm.specOff) { Shm.specOff = document.createElement('canvas'); Shm.specOff.width = Shm.SPEC_W; Shm.specOff.height = Shm.SPEC_BINS; Shm.specOff.getContext('2d').fillRect(0, 0, Shm.SPEC_W, Shm.SPEC_BINS); }
         const now = performance.now();
-        if (now - specLast > 110) {
-          specLast = now;
+        if (now - Shm.specLast > 110) {
+          Shm.specLast = now;
           const sid = (o.sensors.find(s => /top|s1/.test(s.id)) || o.sensors[0])?.id;
-          const { mag, df } = fftMag(sigBuf[sid] || []);
-          const og = specOff.getContext('2d');
-          og.drawImage(specOff, -1, 0);                 // desplaza a la izquierda
+          const { mag, df } = fftMag(Shm.sigBuf[sid] || []);
+          const og = Shm.specOff.getContext('2d');
+          og.drawImage(Shm.specOff, -1, 0);                 // desplaza a la izquierda
           let mx = 1e-9; for (let i = 1; i < mag.length; i++) if (mag[i] > mx) mx = mag[i];
-          for (let y = 0; y < SPEC_BINS; y++) {
-            const bi = Math.round(((y / SPEC_BINS) * SPEC_FMAX) / (df || 1));
+          for (let y = 0; y < Shm.SPEC_BINS; y++) {
+            const bi = Math.round(((y / Shm.SPEC_BINS) * Shm.SPEC_FMAX) / (df || 1));
             og.fillStyle = heat((mag[bi] || 0) / mx);
-            og.fillRect(SPEC_W - 1, SPEC_BINS - 1 - y, 1, 1);   // baja frecuencia abajo
+            og.fillRect(Shm.SPEC_W - 1, Shm.SPEC_BINS - 1 - y, 1, 1);   // baja frecuencia abajo
           }
         }
         const dpr = Math.min(devicePixelRatio, 2), w = sc.clientWidth, h = sc.clientHeight || 90;
         sc.width = w * dpr; sc.height = h * dpr; const g = sc.getContext('2d'); g.scale(dpr, dpr);
-        g.imageSmoothingEnabled = false; g.clearRect(0, 0, w, h); g.drawImage(specOff, 0, 0, w, h);
+        g.imageSmoothingEnabled = false; g.clearRect(0, 0, w, h); g.drawImage(Shm.specOff, 0, 0, w, h);
       }
 
       // Diagramas N/V/M del fuste (turbina)
@@ -2149,7 +2147,7 @@ function buildDashboard(panel, fleet, actions) {
         const base = prof[0] || {};
         const info = $('#nvm-info'); if (info) info.textContent = `${(base.N || 0).toFixed(0)} kN · ${(base.V || 0).toFixed(0)} kN · ${(base.M || 0).toFixed(0)} kN·m`;
       }
-      sigRAF = requestAnimationFrame(draw);
+      Shm.sigRAF = requestAnimationFrame(draw);
     };
     draw();
   }
@@ -2159,7 +2157,7 @@ function buildDashboard(panel, fleet, actions) {
     const o = current; if (!o) return;
     const cv = el.querySelector('#cls-band');
     if (cv) {
-      const hist = clsHist[o.id] || [];
+      const hist = Shm.clsHist[o.id] || [];
       const dpr = Math.min(devicePixelRatio, 2), w = cv.clientWidth, h = cv.clientHeight || 34;
       cv.width = w * dpr; cv.height = h * dpr; const g = cv.getContext('2d'); g.scale(dpr, dpr);
       g.clearRect(0, 0, w, h);
@@ -2170,7 +2168,7 @@ function buildDashboard(panel, fleet, actions) {
     }
     const evEl = el.querySelector('#cls-events');
     if (evEl) {
-      const events = (clsEvents[o.id] || []).slice(-8).reverse();
+      const events = (Shm.clsEvents[o.id] || []).slice(-8).reverse();
       evEl.innerHTML = events.length ? events.map(e => {
         const tm = new Date(e.t).toLocaleTimeString('es-CL');
         return `<div class="row" style="font-size:12px"><span>${tm}</span><b><span style="color:${CLS_COL[e.from]}">${CLS[e.from]}</span> → <span style="color:${CLS_COL[e.to]}">${CLS[e.to]}</span></b></div>`;
@@ -2387,7 +2385,7 @@ function buildDashboard(panel, fleet, actions) {
       const d = window.shmData?.get(o.id) || {}; const sid = topSid();
       const cls = d.cls || 0;
       const sensRows = (d.sensors || o.sensors).map((se, i) => `<tr><td>${se.id}</td><td>${t('brep.sMems')}</td><td>${o.type === 'hv' ? t('brep.sNode', i + 1) : (se.id.includes('mid') ? t('brep.sMid') : t('brep.sTop'))}</td><td>${se.status === 'fault' ? `<span class="warn">${t('brep.sFault')}</span>` : t('brep.sOp')}</td><td>${se.rms != null ? (se.rms * 1000).toFixed(1) + ' mg' : '—'}</td></tr>`).join('');
-      const evRows = (clsEvents[o.id] || []).slice(-12).reverse().map(e => `<tr><td>${fmtT(e.t)}</td><td>${t('cls.' + e.from)} → ${e.to >= 3 ? `<span class="warn">${t('cls.' + e.to)}</span>` : t('cls.' + e.to)}</td></tr>`).join('') || `<tr><td colspan="2">${t('brep.noChanges')}</td></tr>`;
+      const evRows = (Shm.clsEvents[o.id] || []).slice(-12).reverse().map(e => `<tr><td>${fmtT(e.t)}</td><td>${t('cls.' + e.from)} → ${e.to >= 3 ? `<span class="warn">${t('cls.' + e.to)}</span>` : t('cls.' + e.to)}</td></tr>`).join('') || `<tr><td colspan="2">${t('brep.noChanges')}</td></tr>`;
       const mRows = (actions.log || []).filter(m => m.id === o.id).slice(-12).reverse().map(m => `<tr><td>${fmtT(m.t)}</td><td>${esc(m.action)}</td></tr>`).join('') || `<tr><td colspan="2">${t('brep.noMaint')}</td></tr>`;
       // Buffer sintético para el gateway (nodo de enlace en la base de la torre).
       const gwBuf = []; for (let i = 0; i < 300; i++) gwBuf.push(0.22 * Math.sin(2 * Math.PI * 0.283 * i / FS) + 0.08 * (Math.random() - 0.5));
@@ -2396,7 +2394,7 @@ function buildDashboard(panel, fleet, actions) {
         <div class="plot"><div class="cap">${t('brep.vibSignal')}</div><img src="${imgSignal(buf)}"></div>
         <div class="vib2"><div class="plot"><div class="cap">FFT</div><img src="${imgFFT(buf)}"></div><div class="plot"><div class="cap">PSD</div><img src="${imgPSD(buf)}"></div></div>
         <div class="plot"><div class="cap">${t('brep.vibWavelet')}</div><img src="${imgWavelet(buf)}"></div>`;
-      const vibSensores = (o.sensors).map(se => vibBlock(t('brep.sensorLabel', se.id), sigBuf[se.id], se.status === 'fault')).join('');
+      const vibSensores = (o.sensors).map(se => vibBlock(t('brep.sensorLabel', se.id), Shm.sigBuf[se.id], se.status === 'fault')).join('');
       const vibGateway = o.type === 'turbine' ? vibBlock(t('brep.gateway'), gwBuf, false) : '';
       // Estado estructural: deformada a partir de lo que MIDEN los sensores (no de una carga).
       // Desplazamiento ≈ aceleración_RMS / (2π·f₁)²  en cada sensor (a su altura) + base = 0.
@@ -2481,7 +2479,7 @@ function buildDashboard(panel, fleet, actions) {
     let compilado = '';
     if (!o) {
       const allEv = [];
-      for (const id in clsEvents) for (const e of clsEvents[id]) allEv.push({ ...e, id });
+      for (const id in Shm.clsEvents) for (const e of Shm.clsEvents[id]) allEv.push({ ...e, id });
       allEv.sort((a, b) => b.t - a.t);
       const evRows = allEv.slice(0, 20).map(e => `<tr><td>${fmtT(e.t)}</td><td>${esc(fleet.getStructure(e.id)?.label || e.id)}</td><td>${t('cls.' + e.from)} → ${e.to >= 3 ? `<span class="warn">${t('cls.' + e.to)}</span>` : t('cls.' + e.to)}</td></tr>`).join('') || `<tr><td colspan="3">${t('brep.noChanges')}</td></tr>`;
       const mRows = (actions.log || []).slice(-20).reverse().map(m => `<tr><td>${fmtT(m.t)}</td><td>${esc(fleet.getStructure(m.id)?.label || m.id)}</td><td>${esc(m.action)}</td></tr>`).join('') || `<tr><td colspan="3">${t('brep.noActions')}</td></tr>`;
