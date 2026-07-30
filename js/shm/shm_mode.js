@@ -13,11 +13,11 @@ import { DataSource } from './data_source.js?v=332';
 import { computeTwin } from './digital_twin.js?v=332';
 import { ParkManager, loadParksStore } from './parks.js?v=332';
 import { MapView } from './map_view.js?v=332';
-import { defaultStages, builtFromStages, LAYOUT_SCALE } from './parks_data_caman.js?v=332';
+import { defaultStages, LAYOUT_SCALE } from './parks_data_caman.js?v=332';
 import { fftMag } from './dsp.js?v=332';
 import { buildSunControl, buildCompass, buildNameplate, buildBanner, initPanelResize } from './viewport_chrome.js?v=332';
 import { buildAvanceHUD } from './avance_hud.js?v=332';
-import { renderAvance, computeParkAvance } from './avance_dashboard.js?v=332';
+import { computeParkAvance } from './avance_dashboard.js?v=332';
 import * as Insp from './inspection.js?v=332';
 import * as Fat from './fatigue.js?v=332';
 import * as Instr from './instrumentation.js?v=332';
@@ -26,6 +26,7 @@ import { showBackendConfig } from './backend_ui.js?v=332';
 import { backendActive, pushStructures, requestCapture, latestWave } from './backend_sync.js?v=332';
 import { openLive } from './live_stream.js?v=332';
 import { renderProyecto } from '../workspaces/proyecto.js?v=332';
+import { renderObra } from '../workspaces/obra.js?v=332';
 import { authRequired, loggedIn, isEditor, canOperate, canGestion, canQualityEdit, canQualityApprove, canInspect, currentRole, allowedWorkspaces } from './auth.js?v=332';
 import { requireLogin, userChipHTML, wireUserChip } from './auth_ui.js?v=332';
 import * as Hist from './history.js?v=332';
@@ -965,16 +966,7 @@ function buildDashboard(panel, fleet, actions) {
     const PANEL_TOOLS = { insp: 'shm-pinsp-tool', shm: 'shm-pshm-tool' };
     for (const [view, id] of Object.entries(PANEL_TOOLS)) document.getElementById(id)?.classList.toggle('active', v === view);
     if (v === 'shadow') renderShadow();
-    if (v === 'obra') {
-      try {
-        renderAvance($('#shm-avance'), fleet.structures, current, (st) => {
-          st.built = builtFromStages(st.stages);
-          fleet.setProgress(st.id, st.built);
-          fleet.onLayoutChange?.();
-          updateParkProgress(); window.shmMap?.refresh?.();
-        });
-      } catch (e) { console.warn('[shm] avance', e); }
-    }
+    if (v === 'obra') renderObra($('#shm-avance'), fleet, current, () => { updateParkProgress(); window.shmMap?.refresh?.(); });
     if (v === 'insp') renderInsp();        // siembra la inspección si no existe
     if (v === 'shm') renderSHM();
     if (v === 'parque') updateRollup();
