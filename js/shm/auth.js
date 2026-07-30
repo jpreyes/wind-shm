@@ -12,7 +12,7 @@
 // localStorage (`SESSION_KEY`) al armar los headers. Aquí solo importamos la
 // config del backend (URL + anon/publishable key) para pegarle a `/auth/v1/*`.
 // ─────────────────────────────────────────────────────────────────────────────
-import { getBackendConfig } from './backend.js?v=331';
+import { getBackendConfig } from './backend.js?v=332';
 
 export const SESSION_KEY = 'rewind.auth.v1';
 const SKEW_MS = 30000;   // refresca 30 s antes del vencimiento (margen de reloj/red)
@@ -86,6 +86,20 @@ export function canQualityApprove() { return has('admin', 'calidad_aprobador'); 
 export function canInspect() { return has('admin', 'inspector'); }                                  // inspección estructural · fotos estado
 export function canOperate() { return has('admin', 'operador'); }                                   // alarmas · pedir captura SHM
 export function isEditor() { return currentRole() !== 'visualizador'; }                             // legacy: cualquier rol que escribe
+
+// ── Espacios de trabajo (Proyecto · Obra · Operación) ─────────────────────────
+// Separación real del ciclo de vida: cada rol entra solo a su(s) «mundo(s)». El
+// `visualizador` y el `admin` ven los tres (el visualizador, solo lectura). Esto
+// gobierna a qué workspace ACCEDE el usuario; el RLS del server sigue siendo la
+// autoridad de ESCRITURA (capacidades cap-* de arriba). Fuente única del mapeo.
+export const WORKSPACES = ['proyecto', 'obra', 'operacion'];
+const WS_ROLES = {
+  proyecto:  ['admin', 'gestor', 'visualizador'],
+  obra:      ['admin', 'gestor', 'calidad_inspector', 'calidad_aprobador', 'visualizador'],
+  operacion: ['admin', 'operador', 'inspector', 'visualizador'],
+};
+export function canWorkspace(ws) { return (WS_ROLES[ws] || []).includes(currentRole()); }
+export function allowedWorkspaces() { return WORKSPACES.filter(canWorkspace); }
 
 // Guarda la respuesta de token de Supabase como sesión. `expires_at` viene en
 // segundos epoch; si no, lo derivamos de `expires_in`.

@@ -11,7 +11,7 @@
 // openLive(id, onChunk, onState) → devuelve stop(). onChunk({fs,ax,ay,az,sensor,trigger}).
 // onState: 'connecting' | 'idle' (canal vivo, sin flujo) | 'live' (llegando chunks) | 'closed'.
 // ─────────────────────────────────────────────────────────────────────────────
-import { getBackendConfig } from './backend.js?v=331';
+import { getBackendConfig } from './backend.js?v=332';
 
 // Token de sesión (RLS) o, si no hay, la publishable key (canal público).
 function authToken(anonKey) {

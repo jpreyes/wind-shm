@@ -8,36 +8,36 @@
 //   inspecciones y señal temporal EN VIVO desde un Web Worker (DataSource).
 // Recortes (modelado) los hace shm.css ocultando, no borrando.
 // ─────────────────────────────────────────────────────────────────────────────
-import { FleetView } from './fleet_view.js?v=331';
-import { DataSource } from './data_source.js?v=331';
-import { computeTwin } from './digital_twin.js?v=331';
-import { ParkManager, loadParksStore } from './parks.js?v=331';
-import { MapView } from './map_view.js?v=331';
-import { defaultStages, builtFromStages, LAYOUT_SCALE } from './parks_data_caman.js?v=331';
-import { fftMag } from './dsp.js?v=331';
-import { buildSunControl, buildCompass, buildNameplate, buildBanner, initPanelResize } from './viewport_chrome.js?v=331';
-import { buildAvanceHUD } from './avance_hud.js?v=331';
-import { renderAvance, computeParkAvance } from './avance_dashboard.js?v=331';
-import * as Insp from './inspection.js?v=331';
-import * as Fat from './fatigue.js?v=331';
-import * as Instr from './instrumentation.js?v=331';
-import * as Calidad from './calidad.js?v=331';
-import { showBackendConfig } from './backend_ui.js?v=331';
-import { backendActive, pushStructures, requestCapture, latestWave } from './backend_sync.js?v=331';
-import { openLive } from './live_stream.js?v=331';
-import { authRequired, loggedIn, isEditor, canOperate, canGestion, canQualityEdit, canQualityApprove, canInspect, currentRole } from './auth.js?v=331';
-import { requireLogin, userChipHTML, wireUserChip } from './auth_ui.js?v=331';
-import * as Hist from './history.js?v=331';
-import * as Health from './health.js?v=331';
-import * as Bench from './benchmark.js?v=331';
-import * as Alarms from './alarms.js?v=331';
-import { METEO_CAMAN } from './meteo_caman.js?v=331';
-import { ReplaySource } from './replay.js?v=331';
-import { esc, safeUrl } from './util.js?v=331';
-import { t, getLang, setLang } from './i18n.js?v=331';
+import { FleetView } from './fleet_view.js?v=332';
+import { DataSource } from './data_source.js?v=332';
+import { computeTwin } from './digital_twin.js?v=332';
+import { ParkManager, loadParksStore } from './parks.js?v=332';
+import { MapView } from './map_view.js?v=332';
+import { defaultStages, builtFromStages, LAYOUT_SCALE } from './parks_data_caman.js?v=332';
+import { fftMag } from './dsp.js?v=332';
+import { buildSunControl, buildCompass, buildNameplate, buildBanner, initPanelResize } from './viewport_chrome.js?v=332';
+import { buildAvanceHUD } from './avance_hud.js?v=332';
+import { renderAvance, computeParkAvance } from './avance_dashboard.js?v=332';
+import * as Insp from './inspection.js?v=332';
+import * as Fat from './fatigue.js?v=332';
+import * as Instr from './instrumentation.js?v=332';
+import * as Calidad from './calidad.js?v=332';
+import { showBackendConfig } from './backend_ui.js?v=332';
+import { backendActive, pushStructures, requestCapture, latestWave } from './backend_sync.js?v=332';
+import { openLive } from './live_stream.js?v=332';
+import { authRequired, loggedIn, isEditor, canOperate, canGestion, canQualityEdit, canQualityApprove, canInspect, currentRole, allowedWorkspaces } from './auth.js?v=332';
+import { requireLogin, userChipHTML, wireUserChip } from './auth_ui.js?v=332';
+import * as Hist from './history.js?v=332';
+import * as Health from './health.js?v=332';
+import * as Bench from './benchmark.js?v=332';
+import * as Alarms from './alarms.js?v=332';
+import { METEO_CAMAN } from './meteo_caman.js?v=332';
+import { ReplaySource } from './replay.js?v=332';
+import { esc, safeUrl } from './util.js?v=332';
+import { t, getLang, setLang } from './i18n.js?v=332';
 
 const F1_BASE = { turbine: 0.283, hv: 1.6 };
-const REWIND_VER = 'v331';   // versión visible del build (subir junto al cache-bust)
+const REWIND_VER = 'v332';   // versión visible del build (subir junto al cache-bust)
 const FS = 62.5;   // frecuencia de muestreo de la señal (Hz), igual que shm_worker.js
 // Clasificador ML de daño (0..4)
 const CLS = ['Sin daño', 'Leve', 'Moderado', 'Alto', 'Muy alto'];
@@ -352,7 +352,7 @@ async function boot() {
   // ── Relieve conceptual del terreno (DEM vendorizado) — encendido por defecto ─
   setLoad(88, 'Cargando relieve…'); await delay(40);
   try {
-    await fleet.loadTerrain('data/caman_dem.json?v=331');
+    await fleet.loadTerrain('data/caman_dem.json?v=332');
     fleet.setTerrainVisible(true);
     document.getElementById('shm-relieve-tool')?.classList.add('active');
   } catch (e) { console.warn('[shm] relieve no disponible', e); }
@@ -987,21 +987,31 @@ function buildDashboard(panel, fleet, actions) {
   }
   el.querySelectorAll('.shm-toptab').forEach(t => t.addEventListener('click', () => setTopView(t.dataset.v)));
 
-  // ── Selector de FASE (ciclo de vida) — filtra qué pestañas se ven ────────────
-  // Cada pestaña pertenece a una fase; Parque y Selección son universales (sin
-  // fase → siempre visibles). Al elegir una fase se ocultan las pestañas de las
-  // otras y se navega a la vista principal de esa fase. Reduce la saturación (6→3-4).
+  // ── Selector de FASE / espacios de trabajo (ciclo de vida) ───────────────────
+  // Cada pestaña y cada herramienta de análisis del toolbar pertenece a un workspace
+  // (Proyecto/Obra/Operación); Parque y Selección son universales. El ROL define a qué
+  // workspaces entra el usuario (auth.allowedWorkspaces): se OCULTAN los botones de fase
+  // no permitidos y, al cambiar de fase, se muestran solo las pestañas y las herramientas
+  // de ESE workspace (antes el toolbar mostraba todo en toda fase — separación real).
   const TAB_PHASE = { obra: 'obra', shadow: 'proyecto', shm: 'operacion', insp: 'operacion' };
   const PHASE_PRIMARY = { proyecto: 'shadow', obra: 'obra', operacion: 'shm' };
+  const WS_TOOLS = { proyecto: ['shm-sun-tool'], obra: ['shm-avance-tool'], operacion: ['shm-pinsp-tool', 'shm-pshm-tool'] };
   const PHASE_KEY = 'rewind.phase.v1';
+  const allowedWs = allowedWorkspaces();                          // workspaces habilitados por rol
+  const wsOK = (ph) => allowedWs.includes(ph);
+  // Oculta los botones de fase que el rol no puede usar; si queda ≤1, esconde la barra.
+  el.querySelectorAll('.shm-phase').forEach(b => { if (!wsOK(b.dataset.ph)) b.style.display = 'none'; });
+  if (allowedWs.length <= 1) el.querySelector('.shm-phasebar')?.classList.add('shm-phasebar-solo');
   function setPhase(ph, { navigate = false } = {}) {
-    if (!PHASE_PRIMARY[ph]) ph = 'obra';
+    if (!wsOK(ph) || !PHASE_PRIMARY[ph]) ph = allowedWs[0] || 'obra';   // clamp a un workspace permitido
     try { localStorage.setItem(PHASE_KEY, ph); } catch { /* */ }
     el.querySelectorAll('.shm-phase').forEach(b => { const on = b.dataset.ph === ph; b.classList.toggle('active', on); b.setAttribute('aria-selected', on ? 'true' : 'false'); });
     el.querySelectorAll('.shm-toptab').forEach(tb => {
       const tabPh = TAB_PHASE[tb.dataset.v];              // undefined = universal
       tb.style.display = (!tabPh || tabPh === ph) ? '' : 'none';
     });
+    // Toolbar scopeado al workspace activo: solo sus herramientas de análisis.
+    for (const [wsp, ids] of Object.entries(WS_TOOLS)) for (const id of ids) { const b = document.getElementById(id); if (b) b.style.display = (wsp === ph) ? '' : 'none'; }
     if (navigate) setTopView(PHASE_PRIMARY[ph]);
     else {
       const active = el.querySelector('.shm-toptab.active');
@@ -1009,7 +1019,8 @@ function buildDashboard(panel, fleet, actions) {
     }
   }
   el.querySelectorAll('.shm-phase').forEach(b => b.addEventListener('click', () => setPhase(b.dataset.ph, { navigate: true })));
-  let savedPhase = 'obra'; try { savedPhase = localStorage.getItem(PHASE_KEY) || 'obra'; } catch { /* */ }
+  let savedPhase = allowedWs.includes('obra') ? 'obra' : (allowedWs[0] || 'obra');   // default útil: Obra si el rol la tiene
+  try { const s = localStorage.getItem(PHASE_KEY); if (s && wsOK(s)) savedPhase = s; } catch { /* */ }
   setPhase(savedPhase, { navigate: false });   // en el boot: filtra pero NO navega (deja Parque activo)
 
   // ── Pestaña «Shadow flicker»: análisis de sombras en el panel derecho ────────

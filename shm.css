@@ -677,6 +677,8 @@ body.shm #shm-panel .shm-body { overflow-x: hidden; }
 #shm-panel .shm-toptab.active { color: var(--accent); border-left-color: var(--accent); background: var(--bg3); }
 /* Fase 2 · Selector de FASE (barra horizontal que filtra las pestañas) */
 #shm-panel .shm-phasebar { display: flex; align-items: center; gap: 5px; padding: 6px 10px; border-bottom: 1px solid var(--border); background: var(--bg2); flex-wrap: wrap; }
+/* Un solo workspace habilitado por el rol → no hay nada que conmutar, se esconde la barra. */
+#shm-panel .shm-phasebar.shm-phasebar-solo { display: none; }
 #shm-panel .shm-phase-lbl { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: .6px; color: var(--text-muted); margin-right: 2px; }
 #shm-panel .shm-phase { cursor: pointer; border: 1px solid var(--border2); background: var(--bg4); color: var(--text-muted); border-radius: 999px; padding: 3px 11px; font: inherit; font-size: 11.5px; font-weight: 700; }
 #shm-panel .shm-phase:hover { color: var(--text); border-color: var(--accent); }
