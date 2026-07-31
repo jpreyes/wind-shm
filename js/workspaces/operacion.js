@@ -12,6 +12,9 @@ import * as Selection from '../core/selection.js?v=332';
 import { Shm } from '../core/shm_state.js?v=332';
 import { t, getLang } from '../shm/i18n.js?v=332';
 import { esc, safeUrl } from '../shm/util.js?v=332';
+import { fftMag } from '../shm/dsp.js?v=332';
+import { latestWave, requestCapture } from '../shm/backend_sync.js?v=332';
+import { openLive } from '../shm/live_stream.js?v=332';
 
 // ── Alimentación del estado SHM en vivo (paso 2 de B2: partir onTick) ──────────
 // Por cada tick, actualiza los buffers de señal + el histórico de f₁ de la torre
@@ -295,4 +298,178 @@ export function renderInsp() {
         <p class="mut" style="margin-top:18px">${t('irep.nextLabel')}: <b>${insp.nextDate || '—'}</b> · ${t('rep.gen')} ${new Date().toLocaleString(lc)} · ReWind. ${t('irep.footTail')}</p>
       </div></html>`;
     _ctx.openReport?.(html, 'informe-inspeccion-rewind.html');
+  }
+
+// ── Señal en vivo + ventana capturada (osciloscopio) — B2 paso 3 ─────────────
+// Máquina de señal/captura extraída de shm_mode: dibuja Shm.sigBuf en las canvas
+// «en vivo», reproduce la ventana .npz capturada y escucha el canal Realtime en
+// vivo. Autocontenida (Shm + Selection + dsp/backend_sync/live_stream + document).
+export function startSig() {
+    const draw = () => {
+      const cvs = document.querySelectorAll('#sig-wrap canvas.sig');
+      cvs.forEach(cv => {
+        const sid = cv.dataset.sid, buf = Shm.sigBuf[sid] || [];
+        const dpr = Math.min(devicePixelRatio, 2), w = cv.clientWidth, h = cv.clientHeight || 80;
+        cv.width = w * dpr; cv.height = h * dpr; const g = cv.getContext('2d'); g.scale(dpr, dpr);
+        g.clearRect(0, 0, w, h);
+        const fault = Selection.getCurrent()?.sensors.find(s => s.id === sid)?.status === 'fault';
+        g.strokeStyle = fault ? '#ff3b3b' : '#2bff77'; g.lineWidth = 1.5; g.beginPath();
+        const n = Math.max(buf.length, 1), step = w / 700;
+        for (let i = 0; i < buf.length; i++) {
+          const x = i * step, y = h / 2 - buf[i] * h * 0.4;
+          i === 0 ? g.moveTo(x, y) : g.lineTo(x, y);
+        }
+        g.stroke();
+      });
+      Shm.sigRAF = requestAnimationFrame(draw);
+    };
+    draw();
+  }
+export function stopSig() { if (Shm.sigRAF) { cancelAnimationFrame(Shm.sigRAF); Shm.sigRAF = null; } stopWavePlay(); stopLive(); }
+  function stopLive() { if (Shm.liveStop) { try { Shm.liveStop(); } catch { /* */ } Shm.liveStop = null; } }
+
+  // Reproduce una ventana cruda (real) como osciloscopio en las canvas «en vivo»:
+  // recorre las muestras alimentando Shm.sigBuf → la traza se mueve. `sid` = sensor que
+  // capturó. Loopea; ~10× tiempo real para que se vea andando.
+  function stopWavePlay() { if (Shm.wavePlay) { cancelAnimationFrame(Shm.wavePlay.raf); Shm.wavePlay = null; } }
+  function playWave(ax, sid, fs) {
+    stopWavePlay();
+    if (!ax || !ax.length) return;
+    // Normaliza a ±1 por su pico: la aceleración real es chica (~0.02 m/s²) y la
+    // traza usa escala fija → si no, se vería casi plana. Es cualitativa (osciloscopio).
+    let norm = 1e-6; for (let i = 0; i < ax.length; i++) { const a = Math.abs(ax[i]); if (a > norm) norm = a; }
+    const sc = new Float32Array(ax.length); for (let i = 0; i < ax.length; i++) sc[i] = ax[i] / norm;
+    const winN = 700, step = Math.max(1, Math.round((fs || 150) / 6));   // ~10× tiempo real
+    let cur = 0;
+    const tick = () => {
+      cur += step; if (cur >= sc.length) cur = 0;
+      Shm.sigBuf[sid] = Array.from(sc.subarray(Math.max(0, cur - winN), cur));
+      Shm.wavePlay.raf = requestAnimationFrame(tick);
+    };
+    Shm.wavePlay = { sid, raf: requestAnimationFrame(tick) };
+    const st = [...document.querySelectorAll('#sig-wrap .row')].find(r => r.firstChild.textContent === sid)?.querySelector('.sig-st');
+    if (st) { st.textContent = '▶ ' + t('sig.realWin'); st.style.color = 'var(--accent)'; }
+  }
+
+  // ── Ventana capturada del SENSOR REAL (on-demand) ─────────────────────────────
+  // Baja el .npz de Storage, lo decodifica y pinta la serie temporal + su FFT.
+  // Es la señal REAL del sensor (no la simulada del worker) — cierra el on-demand.
+export function buildCapturedWave(host, o) {
+    const box = document.createElement('div'); box.className = 'sig-cap';
+    const canOp = document.body.classList.contains('cap-operate');
+    let lastWave = null;
+    box.innerHTML = `<div class="sig-cap-h">${t('sig.capTitle')}
+        <span class="sig-live" title="${esc(t('sig.liveTip'))}">○ ${t('sig.liveOff')}</span>
+        <span style="flex:1"></span>
+        <button class="cal-link sig-play" type="button" disabled>${t('sig.play')}</button>
+        <button class="cal-link sig-load" type="button">${t('sig.load')}</button>
+        ${canOp ? `<button class="cal-btn sig-cap-req" type="button">${t('sig.reqLive')}</button>` : ''}</div>
+      <div class="sig-cap-meta cal-mut">${t('sig.none')}</div>
+      <canvas class="sig-cap-wave"></canvas>
+      <div class="sig-cap-fftlab cal-mut" style="margin-top:6px"></div>
+      <canvas class="sig-cap-fft"></canvas>`;
+    host.appendChild(box);
+    const meta = box.querySelector('.sig-cap-meta');
+    const waveC = box.querySelector('.sig-cap-wave'), fftC = box.querySelector('.sig-cap-fft');
+    const fftLab = box.querySelector('.sig-cap-fftlab');
+    const playBtn = box.querySelector('.sig-play');
+    const liveEl = box.querySelector('.sig-live');
+
+    const draw = (res) => {
+      const a = res?.arrays; if (!a || !a.ax || !a.ax.length) { meta.textContent = res?.meta ? t('sig.noRaw') : t('sig.none'); return; }
+      const fs = a.fs || 150, ax = a.ax, n = ax.length;
+      const w = res.meta || {};
+      const when = w.ts ? new Date(w.ts).toLocaleString(getLang() === 'en' ? 'en-GB' : 'es-CL', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit', second: '2-digit' }) : '—';
+      const trig = w.meta?.trigger || w.extra?.trigger || '—';
+      meta.innerHTML = `${when} · ${(n / fs).toFixed(0)}s @ ${fs}Hz · <b>${esc(trig)}</b> · ${(n / 1000).toFixed(0)}k pts`;
+      // Serie temporal: envolvente min/max decimada al ancho del canvas.
+      drawWaveEnvelope(waveC, ax);
+      // FFT de la ventana completa (fs real del sensor).
+      const { mag, df } = fftMag(ax, fs);
+      const peak = drawCapFFT(fftC, mag, df);
+      fftLab.innerHTML = `${t('avz.fftPeak')}: f₁ ≈ <b>${peak ? peak.toFixed(3) : '—'} Hz</b>`;
+      // Reproduce la ventana REAL en las canvas «en vivo» de arriba (osciloscopio).
+      const sid = (o.sensors.find(s => s.id === w.sensor) || o.sensors[0])?.id;
+      lastWave = { ax, sid, fs };
+      playBtn.disabled = false;
+      if (sid) { playWave(ax, sid, fs); playBtn.textContent = t('sig.pause'); }
+    };
+    playBtn.addEventListener('click', () => {
+      if (Shm.wavePlay) { stopWavePlay(); playBtn.textContent = t('sig.play'); }
+      else if (lastWave?.sid) { playWave(lastWave.ax, lastWave.sid, lastWave.fs); playBtn.textContent = t('sig.pause'); }
+    });
+
+    const load = async (after) => {
+      meta.textContent = t('sig.loading');
+      try { const res = await latestWave(o.id, after); return res; }
+      catch { meta.textContent = t('sh.captureErr'); return null; }
+    };
+    box.querySelector('.sig-load').addEventListener('click', async () => { const r = await load(null); if (Selection.getCurrent()?.id === o.id) draw(r); });
+
+    // On-demand EN VIVO: pide al sensor que TRANSMITA en tiempo real (kind 'live').
+    // El sensor abre su WS de salida y emite chunks → llegan por el canal de abajo.
+    const reqBtn = box.querySelector('.sig-cap-req');
+    if (reqBtn) reqBtn.addEventListener('click', async () => {
+      reqBtn.disabled = true; meta.textContent = t('sig.reqSent');
+      try { await requestCapture(o.id, 'live'); } catch { meta.textContent = t('sh.captureErr'); }
+      finally { setTimeout(() => { reqBtn.disabled = false; }, 2000); }
+    });
+
+    // ── Canal EN VIVO (Realtime Broadcast) — tiempo real de verdad ───────────────
+    // Suscrito mientras la pestaña Señal esté abierta. Cuando el sensor transmite
+    // (on-demand o anomalía), los chunks alimentan la traza de arriba → aceleración
+    // REAL en vivo (<1 s). Si no hay flujo, cae al replay de la última ventana.
+    let liveNorm = 0.02, liveActive = false;
+    stopLive();
+    Shm.liveStop = openLive(o.id, (chunk) => {
+      const ax = chunk?.ax; if (!ax || !ax.length) return;
+      const sid = (o.sensors.find(s => s.id === chunk.sensor) || o.sensors[0])?.id; if (!sid) return;
+      if (!liveActive) { liveActive = true; stopWavePlay(); playBtn.textContent = t('sig.play'); }   // el vivo manda sobre el replay
+      for (let i = 0; i < ax.length; i++) { const a = Math.abs(ax[i]); if (a > liveNorm) liveNorm = a; }
+      liveNorm *= 0.9995;   // el pico decae lento → autoescala
+      const buf = Shm.sigBuf[sid] || (Shm.sigBuf[sid] = []);
+      for (let i = 0; i < ax.length; i++) buf.push(ax[i] / liveNorm);
+      if (buf.length > 700) buf.splice(0, buf.length - 700);
+      meta.innerHTML = `<b style="color:var(--danger)">● ${t('sig.liveOn')}</b> · ${chunk.fs || 150}Hz · ${esc(chunk.trigger || 'live')} · ${esc(sid)}`;
+      const st = [...document.querySelectorAll('#sig-wrap .row')].find(r => r.firstChild.textContent === sid)?.querySelector('.sig-st');
+      if (st) { st.textContent = '● ' + t('sig.liveOn'); st.style.color = 'var(--danger)'; }
+    }, (state) => {
+      const on = state === 'live';
+      liveEl.textContent = (on ? '● ' : '○ ') + (on ? t('sig.liveOn') : t('sig.liveOff'));
+      liveEl.classList.toggle('on', on);
+      if (state === 'idle' && liveActive) liveActive = false;   // se cortó el flujo → habilita replay de nuevo
+    });
+
+    // Carga automática de la última ventana existente al abrir la pestaña (fallback
+    // cuando no hay transmisión en vivo).
+    load(null).then((r) => { if (Selection.getCurrent()?.id === o.id && !liveActive) draw(r); });
+  }
+
+  function drawWaveEnvelope(cv, ax) {
+    const dpr = Math.min(devicePixelRatio, 2), w = cv.clientWidth || 300, h = cv.clientHeight || 90;
+    cv.width = w * dpr; cv.height = h * dpr; const g = cv.getContext('2d'); g.scale(dpr, dpr);
+    g.clearRect(0, 0, w, h);
+    let mx = 1e-9; for (let i = 0; i < ax.length; i++) { const v = Math.abs(ax[i]); if (v > mx) mx = v; }
+    g.strokeStyle = 'rgba(120,130,140,.35)'; g.beginPath(); g.moveTo(0, h / 2); g.lineTo(w, h / 2); g.stroke();
+    g.strokeStyle = '#2bff77'; g.lineWidth = 1; g.beginPath();
+    const buckets = Math.min(w, ax.length), per = ax.length / buckets;
+    for (let b = 0; b < buckets; b++) {
+      let lo = Infinity, hi = -Infinity; const s = Math.floor(b * per), e = Math.floor((b + 1) * per);
+      for (let i = s; i < e; i++) { if (ax[i] < lo) lo = ax[i]; if (ax[i] > hi) hi = ax[i]; }
+      const x = b, yLo = h / 2 - (lo / mx) * h * 0.45, yHi = h / 2 - (hi / mx) * h * 0.45;
+      g.moveTo(x, yLo); g.lineTo(x, yHi);
+    }
+    g.stroke();
+  }
+
+  function drawCapFFT(cv, mag, df) {
+    const dpr = Math.min(devicePixelRatio, 2), w = cv.clientWidth || 300, h = cv.clientHeight || 90;
+    cv.width = w * dpr; cv.height = h * dpr; const g = cv.getContext('2d'); g.scale(dpr, dpr);
+    g.clearRect(0, 0, w, h);
+    const fMax = 6, bins = Math.max(1, Math.min(mag.length, Math.floor(fMax / (df || 1))));
+    let mxv = 1e-9, peak = 0; for (let i = 1; i < bins; i++) if (mag[i] > mxv) { mxv = mag[i]; peak = i; }
+    g.fillStyle = '#38bdf8';
+    for (let i = 1; i < bins; i++) { const x = (i / bins) * w, bh = (mag[i] / mxv) * (h - 12); g.fillRect(x, h - bh, Math.max(1, w / bins - 1), bh); }
+    g.fillStyle = '#2dd4bf'; g.fillRect((peak / bins) * w - 1, 0, 2, h);
+    return peak * df;
   }
