@@ -8,7 +8,7 @@
 // refrescar el avance del parque + el mapa. `current` = torre seleccionada (o null).
 // ─────────────────────────────────────────────────────────────────────────────
 import { renderAvance } from '../shm/avance_dashboard.js?v=333';
-import { builtFromStages } from '../shm/parks_data_caman.js?v=333';
+import { builtFromStages } from '../core/parks_data_caman.js?v=333';
 
 export function renderObra(host, fleet, current, onProgress) {
   if (!host) return;

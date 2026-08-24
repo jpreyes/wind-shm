@@ -8,38 +8,38 @@
 //   inspecciones y señal temporal EN VIVO desde un Web Worker (DataSource).
 // Recortes (modelado) los hace shm.css ocultando, no borrando.
 // ─────────────────────────────────────────────────────────────────────────────
-import { FleetView } from './fleet_view.js?v=333';
-import { DataSource } from './data_source.js?v=333';
-import { computeTwin } from './digital_twin.js?v=333';
-import { ParkManager, loadParksStore } from './parks.js?v=333';
-import { MapView } from './map_view.js?v=333';
-import { defaultStages, LAYOUT_SCALE } from './parks_data_caman.js?v=333';
-import { fftMag } from './dsp.js?v=333';
-import { buildSunControl, buildCompass, buildNameplate, buildBanner, initPanelResize } from './viewport_chrome.js?v=333';
+import { FleetView } from '../core/fleet_view.js?v=333';
+import { DataSource } from '../core/data_source.js?v=333';
+import { computeTwin } from '../core/digital_twin.js?v=333';
+import { ParkManager, loadParksStore } from '../core/parks.js?v=333';
+import { MapView } from '../core/map_view.js?v=333';
+import { defaultStages, LAYOUT_SCALE } from '../core/parks_data_caman.js?v=333';
+import { fftMag } from '../core/dsp.js?v=333';
+import { buildSunControl, buildCompass, buildNameplate, buildBanner, initPanelResize } from '../core/viewport_chrome.js?v=333';
 import { buildAvanceHUD } from './avance_hud.js?v=333';
 import { computeParkAvance } from './avance_dashboard.js?v=333';
 import * as Insp from './inspection.js?v=333';
 import * as Fat from './fatigue.js?v=333';
-import * as Instr from './instrumentation.js?v=333';
+import * as Instr from '../core/instrumentation.js?v=333';
 import * as Calidad from './calidad.js?v=333';
-import { showBackendConfig } from './backend_ui.js?v=333';
-import { backendActive, pushStructures, requestCapture, latestWave } from './backend_sync.js?v=333';
-import { openLive } from './live_stream.js?v=333';
+import { showBackendConfig } from '../core/backend_ui.js?v=333';
+import { backendActive, pushStructures, requestCapture, latestWave } from '../core/backend_sync.js?v=333';
+import { openLive } from '../core/live_stream.js?v=333';
 import { renderProyecto } from '../workspaces/proyecto.js?v=333';
 import { renderObra } from '../workspaces/obra.js?v=333';
 import * as Selection from '../core/selection.js?v=333';
 import { renderInsp, initInspection, feedSHM, startSig, stopSig, buildCapturedWave } from '../workspaces/operacion.js?v=333';
 import { Shm } from '../core/shm_state.js?v=333';
-import { authRequired, loggedIn, isEditor, canOperate, canGestion, canQualityEdit, canQualityApprove, canInspect, currentRole, allowedWorkspaces } from './auth.js?v=333';
-import { requireLogin, userChipHTML, wireUserChip } from './auth_ui.js?v=333';
+import { authRequired, loggedIn, isEditor, canOperate, canGestion, canQualityEdit, canQualityApprove, canInspect, currentRole, allowedWorkspaces } from '../core/auth.js?v=333';
+import { requireLogin, userChipHTML, wireUserChip } from '../core/auth_ui.js?v=333';
 import * as Hist from './history.js?v=333';
 import * as Health from './health.js?v=333';
 import * as Bench from './benchmark.js?v=333';
 import * as Alarms from './alarms.js?v=333';
-import { METEO_CAMAN } from './meteo_caman.js?v=333';
+import { METEO_CAMAN } from '../core/meteo_caman.js?v=333';
 import { ReplaySource } from './replay.js?v=333';
-import { esc, safeUrl } from './util.js?v=333';
-import { t, getLang, setLang } from './i18n.js?v=333';
+import { esc, safeUrl } from '../core/util.js?v=333';
+import { t, getLang, setLang } from '../core/i18n.js?v=333';
 
 const F1_BASE = { turbine: 0.283, hv: 1.6 };
 const REWIND_VER = 'v333';   // versión visible del build (subir junto al cache-bust)

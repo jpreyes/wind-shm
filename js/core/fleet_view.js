@@ -11,7 +11,7 @@ import { createTurbine, TOWER_H } from './turbine_mesh.js?v=333';
 import { createSubstationTower, groundCable, overheadLine } from './structures.js?v=333';
 import { toScene, CAMAN_CENTER, LAYOUT_SCALE, defaultStages, builtFromStages } from './parks_data_caman.js?v=333';
 import { CAMAN_ROADS } from './caman_roads.js?v=333';
-import { solarPosition, dateFromLocal, sunSceneDir } from './solar.js?v=333';
+import { solarPosition, dateFromLocal, sunSceneDir } from '../shm/solar.js?v=333';
 
 const SPACING = 235;
 const TOWER_SCALE = 2.2;   // agranda las torres (vista esquemática) para que destaquen sobre el relieve
