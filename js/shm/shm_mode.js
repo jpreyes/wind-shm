@@ -8,41 +8,41 @@
 //   inspecciones y señal temporal EN VIVO desde un Web Worker (DataSource).
 // Recortes (modelado) los hace shm.css ocultando, no borrando.
 // ─────────────────────────────────────────────────────────────────────────────
-import { FleetView } from './fleet_view.js?v=332';
-import { DataSource } from './data_source.js?v=332';
-import { computeTwin } from './digital_twin.js?v=332';
-import { ParkManager, loadParksStore } from './parks.js?v=332';
-import { MapView } from './map_view.js?v=332';
-import { defaultStages, LAYOUT_SCALE } from './parks_data_caman.js?v=332';
-import { fftMag } from './dsp.js?v=332';
-import { buildSunControl, buildCompass, buildNameplate, buildBanner, initPanelResize } from './viewport_chrome.js?v=332';
-import { buildAvanceHUD } from './avance_hud.js?v=332';
-import { computeParkAvance } from './avance_dashboard.js?v=332';
-import * as Insp from './inspection.js?v=332';
-import * as Fat from './fatigue.js?v=332';
-import * as Instr from './instrumentation.js?v=332';
-import * as Calidad from './calidad.js?v=332';
-import { showBackendConfig } from './backend_ui.js?v=332';
-import { backendActive, pushStructures, requestCapture, latestWave } from './backend_sync.js?v=332';
-import { openLive } from './live_stream.js?v=332';
-import { renderProyecto } from '../workspaces/proyecto.js?v=332';
-import { renderObra } from '../workspaces/obra.js?v=332';
-import * as Selection from '../core/selection.js?v=332';
-import { renderInsp, initInspection, feedSHM, startSig, stopSig, buildCapturedWave } from '../workspaces/operacion.js?v=332';
-import { Shm } from '../core/shm_state.js?v=332';
-import { authRequired, loggedIn, isEditor, canOperate, canGestion, canQualityEdit, canQualityApprove, canInspect, currentRole, allowedWorkspaces } from './auth.js?v=332';
-import { requireLogin, userChipHTML, wireUserChip } from './auth_ui.js?v=332';
-import * as Hist from './history.js?v=332';
-import * as Health from './health.js?v=332';
-import * as Bench from './benchmark.js?v=332';
-import * as Alarms from './alarms.js?v=332';
-import { METEO_CAMAN } from './meteo_caman.js?v=332';
-import { ReplaySource } from './replay.js?v=332';
-import { esc, safeUrl } from './util.js?v=332';
-import { t, getLang, setLang } from './i18n.js?v=332';
+import { FleetView } from './fleet_view.js?v=333';
+import { DataSource } from './data_source.js?v=333';
+import { computeTwin } from './digital_twin.js?v=333';
+import { ParkManager, loadParksStore } from './parks.js?v=333';
+import { MapView } from './map_view.js?v=333';
+import { defaultStages, LAYOUT_SCALE } from './parks_data_caman.js?v=333';
+import { fftMag } from './dsp.js?v=333';
+import { buildSunControl, buildCompass, buildNameplate, buildBanner, initPanelResize } from './viewport_chrome.js?v=333';
+import { buildAvanceHUD } from './avance_hud.js?v=333';
+import { computeParkAvance } from './avance_dashboard.js?v=333';
+import * as Insp from './inspection.js?v=333';
+import * as Fat from './fatigue.js?v=333';
+import * as Instr from './instrumentation.js?v=333';
+import * as Calidad from './calidad.js?v=333';
+import { showBackendConfig } from './backend_ui.js?v=333';
+import { backendActive, pushStructures, requestCapture, latestWave } from './backend_sync.js?v=333';
+import { openLive } from './live_stream.js?v=333';
+import { renderProyecto } from '../workspaces/proyecto.js?v=333';
+import { renderObra } from '../workspaces/obra.js?v=333';
+import * as Selection from '../core/selection.js?v=333';
+import { renderInsp, initInspection, feedSHM, startSig, stopSig, buildCapturedWave } from '../workspaces/operacion.js?v=333';
+import { Shm } from '../core/shm_state.js?v=333';
+import { authRequired, loggedIn, isEditor, canOperate, canGestion, canQualityEdit, canQualityApprove, canInspect, currentRole, allowedWorkspaces } from './auth.js?v=333';
+import { requireLogin, userChipHTML, wireUserChip } from './auth_ui.js?v=333';
+import * as Hist from './history.js?v=333';
+import * as Health from './health.js?v=333';
+import * as Bench from './benchmark.js?v=333';
+import * as Alarms from './alarms.js?v=333';
+import { METEO_CAMAN } from './meteo_caman.js?v=333';
+import { ReplaySource } from './replay.js?v=333';
+import { esc, safeUrl } from './util.js?v=333';
+import { t, getLang, setLang } from './i18n.js?v=333';
 
 const F1_BASE = { turbine: 0.283, hv: 1.6 };
-const REWIND_VER = 'v332';   // versión visible del build (subir junto al cache-bust)
+const REWIND_VER = 'v333';   // versión visible del build (subir junto al cache-bust)
 const FS = 62.5;   // frecuencia de muestreo de la señal (Hz), igual que shm_worker.js
 // Clasificador ML de daño (0..4)
 const CLS = ['Sin daño', 'Leve', 'Moderado', 'Alto', 'Muy alto'];
@@ -357,7 +357,7 @@ async function boot() {
   // ── Relieve conceptual del terreno (DEM vendorizado) — encendido por defecto ─
   setLoad(88, 'Cargando relieve…'); await delay(40);
   try {
-    await fleet.loadTerrain('data/caman_dem.json?v=332');
+    await fleet.loadTerrain('data/caman_dem.json?v=333');
     fleet.setTerrainVisible(true);
     document.getElementById('shm-relieve-tool')?.classList.add('active');
   } catch (e) { console.warn('[shm] relieve no disponible', e); }
@@ -996,7 +996,22 @@ function buildDashboard(panel, fleet, actions) {
   const PHASE_PRIMARY = { proyecto: 'shadow', obra: 'obra', operacion: 'shm' };
   const WS_TOOLS = { proyecto: ['shm-sun-tool'], obra: ['shm-avance-tool'], operacion: ['shm-pinsp-tool', 'shm-pshm-tool'] };
   const PHASE_KEY = 'rewind.phase.v1';
-  const allowedWs = allowedWorkspaces();                          // workspaces habilitados por rol
+  // ── Frente C: app fija por entrada ──────────────────────────────────────────
+  // Cada HTML de entrada (proyecto/obra/operacion.html) declara su workspace en
+  // <html data-app="…">. Si está presente, la app se CLAVA a ese único workspace:
+  // se intersecta con lo que el ROL permite, se oculta el selector de fase y, si el
+  // rol no puede entrar a ESTA app, se vuelve al chooser. Sin data-app (p.ej. la app
+  // combinada histórica) se comporta como antes: todos los workspaces del rol.
+  const APP_WS = (typeof document !== 'undefined' && document.documentElement.dataset.app) ||
+                 (typeof window !== 'undefined' && window.REWIND_APP) || null;
+  const roleWs = allowedWorkspaces();                            // workspaces habilitados por ROL
+  const allowedWs = APP_WS ? roleWs.filter(w => w === APP_WS) : roleWs;
+  // Rol logueado sin acceso a ESTA app → volver al chooser (si no hay sesión, el
+  // flujo de login se encarga primero; por eso exigimos roleWs no vacío).
+  if (APP_WS && roleWs.length && allowedWs.length === 0) {
+    try { location.replace('elegir.html?denied=' + encodeURIComponent(APP_WS)); } catch { /* */ }
+    return;
+  }
   const wsOK = (ph) => allowedWs.includes(ph);
   // Oculta los botones de fase que el rol no puede usar; si queda ≤1, esconde la barra.
   el.querySelectorAll('.shm-phase').forEach(b => { if (!wsOK(b.dataset.ph)) b.style.display = 'none'; });

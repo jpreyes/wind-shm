@@ -8,8 +8,8 @@
 // `current`), por eso es el más limpio de aislar. Las acciones de flicker viven en
 // `window.shmMap` (MapView); los controles de hora/fecha, en el HUD solar sobre el visor.
 // ─────────────────────────────────────────────────────────────────────────────
-import { t } from '../shm/i18n.js?v=332';
-import { esc } from '../shm/util.js?v=332';
+import { t } from '../shm/i18n.js?v=333';
+import { esc } from '../shm/util.js?v=333';
 
 export function renderProyecto(host, fleet) {
   if (!host) return;
