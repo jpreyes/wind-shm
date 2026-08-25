@@ -1,0 +1,21 @@
+{
+  "name": "ReWind Proyecto",
+  "short_name": "Proyecto",
+  "description": "Diseño y desarrollo del parque: emplazamiento, sombra proyectada (shadow-flicker), viento y layout.",
+  "lang": "es-CL",
+  "dir": "ltr",
+  "id": "/proyecto",
+  "start_url": "./proyecto.html",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "landscape",
+  "background_color": "#070a0f",
+  "theme_color": "#e0a63a",
+  "categories": ["education", "productivity", "utilities"],
+  "icons": [
+    { "src": "icons/icon-proyecto.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" },
+    { "src": "icons/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}

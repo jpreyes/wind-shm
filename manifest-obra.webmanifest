@@ -1,0 +1,21 @@
+{
+  "name": "ReWind Obra",
+  "short_name": "Obra",
+  "description": "Construcción: avance físico 4D por partida y control de calidad del parque eólico.",
+  "lang": "es-CL",
+  "dir": "ltr",
+  "id": "/obra",
+  "start_url": "./obra.html",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "landscape",
+  "background_color": "#070a0f",
+  "theme_color": "#f0793a",
+  "categories": ["education", "productivity", "utilities"],
+  "icons": [
+    { "src": "icons/icon-obra.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" },
+    { "src": "icons/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}

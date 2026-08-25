@@ -8,36 +8,41 @@
 //   inspecciones y señal temporal EN VIVO desde un Web Worker (DataSource).
 // Recortes (modelado) los hace shm.css ocultando, no borrando.
 // ─────────────────────────────────────────────────────────────────────────────
-import { FleetView } from './fleet_view.js?v=332';
-import { DataSource } from './data_source.js?v=332';
-import { computeTwin } from './digital_twin.js?v=332';
-import { ParkManager, loadParksStore } from './parks.js?v=332';
-import { MapView } from './map_view.js?v=332';
-import { defaultStages, builtFromStages, LAYOUT_SCALE } from './parks_data_caman.js?v=332';
-import { fftMag } from './dsp.js?v=332';
-import { buildSunControl, buildCompass, buildNameplate, buildBanner, initPanelResize } from './viewport_chrome.js?v=332';
-import { buildAvanceHUD } from './avance_hud.js?v=332';
-import { renderAvance, computeParkAvance } from './avance_dashboard.js?v=332';
-import * as Insp from './inspection.js?v=332';
-import * as Fat from './fatigue.js?v=332';
-import * as Instr from './instrumentation.js?v=332';
-import * as Calidad from './calidad.js?v=332';
-import { showBackendConfig } from './backend_ui.js?v=332';
-import { backendActive, pushStructures, requestCapture, latestWave } from './backend_sync.js?v=332';
-import { openLive } from './live_stream.js?v=332';
-import { authRequired, loggedIn, isEditor, canOperate, canGestion, canQualityEdit, canQualityApprove, canInspect, currentRole, allowedWorkspaces } from './auth.js?v=332';
-import { requireLogin, userChipHTML, wireUserChip } from './auth_ui.js?v=332';
-import * as Hist from './history.js?v=332';
-import * as Health from './health.js?v=332';
-import * as Bench from './benchmark.js?v=332';
-import * as Alarms from './alarms.js?v=332';
-import { METEO_CAMAN } from './meteo_caman.js?v=332';
-import { ReplaySource } from './replay.js?v=332';
-import { esc, safeUrl } from './util.js?v=332';
-import { t, getLang, setLang } from './i18n.js?v=332';
+import { FleetView } from '../core/fleet_view.js?v=333';
+import { DataSource } from '../core/data_source.js?v=333';
+import { computeTwin } from '../core/digital_twin.js?v=333';
+import { ParkManager, loadParksStore } from '../core/parks.js?v=333';
+import { MapView } from '../core/map_view.js?v=333';
+import { defaultStages, LAYOUT_SCALE } from '../core/parks_data_caman.js?v=333';
+import { fftMag } from '../core/dsp.js?v=333';
+import { buildSunControl, buildCompass, buildNameplate, buildBanner, initPanelResize } from '../core/viewport_chrome.js?v=333';
+import { buildAvanceHUD } from './avance_hud.js?v=333';
+import { computeParkAvance } from './avance_dashboard.js?v=333';
+import * as Insp from './inspection.js?v=333';
+import * as Fat from './fatigue.js?v=333';
+import * as Instr from '../core/instrumentation.js?v=333';
+import * as Calidad from './calidad.js?v=333';
+import { showBackendConfig } from '../core/backend_ui.js?v=333';
+import { backendActive, pushStructures, requestCapture, latestWave } from '../core/backend_sync.js?v=333';
+import { openLive } from '../core/live_stream.js?v=333';
+import { renderProyecto } from '../workspaces/proyecto.js?v=333';
+import { renderObra } from '../workspaces/obra.js?v=333';
+import * as Selection from '../core/selection.js?v=333';
+import { renderInsp, initInspection, feedSHM, startSig, stopSig, buildCapturedWave } from '../workspaces/operacion.js?v=333';
+import { Shm } from '../core/shm_state.js?v=333';
+import { authRequired, loggedIn, isEditor, canOperate, canGestion, canQualityEdit, canQualityApprove, canInspect, currentRole, allowedWorkspaces } from '../core/auth.js?v=333';
+import { requireLogin, userChipHTML, wireUserChip } from '../core/auth_ui.js?v=333';
+import * as Hist from './history.js?v=333';
+import * as Health from './health.js?v=333';
+import * as Bench from './benchmark.js?v=333';
+import * as Alarms from './alarms.js?v=333';
+import { METEO_CAMAN } from '../core/meteo_caman.js?v=333';
+import { ReplaySource } from './replay.js?v=333';
+import { esc, safeUrl } from '../core/util.js?v=333';
+import { t, getLang, setLang } from '../core/i18n.js?v=333';
 
 const F1_BASE = { turbine: 0.283, hv: 1.6 };
-const REWIND_VER = 'v332';   // versión visible del build (subir junto al cache-bust)
+const REWIND_VER = 'v333';   // versión visible del build (subir junto al cache-bust)
 const FS = 62.5;   // frecuencia de muestreo de la señal (Hz), igual que shm_worker.js
 // Clasificador ML de daño (0..4)
 const CLS = ['Sin daño', 'Leve', 'Moderado', 'Alto', 'Muy alto'];
@@ -352,7 +357,7 @@ async function boot() {
   // ── Relieve conceptual del terreno (DEM vendorizado) — encendido por defecto ─
   setLoad(88, 'Cargando relieve…'); await delay(40);
   try {
-    await fleet.loadTerrain('data/caman_dem.json?v=332');
+    await fleet.loadTerrain('data/caman_dem.json?v=333');
     fleet.setTerrainVisible(true);
     document.getElementById('shm-relieve-tool')?.classList.add('active');
   } catch (e) { console.warn('[shm] relieve no disponible', e); }
@@ -951,6 +956,9 @@ function buildDashboard(panel, fleet, actions) {
     </div>`;
   panel.appendChild(el);
   const $ = (s) => el.querySelector(s);
+  // Inspección (Operación) extraída a workspaces/operacion.js: inyecta las deps del
+  // shell (refrescar rollup del parque tras editar, abrir el informe imprimible).
+  initInspection({ onChange: () => updateRollup(), openReport: openReportWindow });
   el.querySelector('#park-summary-btn')?.addEventListener('click', () => showExecutiveSummary());
   el.querySelector('#park-report-btn')?.addEventListener('click', () => buildReport(null));
   el.querySelector('#park-csv-btn')?.addEventListener('click', () => downloadExecutiveCSV());
@@ -964,16 +972,7 @@ function buildDashboard(panel, fleet, actions) {
     const PANEL_TOOLS = { insp: 'shm-pinsp-tool', shm: 'shm-pshm-tool' };
     for (const [view, id] of Object.entries(PANEL_TOOLS)) document.getElementById(id)?.classList.toggle('active', v === view);
     if (v === 'shadow') renderShadow();
-    if (v === 'obra') {
-      try {
-        renderAvance($('#shm-avance'), fleet.structures, current, (st) => {
-          st.built = builtFromStages(st.stages);
-          fleet.setProgress(st.id, st.built);
-          fleet.onLayoutChange?.();
-          updateParkProgress(); window.shmMap?.refresh?.();
-        });
-      } catch (e) { console.warn('[shm] avance', e); }
-    }
+    if (v === 'obra') renderObra($('#shm-avance'), fleet, current, () => { updateParkProgress(); window.shmMap?.refresh?.(); });
     if (v === 'insp') renderInsp();        // siembra la inspección si no existe
     if (v === 'shm') renderSHM();
     if (v === 'parque') updateRollup();
@@ -997,7 +996,22 @@ function buildDashboard(panel, fleet, actions) {
   const PHASE_PRIMARY = { proyecto: 'shadow', obra: 'obra', operacion: 'shm' };
   const WS_TOOLS = { proyecto: ['shm-sun-tool'], obra: ['shm-avance-tool'], operacion: ['shm-pinsp-tool', 'shm-pshm-tool'] };
   const PHASE_KEY = 'rewind.phase.v1';
-  const allowedWs = allowedWorkspaces();                          // workspaces habilitados por rol
+  // ── Frente C: app fija por entrada ──────────────────────────────────────────
+  // Cada HTML de entrada (proyecto/obra/operacion.html) declara su workspace en
+  // <html data-app="…">. Si está presente, la app se CLAVA a ese único workspace:
+  // se intersecta con lo que el ROL permite, se oculta el selector de fase y, si el
+  // rol no puede entrar a ESTA app, se vuelve al chooser. Sin data-app (p.ej. la app
+  // combinada histórica) se comporta como antes: todos los workspaces del rol.
+  const APP_WS = (typeof document !== 'undefined' && document.documentElement.dataset.app) ||
+                 (typeof window !== 'undefined' && window.REWIND_APP) || null;
+  const roleWs = allowedWorkspaces();                            // workspaces habilitados por ROL
+  const allowedWs = APP_WS ? roleWs.filter(w => w === APP_WS) : roleWs;
+  // Rol logueado sin acceso a ESTA app → volver al chooser (si no hay sesión, el
+  // flujo de login se encarga primero; por eso exigimos roleWs no vacío).
+  if (APP_WS && roleWs.length && allowedWs.length === 0) {
+    try { location.replace('elegir.html?denied=' + encodeURIComponent(APP_WS)); } catch { /* */ }
+    return;
+  }
   const wsOK = (ph) => allowedWs.includes(ph);
   // Oculta los botones de fase que el rol no puede usar; si queda ≤1, esconde la barra.
   el.querySelectorAll('.shm-phase').forEach(b => { if (!wsOK(b.dataset.ph)) b.style.display = 'none'; });
@@ -1026,88 +1040,14 @@ function buildDashboard(panel, fleet, actions) {
   // ── Pestaña «Shadow flicker»: análisis de sombras en el panel derecho ────────
   // Los controles de hora/fecha viven en el HUD flotante (sobre el visor); aquí van
   // los ANÁLISIS: mapa de flicker, informes y la lista de receptores (viviendas).
-  function renderShadow() {
-    const host = $('#shm-shadow'); if (!host) return;
-    const mv = window.shmMap;
-    if (!fleet.sunMode) {
-      host.innerHTML = `<div class="ssh-off">${t('ssh.off')}<br><br>${t('ssh.offHint')}</div>`;
-      return;
-    }
-    const rcp = (mv?._receptors) || [];
-    const nEx = rcp.filter(r => !r.ok).length;
-    const nOk = rcp.length - nEx;
-    const opTurb = fleet.structures.filter(s => s.type !== 'hv' && (s.built ?? 1) >= 0.97).length;
-    const worst = rcp.reduce((a, r) => r.res.hoursYear > (a?.res.hoursYear ?? -1) ? r : a, null);
-    const sp = fleet.getSunInfo?.();
-    const stime = fleet._sunTime || {};
-    const dateStr = (stime.year != null) ? `${String(stime.day).padStart(2, '0')}/${String((stime.month0 ?? 0) + 1).padStart(2, '0')}/${stime.year}` : '—';
-    const hourStr = (stime.hour != null) ? `${String(Math.floor(stime.hour)).padStart(2, '0')}:${String(Math.round((stime.hour % 1) * 60) % 60).padStart(2, '0')}` : '—';
-    const sunStr = sp ? (sp.elevation > 0 ? `${sp.elevation.toFixed(0)}° alt · ${sp.azimuth.toFixed(0)}° az` : t('ssh.night')) : '—';
-    const compliance = !rcp.length ? { txt: t('ssh.cNone'), cls: 'na' }
-      : nEx ? { txt: t('ssh.cBad', nEx, rcp.length), cls: 'bad' }
-      : { txt: t('ssh.cOk', rcp.length), cls: 'ok' };
-
-    const rows = rcp.length ? rcp.map(r => `
-      <div class="ssh-rcp ${r.ok ? 'ok' : 'bad'}">
-        <span class="ssh-n" title="${r.name || t('ssh.rcpName', r.n)}">${r.name ? r.name : '#' + r.n}</span>
-        <span class="ssh-v">
-          <b>${r.res.hoursYear.toFixed(1)}</b> ${t('ssh.hYear')}<span class="ssh-sub"> (real≈${r.res.hoursYearReal.toFixed(1)})</span><br>
-          <span class="ssh-st">${t('ssh.minDay', r.res.maxMinDay)} · ${t('ssh.days', r.res.daysAffected)} · ${r.ok ? t('ssh.comply') : t('ssh.exceed')}</span>
-          ${r.win ? `<span class="ssh-st">${t('ssh.stop', r.win.months, r.win.hours)}</span>` : ''}
-        </span>
-        <button class="ssh-del" data-n="${r.n}" title="${t('ssh.delTip')}">✕</button>
-      </div>`).join('') : `<div class="ssh-empty">${t('ssh.empty')}</div>`;
-
-    host.innerHTML = `
-      <div class="ssh-hdr">${t('ssh.hdr')}</div>
-      <div class="ssh-banner ${compliance.cls}">${compliance.cls === 'ok' ? '✓' : compliance.cls === 'bad' ? '✗' : 'ℹ'} ${compliance.txt}
-        <span class="ssh-banner-sub">${t('ssh.limit')}</span></div>
-      <div class="ssh-kpis">
-        <div class="ssh-kpi"><div class="k">${t('ssh.kTurb')}</div><div class="v">${opTurb}</div></div>
-        <div class="ssh-kpi"><div class="k">${t('ssh.kRcp')}</div><div class="v">${rcp.length}</div></div>
-        <div class="ssh-kpi"><div class="k">${t('ssh.kOk')}</div><div class="v" style="color:var(--success,#22c55e)">${nOk}</div></div>
-        <div class="ssh-kpi"><div class="k">${t('ssh.kEx')}</div><div class="v" style="color:var(--danger,#ef4444)">${nEx}</div></div>
-        <div class="ssh-kpi wide"><div class="k">${t('ssh.kWorst')}</div><div class="v">${worst ? `#${worst.n} · ${worst.res.hoursYear.toFixed(1)} ${t('ssh.hYear')}` : '—'}</div></div>
-      </div>
-      <div class="ssh-params">
-        <div class="ssh-prow"><span>${t('ssh.sunNow')}</span><b>${sunStr}</b></div>
-        <div class="ssh-prow"><span>${t('ssh.dateHour')}</span><b>${dateStr} · ${hourStr}</b></div>
-        <div class="ssh-prow"><span>${t('ssh.hubRotor')}</span><b>90 m · Ø84 m</b></div>
-        <div class="ssh-prow"><span>${t('ssh.method')}</span><b>${t('ssh.methodV')}</b></div>
-      </div>
-      <div class="ssh-actions">
-        <button id="ssh-fmap" class="sun-btn js-fmap ${mv?._flickerOverlay ? 'active' : ''}" type="button">${t('ssh.fmap')}</button>
-        <div class="sun-legend"><span><i style="background:#bee678"></i>1–5</span><span><i style="background:#fde047"></i>5–15</span><span><i style="background:#fb923c"></i>15–30</span><span><i style="background:#ef4444"></i>≥30 ✗</span></div>
-        <button id="ssh-report" class="sun-btn" type="button">${t('ssh.reportAll')}</button>
-        <button id="ssh-inter" class="sun-btn" type="button">${t('ssh.inter')}</button>
-      </div>
-      <div class="ssh-rcp-h">${t('ssh.rcpH')} · ${rcp.length}${rcp.length ? ` · ${t('ssh.exceedN', nEx)}` : ''}
-        <span class="ssh-rcp-act">
-          <input type="file" id="ssh-file" accept=".csv,.txt,.kml,.kmz,.geojson,.json,.shp" style="display:none">
-          <button id="ssh-import" class="ssh-mini" type="button" title="${t('ssh.importTip')}">${t('ssh.import')}</button>
-          ${rcp.length ? `<button id="ssh-clear" class="ssh-mini" type="button" title="${t('ssh.clearTip')}">${t('ssh.clear')}</button>` : ''}
-        </span>
-      </div>
-      <div class="ssh-list">${rows}</div>
-      <div class="ssh-foot">${t('ssh.foot')}</div>`;
-    host.querySelector('#ssh-fmap')?.addEventListener('click', () => { window.shmMap?.toggleFlickerMap(); window.shmSyncFlickerBtns?.(); });
-    host.querySelector('#ssh-report')?.addEventListener('click', () => window.shmMap?.flickerReport());
-    host.querySelector('#ssh-inter')?.addEventListener('click', () => window.shmMap?.interTurbineReport());
-    host.querySelectorAll('.ssh-del').forEach(b => b.addEventListener('click', () => window.shmMap?.removeReceptor(+b.dataset.n)));
-    const fileInp = host.querySelector('#ssh-file');
-    host.querySelector('#ssh-import')?.addEventListener('click', () => fileInp?.click());
-    fileInp?.addEventListener('change', async (e) => { const f = e.target.files?.[0]; e.target.value = ''; if (f) await window.shmMap?.importReceptors(f); });
-    host.querySelector('#ssh-clear')?.addEventListener('click', () => { if (confirm(t('ssh.clearConfirm'))) window.shmMap?.clearReceptors(); });
-  }
+  // Proyecto (diseño): el análisis de shadow-flicker vive en workspaces/proyecto.js
+  // (refactor B2). Aquí solo se delega; el host es el panel derecho.
+  function renderShadow() { renderProyecto($('#shm-shadow'), fleet); }
   function showShadow() { setTopView('shadow'); }
 
-  let list = [], current = null, pane = 'datos', sigBuf = {}, sigRAF = null, freqHist = {}, wavePlay = null, liveStop = null;
-  let editSensorId = null;   // R-36f: id del sensor de instrumentación en edición (o null)
-  let inspSel = null;   // id de la inspección abierta en la pestaña Inspección
-  let specOff = null, specLast = 0;                 // espectrograma (offscreen + scroll)
-  const clsHist = {}, clsEvents = {}; let lastHistT = 0;   // histórico de clasificación ML
-  let lastAnomT = 0;   // R-26: throttle del benchmarking de flota
-  const SPEC_W = 170, SPEC_BINS = 48, SPEC_FMAX = 6;
+  let list = [], current = null;   // list=estructuras · current=selección (espeja a Selection store)
+  let lastAnomT = 0;   // R-26: throttle del benchmarking de flota (Parque)
+  // El estado SHM vive ahora en core/shm_state.js (objeto mutable `Shm`).
   const heat = (t) => {
     t = Math.max(0, Math.min(1, t));
     const s = [[12, 16, 32], [22, 90, 190], [30, 200, 200], [240, 220, 60], [232, 50, 40]];
@@ -1234,8 +1174,8 @@ function buildDashboard(panel, fleet, actions) {
   }
 
   function select(obj) {
-    current = obj; highlight();
-    sigBuf = {}; freqHist = {}; specOff = null; inspSel = null;
+    current = obj; Selection.setCurrent(obj); highlight();   // store compartido (workspaces extraídos)
+    Shm.sigBuf = {}; Shm.freqHist = {}; Shm.specOff = null;
     if (!obj) {
       stopSig();
       $('#shm-detail').innerHTML = `<div class="empty">${t('empty.select')}</div>`;
@@ -1316,7 +1256,7 @@ function buildDashboard(panel, fleet, actions) {
   // ── Pestaña SHM: estado por sensores + señal + sensores + avanzado ───────────
   function renderSHM() {
     const o = current; if (!o) { const h = $('#shm-shm'); if (h) h.innerHTML = `<div class="empty">${t('empty.select')}</div>`; return; }
-    if (!['estado', 'senal', 'tendencia', 'sensores', 'avz', 'fatiga'].includes(pane)) pane = 'estado';
+    if (!['estado', 'senal', 'tendencia', 'sensores', 'avz', 'fatiga'].includes(Shm.pane)) Shm.pane = 'estado';
     $('#shm-shm').innerHTML = `
       <div class="shm-tabs">
         <button class="shm-tab" data-p="estado">${t('tab.estado')}</button>
@@ -1327,16 +1267,16 @@ function buildDashboard(panel, fleet, actions) {
         <button class="shm-tab" data-p="avz">${t('tab.avz')}</button>
       </div>
       <div class="shm-body" id="shm-pane"></div>`;
-    el.querySelectorAll('#shm-shm .shm-tab').forEach(t => t.addEventListener('click', () => { pane = t.dataset.p; renderSHMPane(); }));
+    el.querySelectorAll('#shm-shm .shm-tab').forEach(t => t.addEventListener('click', () => { Shm.pane = t.dataset.p; renderSHMPane(); }));
     renderSHMPane();
   }
 
   function renderSHMPane() {
     stopSig();
-    el.querySelectorAll('#shm-shm .shm-tab').forEach(t => t.classList.toggle('active', t.dataset.p === pane));
+    el.querySelectorAll('#shm-shm .shm-tab').forEach(t => t.classList.toggle('active', t.dataset.p === Shm.pane));
     const o = current, body = el.querySelector('#shm-shm #shm-pane'); if (!o || !body) return;
     const sum = (window.shmData && window.shmData.get(o.id)) || null;
-    if (pane === 'estado') {
+    if (Shm.pane === 'estado') {
       const dmg = sum ? Math.round((sum.dmg || 0) * 100) : 0;
       body.innerHTML = healthGaugeHTML(o, sum) + `
         <div class="row"><span>${t('sh.cls')}</span><b id="sh-cls">…</b></div>
@@ -1356,7 +1296,7 @@ function buildDashboard(panel, fleet, actions) {
         catch { st.textContent = t('sh.captureErr'); }
         finally { capBtn.disabled = false; capBtn.textContent = t('sh.capture'); }
       });
-    } else if (pane === 'senal') {
+    } else if (Shm.pane === 'senal') {
       body.innerHTML = `<div class="note" style="margin-top:0">${t('sig.note')}</div><div id="sig-wrap"></div>`;
       const wrap = body.querySelector('#sig-wrap');
       for (const se of o.sensors) {
@@ -1367,23 +1307,23 @@ function buildDashboard(panel, fleet, actions) {
       }
       startSig();
       if (backendActive()) buildCapturedWave(body, o);   // señal REAL del sensor (Storage)
-    } else if (pane === 'tendencia') {
+    } else if (Shm.pane === 'tendencia') {
       // R-34: tendencia de f₁ desde el histórico persistente (IndexedDB).
       body.innerHTML = `<div class="ins-mut" style="padding:12px">${t('trend.loading')}</div>`;
       const oid = o.id, days = 30;
       Hist.range(oid, Date.now() - days * 864e5).then((rows) => {
-        if (pane !== 'tendencia' || current?.id !== oid) return;   // cambió de pestaña/torre
+        if (Shm.pane !== 'tendencia' || current?.id !== oid) return;   // cambió de pestaña/torre
         body.innerHTML = trendHTML(rows, o, days);
       });
-    } else if (pane === 'sensores') {
+    } else if (Shm.pane === 'sensores') {
       const gwRow = o.gateway?.mesh
         ? `<div class="shm-sensor"><span class="dot ok"></span><span style="flex:1">📶 ${t('ahud.gateway')} <span class="ins-mut" style="font-size:10px">(${t('ahud.gwRoleV')})</span></span><b style="color:var(--success)">${t('ahud.gwOnline')}</b></div>`
         : '';
       const custom = Instr.getSensors(o.id);
-      if (editSensorId && !custom.some(c => c.id === editSensorId)) editSensorId = null;   // el sensor pudo borrarse
-      const editing = editSensorId ? custom.find(c => c.id === editSensorId) : null;
+      if (Shm.editSensorId && !custom.some(c => c.id === Shm.editSensorId)) Shm.editSensorId = null;   // el sensor pudo borrarse
+      const editing = Shm.editSensorId ? custom.find(c => c.id === Shm.editSensorId) : null;
       const customRows = custom.map(cs =>
-        `<div class="shm-sensor ${cs.id === editSensorId ? 'editing' : ''}"><span class="dot ok"></span><span style="flex:1">${Instr.typeIcon(cs.type)} ${esc(cs.label || Instr.typeLabel(cs.type))} <span class="ins-mut" style="font-size:10px">· ${Math.round((cs.yFrac || 0) * 100)}%</span></span><b class="s-custom" data-cs-id="${esc(cs.id)}" data-cs-type="${esc(cs.type)}">—</b><button class="ins-x cs-edit" data-cse="${esc(cs.id)}" title="${t('instr.edit')}">✎</button><button class="ins-x cs-del" data-csd="${esc(cs.id)}" title="${t('instr.remove')}">✕</button></div>`
+        `<div class="shm-sensor ${cs.id === Shm.editSensorId ? 'editing' : ''}"><span class="dot ok"></span><span style="flex:1">${Instr.typeIcon(cs.type)} ${esc(cs.label || Instr.typeLabel(cs.type))} <span class="ins-mut" style="font-size:10px">· ${Math.round((cs.yFrac || 0) * 100)}%</span></span><b class="s-custom" data-cs-id="${esc(cs.id)}" data-cs-type="${esc(cs.type)}">—</b><button class="ins-x cs-edit" data-cse="${esc(cs.id)}" title="${t('instr.edit')}">✎</button><button class="ins-x cs-del" data-csd="${esc(cs.id)}" title="${t('instr.remove')}">✕</button></div>`
       ).join('');
       const typeOpts = Instr.SENSOR_TYPES.map(ty => `<option value="${ty.key}"${editing && editing.type === ty.key ? ' selected' : ''}>${Instr.typeLabel(ty.key)}</option>`).join('');
       body.innerHTML = o.sensors.map(se =>
@@ -1403,18 +1343,18 @@ function buildDashboard(panel, fleet, actions) {
       const refreshHud = () => { if (window.shmAvanceHUD && current === o) window.shmAvanceHUD.show(o, 'shm'); };
       body.querySelector('#cs-add')?.addEventListener('click', () => {
         const patch = { type: body.querySelector('#cs-type').value, label: body.querySelector('#cs-label').value, yFrac: (+yf.value || 0) / 100 };
-        if (editSensorId) { Instr.updateSensor(o.id, editSensorId, patch); editSensorId = null; }   // R-36f: editar sin recrear
+        if (Shm.editSensorId) { Instr.updateSensor(o.id, Shm.editSensorId, patch); Shm.editSensorId = null; }   // R-36f: editar sin recrear
         else Instr.addSensor(o.id, patch);
         refreshHud(); renderSHMPane();
       });
-      body.querySelector('#cs-cancel')?.addEventListener('click', () => { editSensorId = null; renderSHMPane(); });
-      body.querySelectorAll('.cs-edit').forEach(b => b.addEventListener('click', () => { editSensorId = b.dataset.cse; renderSHMPane(); }));
+      body.querySelector('#cs-cancel')?.addEventListener('click', () => { Shm.editSensorId = null; renderSHMPane(); });
+      body.querySelectorAll('.cs-edit').forEach(b => b.addEventListener('click', () => { Shm.editSensorId = b.dataset.cse; renderSHMPane(); }));
       body.querySelectorAll('.cs-del').forEach(b => b.addEventListener('click', () => {
         Instr.removeSensor(o.id, b.dataset.csd);
-        if (editSensorId === b.dataset.csd) editSensorId = null;
+        if (Shm.editSensorId === b.dataset.csd) Shm.editSensorId = null;
         refreshHud(); renderSHMPane();
       }));
-    } else if (pane === 'fatiga') {
+    } else if (Shm.pane === 'fatiga') {
       if ((o.built ?? 1) < 0.97) {   // R-40e: torre en montaje → sin fatiga «consumida»
         body.innerHTML = `<div class="ins-mut" style="padding:16px 12px;line-height:1.5">${t('phys.montaje')}</div>`;
       } else {
@@ -1438,7 +1378,7 @@ function buildDashboard(panel, fleet, actions) {
           ${fatigueSpectrumSVG(a)}
           <div class="note" style="font-size:10px">${t('fat.note')}</div>`;
       }
-    } else if (pane === 'avz') {
+    } else if (Shm.pane === 'avz') {
       const nvm = o.type === 'turbine'
         ? `<div class="note">${t('avz.nvmNote')}</div>
            <div id="nvm-wrap" style="display:flex;gap:6px">
@@ -1851,259 +1791,8 @@ function buildDashboard(panel, fleet, actions) {
     </svg>`;
   }
 
-  function seedInspection(o) {
-    const h = ihash(o.id), fault = o.sensors.some(s => s.status === 'fault');
-    const insp = Insp.addInspection(o.id, {
-      inspector: ['J. Pérez', 'M. Soto', 'C. Vidal'][h % 3],
-      date: new Date(Date.now() - (18 + h % 140) * 864e5).toISOString().slice(0, 10),
-      location: 'Fuste / fundación', summary: 'Inspección visual de rutina (ejemplo).',
-    });
-    const nD = fault ? 2 : (h % 3 === 0 ? 1 : 0);
-    for (let k = 0; k < nD; k++) insp.damages.push({
-      id: Insp.uid(), location: ['Fundación', 'Fuste (medio)', 'Brida', 'Base'][(h + k) % 4],
-      damage_type: Insp.DAMAGE_TYPES[(h + k * 7) % Insp.DAMAGE_TYPES.length],
-      damage_cause: Insp.DAMAGE_CAUSES[(h + k * 5) % Insp.DAMAGE_CAUSES.length],
-      severity: Insp.SEVERITIES[fault ? (k === 0 ? 2 : 1) : (h % 2)],
-      extent: (5 + (h % 45)) + '%', comments: '',
-    });
-    insp.condition = Insp.conditionFromScore(Insp.inspectionScore(insp.damages));
-    Insp.updateInspection(o.id, insp);
-  }
-
-  // Mini-gráfico de evolución del score de inspección (histórico de evaluación).
-  function evalHistorySVG(hist) {
-    if (hist.length < 2) return `<div class="ins-mut">${t('ins.histSingle')}</div>`;
-    const W = 280, H = 70, ml = 22, mb = 14, mt = 6, pw = W - ml - 8, ph = H - mt - mb;
-    const X = (i) => ml + (i / (hist.length - 1)) * pw, Y = (v) => mt + (1 - v / 100) * ph;
-    const pts = hist.map((p, i) => `${X(i).toFixed(1)},${Y(p.score).toFixed(1)}`).join(' ');
-    const dots = hist.map((p, i) => `<circle cx="${X(i).toFixed(1)}" cy="${Y(p.score).toFixed(1)}" r="2.6" fill="${Insp.scoreBand(p.score).cls === 'critica' ? '#ef4444' : Insp.scoreBand(p.score).cls === 'observacion' ? '#f59e0b' : '#22c55e'}"/>`).join('');
-    const grid = [0, 50, 100].map(v => `<line x1="${ml}" y1="${Y(v)}" x2="${W - 8}" y2="${Y(v)}" stroke="var(--border,#28384a)" stroke-width="0.5"/><text x="${ml - 4}" y="${Y(v) + 3}" text-anchor="end" font-size="7" fill="var(--text-muted,#93a6b8)">${v}</text>`).join('');
-    return `<svg viewBox="0 0 ${W} ${H}" style="width:100%;height:auto;aspect-ratio:${W}/${H};display:block;background:var(--bg3);border:1px solid var(--border);border-radius:6px">
-      ${grid}<polyline points="${pts}" fill="none" stroke="var(--accent,#38bdf8)" stroke-width="2"/>${dots}</svg>`;
-  }
-
-  function renderInsp() {
-    const host = $('#shm-insp'); const o = current;
-    if (!host) return;
-    if (!o) { host.innerHTML = `<div class="empty">${t('empty.select')}</div>`; return; }
-    let inspections = Insp.getInspections(o.id);
-    if (!inspections.length) {
-      if (Insp.wasSeeded(o.id)) {   // R-40b: ya se sembró/vació antes → NO re-sembrar demo
-        host.innerHTML = `<div class="shm-body ins-body"><div class="ins-head">Inspección · ${esc(o.label)}</div>
-          <div class="ins-empty">${t('ins.empty')}<button id="ins-first" class="ins-btn">${t('ins.newFirst')}</button></div></div>`;
-        host.querySelector('#ins-first').addEventListener('click', () => { const ni = Insp.addInspection(o.id, {}); inspSel = ni.id; renderInsp(); });
-        return;
-      }
-      seedInspection(o); Insp.markSeeded(o.id); inspections = Insp.getInspections(o.id);
-    }
-    if (!inspSel || !inspections.some(i => i.id === inspSel)) inspSel = inspections[0].id;
-    const sel = inspections.find(i => i.id === inspSel);
-    const score = Insp.inspectionScore(sel.damages), band = Insp.scoreBand(score);
-    const latest = inspections[0];
-    const hist = inspections.slice().sort((a, b) => (a.date || '').localeCompare(b.date || '')).map(i => ({ date: i.date, score: Insp.inspectionScore(i.damages) }));
-    const opt = (arr, v) => arr.map(x => `<option ${x === v ? 'selected' : ''}>${x}</option>`).join('');
-    const condOpt = Insp.CONDITIONS.map(c => `<option value="${c.key}" ${c.key === sel.condition ? 'selected' : ''}>${c.label}</option>`).join('');
-
-    const dmgRows = sel.damages.length ? sel.damages.map(d => {
-      const sc = Insp.scoreDamage(d), b = Insp.scoreBand(sc);
-      const np = (d.photos || []).length;
-      const strip = np ? `<div class="ins-dmg-photos">${d.photos.map(p => `<div class="ins-dphoto" data-d="${esc(d.id)}" data-p="${esc(p.id)}" style="background-image:url('${safeUrl(p.url)}')"><button class="ins-px" data-del-dmgphoto title="${t('ins.rmPhoto')}">✕</button></div>`).join('')}</div>` : '';
-      return `<div class="ins-dmg-wrap">
-        <div class="ins-dmg">
-          <span class="ins-dmg-sc ${b.cls}">${sc.toFixed(0)}</span>
-          <span class="ins-dmg-v"><b>${esc(d.damage_type)}</b><br><span class="ins-mut">${esc(d.severity)} · ${esc(d.damage_cause)}${d.extent ? ' · ' + esc(d.extent) : ''}${d.location ? ' · ' + esc(d.location) : ''}</span></span>
-          <button class="ins-dmg-cam" data-dmg-addphoto="${esc(d.id)}" title="${t('ins.addPhotoFinding')}">📷${np ? ' ' + np : ''}</button>
-          <button class="ins-ot" data-ot="${esc(d.id)}" title="${t('ins.otTip')}">→ OT</button>
-          <button class="ins-x" data-del-dmg="${esc(d.id)}" title="${t('ins.rmFinding')}">✕</button>
-        </div>${strip}</div>`;
-    }).join('') : `<div class="ins-mut">${t('ins.noFindings')}</div>`;
-
-    const listRows = inspections.map(i => {
-      const sc = Insp.inspectionScore(i.damages), b = Insp.scoreBand(sc);
-      return `<button class="ins-row ${i.id === inspSel ? 'active' : ''}" data-insp="${i.id}">
-        <span class="ins-dot ${Insp.conditionFromScore(sc)}"></span>
-        <span class="ins-row-d">${esc(i.date)}</span><span class="ins-row-i">${esc(i.inspector)}</span>
-        <span class="ins-row-h" title="hallazgos">${i.damages.length}⚐</span>
-        <span class="ins-row-s ${b.cls}">${sc.toFixed(0)}</span></button>`;
-    }).join('');
-
-    host.innerHTML = `
-      <div class="shm-body ins-body">
-        <div class="ins-head">Inspección · ${esc(o.label)}
-          <span class="ins-cond ${esc(sel.condition)}">${Insp.conditionLabel(sel.condition)}</span></div>
-        <div class="ins-kpis">
-          <div class="ins-kpi"><div class="k">${t('ins.kInsp')}</div><div class="v">${inspections.length}</div></div>
-          <div class="ins-kpi"><div class="k">${t('ins.kScore')}</div><div class="v ${band.cls}">${score.toFixed(0)}</div></div>
-          <div class="ins-kpi"><div class="k">${t('ins.kFindings')}</div><div class="v">${sel.damages.length}</div></div>
-          <div class="ins-kpi"><div class="k">${t('ins.kTests')}</div><div class="v">${sel.tests.length}</div></div>
-        </div>
-        ${(() => {
-          const due = Insp.dueState(sel.nextDate), ow = (sel.workOrders || []).filter(w => w.status !== 'cerrado'), odw = ow.filter(w => Insp.dueState(w.due).overdue).length;
-          const m = [];
-          if (due.overdue) m.push(t('ins.aOverdue')); else if (due.soon) m.push(t('ins.aSoon'));
-          if (odw) m.push(t('ins.aWoOverdue', odw)); if (ow.length) m.push(t('ins.aWoOpen', ow.length));
-          return m.length ? `<div class="ins-alert ${due.overdue || odw ? 'bad' : 'warn'}">⚠ ${m.join(' · ')}</div>` : '';
-        })()}
-        <div class="shm-sub2">${t('ins.hist')}</div>
-        ${evalHistorySVG(hist)}
-        <div class="ins-actrow"><button id="ins-new" class="ins-btn">${t('ins.new')}</button></div>
-        <div class="shm-sub2">${t('ins.listH')}</div>
-        <div class="ins-list">${listRows}</div>
-        <div class="ins-card">
-          <div class="ins-card-h">${esc(sel.date)} · <b>${esc(sel.inspector)}</b>
-            <span class="ins-score ${band.cls}" title="${t('ins.scoreTitle')}">${score.toFixed(0)} <small>${band.label}</small></span></div>
-          <div class="ins-meta">
-            <label>${t('ins.fDate')}<input type="date" id="ins-date" value="${esc(sel.date)}"></label>
-            <label>${t('ins.fInsp')}<input type="text" id="ins-insp" value="${esc(sel.inspector)}"></label>
-            <label>${t('ins.fCond')}<select id="ins-cond">${condOpt}</select></label>
-            <label>${t('ins.fLoc')}<input type="text" id="ins-loc" value="${esc(sel.location || '')}"></label>
-            <label>${t('ins.fNext')}<input type="date" id="ins-next" value="${esc(sel.nextDate || '')}"></label>
-          </div>
-          <label class="ins-sumlbl">${t('ins.summary')}<textarea id="ins-sum" rows="2">${esc(sel.summary || '')}</textarea></label>
-
-          <div class="shm-sub2">${t('ins.photos')} · ${(sel.photos || []).length}</div>
-          <div class="ins-photos">${(sel.photos || []).map(p => `<div class="ins-photo" data-photo="${esc(p.id)}" style="background-image:url('${safeUrl(p.url)}')"><button class="ins-px" data-del-photo="${esc(p.id)}" title="${t('ins.rmPhoto')}">✕</button></div>`).join('') || `<div class="ins-mut">${t('ins.noPhotos')}</div>`}</div>
-          <input type="file" id="ins-photo-file" accept="image/*" style="display:none">
-          <button id="ins-addphoto" class="ins-mini-btn">${t('ins.addPhoto')}</button>
-
-          <div class="shm-sub2">${t('ins.findings')}</div>
-          <div class="ins-dmgs">${dmgRows}</div>
-          <input type="file" id="nd-photo-file" accept="image/*" style="display:none">
-          <div class="ins-addform">
-            <select id="nd-type">${opt(Insp.DAMAGE_TYPES, '')}</select>
-            <select id="nd-cause">${opt(Insp.DAMAGE_CAUSES, '')}</select>
-            <div class="ins-add3">
-              <select id="nd-sev">${opt(Insp.SEVERITIES, 'Media')}</select>
-              <input type="text" id="nd-ext" placeholder="${t('ins.extent')}" >
-              <input type="text" id="nd-loc" placeholder="${t('ins.loc')}">
-            </div>
-            <button id="nd-add" class="ins-btn">${t('ins.addFinding')}</button>
-          </div>
-
-          <div class="shm-sub2">${t('ins.tests')} · ${sel.tests.length}</div>
-          <div class="ins-mini">${sel.tests.map(t2 => { const c = Insp.classifyTest(t2.test_type); return `<div class="ins-li"><span class="ins-tbadge ${c.ndt ? 'ndt' : ''}">${c.label}</span> <b>${esc(t2.test_type)}</b> — ${esc(t2.result_summary || '—')} <button class="ins-x" data-del-test="${esc(t2.id)}">✕</button></div>`; }).join('') || `<div class="ins-mut">${t('ins.noTests')}</div>`}</div>
-          <div class="ins-add"><input type="text" id="nt-type" placeholder="${t('ins.pTestType')}"><input type="text" id="nt-res" placeholder="${t('ins.pTestResult')}"><button id="ins-addtest" class="ins-btn" title="${t('ins.addTest')}">＋</button></div>
-
-          <div class="shm-sub2">${t('ins.docs')} · ${sel.documents.length}</div>
-          <div class="ins-mini">${sel.documents.map(dc => `<div class="ins-li">📎 <b>${esc(dc.title)}</b> <span class="ins-mut">(${esc(dc.category)})</span> <button class="ins-x" data-del-doc="${esc(dc.id)}">✕</button></div>`).join('') || `<div class="ins-mut">${t('ins.noDocs')}</div>`}</div>
-          <div class="ins-add"><input type="text" id="ndc-title" placeholder="${t('ins.pDocTitle')}"><input type="text" id="ndc-cat" placeholder="${t('ins.pDocCat')}" value="informe"><button id="ins-adddoc" class="ins-btn" title="${t('ins.addDoc')}">＋</button></div>
-
-          <div class="shm-sub2">${t('ins.wos')} · ${(sel.workOrders || []).length}</div>
-          <div class="ins-mini">${(sel.workOrders || []).map(w => { const dd = Insp.dueState(w.due); return `<div class="ins-wo">
-            <button class="ins-wost s-${esc(String(w.status).replace(/ /g, ''))}" data-wo="${esc(w.id)}" title="${t('ins.woStateTip')}">${esc(w.status)}</button>
-            <span class="ins-wo-v"><b>${esc(w.title)}</b><br><span class="ins-mut">${esc(w.assignee || t('ins.unassigned'))} · ${t('ins.prio')} ${esc(w.priority)}${w.due ? ` · ${t('ins.dueWord')} ${esc(w.due)}${dd.overdue ? ' ⚠' : ''}` : ''}</span></span>
-            <button class="ins-x" data-del-wo="${esc(w.id)}">✕</button></div>`; }).join('') || `<div class="ins-mut">${t('ins.noWos')}</div>`}</div>
-          <div class="ins-add ins-add-wo"><input type="text" id="nw-title" placeholder="${t('ins.pWoTitle')}"><input type="text" id="nw-assignee" placeholder="${t('ins.pWoAssignee')}"><select id="nw-prio">${Insp.WO_PRIORITY.map(p => `<option value="${p}"${p === 'media' ? ' selected' : ''}>${p}</option>`).join('')}</select><button id="ins-addwo" class="ins-btn" title="${t('ins.addWo')}">＋</button></div>
-
-          <div class="ins-foot"><button id="ins-report" class="ins-btn">${t('ins.report')}</button>
-            <button id="ins-del" class="ins-del">${t('ins.del')}</button></div>
-        </div>
-        <div class="note" style="font-size:10px">${t('ins.note')}</div>
-      </div>`;
-
-    const save = (re = true) => { Insp.updateInspection(o.id, sel); updateRollup(); if (re) renderInsp(); };
-    host.querySelectorAll('[data-insp]').forEach(b => b.addEventListener('click', () => { inspSel = b.dataset.insp; renderInsp(); }));
-    host.querySelector('#ins-new').addEventListener('click', () => { const ni = Insp.addInspection(o.id, { inspector: latest.inspector }); inspSel = ni.id; renderInsp(); });
-    host.querySelector('#ins-del').addEventListener('click', () => { if (confirm(t('ins.delConfirm'))) { Insp.removeInspection(o.id, sel.id); inspSel = null; renderInsp(); } });
-    host.querySelector('#ins-date').addEventListener('change', (e) => { sel.date = e.target.value; save(); });
-    host.querySelector('#ins-insp').addEventListener('change', (e) => { sel.inspector = e.target.value; save(false); });
-    host.querySelector('#ins-loc').addEventListener('change', (e) => { sel.location = e.target.value; save(false); });
-    host.querySelector('#ins-sum').addEventListener('change', (e) => { sel.summary = e.target.value; save(false); });
-    host.querySelector('#ins-cond').addEventListener('change', (e) => { sel.condition = e.target.value; save(); });
-    host.querySelector('#ins-next').addEventListener('change', (e) => { sel.nextDate = e.target.value; save(); });
-    host.querySelectorAll('[data-del-dmg]').forEach(b => b.addEventListener('click', () => { sel.damages = sel.damages.filter(d => d.id !== b.dataset.delDmg); sel.condition = Insp.conditionFromScore(Insp.inspectionScore(sel.damages)); save(); }));
-    host.querySelector('#nd-add').addEventListener('click', () => {
-      sel.damages.push({ id: Insp.uid(), damage_type: $('#nd-type').value, damage_cause: $('#nd-cause').value, severity: $('#nd-sev').value, extent: $('#nd-ext').value.trim(), location: $('#nd-loc').value.trim(), comments: '' });
-      sel.condition = Insp.conditionFromScore(Insp.inspectionScore(sel.damages)); save();
-    });
-    host.querySelector('#ins-addtest').addEventListener('click', () => { const tt = ($('#nt-type').value || '').trim(); if (!tt) { $('#nt-type').focus(); return; } const r = ($('#nt-res').value || '').trim(); sel.tests.push({ id: Insp.uid(), test_type: tt, result_summary: r, executed_at: new Date().toISOString().slice(0, 10) }); save(); });
-    host.querySelector('#ins-adddoc').addEventListener('click', () => { const tt = ($('#ndc-title').value || '').trim(); if (!tt) { $('#ndc-title').focus(); return; } const c = ($('#ndc-cat').value || 'otro').trim(); sel.documents.push({ id: Insp.uid(), title: tt, category: c, issued_at: new Date().toISOString().slice(0, 10) }); save(); });
-    host.querySelectorAll('[data-del-test]').forEach(b => b.addEventListener('click', () => { sel.tests = sel.tests.filter(t => t.id !== b.dataset.delTest); save(); }));
-    host.querySelectorAll('[data-del-doc]').forEach(b => b.addEventListener('click', () => { sel.documents = sel.documents.filter(d => d.id !== b.dataset.delDoc); save(); }));
-    // Órdenes de trabajo
-    host.querySelector('#ins-addwo').addEventListener('click', () => {
-      const title = ($('#nw-title').value || '').trim(); if (!title) { $('#nw-title').focus(); return; }
-      const assignee = ($('#nw-assignee').value || '').trim();
-      const priority = ($('#nw-prio').value || 'media').trim().toLowerCase();
-      (sel.workOrders ||= []).push({ id: Insp.uid(), title, assignee, priority: Insp.WO_PRIORITY.includes(priority) ? priority : 'media', status: 'abierto', due: sel.nextDate || '' });
-      save();
-    });
-    host.querySelectorAll('[data-wo]').forEach(b => b.addEventListener('click', () => { const w = (sel.workOrders || []).find(x => x.id === b.dataset.wo); if (w) { w.status = Insp.WO_STATUS[(Insp.WO_STATUS.indexOf(w.status) + 1) % Insp.WO_STATUS.length]; save(); } }));
-    host.querySelectorAll('[data-del-wo]').forEach(b => b.addEventListener('click', () => { sel.workOrders = (sel.workOrders || []).filter(w => w.id !== b.dataset.delWo); save(); }));
-    host.querySelectorAll('[data-ot]').forEach(b => b.addEventListener('click', () => {
-      const d = sel.damages.find(x => x.id === b.dataset.ot); if (!d) return;
-      (sel.workOrders ||= []).push({ id: Insp.uid(), title: 'Reparar: ' + d.damage_type, assignee: '', priority: Insp.priorityFromSeverity(d.severity), status: 'abierto', due: sel.nextDate || '', damageId: d.id });
-      save();
-    }));
-    host.querySelector('#ins-report').addEventListener('click', () => inspectionReport(o, sel, score));
-    // Fotos
-    const pf = host.querySelector('#ins-photo-file');
-    host.querySelector('#ins-addphoto').addEventListener('click', () => pf.click());
-    pf.addEventListener('change', async (e) => {
-      const f = e.target.files?.[0]; e.target.value = ''; if (!f) return;
-      try { const url = await Insp.imageToThumb(f); (sel.photos ||= []).push({ id: Insp.uid(), url }); save(); }
-      catch (err) { alert(t('ins.photoFail', err?.message || err)); }
-    });
-    host.querySelectorAll('[data-del-photo]').forEach(b => b.addEventListener('click', (e) => { e.stopPropagation(); sel.photos = (sel.photos || []).filter(p => p.id !== b.dataset.delPhoto); save(); }));
-    host.querySelectorAll('.ins-photo').forEach(d => d.addEventListener('click', (e) => { if (e.target.closest('.ins-px')) return; const p = (sel.photos || []).find(x => x.id === d.dataset.photo); if (p) { const w = window.open('', '_blank'); if (w) w.document.write(`<img src="${safeUrl(p.url)}" style="max-width:100%">`); else alert(t('alert.popupBlocked')); } }));
-    // Fotos por hallazgo (input oculto compartido + objetivo recordado)
-    let dmgPhotoTarget = null;
-    const dpf = host.querySelector('#nd-photo-file');
-    host.querySelectorAll('[data-dmg-addphoto]').forEach(b => b.addEventListener('click', () => { dmgPhotoTarget = b.dataset.dmgAddphoto; dpf.click(); }));
-    dpf.addEventListener('change', async (e) => {
-      const f = e.target.files?.[0]; e.target.value = ''; const tid = dmgPhotoTarget; dmgPhotoTarget = null;
-      if (!f || !tid) return;
-      const d = sel.damages.find(x => x.id === tid); if (!d) return;
-      try { const url = await Insp.imageToThumb(f); (d.photos ||= []).push({ id: Insp.uid(), url }); save(); }
-      catch (err) { alert(t('ins.photoFail', err?.message || err)); }
-    });
-    host.querySelectorAll('[data-del-dmgphoto]').forEach(b => b.addEventListener('click', (e) => {
-      e.stopPropagation();
-      const wrap = b.closest('.ins-dphoto'); if (!wrap) return;
-      const d = sel.damages.find(x => x.id === wrap.dataset.d); if (!d) return;
-      d.photos = (d.photos || []).filter(p => p.id !== wrap.dataset.p); save();
-    }));
-    host.querySelectorAll('.ins-dphoto').forEach(elp => elp.addEventListener('click', (e) => {
-      if (e.target.closest('.ins-px')) return;
-      const d = sel.damages.find(x => x.id === elp.dataset.d); const p = d && (d.photos || []).find(x => x.id === elp.dataset.p);
-      if (p) { const w = window.open('', '_blank'); if (w) w.document.write(`<img src="${safeUrl(p.url)}" style="max-width:100%">`); else alert(t('alert.popupBlocked')); }
-    }));
-  }
-
-  // Informe de inspección imprimible.
-  function inspectionReport(o, insp, score) {
-    const band = Insp.scoreBand(score);
-    const rows = insp.damages.map(d => `<tr><td>${d.damage_type}</td><td>${d.severity}</td><td>${d.damage_cause}</td><td>${d.extent || '—'}</td><td>${d.location || '—'}</td><td style="text-align:right">${Insp.scoreDamage(d).toFixed(0)}</td></tr>`).join('') || `<tr><td colspan="6" style="color:#15803d">${t('irep.noFindings')}</td></tr>`;
-    const tests = insp.tests.map(tt => `<tr><td>${Insp.classifyTest(tt.test_type).label}</td><td>${tt.test_type}</td><td>${tt.result_summary || '—'}</td><td>${tt.executed_at || '—'}</td></tr>`).join('') || `<tr><td colspan="4" style="color:#64748b">${t('irep.noTests')}</td></tr>`;
-    const wos = (insp.workOrders || []).map(w => `<tr><td>${w.title}</td><td>${w.assignee || '—'}</td><td>${w.priority}</td><td>${w.status}</td><td>${w.due || '—'}</td></tr>`).join('') || `<tr><td colspan="5" style="color:#64748b">${t('irep.noWos')}</td></tr>`;
-    const dmgPhotos = insp.damages.filter(d => (d.photos || []).length).map(d =>
-      `<div class="dphoto-grp"><div class="mut"><b>${d.damage_type}</b> · ${d.severity}${d.location ? ' · ' + d.location : ''}</div>
-        <div class="dphoto-row">${d.photos.map(p => `<img src="${p.url}" alt="${d.damage_type}">`).join('')}</div></div>`).join('');
-    const lc = getLang() === 'en' ? 'en-GB' : 'es-CL';
-    const html = `<!doctype html><html lang="${getLang()}"><meta charset="utf-8"><title>${t('irep.titleDoc')} — ${o.label}</title>
-      <style>body{font:14px/1.5 system-ui,sans-serif;margin:0;color:#1b2533}.wrap{max-width:820px;margin:0 auto;padding:0 32px 40px}
-      .hero{background:linear-gradient(120deg,#0e7490,#155e75);color:#fff;padding:24px 32px;margin-bottom:22px}.hero h1{margin:4px 0;font-size:21px}
-      h2{font-size:15px;border-bottom:2px solid #cbd5e1;padding-bottom:5px;margin:24px 0 10px}.mut{color:#64748b;font-size:12px}
-      table{border-collapse:collapse;width:100%;font-size:13px;margin-top:6px}th,td{border:1px solid #cbd5e1;padding:6px 9px;text-align:left}th{background:#f1f5f9}
-      .score{display:inline-block;font-size:30px;font-weight:800;padding:6px 16px;border-radius:10px;color:#fff;background:${band.cls === 'critica' ? '#dc2626' : band.cls === 'observacion' ? '#d97706' : '#16a34a'}}
-      .dphoto-grp{margin:10px 0}.dphoto-row{display:flex;flex-wrap:wrap;gap:7px;margin-top:4px}.dphoto-row img{width:170px;height:128px;object-fit:cover;border:1px solid #cbd5e1;border-radius:6px}</style>
-      <div class="hero"><div class="mut" style="color:#cfe9f1;letter-spacing:2px;text-transform:uppercase">${t('irep.kicker')}</div>
-        <h1>${t('irep.title')} — ${o.label}</h1><div style="opacity:.9;font-size:13px">${insp.date} · ${insp.inspector} · ${Insp.conditionLabel(insp.condition)}</div></div>
-      <div class="wrap">
-        <h2>${t('irep.hEval')}</h2>
-        <p><span class="score">${score.toFixed(0)}</span> <span class="mut">/100 · ${band.label} ${t('irep.evalSub')}</span></p>
-        <p>${insp.summary || `<span class="mut">${t('irep.noSummary')}</span>`}</p>
-        <h2>${t('irep.hFindings')} (${insp.damages.length})</h2>
-        <table><thead><tr><th>${t('irep.thType')}</th><th>${t('irep.thSev')}</th><th>${t('irep.thCause')}</th><th>${t('irep.thExtent')}</th><th>${t('irep.thLoc')}</th><th style="text-align:right">${t('irep.thScore')}</th></tr></thead><tbody>${rows}</tbody></table>
-        ${dmgPhotos ? `<h2>${t('irep.hPhotos')}</h2>${dmgPhotos}` : ''}
-        <h2>${t('irep.hTests')} (${insp.tests.length})</h2>
-        <table><thead><tr><th>${t('irep.thClass')}</th><th>${t('irep.thTest')}</th><th>${t('irep.thResult')}</th><th>${t('irep.thDate')}</th></tr></thead><tbody>${tests}</tbody></table>
-        <h2>${t('irep.hWos')} (${(insp.workOrders || []).length})</h2>
-        <table><thead><tr><th>${t('irep.thOrder')}</th><th>${t('irep.thAssignee')}</th><th>${t('irep.thPrio')}</th><th>${t('irep.thStatus')}</th><th>${t('irep.thDue')}</th></tr></thead><tbody>${wos}</tbody></table>
-        <p class="mut" style="margin-top:18px">${t('irep.nextLabel')}: <b>${insp.nextDate || '—'}</b> · ${t('rep.gen')} ${new Date().toLocaleString(lc)} · ReWind. ${t('irep.footTail')}</p>
-      </div></html>`;
-    openReportWindow(html, 'informe-inspeccion-rewind.html');
-  }
+  // Inspeccion (Operacion): renderInsp + helpers viven en workspaces/operacion.js
+  // (refactor B2). shm_mode importa renderInsp/initInspection y le inyecta el ctx.
 
   // Actualiza los números dinámicos del panel abierto (sólo toca lo que EXISTE en
   // la vista visible → seguro aunque Selección/SHM no estén montadas a la vez).
@@ -2145,31 +1834,21 @@ function buildDashboard(panel, fleet, actions) {
       if (row.classList.contains('alarm')) { dot.style.background = ''; dot.style.boxShadow = ''; }  // CSS maneja el rojo titilante
       else { dot.style.background = c; dot.style.boxShadow = `0 0 6px ${c}`; }
     }
-    // buffers de señal de la estructura enfocada
-    if (current && msg.waves[current.id]) {
-      for (const w of msg.waves[current.id]) {
-        (sigBuf[w.id] || (sigBuf[w.id] = [])).push(...w.samples);
-        const buf = sigBuf[w.id]; if (buf.length > 700) buf.splice(0, buf.length - 700);
-      }
-    }
-    // historial de f₁ para el seguimiento (pestaña Avanzado)
-    if (current && msg.summaries[current.id]) {
-      const h = (freqHist[current.id] || (freqHist[current.id] = []));
-      h.push(msg.summaries[current.id].f1); if (h.length > 160) h.shift();
-    }
+    // Estado SHM en vivo (señal + histórico de f₁) → workspaces/operacion.js (B2 paso 2)
+    feedSHM(msg);
     // Histórico de clasificación ML (muestreo ~1 s, todas las estructuras)
     const now = Date.now();
-    if (now - lastHistT > 1000) {
-      lastHistT = now;
+    if (now - Shm.lastHistT > 1000) {
+      Shm.lastHistT = now;
       for (const id in msg.summaries) {
         const s = msg.summaries[id];
         if (!window.shmReplaying) Hist.record(id, { t: now, f1: s.f1, rms: s.rms, wind: s.wind, tilt: s.tilt });   // R-34 (no grabar en replay)
         const cls = msg.summaries[id].cls || 0;
-        const h = (clsHist[id] || (clsHist[id] = []));
+        const h = (Shm.clsHist[id] || (Shm.clsHist[id] = []));
         const prev = h.length ? h[h.length - 1].cls : null;
         h.push({ t: now, cls }); if (h.length > 240) h.shift();
         if (prev !== null && prev !== cls) {
-          const ev = (clsEvents[id] || (clsEvents[id] = []));
+          const ev = (Shm.clsEvents[id] || (Shm.clsEvents[id] = []));
           ev.push({ t: now, from: prev, to: cls }); if (ev.length > 40) ev.shift();
         }
       }
@@ -2232,175 +1911,8 @@ function buildDashboard(panel, fleet, actions) {
   }
 
   // Dibujo de la señal en vivo desde los buffers.
-  function startSig() {
-    const draw = () => {
-      const cvs = el.querySelectorAll('#sig-wrap canvas.sig');
-      cvs.forEach(cv => {
-        const sid = cv.dataset.sid, buf = sigBuf[sid] || [];
-        const dpr = Math.min(devicePixelRatio, 2), w = cv.clientWidth, h = cv.clientHeight || 80;
-        cv.width = w * dpr; cv.height = h * dpr; const g = cv.getContext('2d'); g.scale(dpr, dpr);
-        g.clearRect(0, 0, w, h);
-        const fault = current?.sensors.find(s => s.id === sid)?.status === 'fault';
-        g.strokeStyle = fault ? '#ff3b3b' : '#2bff77'; g.lineWidth = 1.5; g.beginPath();
-        const n = Math.max(buf.length, 1), step = w / 700;
-        for (let i = 0; i < buf.length; i++) {
-          const x = i * step, y = h / 2 - buf[i] * h * 0.4;
-          i === 0 ? g.moveTo(x, y) : g.lineTo(x, y);
-        }
-        g.stroke();
-      });
-      sigRAF = requestAnimationFrame(draw);
-    };
-    draw();
-  }
-  function stopSig() { if (sigRAF) { cancelAnimationFrame(sigRAF); sigRAF = null; } stopWavePlay(); stopLive(); }
-  function stopLive() { if (liveStop) { try { liveStop(); } catch { /* */ } liveStop = null; } }
-
-  // Reproduce una ventana cruda (real) como osciloscopio en las canvas «en vivo»:
-  // recorre las muestras alimentando sigBuf → la traza se mueve. `sid` = sensor que
-  // capturó. Loopea; ~10× tiempo real para que se vea andando.
-  function stopWavePlay() { if (wavePlay) { cancelAnimationFrame(wavePlay.raf); wavePlay = null; } }
-  function playWave(ax, sid, fs) {
-    stopWavePlay();
-    if (!ax || !ax.length) return;
-    // Normaliza a ±1 por su pico: la aceleración real es chica (~0.02 m/s²) y la
-    // traza usa escala fija → si no, se vería casi plana. Es cualitativa (osciloscopio).
-    let norm = 1e-6; for (let i = 0; i < ax.length; i++) { const a = Math.abs(ax[i]); if (a > norm) norm = a; }
-    const sc = new Float32Array(ax.length); for (let i = 0; i < ax.length; i++) sc[i] = ax[i] / norm;
-    const winN = 700, step = Math.max(1, Math.round((fs || 150) / 6));   // ~10× tiempo real
-    let cur = 0;
-    const tick = () => {
-      cur += step; if (cur >= sc.length) cur = 0;
-      sigBuf[sid] = Array.from(sc.subarray(Math.max(0, cur - winN), cur));
-      wavePlay.raf = requestAnimationFrame(tick);
-    };
-    wavePlay = { sid, raf: requestAnimationFrame(tick) };
-    const st = [...el.querySelectorAll('#sig-wrap .row')].find(r => r.firstChild.textContent === sid)?.querySelector('.sig-st');
-    if (st) { st.textContent = '▶ ' + t('sig.realWin'); st.style.color = 'var(--accent)'; }
-  }
-
-  // ── Ventana capturada del SENSOR REAL (on-demand) ─────────────────────────────
-  // Baja el .npz de Storage, lo decodifica y pinta la serie temporal + su FFT.
-  // Es la señal REAL del sensor (no la simulada del worker) — cierra el on-demand.
-  function buildCapturedWave(host, o) {
-    const box = document.createElement('div'); box.className = 'sig-cap';
-    const canOp = document.body.classList.contains('cap-operate');
-    let lastWave = null;
-    box.innerHTML = `<div class="sig-cap-h">${t('sig.capTitle')}
-        <span class="sig-live" title="${esc(t('sig.liveTip'))}">○ ${t('sig.liveOff')}</span>
-        <span style="flex:1"></span>
-        <button class="cal-link sig-play" type="button" disabled>${t('sig.play')}</button>
-        <button class="cal-link sig-load" type="button">${t('sig.load')}</button>
-        ${canOp ? `<button class="cal-btn sig-cap-req" type="button">${t('sig.reqLive')}</button>` : ''}</div>
-      <div class="sig-cap-meta cal-mut">${t('sig.none')}</div>
-      <canvas class="sig-cap-wave"></canvas>
-      <div class="sig-cap-fftlab cal-mut" style="margin-top:6px"></div>
-      <canvas class="sig-cap-fft"></canvas>`;
-    host.appendChild(box);
-    const meta = box.querySelector('.sig-cap-meta');
-    const waveC = box.querySelector('.sig-cap-wave'), fftC = box.querySelector('.sig-cap-fft');
-    const fftLab = box.querySelector('.sig-cap-fftlab');
-    const playBtn = box.querySelector('.sig-play');
-    const liveEl = box.querySelector('.sig-live');
-
-    const draw = (res) => {
-      const a = res?.arrays; if (!a || !a.ax || !a.ax.length) { meta.textContent = res?.meta ? t('sig.noRaw') : t('sig.none'); return; }
-      const fs = a.fs || 150, ax = a.ax, n = ax.length;
-      const w = res.meta || {};
-      const when = w.ts ? new Date(w.ts).toLocaleString(getLang() === 'en' ? 'en-GB' : 'es-CL', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit', second: '2-digit' }) : '—';
-      const trig = w.meta?.trigger || w.extra?.trigger || '—';
-      meta.innerHTML = `${when} · ${(n / fs).toFixed(0)}s @ ${fs}Hz · <b>${esc(trig)}</b> · ${(n / 1000).toFixed(0)}k pts`;
-      // Serie temporal: envolvente min/max decimada al ancho del canvas.
-      drawWaveEnvelope(waveC, ax);
-      // FFT de la ventana completa (fs real del sensor).
-      const { mag, df } = fftMag(ax, fs);
-      const peak = drawCapFFT(fftC, mag, df);
-      fftLab.innerHTML = `${t('avz.fftPeak')}: f₁ ≈ <b>${peak ? peak.toFixed(3) : '—'} Hz</b>`;
-      // Reproduce la ventana REAL en las canvas «en vivo» de arriba (osciloscopio).
-      const sid = (o.sensors.find(s => s.id === w.sensor) || o.sensors[0])?.id;
-      lastWave = { ax, sid, fs };
-      playBtn.disabled = false;
-      if (sid) { playWave(ax, sid, fs); playBtn.textContent = t('sig.pause'); }
-    };
-    playBtn.addEventListener('click', () => {
-      if (wavePlay) { stopWavePlay(); playBtn.textContent = t('sig.play'); }
-      else if (lastWave?.sid) { playWave(lastWave.ax, lastWave.sid, lastWave.fs); playBtn.textContent = t('sig.pause'); }
-    });
-
-    const load = async (after) => {
-      meta.textContent = t('sig.loading');
-      try { const res = await latestWave(o.id, after); return res; }
-      catch { meta.textContent = t('sh.captureErr'); return null; }
-    };
-    box.querySelector('.sig-load').addEventListener('click', async () => { const r = await load(null); if (current?.id === o.id) draw(r); });
-
-    // On-demand EN VIVO: pide al sensor que TRANSMITA en tiempo real (kind 'live').
-    // El sensor abre su WS de salida y emite chunks → llegan por el canal de abajo.
-    const reqBtn = box.querySelector('.sig-cap-req');
-    if (reqBtn) reqBtn.addEventListener('click', async () => {
-      reqBtn.disabled = true; meta.textContent = t('sig.reqSent');
-      try { await requestCapture(o.id, 'live'); } catch { meta.textContent = t('sh.captureErr'); }
-      finally { setTimeout(() => { reqBtn.disabled = false; }, 2000); }
-    });
-
-    // ── Canal EN VIVO (Realtime Broadcast) — tiempo real de verdad ───────────────
-    // Suscrito mientras la pestaña Señal esté abierta. Cuando el sensor transmite
-    // (on-demand o anomalía), los chunks alimentan la traza de arriba → aceleración
-    // REAL en vivo (<1 s). Si no hay flujo, cae al replay de la última ventana.
-    let liveNorm = 0.02, liveActive = false;
-    stopLive();
-    liveStop = openLive(o.id, (chunk) => {
-      const ax = chunk?.ax; if (!ax || !ax.length) return;
-      const sid = (o.sensors.find(s => s.id === chunk.sensor) || o.sensors[0])?.id; if (!sid) return;
-      if (!liveActive) { liveActive = true; stopWavePlay(); playBtn.textContent = t('sig.play'); }   // el vivo manda sobre el replay
-      for (let i = 0; i < ax.length; i++) { const a = Math.abs(ax[i]); if (a > liveNorm) liveNorm = a; }
-      liveNorm *= 0.9995;   // el pico decae lento → autoescala
-      const buf = sigBuf[sid] || (sigBuf[sid] = []);
-      for (let i = 0; i < ax.length; i++) buf.push(ax[i] / liveNorm);
-      if (buf.length > 700) buf.splice(0, buf.length - 700);
-      meta.innerHTML = `<b style="color:var(--danger)">● ${t('sig.liveOn')}</b> · ${chunk.fs || 150}Hz · ${esc(chunk.trigger || 'live')} · ${esc(sid)}`;
-      const st = [...el.querySelectorAll('#sig-wrap .row')].find(r => r.firstChild.textContent === sid)?.querySelector('.sig-st');
-      if (st) { st.textContent = '● ' + t('sig.liveOn'); st.style.color = 'var(--danger)'; }
-    }, (state) => {
-      const on = state === 'live';
-      liveEl.textContent = (on ? '● ' : '○ ') + (on ? t('sig.liveOn') : t('sig.liveOff'));
-      liveEl.classList.toggle('on', on);
-      if (state === 'idle' && liveActive) liveActive = false;   // se cortó el flujo → habilita replay de nuevo
-    });
-
-    // Carga automática de la última ventana existente al abrir la pestaña (fallback
-    // cuando no hay transmisión en vivo).
-    load(null).then((r) => { if (current?.id === o.id && !liveActive) draw(r); });
-  }
-
-  function drawWaveEnvelope(cv, ax) {
-    const dpr = Math.min(devicePixelRatio, 2), w = cv.clientWidth || 300, h = cv.clientHeight || 90;
-    cv.width = w * dpr; cv.height = h * dpr; const g = cv.getContext('2d'); g.scale(dpr, dpr);
-    g.clearRect(0, 0, w, h);
-    let mx = 1e-9; for (let i = 0; i < ax.length; i++) { const v = Math.abs(ax[i]); if (v > mx) mx = v; }
-    g.strokeStyle = 'rgba(120,130,140,.35)'; g.beginPath(); g.moveTo(0, h / 2); g.lineTo(w, h / 2); g.stroke();
-    g.strokeStyle = '#2bff77'; g.lineWidth = 1; g.beginPath();
-    const buckets = Math.min(w, ax.length), per = ax.length / buckets;
-    for (let b = 0; b < buckets; b++) {
-      let lo = Infinity, hi = -Infinity; const s = Math.floor(b * per), e = Math.floor((b + 1) * per);
-      for (let i = s; i < e; i++) { if (ax[i] < lo) lo = ax[i]; if (ax[i] > hi) hi = ax[i]; }
-      const x = b, yLo = h / 2 - (lo / mx) * h * 0.45, yHi = h / 2 - (hi / mx) * h * 0.45;
-      g.moveTo(x, yLo); g.lineTo(x, yHi);
-    }
-    g.stroke();
-  }
-
-  function drawCapFFT(cv, mag, df) {
-    const dpr = Math.min(devicePixelRatio, 2), w = cv.clientWidth || 300, h = cv.clientHeight || 90;
-    cv.width = w * dpr; cv.height = h * dpr; const g = cv.getContext('2d'); g.scale(dpr, dpr);
-    g.clearRect(0, 0, w, h);
-    const fMax = 6, bins = Math.max(1, Math.min(mag.length, Math.floor(fMax / (df || 1))));
-    let mxv = 1e-9, peak = 0; for (let i = 1; i < bins; i++) if (mag[i] > mxv) { mxv = mag[i]; peak = i; }
-    g.fillStyle = '#38bdf8';
-    for (let i = 1; i < bins; i++) { const x = (i / bins) * w, bh = (mag[i] / mxv) * (h - 12); g.fillRect(x, h - bh, Math.max(1, w / bins - 1), bh); }
-    g.fillStyle = '#2dd4bf'; g.fillRect((peak / bins) * w - 1, 0, 2, h);
-    return peak * df;
-  }
+  // Señal/captura (osciloscopio en vivo) → workspaces/operacion.js (B2 paso 3):
+  // startSig · stopSig · buildCapturedWave (importados). Los internos viven allá.
 
   // Pestaña Avanzado: espectro FFT + seguimiento de f₁.
   function startAvz() {
@@ -2410,7 +1922,7 @@ function buildDashboard(panel, fleet, actions) {
       if (o && fc) {
         // FFT del acelerómetro superior (o el primero disponible)
         const sid = (o.sensors.find(s => /top|s1/.test(s.id)) || o.sensors[0])?.id;
-        const { mag, df } = fftMag(sigBuf[sid] || []);
+        const { mag, df } = fftMag(Shm.sigBuf[sid] || []);
         const dpr = Math.min(devicePixelRatio, 2), w = fc.clientWidth, h = fc.clientHeight || 110;
         fc.width = w * dpr; fc.height = h * dpr; const g = fc.getContext('2d'); g.scale(dpr, dpr);
         g.clearRect(0, 0, w, h);
@@ -2428,7 +1940,7 @@ function buildDashboard(panel, fleet, actions) {
         const pk = el.querySelector('#fft-peak'); if (pk) pk.textContent = `${(peak * df).toFixed(3)} Hz`;
       }
       if (o && qc) {
-        const hist = freqHist[o.id] || [], base = window.shmTwin?.[o.type];
+        const hist = Shm.freqHist[o.id] || [], base = window.shmTwin?.[o.type];
         const dpr = Math.min(devicePixelRatio, 2), w = qc.clientWidth, h = qc.clientHeight || 80;
         qc.width = w * dpr; qc.height = h * dpr; const g = qc.getContext('2d'); g.scale(dpr, dpr);
         g.clearRect(0, 0, w, h);
@@ -2445,24 +1957,24 @@ function buildDashboard(panel, fleet, actions) {
       // Espectrograma (frecuencia–tiempo) del acelerómetro superior
       const sc = el.querySelector('#spec-canvas');
       if (o && sc) {
-        if (!specOff) { specOff = document.createElement('canvas'); specOff.width = SPEC_W; specOff.height = SPEC_BINS; specOff.getContext('2d').fillRect(0, 0, SPEC_W, SPEC_BINS); }
+        if (!Shm.specOff) { Shm.specOff = document.createElement('canvas'); Shm.specOff.width = Shm.SPEC_W; Shm.specOff.height = Shm.SPEC_BINS; Shm.specOff.getContext('2d').fillRect(0, 0, Shm.SPEC_W, Shm.SPEC_BINS); }
         const now = performance.now();
-        if (now - specLast > 110) {
-          specLast = now;
+        if (now - Shm.specLast > 110) {
+          Shm.specLast = now;
           const sid = (o.sensors.find(s => /top|s1/.test(s.id)) || o.sensors[0])?.id;
-          const { mag, df } = fftMag(sigBuf[sid] || []);
-          const og = specOff.getContext('2d');
-          og.drawImage(specOff, -1, 0);                 // desplaza a la izquierda
+          const { mag, df } = fftMag(Shm.sigBuf[sid] || []);
+          const og = Shm.specOff.getContext('2d');
+          og.drawImage(Shm.specOff, -1, 0);                 // desplaza a la izquierda
           let mx = 1e-9; for (let i = 1; i < mag.length; i++) if (mag[i] > mx) mx = mag[i];
-          for (let y = 0; y < SPEC_BINS; y++) {
-            const bi = Math.round(((y / SPEC_BINS) * SPEC_FMAX) / (df || 1));
+          for (let y = 0; y < Shm.SPEC_BINS; y++) {
+            const bi = Math.round(((y / Shm.SPEC_BINS) * Shm.SPEC_FMAX) / (df || 1));
             og.fillStyle = heat((mag[bi] || 0) / mx);
-            og.fillRect(SPEC_W - 1, SPEC_BINS - 1 - y, 1, 1);   // baja frecuencia abajo
+            og.fillRect(Shm.SPEC_W - 1, Shm.SPEC_BINS - 1 - y, 1, 1);   // baja frecuencia abajo
           }
         }
         const dpr = Math.min(devicePixelRatio, 2), w = sc.clientWidth, h = sc.clientHeight || 90;
         sc.width = w * dpr; sc.height = h * dpr; const g = sc.getContext('2d'); g.scale(dpr, dpr);
-        g.imageSmoothingEnabled = false; g.clearRect(0, 0, w, h); g.drawImage(specOff, 0, 0, w, h);
+        g.imageSmoothingEnabled = false; g.clearRect(0, 0, w, h); g.drawImage(Shm.specOff, 0, 0, w, h);
       }
 
       // Diagramas N/V/M del fuste (turbina)
@@ -2473,7 +1985,7 @@ function buildDashboard(panel, fleet, actions) {
         const base = prof[0] || {};
         const info = $('#nvm-info'); if (info) info.textContent = `${(base.N || 0).toFixed(0)} kN · ${(base.V || 0).toFixed(0)} kN · ${(base.M || 0).toFixed(0)} kN·m`;
       }
-      sigRAF = requestAnimationFrame(draw);
+      Shm.sigRAF = requestAnimationFrame(draw);
     };
     draw();
   }
@@ -2483,7 +1995,7 @@ function buildDashboard(panel, fleet, actions) {
     const o = current; if (!o) return;
     const cv = el.querySelector('#cls-band');
     if (cv) {
-      const hist = clsHist[o.id] || [];
+      const hist = Shm.clsHist[o.id] || [];
       const dpr = Math.min(devicePixelRatio, 2), w = cv.clientWidth, h = cv.clientHeight || 34;
       cv.width = w * dpr; cv.height = h * dpr; const g = cv.getContext('2d'); g.scale(dpr, dpr);
       g.clearRect(0, 0, w, h);
@@ -2494,7 +2006,7 @@ function buildDashboard(panel, fleet, actions) {
     }
     const evEl = el.querySelector('#cls-events');
     if (evEl) {
-      const events = (clsEvents[o.id] || []).slice(-8).reverse();
+      const events = (Shm.clsEvents[o.id] || []).slice(-8).reverse();
       evEl.innerHTML = events.length ? events.map(e => {
         const tm = new Date(e.t).toLocaleTimeString('es-CL');
         return `<div class="row" style="font-size:12px"><span>${tm}</span><b><span style="color:${CLS_COL[e.from]}">${CLS[e.from]}</span> → <span style="color:${CLS_COL[e.to]}">${CLS[e.to]}</span></b></div>`;
@@ -2711,7 +2223,7 @@ function buildDashboard(panel, fleet, actions) {
       const d = window.shmData?.get(o.id) || {}; const sid = topSid();
       const cls = d.cls || 0;
       const sensRows = (d.sensors || o.sensors).map((se, i) => `<tr><td>${se.id}</td><td>${t('brep.sMems')}</td><td>${o.type === 'hv' ? t('brep.sNode', i + 1) : (se.id.includes('mid') ? t('brep.sMid') : t('brep.sTop'))}</td><td>${se.status === 'fault' ? `<span class="warn">${t('brep.sFault')}</span>` : t('brep.sOp')}</td><td>${se.rms != null ? (se.rms * 1000).toFixed(1) + ' mg' : '—'}</td></tr>`).join('');
-      const evRows = (clsEvents[o.id] || []).slice(-12).reverse().map(e => `<tr><td>${fmtT(e.t)}</td><td>${t('cls.' + e.from)} → ${e.to >= 3 ? `<span class="warn">${t('cls.' + e.to)}</span>` : t('cls.' + e.to)}</td></tr>`).join('') || `<tr><td colspan="2">${t('brep.noChanges')}</td></tr>`;
+      const evRows = (Shm.clsEvents[o.id] || []).slice(-12).reverse().map(e => `<tr><td>${fmtT(e.t)}</td><td>${t('cls.' + e.from)} → ${e.to >= 3 ? `<span class="warn">${t('cls.' + e.to)}</span>` : t('cls.' + e.to)}</td></tr>`).join('') || `<tr><td colspan="2">${t('brep.noChanges')}</td></tr>`;
       const mRows = (actions.log || []).filter(m => m.id === o.id).slice(-12).reverse().map(m => `<tr><td>${fmtT(m.t)}</td><td>${esc(m.action)}</td></tr>`).join('') || `<tr><td colspan="2">${t('brep.noMaint')}</td></tr>`;
       // Buffer sintético para el gateway (nodo de enlace en la base de la torre).
       const gwBuf = []; for (let i = 0; i < 300; i++) gwBuf.push(0.22 * Math.sin(2 * Math.PI * 0.283 * i / FS) + 0.08 * (Math.random() - 0.5));
@@ -2720,7 +2232,7 @@ function buildDashboard(panel, fleet, actions) {
         <div class="plot"><div class="cap">${t('brep.vibSignal')}</div><img src="${imgSignal(buf)}"></div>
         <div class="vib2"><div class="plot"><div class="cap">FFT</div><img src="${imgFFT(buf)}"></div><div class="plot"><div class="cap">PSD</div><img src="${imgPSD(buf)}"></div></div>
         <div class="plot"><div class="cap">${t('brep.vibWavelet')}</div><img src="${imgWavelet(buf)}"></div>`;
-      const vibSensores = (o.sensors).map(se => vibBlock(t('brep.sensorLabel', se.id), sigBuf[se.id], se.status === 'fault')).join('');
+      const vibSensores = (o.sensors).map(se => vibBlock(t('brep.sensorLabel', se.id), Shm.sigBuf[se.id], se.status === 'fault')).join('');
       const vibGateway = o.type === 'turbine' ? vibBlock(t('brep.gateway'), gwBuf, false) : '';
       // Estado estructural: deformada a partir de lo que MIDEN los sensores (no de una carga).
       // Desplazamiento ≈ aceleración_RMS / (2π·f₁)²  en cada sensor (a su altura) + base = 0.
@@ -2805,7 +2317,7 @@ function buildDashboard(panel, fleet, actions) {
     let compilado = '';
     if (!o) {
       const allEv = [];
-      for (const id in clsEvents) for (const e of clsEvents[id]) allEv.push({ ...e, id });
+      for (const id in Shm.clsEvents) for (const e of Shm.clsEvents[id]) allEv.push({ ...e, id });
       allEv.sort((a, b) => b.t - a.t);
       const evRows = allEv.slice(0, 20).map(e => `<tr><td>${fmtT(e.t)}</td><td>${esc(fleet.getStructure(e.id)?.label || e.id)}</td><td>${t('cls.' + e.from)} → ${e.to >= 3 ? `<span class="warn">${t('cls.' + e.to)}</span>` : t('cls.' + e.to)}</td></tr>`).join('') || `<tr><td colspan="3">${t('brep.noChanges')}</td></tr>`;
       const mRows = (actions.log || []).slice(-20).reverse().map(m => `<tr><td>${fmtT(m.t)}</td><td>${esc(fleet.getStructure(m.id)?.label || m.id)}</td><td>${esc(m.action)}</td></tr>`).join('') || `<tr><td colspan="3">${t('brep.noActions')}</td></tr>`;

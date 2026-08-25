@@ -1,0 +1,57 @@
+<!DOCTYPE html>
+<html lang="es" data-theme="light" data-app="proyecto">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ReWind Proyecto · Siting y sombra</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cline x1='12' y1='22' x2='12' y2='12' stroke='%2338bdf8' stroke-width='2' stroke-linecap='round'/%3E%3Cg stroke='%2338bdf8' stroke-width='2' stroke-linecap='round'%3E%3Cline x1='12' y1='11' x2='12' y2='3'/%3E%3Cline x1='12' y1='11' x2='19' y2='15'/%3E%3Cline x1='12' y1='11' x2='5' y2='15'/%3E%3C/g%3E%3Ccircle cx='12' cy='11' r='1.7' fill='%232dd4bf'/%3E%3C/svg%3E">
+  <!-- PWA -->
+  <link rel="manifest" href="manifest-proyecto.webmanifest">
+  <meta name="theme-color" content="#0b1018">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="ReWind Proyecto">
+  <link rel="apple-touch-icon" href="icons/icon-192.png">
+  <link rel="icon" type="image/svg+xml" href="icons/icon-proyecto.svg">
+  <!-- Captura temprana del evento de instalación PWA (puede dispararse antes
+       de que el resto de scripts se ejecute). -->
+  <script>
+    // Tema: claro por defecto; aplica el guardado antes de pintar (sin flash).
+    try { document.documentElement.dataset.theme = localStorage.getItem('rewind_theme') || localStorage.getItem('portico_theme') || 'light'; } catch (e) {}
+    window.__pwaInstall = null;
+    window.addEventListener('beforeinstallprompt', function (e) {
+      e.preventDefault();
+      window.__pwaInstall = e;
+      window.dispatchEvent(new Event('pwa-installable'));
+    });
+    window.addEventListener('appinstalled', function () {
+      window.__pwaInstall = null;
+      window.dispatchEvent(new Event('pwa-installed'));
+    });
+  </script>
+  <link rel="stylesheet" href="lib/leaflet/leaflet.css?v=333">
+  <link rel="stylesheet" href="style.css?v=333">
+  <link rel="stylesheet" href="ui-v2.css?v=333">
+  <link rel="stylesheet" href="shm.css?v=333">
+  <script type="importmap">
+  {
+    "imports": {
+      "three": "./lib/three/three.module.js",
+      "three/addons/": "./lib/three/addons/"
+    }
+  }
+  </script>
+</head>
+<body>
+<!-- Frente C (dedup): el shell compartido (menubar, árbol, viewport, panel,
+     statusbar, portada, tooltip) se inyecta desde core/shell_dom.js. Esta entrada
+     solo declara el head per-app + las libs + el orquestador. -->
+<script src="js/core/shell_dom.js?v=333"></script>
+<!-- numeric.js (gemelo digital) + Leaflet (mapa 2D): globales antes de los módulos -->
+<script src="lib/numeric.js"></script>
+<script src="lib/leaflet/leaflet.js?v=333"></script>
+<!-- ReWind: se auto-bootea sobre el shell inyectado -->
+<script type="module" src="js/shm/shm_mode.js?v=333"></script>
+</body>
+</html>

@@ -9,7 +9,7 @@
 // Al subir la versión de la app, suba también CACHE_VERSION para forzar una
 // limpieza completa de la caché antigua en la próxima visita en línea.
 // ──────────────────────────────────────────────────────────────────────────────
-const CACHE_VERSION = 'v287';
+const CACHE_VERSION = 'v290';
 const CACHE = `rewind-${CACHE_VERSION}`;
 
 // Núcleo mínimo para que la app arranque aunque sea la primera vez sin red.
@@ -19,18 +19,29 @@ const CACHE = `rewind-${CACHE_VERSION}`;
 const SHELL = [
   './',
   './index.html',
+  './elegir.html',
+  './proyecto.html',
+  './obra.html',
+  './operacion.html',
   './app.html',
   './manifest.webmanifest',
-  './style.css?v=332',
-  './ui-v2.css?v=332',
-  './shm.css?v=332',
-  './js/shm/shm_mode.js?v=332',
+  './manifest-proyecto.webmanifest',
+  './manifest-obra.webmanifest',
+  './manifest-operacion.webmanifest',
+  './style.css?v=333',
+  './ui-v2.css?v=333',
+  './shm.css?v=333',
+  './js/core/shell_dom.js?v=333',
+  './js/shm/shm_mode.js?v=333',
   './lib/numeric.js',
-  './lib/leaflet/leaflet.js?v=332',
-  './lib/leaflet/leaflet.css?v=332',
+  './lib/leaflet/leaflet.js?v=333',
+  './lib/leaflet/leaflet.css?v=333',
   './icons/icon.svg',
   './icons/icon-192.png',
   './icons/icon-512.png',
+  './icons/icon-proyecto.svg',
+  './icons/icon-obra.svg',
+  './icons/icon-operacion.svg',
 ];
 
 self.addEventListener('install', (e) => {
@@ -68,11 +79,16 @@ self.addEventListener('fetch', (e) => {
       // Sin red: servir desde caché
       const cached = await caches.match(req);
       if (cached) return cached;
-      // Para navegaciones: app.html → shell de la app; el resto → la landing.
+      // Para navegaciones (Frente C, 3 apps): cada módulo cae en SU propio shell;
+      // app.html/elegir.html → el chooser; el resto → la landing.
       if (req.mode === 'navigate') {
-        const isApp = url.pathname.endsWith('/app.html');
-        const shell = await caches.match(isApp ? './app.html' : './index.html');
-        if (shell) return shell;
+        const p = url.pathname;
+        let shell = './index.html';
+        const m = p.match(/\/(proyecto|obra|operacion)\.html$/);
+        if (m) shell = './' + m[1] + '.html';
+        else if (/\/(app|elegir)\.html$/.test(p)) shell = './elegir.html';
+        const cached = await caches.match(shell) || await caches.match('./index.html');
+        if (cached) return cached;
       }
       return new Response('Sin conexión y sin copia en caché.', {
         status: 503, statusText: 'Offline',
