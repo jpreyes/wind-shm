@@ -19,6 +19,17 @@
   a{text-decoration:none;color:inherit;}
   ::selection{background:#2dd4bf;color:#04070b;}
   ::placeholder{color:#7f9a93;opacity:1;}
+  html{scroll-behavior:smooth;}
+  /* Menú «Entrar» — se despliega desde los botones de la landing (elige módulo). */
+  .rw-trigger{cursor:pointer; font:inherit;}
+  #rw-menu{position:fixed; display:none; z-index:200; min-width:250px; background:#fffdf8; border:1px solid #e0dccf; border-radius:14px; box-shadow:0 20px 50px -12px rgba(16,46,43,.4); padding:7px;}
+  #rw-menu a{display:flex; align-items:center; gap:12px; padding:11px 12px; border-radius:10px; color:#102e2b;}
+  #rw-menu a:hover, #rw-menu a:focus{background:#f1efe7; outline:none;}
+  #rw-menu .dot{width:10px; height:10px; border-radius:50%; flex:none;}
+  #rw-menu .mt{font-family:'Schibsted Grotesk',sans-serif; font-weight:600; font-size:15px;}
+  #rw-menu .ms{font-family:'IBM Plex Mono',monospace; font-size:10.5px; color:#7a857f; letter-spacing:.02em;}
+  #rw-menu .car{margin-left:auto; color:#9aa29c;}
+  #rw-denied{position:fixed; left:50%; top:18px; transform:translateX(-50%); display:none; z-index:210; background:#102e2b; color:#eef0e9; border:1px solid #6fd6c6; border-radius:12px; padding:12px 18px; font-size:14px; box-shadow:0 14px 40px rgba(16,46,43,.4); max-width:90vw;}
 </style>
 </head>
 <body style="margin:0; background:#f4f1ea; color:#102e2b; font-family:'Hanken Grotesk',system-ui,sans-serif;">
@@ -30,10 +41,10 @@
         <span style="font-family:'IBM Plex Mono',monospace; font-size:10.5px; letter-spacing:.12em; color:#15807a;">SHM · EÓLICA</span>
       </div>
       <div style="display:flex; align-items:center; gap:30px; font-size:14px; color:#41524e;">
-        <a href="elegir.html">Plataforma</a>
-        <a href="elegir.html">Capacidades</a>
-        <a href="elegir.html">Camán I</a>
-        <a href="elegir.html" style="border:1px solid #102e2b; padding:9px 17px; border-radius:999px; color:#102e2b; font-weight:500;">Ver la demo</a>
+        <a href="#capacidades">Plataforma</a>
+        <a href="#capacidades">Capacidades</a>
+        <a href="#showcase">Camán I</a>
+        <button type="button" class="rw-trigger" data-rw-open aria-haspopup="true" aria-expanded="false" style="border:1px solid #102e2b; padding:9px 17px; border-radius:999px; color:#102e2b; font-weight:500; background:transparent; font-size:14px;">Ver la demo ▾</button>
       </div>
     </header>
 
@@ -48,8 +59,8 @@
           ReWind pone un gemelo digital en cada aerogenerador y reúne tu parque entero en una flota viva en 3D. Los sensores miden; la física hace el resto.
         </p>
         <div style="display:flex; gap:14px; align-items:center; flex-wrap:wrap;">
-          <a href="elegir.html" style="display:inline-flex; align-items:center; gap:8px; background:#102e2b; color:#f4f1ea; padding:15px 26px; border-radius:999px; font-weight:500; font-size:15px;">Conoce la plataforma →</a>
-          <a href="elegir.html" style="display:inline-flex; align-items:center; gap:8px; color:#102e2b; padding:15px 18px; font-weight:500; font-size:15px; border-bottom:1px solid #102e2b;">Ver el parque Camán I</a>
+          <button type="button" class="rw-trigger" data-rw-open aria-haspopup="true" aria-expanded="false" style="display:inline-flex; align-items:center; gap:8px; background:#102e2b; color:#f4f1ea; padding:15px 26px; border-radius:999px; font-weight:500; font-size:15px; border:none;">Entrar a ReWind ▾</button>
+          <a href="#showcase" style="display:inline-flex; align-items:center; gap:8px; color:#102e2b; padding:15px 18px; font-weight:500; font-size:15px; border-bottom:1px solid #102e2b;">Ver el parque Camán I</a>
         </div>
       </div>
       <div>
@@ -63,7 +74,7 @@
     </div>
 
     <!-- product showcase -->
-    <div style="max-width:1140px; margin:0 auto; padding:34px 44px 10px;">
+    <div id="showcase" style="max-width:1140px; margin:0 auto; padding:34px 44px 10px; scroll-margin-top:24px;">
       <div style="border:1px solid rgba(16,46,43,.16); border-radius:16px; overflow:hidden; background:#fff; box-shadow:0 44px 90px -46px rgba(16,46,43,.55);">
         <div style="display:flex; align-items:center; gap:9px; padding:13px 16px; border-bottom:1px solid rgba(16,46,43,.1); background:#f4f1ea;">
           <span style="width:11px; height:11px; border-radius:50%; background:#d9663f;"></span>
@@ -253,15 +264,60 @@
         <div style="font-size:13.5px; line-height:1.55; color:#52615c; max-width:360px;">Monitoreo de salud estructural de parques eólicos. Pensado y construido en Valdivia, Chile.</div>
       </div>
       <div style="display:flex; flex-direction:column; align-items:flex-end; gap:12px;">
-        <a href="elegir.html" style="display:inline-flex; align-items:center; gap:8px; background:#15807a; color:#fff; padding:14px 24px; border-radius:999px; font-weight:600; font-size:15px;">Ver la demo →</a>
+        <button type="button" class="rw-trigger" data-rw-open aria-haspopup="true" aria-expanded="false" style="display:inline-flex; align-items:center; gap:8px; background:#15807a; color:#fff; padding:14px 24px; border-radius:999px; font-weight:600; font-size:15px; border:none;">Ver la demo ▾</button>
         <span style="font-family:'IBM Plex Mono',monospace; font-size:11.5px; color:#7a857f;">Contacto · Dr. Juan Patricio Reyes C.</span>
       </div>
     </footer>
 
   </section>
 
+  <!-- Menú «Entrar» — desplegado desde los botones de la landing; cada ítem entra
+       directo a su módulo (sin página de elección intermedia). -->
+  <div id="rw-menu" role="menu" aria-label="Elegí un módulo">
+    <a role="menuitem" href="proyecto.html?demo"><span class="dot" style="background:#c8871a;"></span><span><span class="mt" style="color:#a06d12;">Proyecto</span><br><span class="ms">siting · sombra · viento</span></span><span class="car">→</span></a>
+    <a role="menuitem" href="obra.html?demo"><span class="dot" style="background:#d95f18;"></span><span><span class="mt" style="color:#c2510f;">Obra</span><br><span class="ms">avance 4D · calidad</span></span><span class="car">→</span></a>
+    <a role="menuitem" href="operacion.html?demo"><span class="dot" style="background:#12889a;"></span><span><span class="mt" style="color:#0e7280;">Operación</span><br><span class="ms">SHM en vivo · inspección</span></span><span class="car">→</span></a>
+  </div>
+  <div id="rw-denied" role="status"></div>
+
 <script>
 (function(){var f=document.getElementById("demo-form");if(!f)return;f.addEventListener("submit",function(){setTimeout(function(){f.style.display="none";var t=document.getElementById("demo-thanks");if(t)t.style.display="block";},500);});})();
+
+// Menú «Entrar»: se abre bajo el botón clickeado; cierra al clic afuera / Esc / scroll.
+(function(){
+  var menu=document.getElementById("rw-menu"); if(!menu) return;
+  var cur=null;
+  function place(btn){
+    var r=btn.getBoundingClientRect();
+    menu.style.display="block";
+    var left=r.left; if(left+menu.offsetWidth>window.innerWidth-12) left=window.innerWidth-menu.offsetWidth-12;
+    if(left<12) left=12;
+    menu.style.left=left+"px"; menu.style.top=(r.bottom+8)+"px";
+  }
+  function open(btn){ cur=btn; place(btn); btn.setAttribute("aria-expanded","true"); var a=menu.querySelector("[role=menuitem]"); if(a) a.focus(); }
+  function close(){ if(!cur) return; menu.style.display="none"; cur.setAttribute("aria-expanded","false"); cur=null; }
+  document.querySelectorAll("[data-rw-open]").forEach(function(b){
+    b.addEventListener("click",function(e){ e.preventDefault(); e.stopPropagation(); if(cur===b) close(); else { close(); open(b); } });
+  });
+  document.addEventListener("click",function(e){ if(cur && !menu.contains(e.target)) close(); });
+  document.addEventListener("keydown",function(e){ if(e.key==="Escape") close(); });
+  window.addEventListener("scroll",close,{passive:true});
+  window.addEventListener("resize",close);
+})();
+
+// ?denied=<ws>: una app rebotó por rol; avisamos en la landing y abrimos el menú.
+(function(){
+  try{
+    var d=new URLSearchParams(location.search).get("denied");
+    var L={proyecto:"Proyecto",obra:"Obra",operacion:"Operación"};
+    if(d && L[d]){
+      var box=document.getElementById("rw-denied");
+      box.textContent="Tu rol no tiene acceso al módulo "+L[d]+". Elegí uno habilitado.";
+      box.style.display="block";
+      setTimeout(function(){ box.style.display="none"; },6000);
+    }
+  }catch(e){}
+})();
 </script>
 </body>
 </html>

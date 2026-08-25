@@ -7,14 +7,14 @@
 // shell (refrescar rollup, abrir informe) se inyectan con initInspection(ctx).
 // (renderSHM/senal/live se mudaran en un slice posterior.)
 // ---------------------------------------------------------------------------
-import * as Insp from '../shm/inspection.js?v=333';
-import * as Selection from '../core/selection.js?v=333';
-import { Shm } from '../core/shm_state.js?v=333';
-import { t, getLang } from '../core/i18n.js?v=333';
-import { esc, safeUrl } from '../core/util.js?v=333';
-import { fftMag } from '../core/dsp.js?v=333';
-import { latestWave, requestCapture } from '../core/backend_sync.js?v=333';
-import { openLive } from '../core/live_stream.js?v=333';
+import * as Insp from '../shm/inspection.js?v=334';
+import * as Selection from '../core/selection.js?v=334';
+import { Shm } from '../core/shm_state.js?v=334';
+import { t, getLang } from '../core/i18n.js?v=334';
+import { esc, safeUrl } from '../core/util.js?v=334';
+import { fftMag } from '../core/dsp.js?v=334';
+import { latestWave, requestCapture } from '../core/backend_sync.js?v=334';
+import { openLive } from '../core/live_stream.js?v=334';
 
 // ── Alimentación del estado SHM en vivo (paso 2 de B2: partir onTick) ──────────
 // Por cada tick, actualiza los buffers de señal + el histórico de f₁ de la torre

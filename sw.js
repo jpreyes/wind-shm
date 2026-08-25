@@ -9,7 +9,7 @@
 // Al subir la versión de la app, suba también CACHE_VERSION para forzar una
 // limpieza completa de la caché antigua en la próxima visita en línea.
 // ──────────────────────────────────────────────────────────────────────────────
-const CACHE_VERSION = 'v290';
+const CACHE_VERSION = 'v291';
 const CACHE = `rewind-${CACHE_VERSION}`;
 
 // Núcleo mínimo para que la app arranque aunque sea la primera vez sin red.
@@ -19,7 +19,6 @@ const CACHE = `rewind-${CACHE_VERSION}`;
 const SHELL = [
   './',
   './index.html',
-  './elegir.html',
   './proyecto.html',
   './obra.html',
   './operacion.html',
@@ -28,14 +27,14 @@ const SHELL = [
   './manifest-proyecto.webmanifest',
   './manifest-obra.webmanifest',
   './manifest-operacion.webmanifest',
-  './style.css?v=333',
-  './ui-v2.css?v=333',
-  './shm.css?v=333',
-  './js/core/shell_dom.js?v=333',
-  './js/shm/shm_mode.js?v=333',
+  './style.css?v=334',
+  './ui-v2.css?v=334',
+  './shm.css?v=334',
+  './js/core/shell_dom.js?v=334',
+  './js/shm/shm_mode.js?v=334',
   './lib/numeric.js',
-  './lib/leaflet/leaflet.js?v=333',
-  './lib/leaflet/leaflet.css?v=333',
+  './lib/leaflet/leaflet.js?v=334',
+  './lib/leaflet/leaflet.css?v=334',
   './icons/icon.svg',
   './icons/icon-192.png',
   './icons/icon-512.png',
@@ -80,13 +79,12 @@ self.addEventListener('fetch', (e) => {
       const cached = await caches.match(req);
       if (cached) return cached;
       // Para navegaciones (Frente C, 3 apps): cada módulo cae en SU propio shell;
-      // app.html/elegir.html → el chooser; el resto → la landing.
+      // el resto (landing, app.html→redirect) → la landing.
       if (req.mode === 'navigate') {
         const p = url.pathname;
         let shell = './index.html';
         const m = p.match(/\/(proyecto|obra|operacion)\.html$/);
         if (m) shell = './' + m[1] + '.html';
-        else if (/\/(app|elegir)\.html$/.test(p)) shell = './elegir.html';
         const cached = await caches.match(shell) || await caches.match('./index.html');
         if (cached) return cached;
       }

@@ -6,9 +6,9 @@
 // (acumulado plan vs real por mes), % por componente y ranking de torres atrasadas.
 // Render en DOM/SVG (verificable) + informe imprimible. Módulo de presentación.
 // ─────────────────────────────────────────────────────────────────────────────
-import { enrichStages, TURBINE_COMPONENTS } from '../core/parks_data_caman.js?v=333';
-import * as CTwin from './construction_twin.js?v=333';
-import { t, getLang } from '../core/i18n.js?v=333';
+import { enrichStages, TURBINE_COMPONENTS } from '../core/parks_data_caman.js?v=334';
+import * as CTwin from './construction_twin.js?v=334';
+import { t, getLang } from '../core/i18n.js?v=334';
 
 const DAY = 864e5;
 const fmtPct = (x) => `${Math.round(x * 100)}%`;

@@ -7,8 +7,8 @@
 // etapa, recalcula el `built` de la torre, lo aplica al 3D y avisa a shm_mode para
 // refrescar el avance del parque + el mapa. `current` = torre seleccionada (o null).
 // ─────────────────────────────────────────────────────────────────────────────
-import { renderAvance } from '../shm/avance_dashboard.js?v=333';
-import { builtFromStages } from '../core/parks_data_caman.js?v=333';
+import { renderAvance } from '../shm/avance_dashboard.js?v=334';
+import { builtFromStages } from '../core/parks_data_caman.js?v=334';
 
 export function renderObra(host, fleet, current, onProgress) {
   if (!host) return;
