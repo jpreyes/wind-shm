@@ -9,7 +9,7 @@
 // Al subir la versión de la app, suba también CACHE_VERSION para forzar una
 // limpieza completa de la caché antigua en la próxima visita en línea.
 // ──────────────────────────────────────────────────────────────────────────────
-const CACHE_VERSION = 'v288';
+const CACHE_VERSION = 'v289';
 const CACHE = `rewind-${CACHE_VERSION}`;
 
 // Núcleo mínimo para que la app arranque aunque sea la primera vez sin red.
@@ -25,6 +25,9 @@ const SHELL = [
   './operacion.html',
   './app.html',
   './manifest.webmanifest',
+  './manifest-proyecto.webmanifest',
+  './manifest-obra.webmanifest',
+  './manifest-operacion.webmanifest',
   './style.css?v=333',
   './ui-v2.css?v=333',
   './shm.css?v=333',
@@ -35,6 +38,9 @@ const SHELL = [
   './icons/icon.svg',
   './icons/icon-192.png',
   './icons/icon-512.png',
+  './icons/icon-proyecto.svg',
+  './icons/icon-obra.svg',
+  './icons/icon-operacion.svg',
 ];
 
 self.addEventListener('install', (e) => {
