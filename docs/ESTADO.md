@@ -1,7 +1,9 @@
 # ReWind — Estado actual / Handoff de sesión
 
 > Documento vivo para **retomar el trabajo en otra sesión** sin perder contexto.
-> Última actualización: **2026-07-11** · versión desplegada: **v323** (GitHub Pages).
+> Última actualización: **2026-08-25** · versión desplegada (main): **v332** (GitHub Pages).
+> **En curso (rama `refactor/workspaces-b2`, NO mergeada):** Frente C — separar
+> ReWind en **3 apps independientes**. Ver §1bis abajo. Rama en `v333` · CACHE `v290`.
 > **Plan activo:** [`docs/roadmap-maestro.md`](roadmap-maestro.md) (ordenado por prioridad:
 > auth → GUI → estructuras/fases → sensor real; integra la auditoría externa).
 > Detalle de módulos por fase: [`docs/planes/frente-6-gestion-ciclo-vida.md`](planes/frente-6-gestion-ciclo-vida.md).
@@ -20,6 +22,36 @@ contratista-agnóstico**, **catálogo normativo**, y un **backend Supabase Sprin
 **Frente 6** (reorganizar la app por fases del ciclo de vida).
 
 **Versión:** v323 · REWIND_VER `v323` · `sw.js` CACHE `v278`.
+
+---
+
+## 1bis. Frente C — 3 apps independientes (rama `refactor/workspaces-b2`)
+
+**Decisión (feedback de usuarios):** los 3 paradigmas mezclados (Proyecto/Obra/
+Operación) se separan **en serio**. Elegido: **3 entradas HTML en 1 repo/deploy**
+sobre un núcleo compartido (no 3 repos), con `app.html` retirada al chooser y el
+núcleo movido a `js/core/`. Sin color por app (por ahora). Todo **verificado en
+preview** y **pusheado a la rama** (aún sin merge a `main`):
+
+| Paso | Commit | Qué |
+|---|---|---|
+| C1 | `0dcb3e4` | 3 apps (`proyecto/obra/operacion.html`) + `elegir.html` (chooser auth-aware). `shm_mode` se clava a un workspace vía `<html data-app>`, gatea por rol y redirige al chooser si no hay acceso. `app.html`→redirect. Landing+manifest→chooser. |
+| C2 | `8841057` | Núcleo `js/core/`: 25 módulos de plataforma movidos de `js/shm/`. `js/model`+`js/solver` quedan en la raíz. Rewriter determinista de imports; 0 rotos. |
+| C3 | `ad1654d` | PWA instalable por app: `manifest-{proyecto,obra,operacion}.webmanifest` + íconos SVG recoloreados + identidad PWA por app. 1 solo SW con caché compartida. |
+| C4a | `3444bfa` | Desacople core→workspace: `solar`/`shadow_flicker`/`receptor_import`→`js/core/`. Eliminada `shm.html` legacy. |
+| C4b | `765472c` | Dedup del shell: `js/core/shell_dom.js` inyecta el `<body>` común; las 3 HTML pasan de ~313 a 57 líneas. |
+
+**Arquitectura resultante:** `js/core/` = plataforma (motor 3D, mapa, terreno,
+parks, auth, backend, data_source, digital_twin, dsp/npz, worker, shell_dom, +
+solar/flicker) · `js/shm/` = UI de workspace (obra/operación) + orquestador
+`shm_mode` · `js/workspaces/` = renderers Proyecto/Obra/Operación · `js/model`+
+`js/solver` = gemelo digital (intactos).
+
+**Pendiente Frente C:** (a) merge a `main` + bump global de release (v333→vNNN +
+REWIND_VER + CACHE); (b) revisar contraste si algún día se activa color por app;
+(c) PNG de ícono por-app (hoy comparten los PNG genéricos). **Nota:** hay 1 error
+benigno preexistente "error fetching the script" por carga — el worker SHM funciona
+(produce ticks); no es regresión del Frente C.
 
 > **Fase 1 (Auth) — código listo (v313).** Login Supabase correo+clave
 > (`js/shm/auth.js` + `auth_ui.js`), token del usuario en los headers de
