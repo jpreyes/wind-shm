@@ -30,10 +30,10 @@
       window.dispatchEvent(new Event('pwa-installed'));
     });
   </script>
-  <link rel="stylesheet" href="lib/leaflet/leaflet.css?v=334">
-  <link rel="stylesheet" href="style.css?v=334">
-  <link rel="stylesheet" href="ui-v2.css?v=334">
-  <link rel="stylesheet" href="shm.css?v=334">
+  <link rel="stylesheet" href="lib/leaflet/leaflet.css?v=335">
+  <link rel="stylesheet" href="style.css?v=335">
+  <link rel="stylesheet" href="ui-v2.css?v=335">
+  <link rel="stylesheet" href="shm.css?v=335">
   <script type="importmap">
   {
     "imports": {
@@ -47,11 +47,11 @@
 <!-- Frente C (dedup): el shell compartido (menubar, árbol, viewport, panel,
      statusbar, portada, tooltip) se inyecta desde core/shell_dom.js. Esta entrada
      solo declara el head per-app + las libs + el orquestador. -->
-<script src="js/core/shell_dom.js?v=334"></script>
+<script src="js/core/shell_dom.js?v=335"></script>
 <!-- numeric.js (gemelo digital) + Leaflet (mapa 2D): globales antes de los módulos -->
 <script src="lib/numeric.js"></script>
-<script src="lib/leaflet/leaflet.js?v=334"></script>
+<script src="lib/leaflet/leaflet.js?v=335"></script>
 <!-- ReWind: se auto-bootea sobre el shell inyectado -->
-<script type="module" src="js/shm/shm_mode.js?v=334"></script>
+<script type="module" src="js/shm/shm_mode.js?v=335"></script>
 </body>
 </html>

@@ -35,6 +35,10 @@
       ReWind <span class="brand-park">Camán</span>
     </div>
 
+    <!-- Switcher de módulo (Frente C): saltar a otra app desde la barra, sin volver
+         a la landing. Lo rellena shell_dom según <html data-app> y el rol. -->
+    <div id="rw-switch"></div>
+
     <div class="menubar-right">
       <button id="btn-theme" type="button" title="Cambiar tema claro/oscuro"
         style="background:var(--bg4);border:1px solid var(--border2);color:var(--text);border-radius:6px;cursor:pointer;font-size:14px;line-height:1;padding:4px 8px;margin-right:10px">🌙</button>
@@ -222,6 +226,85 @@
       if (e.target.closest('[data-sw-tipped],[title]')) hide();
     });
     document.addEventListener('mousedown', function () { tip.classList.remove('visible'); });
+  })();
+
+  // ── Switcher de módulo (Frente C): saltar a otra app desde la barra ──────────
+  // Muestra en qué módulo estás y despliega los demás (según el rol) para ir
+  // directo, sin volver a la landing. Se hereda en las 3 apps vía shell_dom.
+  (function () {
+    var APP = document.documentElement.dataset.app;
+    var host = document.getElementById('rw-switch');
+    if (!APP || !host) return;   // solo en las apps (la landing no tiene data-app)
+
+    var MODS = [
+      { ws: 'proyecto',  name: 'Proyecto',  dot: '#c8871a', sub: 'siting · sombra' },
+      { ws: 'obra',      name: 'Obra',      dot: '#d95f18', sub: 'avance 4D · calidad' },
+      { ws: 'operacion', name: 'Operación', dot: '#12889a', sub: 'SHM en vivo' },
+    ];
+    var WS_ROLES = {
+      proyecto:  ['admin', 'gestor', 'visualizador'],
+      obra:      ['admin', 'gestor', 'calidad_inspector', 'calidad_aprobador', 'visualizador'],
+      operacion: ['admin', 'operador', 'inspector', 'visualizador'],
+    };
+    var isDemo = /(?:^|[?&])demo(?:$|&|=)/.test(location.search);
+    var role = null;
+    try { var s = JSON.parse(localStorage.getItem('rewind.auth.v1') || 'null'); if (s && s.role) role = s.role; } catch (e) {}
+    var access = MODS.filter(function (m) { return (isDemo || !role) ? true : (WS_ROLES[m.ws] || []).includes(role); });
+    var cur = MODS.filter(function (m) { return m.ws === APP; })[0] || MODS[0];
+    var q = isDemo ? '?demo' : '';
+
+    var st = document.createElement('style');
+    st.textContent =
+      '#rw-switch{display:flex;align-items:center;margin-left:14px;min-width:0;}' +
+      '#rw-sw-btn{display:inline-flex;align-items:center;gap:8px;background:var(--bg4);border:1px solid var(--border2);color:var(--text);border-radius:999px;cursor:pointer;font:inherit;font-size:13px;font-weight:600;padding:5px 12px;line-height:1;white-space:nowrap;}' +
+      '#rw-sw-btn .car{color:var(--text-muted);font-size:11px;margin-left:2px;}' +
+      '#rw-sw-static{display:inline-flex;align-items:center;gap:8px;color:var(--text);font-size:13px;font-weight:600;padding:5px 4px;white-space:nowrap;}' +
+      '.rw-sw-d{width:9px;height:9px;border-radius:50%;flex:none;}' +
+      '#rw-sw-menu{position:fixed;display:none;z-index:9500;min-width:236px;background:var(--bg-elev,var(--bg4));border:1px solid var(--border2);border-radius:12px;box-shadow:0 18px 44px rgba(2,8,14,.34);padding:6px;}' +
+      '#rw-sw-menu a,#rw-sw-menu .cur{display:flex;align-items:center;gap:10px;padding:9px 11px;border-radius:9px;color:var(--text);text-decoration:none;font-size:13px;}' +
+      '#rw-sw-menu a:hover,#rw-sw-menu a:focus{background:var(--bg3);outline:none;}' +
+      '#rw-sw-menu .cur{opacity:.6;cursor:default;}' +
+      '#rw-sw-menu .nm{font-weight:600;}' +
+      '#rw-sw-menu .sub{font-family:"IBM Plex Mono",monospace;font-size:10px;color:var(--text-muted);}' +
+      '#rw-sw-menu .tag{margin-left:auto;font-family:"IBM Plex Mono",monospace;font-size:9px;color:var(--text-muted);text-transform:uppercase;letter-spacing:.06em;}';
+    document.head.appendChild(st);
+
+    // Con ≤1 módulo accesible no hay a dónde saltar: etiqueta estática.
+    if (access.length <= 1) {
+      host.innerHTML = '<span id="rw-sw-static"><span class="rw-sw-d" style="background:' + cur.dot + '"></span>' + cur.name + '</span>';
+      return;
+    }
+
+    host.innerHTML = '<button id="rw-sw-btn" type="button" aria-haspopup="true" aria-expanded="false" title="Cambiar de módulo">' +
+      '<span class="rw-sw-d" style="background:' + cur.dot + '"></span>' + cur.name + '<span class="car">▾</span></button>';
+
+    var menu = document.createElement('div');
+    menu.id = 'rw-sw-menu';
+    menu.setAttribute('role', 'menu');
+    menu.innerHTML = access.map(function (m) {
+      var dot = '<span class="rw-sw-d" style="background:' + m.dot + '"></span>';
+      var label = '<span><span class="nm">' + m.name + '</span><br><span class="sub">' + m.sub + '</span></span>';
+      if (m.ws === APP) return '<div class="cur">' + dot + label + '<span class="tag">actual</span></div>';
+      return '<a role="menuitem" href="' + m.ws + '.html' + q + '">' + dot + label + '<span class="tag">ir →</span></a>';
+    }).join('');
+    document.body.appendChild(menu);
+
+    var btn = document.getElementById('rw-sw-btn');
+    function place() {
+      var r = btn.getBoundingClientRect();
+      menu.style.display = 'block';
+      var left = r.left; if (left + menu.offsetWidth > window.innerWidth - 12) left = window.innerWidth - menu.offsetWidth - 12;
+      if (left < 12) left = 12;
+      menu.style.left = left + 'px'; menu.style.top = (r.bottom + 8) + 'px';
+    }
+    var open = false;
+    function show() { open = true; place(); btn.setAttribute('aria-expanded', 'true'); var a = menu.querySelector('a'); if (a) a.focus(); }
+    function hide() { if (!open) return; open = false; menu.style.display = 'none'; btn.setAttribute('aria-expanded', 'false'); }
+    btn.addEventListener('click', function (e) { e.preventDefault(); e.stopPropagation(); open ? hide() : show(); });
+    document.addEventListener('click', function (e) { if (open && !menu.contains(e.target) && e.target !== btn) hide(); });
+    document.addEventListener('keydown', function (e) { if (e.key === 'Escape') hide(); });
+    window.addEventListener('scroll', hide, { passive: true });
+    window.addEventListener('resize', hide);
   })();
 
   // ── PWA: registrar el service worker (offline). No bajo automatización. ──────
