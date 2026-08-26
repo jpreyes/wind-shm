@@ -8,41 +8,41 @@
 //   inspecciones y señal temporal EN VIVO desde un Web Worker (DataSource).
 // Recortes (modelado) los hace shm.css ocultando, no borrando.
 // ─────────────────────────────────────────────────────────────────────────────
-import { FleetView } from '../core/fleet_view.js?v=335';
-import { DataSource } from '../core/data_source.js?v=335';
-import { computeTwin } from '../core/digital_twin.js?v=335';
-import { ParkManager, loadParksStore } from '../core/parks.js?v=335';
-import { MapView } from '../core/map_view.js?v=335';
-import { defaultStages, LAYOUT_SCALE } from '../core/parks_data_caman.js?v=335';
-import { fftMag } from '../core/dsp.js?v=335';
-import { buildSunControl, buildCompass, buildNameplate, buildBanner, initPanelResize } from '../core/viewport_chrome.js?v=335';
-import { buildAvanceHUD } from './avance_hud.js?v=335';
-import { computeParkAvance } from './avance_dashboard.js?v=335';
-import * as Insp from './inspection.js?v=335';
-import * as Fat from './fatigue.js?v=335';
-import * as Instr from '../core/instrumentation.js?v=335';
-import * as Calidad from './calidad.js?v=335';
-import { showBackendConfig } from '../core/backend_ui.js?v=335';
-import { backendActive, pushStructures, requestCapture, latestWave } from '../core/backend_sync.js?v=335';
-import { openLive } from '../core/live_stream.js?v=335';
-import { renderProyecto } from '../workspaces/proyecto.js?v=335';
-import { renderObra } from '../workspaces/obra.js?v=335';
-import * as Selection from '../core/selection.js?v=335';
-import { renderInsp, initInspection, feedSHM, startSig, stopSig, buildCapturedWave } from '../workspaces/operacion.js?v=335';
-import { Shm } from '../core/shm_state.js?v=335';
-import { authRequired, loggedIn, isEditor, canOperate, canGestion, canQualityEdit, canQualityApprove, canInspect, currentRole, allowedWorkspaces } from '../core/auth.js?v=335';
-import { requireLogin, userChipHTML, wireUserChip } from '../core/auth_ui.js?v=335';
-import * as Hist from './history.js?v=335';
-import * as Health from './health.js?v=335';
-import * as Bench from './benchmark.js?v=335';
-import * as Alarms from './alarms.js?v=335';
-import { METEO_CAMAN } from '../core/meteo_caman.js?v=335';
-import { ReplaySource } from './replay.js?v=335';
-import { esc, safeUrl } from '../core/util.js?v=335';
-import { t, getLang, setLang } from '../core/i18n.js?v=335';
+import { FleetView } from '../core/fleet_view.js?v=336';
+import { DataSource } from '../core/data_source.js?v=336';
+import { computeTwin } from '../core/digital_twin.js?v=336';
+import { ParkManager, loadParksStore } from '../core/parks.js?v=336';
+import { MapView } from '../core/map_view.js?v=336';
+import { defaultStages, LAYOUT_SCALE } from '../core/parks_data_caman.js?v=336';
+import { fftMag } from '../core/dsp.js?v=336';
+import { buildSunControl, buildCompass, buildNameplate, buildBanner, initPanelResize } from '../core/viewport_chrome.js?v=336';
+import { buildAvanceHUD } from './avance_hud.js?v=336';
+import { computeParkAvance } from './avance_dashboard.js?v=336';
+import * as Insp from './inspection.js?v=336';
+import * as Fat from './fatigue.js?v=336';
+import * as Instr from '../core/instrumentation.js?v=336';
+import * as Calidad from './calidad.js?v=336';
+import { showBackendConfig } from '../core/backend_ui.js?v=336';
+import { backendActive, pushStructures, requestCapture, latestWave } from '../core/backend_sync.js?v=336';
+import { openLive } from '../core/live_stream.js?v=336';
+import { renderProyecto } from '../workspaces/proyecto.js?v=336';
+import { renderObra } from '../workspaces/obra.js?v=336';
+import * as Selection from '../core/selection.js?v=336';
+import { renderInsp, initInspection, feedSHM, startSig, stopSig, buildCapturedWave } from '../workspaces/operacion.js?v=336';
+import { Shm } from '../core/shm_state.js?v=336';
+import { authRequired, loggedIn, isEditor, canOperate, canGestion, canQualityEdit, canQualityApprove, canInspect, currentRole, allowedWorkspaces } from '../core/auth.js?v=336';
+import { requireLogin, userChipHTML, wireUserChip } from '../core/auth_ui.js?v=336';
+import * as Hist from './history.js?v=336';
+import * as Health from './health.js?v=336';
+import * as Bench from './benchmark.js?v=336';
+import * as Alarms from './alarms.js?v=336';
+import { METEO_CAMAN } from '../core/meteo_caman.js?v=336';
+import { ReplaySource } from './replay.js?v=336';
+import { esc, safeUrl } from '../core/util.js?v=336';
+import { t, getLang, setLang } from '../core/i18n.js?v=336';
 
 const F1_BASE = { turbine: 0.283, hv: 1.6 };
-const REWIND_VER = 'v335';   // versión visible del build (subir junto al cache-bust)
+const REWIND_VER = 'v336';   // versión visible del build (subir junto al cache-bust)
 const FS = 62.5;   // frecuencia de muestreo de la señal (Hz), igual que shm_worker.js
 // Clasificador ML de daño (0..4)
 const CLS = ['Sin daño', 'Leve', 'Moderado', 'Alto', 'Muy alto'];
@@ -357,7 +357,7 @@ async function boot() {
   // ── Relieve conceptual del terreno (DEM vendorizado) — encendido por defecto ─
   setLoad(88, 'Cargando relieve…'); await delay(40);
   try {
-    await fleet.loadTerrain('data/caman_dem.json?v=335');
+    await fleet.loadTerrain('data/caman_dem.json?v=336');
     fleet.setTerrainVisible(true);
     document.getElementById('shm-relieve-tool')?.classList.add('active');
   } catch (e) { console.warn('[shm] relieve no disponible', e); }

@@ -5,8 +5,8 @@
 // muestra el gate a pantalla completa. Login OK → recarga y bootea normal. Botón
 // "demo" → `?demo` (modo abierto, simulación, sin login) para presentar sin claves.
 // ─────────────────────────────────────────────────────────────────────────────
-import { signIn, signOut, currentUser, currentRole, authRequired, loggedIn } from './auth.js?v=335';
-import { setBackendConfig } from './backend.js?v=335';
+import { signIn, signOut, currentUser, currentRole, authRequired, loggedIn } from './auth.js?v=336';
+import { setBackendConfig } from './backend.js?v=336';
 
 // ¿Hay que frenar el boot para pedir login? true = se mostró el gate; el caller aborta.
 export function requireLogin() {

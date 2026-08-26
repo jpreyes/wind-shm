@@ -237,7 +237,7 @@
     if (!APP || !host) return;   // solo en las apps (la landing no tiene data-app)
 
     var MODS = [
-      { ws: 'proyecto',  name: 'Proyecto',  dot: '#c8871a', sub: 'siting · sombra' },
+      { ws: 'proyecto',  name: 'Proyecto',  dot: '#7c5cd0', sub: 'siting · sombra' },
       { ws: 'obra',      name: 'Obra',      dot: '#d95f18', sub: 'avance 4D · calidad' },
       { ws: 'operacion', name: 'Operación', dot: '#12889a', sub: 'SHM en vivo' },
     ];

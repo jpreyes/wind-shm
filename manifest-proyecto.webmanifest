@@ -10,7 +10,7 @@
   "display": "standalone",
   "orientation": "landscape",
   "background_color": "#070a0f",
-  "theme_color": "#e0a63a",
+  "theme_color": "#7c5cd0",
   "categories": ["education", "productivity", "utilities"],
   "icons": [
     { "src": "icons/icon-proyecto.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" },
